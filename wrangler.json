@@ -1,15 +1,24 @@
 {
-	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "fusionflow",
-	"main": "./src/worker/index.ts",
-	"compatibility_date": "2025-10-08",
-	"compatibility_flags": ["nodejs_compat"],
-	"observability": {
-		"enabled": true
-	},
-	"upload_source_maps": true,
-	"assets": {
-		"directory": "./dist/client",
-		"not_found_handling": "single-page-application"
-	}
+  "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
+  "name": "fusionflow",
+  "main": "./src/server/index.ts",
+  "compatibility_date": "2025-10-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "fusionflow",
+      "database_id": "92ff189b-31c3-419c-8504-1c39a369cc0f"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "cc54227971144b93b20e97807053979a"
+    }
+  ]
 }

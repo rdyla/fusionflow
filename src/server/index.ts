@@ -15,19 +15,17 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 app.use("*", cors());
 
-app.get("/api/health", (c) => {
-  return c.json({ ok: true });
-});
+app.get("/api/health", (c) => c.json({ ok: true }));
 
 app.use("/api/*", authMiddleware);
 
 app.route("/api", authRoutes);
 app.route("/api/dashboard", dashboardRoutes);
 app.route("/api/projects", projectRoutes);
-app.route("/api", phaseRoutes);
-app.route("/api", milestoneRoutes);
-app.route("/api", taskRoutes);
-app.route("/api", riskRoutes);
-app.route("/api", noteRoutes);
+app.route("/api/projects", phaseRoutes);
+app.route("/api/projects", milestoneRoutes);
+app.route("/api/projects", taskRoutes);
+app.route("/api/projects", riskRoutes);
+app.route("/api/projects", noteRoutes);
 
 export default app;
