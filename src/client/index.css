@@ -94,12 +94,10 @@
     margin-bottom: 10px;
   }
   .ms-metric-value {
-    font-family: 'Syne', sans-serif;
     font-size: 32px;
-    font-weight: 800;
+    font-weight: 700;
     color: #00c8e0;
     line-height: 1;
-    letter-spacing: -0.02em;
   }
 
   /* ── Info grid (detail page) ────────────────────────────────── */
