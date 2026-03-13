@@ -2,6 +2,9 @@
   "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
   "name": "fusionflow",
   "main": "./src/server/index.ts",
+  "assets": {
+    "directory": "./dist"
+  },
   "compatibility_date": "2025-10-08",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {

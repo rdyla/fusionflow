@@ -12,11 +12,13 @@
 		"publish": true
 	},
 	"dependencies": {
+		"@tailwindcss/vite": "^4.2.1",
 		"claude": "^0.1.1",
 		"hono": "^4.11.1",
 		"react": "19.2.1",
 		"react-dom": "19.2.1",
 		"react-router-dom": "^7.13.1",
+		"tailwindcss": "^4.2.1",
 		"zod": "^4.3.6"
 	},
 	"devDependencies": {
@@ -35,7 +37,7 @@
 		"typescript": "^5.8.3",
 		"typescript-eslint": "8.48.0",
 		"vite": "^6.0.0",
-		"wrangler": "^4.56.0"
+		"wrangler": "^4.72.0"
 	},
 	"private": true,
 	"scripts": {

@@ -19,6 +19,10 @@ export type Bindings = {
   DB: D1Database;
   KV: KVNamespace;
   R2: R2Bucket;
+  // Dynamics 365 integration (set via wrangler secret put)
+  DYNAMICS_TENANT_ID?: string;
+  DYNAMICS_CLIENT_ID?: string;
+  DYNAMICS_CLIENT_SECRET?: string;
 };
 
 export type Variables = {

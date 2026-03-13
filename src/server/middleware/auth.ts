@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { AppUser, Bindings, Variables } from "../types";
+import type { AppRole, AppUser, Bindings, Variables } from "../types";
 
 type AppMiddleware = MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -18,6 +18,32 @@ async function findUserByEmail(db: D1Database, email: string): Promise<AppUser |
     .first<AppUser>();
 
   return result ?? null;
+}
+
+const PARTNER_DOMAINS: Record<string, string> = {
+  "zoom.com": "Zoom",
+  "zoom.us": "Zoom",
+  "ringcentral.com": "RingCentral",
+};
+
+async function provisionUser(
+  db: D1Database,
+  email: string,
+  organization: string,
+  role: AppRole
+): Promise<AppUser> {
+  const id = crypto.randomUUID();
+  const namePart = email.split("@")[0];
+
+  await db
+    .prepare(
+      `INSERT INTO users (id, email, name, organization_name, role, is_active)
+       VALUES (?, ?, ?, ?, ?, 1)`
+    )
+    .bind(id, email, namePart, organization, role)
+    .run();
+
+  return { id, email, name: namePart, organization_name: organization, role, is_active: 1 };
 }
 
 function getRequestEmail(req: Request): string | null {
@@ -42,12 +68,19 @@ export const authMiddleware: AppMiddleware = async (c, next) => {
     });
   }
 
-  const user = await findUserByEmail(c.env.DB, email);
+  let user = await findUserByEmail(c.env.DB, email);
 
   if (!user) {
-    throw new HTTPException(403, {
-      message: "Forbidden: user is not provisioned in FusionFlow",
-    });
+    const domain = email.split("@")[1] ?? "";
+    if (domain === "packetfusion.com") {
+      user = await provisionUser(c.env.DB, email, "Packet Fusion", "pm");
+    } else if (PARTNER_DOMAINS[domain]) {
+      user = await provisionUser(c.env.DB, email, PARTNER_DOMAINS[domain], "partner_ae");
+    } else {
+      throw new HTTPException(403, {
+        message: "Forbidden: user is not provisioned in FusionFlow",
+      });
+    }
   }
 
   if (!user.is_active) {

@@ -44,10 +44,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         style={{
           position: "fixed",
-          top: 20,
-          right: 20,
+          bottom: 24,
+          right: 24,
           display: "grid",
-          gap: 10,
+          gap: 8,
           zIndex: 9999,
           width: 320,
           maxWidth: "calc(100vw - 32px)",
@@ -56,15 +56,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         {toasts.map((toast) => (
           <div
             key={toast.id}
-            style={{
-              borderRadius: 12,
-              padding: "12px 14px",
-              color: "#fff",
-              fontWeight: 600,
-              boxShadow: "0 10px 30px rgba(0,0,0,0.28)",
-              border: "1px solid rgba(255,255,255,0.1)",
-              background: backgroundForTone(toast.tone),
-            }}
+            className="ms-toast"
+            style={{ background: backgroundForTone(toast.tone) }}
           >
             {toast.message}
           </div>
@@ -86,12 +79,9 @@ export function useToast() {
 
 function backgroundForTone(tone: ToastTone) {
   switch (tone) {
-    case "success":
-      return "#15803d";
-    case "error":
-      return "#b91c1c";
+    case "success": return "#107c10";
+    case "error":   return "#d13438";
     case "info":
-    default:
-      return "#1d4ed8";
+    default:        return "#0078d4";
   }
 }

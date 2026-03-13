@@ -15,7 +15,7 @@ app.get("/", async (c) => {
   let sql = `
     SELECT id, name, customer_name, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
-           pm_user_id, ae_user_id, created_at, updated_at
+           pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
     FROM projects
   `;
   let bindings: string[] = [];
@@ -57,7 +57,7 @@ app.get("/:id", async (c) => {
       `
       SELECT id, name, customer_name, vendor, solution_type, status, health,
              kickoff_date, target_go_live_date, actual_go_live_date,
-             pm_user_id, ae_user_id, created_at, updated_at
+             pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
       FROM projects
       WHERE id = ?
       LIMIT 1
@@ -81,10 +81,17 @@ const createProjectSchema = z.object({
   kickoff_date: z.string().optional(),
   target_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
+  pm_name: z.string().max(500).nullable().optional(),
   ae_user_id: z.string().nullable().optional(),
+  ae_name: z.string().max(500).nullable().optional(),
+  sa_name: z.string().max(500).nullable().optional(),
+  csm_name: z.string().max(500).nullable().optional(),
+  engineer_name: z.string().max(500).nullable().optional(),
+  dynamics_account_id: z.string().nullable().optional(),
 });
 
 app.post("/", requireRole("admin", "pm"), async (c) => {
+  const auth = c.get("auth");
   const db = c.env.DB;
   const rawBody = await c.req.json();
   const parsed = createProjectSchema.safeParse(rawBody);
@@ -93,17 +100,17 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, ae_user_id: aeInput } = parsed.data;
+  const { name, customer_name, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
   const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
 
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, ae_user_id)
-       VALUES (?, ?, ?, ?, ?, 'not_started', 'on_track', ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id)
+       VALUES (?, ?, ?, ?, ?, 'not_started', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, ae_user_id)
+    .bind(projectId, name, customer_name ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null)
     .run();
 
   // Auto-seed standard phases
@@ -121,7 +128,7 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
       `
       SELECT id, name, customer_name, vendor, solution_type, status, health,
              kickoff_date, target_go_live_date, actual_go_live_date,
-             pm_user_id, ae_user_id, created_at, updated_at
+             pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
       FROM projects WHERE id = ? LIMIT 1
       `
     )
@@ -137,7 +144,12 @@ const updateProjectSchema = z.object({
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
+  pm_name: z.string().max(500).nullable().optional(),
   ae_user_id: z.string().nullable().optional(),
+  ae_name: z.string().max(500).nullable().optional(),
+  sa_name: z.string().max(500).nullable().optional(),
+  csm_name: z.string().max(500).nullable().optional(),
+  engineer_name: z.string().max(500).nullable().optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm"), async (c) => {

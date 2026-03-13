@@ -1,7 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Project, type User } from "../lib/api";
+import { api, type DynamicsAccount, type DynamicsUser, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+
+const STATUS_COLOR: Record<string, string> = {
+  completed: "#107c10",
+  in_progress: "#0078d4",
+  not_started: "#605e5c",
+  blocked: "#d13438",
+};
+const HEALTH_COLOR: Record<string, string> = {
+  on_track: "#107c10",
+  at_risk: "#ff8c00",
+  off_track: "#d13438",
+};
+
+function Badge({ label, color }: { label: string; color: string }) {
+  return (
+    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40` }}>
+      {label}
+    </span>
+  );
+}
 
 const EMPTY_FORM = {
   name: "",
@@ -10,13 +30,21 @@ const EMPTY_FORM = {
   solution_type: "",
   kickoff_date: "",
   target_go_live_date: "",
-  pm_user_id: "",
-  ae_user_id: "",
+  pm_name: "",
+  ae_name: "",
+  sa_name: "",
+  csm_name: "",
+  engineer_name: "",
+  dynamics_account_id: "",
 };
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [dynamicsPMs, setDynamicsPMs] = useState<DynamicsUser[]>([]);
+  const [dynamicsAEs, setDynamicsAEs] = useState<DynamicsUser[]>([]);
+  const [dynamicsSAs, setDynamicsSAs] = useState<DynamicsUser[]>([]);
+  const [dynamicsCSMs, setDynamicsCSMs] = useState<DynamicsUser[]>([]);
+  const [dynamicsEngineers, setDynamicsEngineers] = useState<DynamicsUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -25,17 +53,73 @@ export default function ProjectsPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
+  // Dynamics account search state
+  const [dynQuery, setDynQuery] = useState("");
+  const [dynResults, setDynResults] = useState<DynamicsAccount[]>([]);
+  const [dynLoading, setDynLoading] = useState(false);
+  const [dynOpen, setDynOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<DynamicsAccount | null>(null);
+  const dynTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dynRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    Promise.all([api.projects(), api.users()])
-      .then(([p, u]) => { setProjects(p); setUsers(u); })
+    Promise.all([api.projects(), api.getDynamicsPMs(), api.getDynamicsAEs(), api.getDynamicsSAs(), api.getDynamicsCSMs(), api.getDynamicsEngineers()])
+      .then(([p, pms, aes, sas, csms, engineers]) => {
+        setProjects(p); setDynamicsPMs(pms); setDynamicsAEs(aes);
+        setDynamicsSAs(sas); setDynamicsCSMs(csms); setDynamicsEngineers(engineers);
+      })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, []);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function onMouseDown(e: MouseEvent) {
+      if (dynRef.current && !dynRef.current.contains(e.target as Node)) {
+        setDynOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
+  }, []);
+
+  function handleDynQueryChange(q: string) {
+    setDynQuery(q);
+    setSelectedAccount(null);
+    setForm((f) => ({ ...f, dynamics_account_id: "", customer_name: q }));
+    if (dynTimer.current) clearTimeout(dynTimer.current);
+    if (q.trim().length < 2) { setDynResults([]); setDynOpen(false); return; }
+    dynTimer.current = setTimeout(async () => {
+      setDynLoading(true);
+      try {
+        const results = await api.searchDynamicsAccounts(q.trim());
+        setDynResults(results);
+        setDynOpen(results.length > 0);
+      } catch {
+        setDynResults([]);
+      } finally {
+        setDynLoading(false);
+      }
+    }, 350);
+  }
+
+  function handleSelectAccount(acct: DynamicsAccount) {
+    setSelectedAccount(acct);
+    setDynQuery(acct.name);
+    setDynOpen(false);
+    setForm((f) => ({ ...f, dynamics_account_id: acct.accountid, customer_name: acct.name }));
+  }
+
+  function clearAccount() {
+    setSelectedAccount(null);
+    setDynQuery("");
+    setDynResults([]);
+    setForm((f) => ({ ...f, dynamics_account_id: "", customer_name: "" }));
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
-
     setSaving(true);
     try {
       const created = await api.createProject({
@@ -45,10 +129,13 @@ export default function ProjectsPage() {
         solution_type: form.solution_type.trim() || undefined,
         kickoff_date: form.kickoff_date || undefined,
         target_go_live_date: form.target_go_live_date || undefined,
-        pm_user_id: form.pm_user_id || null,
-        ae_user_id: form.ae_user_id || null,
+        pm_name: form.pm_name || null,
+        ae_name: form.ae_name || null,
+        sa_name: form.sa_name || null,
+        csm_name: form.csm_name || null,
+        engineer_name: form.engineer_name || null,
+        dynamics_account_id: form.dynamics_account_id || null,
       });
-
       showToast("Project created.", "success");
       navigate(`/projects/${created.id}`);
     } catch (err) {
@@ -60,75 +147,73 @@ export default function ProjectsPage() {
   function handleClose() {
     setShowModal(false);
     setForm(EMPTY_FORM);
+    setDynQuery("");
+    setDynResults([]);
+    setSelectedAccount(null);
+    setDynOpen(false);
   }
 
-  if (loading) return <div>Loading projects...</div>;
-  if (error) return <div>Error: {error}</div>;
+  if (loading) return <div style={{ color: "#605e5c", padding: 32 }}>Loading projects...</div>;
+  if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-        <h1 style={{ margin: 0 }}>Projects</h1>
-        <button
-          onClick={() => setShowModal(true)}
-          style={{
-            background: "#2563eb",
-            color: "#fff",
-            border: "none",
-            borderRadius: 10,
-            padding: "10px 18px",
-            fontWeight: 700,
-            cursor: "pointer",
-            fontSize: 14,
-          }}
-        >
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+      <div className="ms-page-header">
+        <h1 className="ms-page-title">Projects</h1>
+        <button className="ms-btn-primary" onClick={() => setShowModal(true)}>
           + New Project
         </button>
       </div>
 
-      <div
-        style={{
-          border: "1px solid rgba(255,255,255,0.12)",
-          borderRadius: 12,
-          overflow: "hidden",
-          background: "#121935",
-        }}
-      >
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead style={{ background: "#182247" }}>
+      <div className="ms-card" style={{ overflow: "hidden" }}>
+        <table className="ms-table">
+          <thead>
             <tr>
-              <Th>Name</Th>
-              <Th>Customer</Th>
-              <Th>Vendor</Th>
-              <Th>Status</Th>
-              <Th>Health</Th>
-              <Th>Go-Live</Th>
+              <th>Name</th>
+              <th>Customer</th>
+              <th>Vendor</th>
+              <th>Status</th>
+              <th>Health</th>
+              <th>Go-Live</th>
             </tr>
           </thead>
-
           <tbody>
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding: 24, color: "#9fb0d9", textAlign: "center" }}>
+                <td colSpan={6} style={{ textAlign: "center", color: "#605e5c", padding: "28px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
             ) : (
               projects.map((project) => (
-                <tr key={project.id} style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <Td>
+                <tr key={project.id}>
+                  <td>
                     <Link
                       to={`/projects/${project.id}`}
-                      style={{ color: "#8db4ff", textDecoration: "none", fontWeight: 600 }}
+                      style={{ color: "#0078d4", textDecoration: "none", fontWeight: 600 }}
                     >
                       {project.name}
                     </Link>
-                  </Td>
-                  <Td>{project.customer_name ?? "—"}</Td>
-                  <Td>{project.vendor ?? "—"}</Td>
-                  <Td>{project.status ?? "—"}</Td>
-                  <Td>{project.health ?? "—"}</Td>
-                  <Td>{project.target_go_live_date ?? "—"}</Td>
+                  </td>
+                  <td style={{ color: "#605e5c" }}>{project.customer_name ?? "—"}</td>
+                  <td style={{ color: "#605e5c" }}>{project.vendor ?? "—"}</td>
+                  <td>
+                    {project.status ? (
+                      <Badge
+                        label={project.status.replace("_", " ")}
+                        color={STATUS_COLOR[project.status] ?? "#605e5c"}
+                      />
+                    ) : "—"}
+                  </td>
+                  <td>
+                    {project.health ? (
+                      <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#605e5c", flexShrink: 0 }} />
+                        <span style={{ fontSize: 13 }}>{project.health.replace("_", " ")}</span>
+                      </span>
+                    ) : "—"}
+                  </td>
+                  <td style={{ color: "#605e5c" }}>{project.target_go_live_date ?? "—"}</td>
                 </tr>
               ))
             )}
@@ -136,148 +221,164 @@ export default function ProjectsPage() {
         </table>
       </div>
 
+      {/* New Project Modal */}
       {showModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.6)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 100,
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}
-        >
-          <div
-            style={{
-              background: "#121935",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 16,
-              padding: 28,
-              width: "100%",
-              maxWidth: 560,
-            }}
-          >
-            <h2 style={{ margin: "0 0 20px" }}>New Project</h2>
-
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) handleClose(); }}>
+          <div className="ms-modal">
+            <h2>New Project</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 14 }}>
-              <FormField label="Project Name *">
+              <label className="ms-label">
+                <span>Project Name *</span>
                 <input
                   autoFocus
                   required
+                  className="ms-input"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  style={inputStyle}
                   placeholder="e.g. Acme Corp – Webex Calling"
                 />
-              </FormField>
+              </label>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                <FormField label="Customer Name">
-                  <input
-                    value={form.customer_name}
-                    onChange={(e) => setForm({ ...form, customer_name: e.target.value })}
-                    style={inputStyle}
-                    placeholder="Customer"
-                  />
-                </FormField>
-
-                <FormField label="Vendor">
-                  <input
-                    value={form.vendor}
-                    onChange={(e) => setForm({ ...form, vendor: e.target.value })}
-                    style={inputStyle}
-                    placeholder="e.g. Cisco, Zoom"
-                  />
-                </FormField>
-
-                <FormField label="Solution Type">
-                  <input
-                    value={form.solution_type}
-                    onChange={(e) => setForm({ ...form, solution_type: e.target.value })}
-                    style={inputStyle}
-                    placeholder="e.g. UCaaS, CCaaS"
-                  />
-                </FormField>
-
-                <FormField label="Kickoff Date">
-                  <input
-                    type="date"
-                    value={form.kickoff_date}
-                    onChange={(e) => setForm({ ...form, kickoff_date: e.target.value })}
-                    style={inputStyle}
-                  />
-                </FormField>
-
-                <FormField label="Target Go-Live">
-                  <input
-                    type="date"
-                    value={form.target_go_live_date}
-                    onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })}
-                    style={inputStyle}
-                  />
-                </FormField>
-
-                <FormField label="Project Manager">
-                  <select
-                    value={form.pm_user_id}
-                    onChange={(e) => setForm({ ...form, pm_user_id: e.target.value })}
-                    style={inputStyle}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.filter((u) => u.role === "pm" || u.role === "admin").map((u) => (
-                      <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+              {/* Dynamics account search — full width above the 2-col grid */}
+              <div ref={dynRef} style={{ position: "relative" }}>
+                <label className="ms-label">
+                  <span>
+                    Customer Account
+                    {selectedAccount && (
+                      <span style={{ marginLeft: 8, fontSize: 11, color: "#107c10", fontWeight: 500 }}>
+                        ✓ Linked to Dynamics
+                      </span>
+                    )}
+                  </span>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      className="ms-input"
+                      value={dynQuery}
+                      onChange={(e) => handleDynQueryChange(e.target.value)}
+                      placeholder="Search Dynamics CE accounts…"
+                      autoComplete="off"
+                    />
+                    {dynLoading && (
+                      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#605e5c" }}>
+                        Searching…
+                      </span>
+                    )}
+                    {selectedAccount && !dynLoading && (
+                      <button
+                        type="button"
+                        onClick={clearAccount}
+                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#605e5c", fontSize: 16, lineHeight: 1 }}
+                        title="Clear selection"
+                      >×</button>
+                    )}
+                  </div>
+                </label>
+                {dynOpen && dynResults.length > 0 && (
+                  <div style={{
+                    position: "absolute", zIndex: 100, left: 0, right: 0,
+                    background: "#fff", border: "1px solid #edebe9", borderRadius: 4,
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto",
+                  }}>
+                    {dynResults.map((acct) => (
+                      <button
+                        key={acct.accountid}
+                        type="button"
+                        onClick={() => handleSelectAccount(acct)}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left",
+                          padding: "8px 14px", background: "none", border: "none",
+                          cursor: "pointer", borderBottom: "1px solid #f3f2f1",
+                          fontSize: 13, color: "#323130",
+                        }}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f3f2f1")}
+                        onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
+                      >
+                        <div style={{ fontWeight: 600 }}>{acct.name}</div>
+                        {(acct.address1_city || acct.address1_stateorprovince) && (
+                          <div style={{ fontSize: 11, color: "#605e5c" }}>
+                            {[acct.address1_city, acct.address1_stateorprovince].filter(Boolean).join(", ")}
+                          </div>
+                        )}
+                      </button>
                     ))}
-                  </select>
-                </FormField>
-
-                <FormField label="Account Executive">
-                  <select
-                    value={form.ae_user_id}
-                    onChange={(e) => setForm({ ...form, ae_user_id: e.target.value })}
-                    style={inputStyle}
-                  >
-                    <option value="">Unassigned</option>
-                    {users.filter((u) => u.role === "pf_ae" || u.role === "admin").map((u) => (
-                      <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-                    ))}
-                  </select>
-                </FormField>
+                  </div>
+                )}
               </div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 6 }}>
-                <button
-                  type="submit"
-                  disabled={saving || !form.name.trim()}
-                  style={{
-                    background: "#2563eb",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "10px 18px",
-                    fontWeight: 700,
-                    cursor: saving || !form.name.trim() ? "default" : "pointer",
-                    opacity: saving || !form.name.trim() ? 0.6 : 1,
-                    fontSize: 14,
-                  }}
-                >
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <label className="ms-label">
+                  <span>Vendor</span>
+                  <input className="ms-input" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. Cisco, Zoom" />
+                </label>
+                <label className="ms-label">
+                  <span>Solution Type</span>
+                  <input className="ms-input" value={form.solution_type} onChange={(e) => setForm({ ...form, solution_type: e.target.value })} placeholder="e.g. UCaaS, CCaaS" />
+                </label>
+                <label className="ms-label">
+                  <span>Kickoff Date</span>
+                  <input type="date" className="ms-input" value={form.kickoff_date} onChange={(e) => setForm({ ...form, kickoff_date: e.target.value })} />
+                </label>
+                <label className="ms-label">
+                  <span>Target Go-Live</span>
+                  <input type="date" className="ms-input" value={form.target_go_live_date} onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })} />
+                </label>
+                <label className="ms-label">
+                  <span>Project Manager</span>
+                  <select className="ms-input" value={form.pm_name} onChange={(e) => setForm({ ...form, pm_name: e.target.value })}>
+                    <option value="">Unassigned</option>
+                    {dynamicsPMs.map((u) => {
+                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
+                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
+                    })}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Account Executive</span>
+                  <select className="ms-input" value={form.ae_name} onChange={(e) => setForm({ ...form, ae_name: e.target.value })}>
+                    <option value="">Unassigned</option>
+                    {dynamicsAEs.map((u) => {
+                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
+                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
+                    })}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Solution Architect</span>
+                  <select className="ms-input" value={form.sa_name} onChange={(e) => setForm({ ...form, sa_name: e.target.value })}>
+                    <option value="">Unassigned</option>
+                    {dynamicsSAs.map((u) => {
+                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
+                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
+                    })}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Client Success Manager</span>
+                  <select className="ms-input" value={form.csm_name} onChange={(e) => setForm({ ...form, csm_name: e.target.value })}>
+                    <option value="">Unassigned</option>
+                    {dynamicsCSMs.map((u) => {
+                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
+                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
+                    })}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Implementation Engineer</span>
+                  <select className="ms-input" value={form.engineer_name} onChange={(e) => setForm({ ...form, engineer_name: e.target.value })}>
+                    <option value="">Unassigned</option>
+                    {dynamicsEngineers.map((u) => {
+                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
+                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
+                    })}
+                  </select>
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <button type="submit" className="ms-btn-primary" disabled={saving || !form.name.trim()}>
                   {saving ? "Creating..." : "Create Project"}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  style={{
-                    background: "#334155",
-                    color: "#fff",
-                    border: "none",
-                    borderRadius: 10,
-                    padding: "10px 18px",
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontSize: 14,
-                  }}
-                >
+                <button type="button" className="ms-btn-secondary" onClick={handleClose}>
                   Cancel
                 </button>
               </div>
@@ -288,39 +389,3 @@ export default function ProjectsPage() {
     </div>
   );
 }
-
-function Th({ children }: { children: React.ReactNode }) {
-  return (
-    <th style={{ textAlign: "left", padding: 14, fontSize: 13, color: "#c8d4ff" }}>
-      {children}
-    </th>
-  );
-}
-
-function Td({ children }: { children: React.ReactNode }) {
-  return (
-    <td style={{ padding: 14, color: "#eef3ff" }}>
-      {children}
-    </td>
-  );
-}
-
-function FormField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label style={{ display: "grid", gap: 6 }}>
-      <span style={{ fontSize: 13, color: "#b8c5e8", fontWeight: 600 }}>{label}</span>
-      {children}
-    </label>
-  );
-}
-
-const inputStyle: React.CSSProperties = {
-  width: "100%",
-  background: "#182247",
-  color: "#eef3ff",
-  border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 10,
-  padding: "10px 12px",
-  fontSize: 14,
-  boxSizing: "border-box",
-};

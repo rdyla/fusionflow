@@ -12,6 +12,7 @@ import riskRoutes from "./routes/risks";
 import noteRoutes from "./routes/notes";
 import adminRoutes from "./routes/admin";
 import documentRoutes from "./routes/documents";
+import dynamicsRoutes from "./routes/dynamics";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -31,5 +32,6 @@ app.route("/api/projects", riskRoutes);
 app.route("/api/projects", noteRoutes);
 app.route("/api/admin", adminRoutes);
 app.route("/api/projects", documentRoutes);
+app.route("/api/dynamics", dynamicsRoutes);
 
 export default app;

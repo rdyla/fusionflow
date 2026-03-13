@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject } from "../services/accessService";
 
@@ -34,7 +33,6 @@ app.get("/:id/documents", async (c) => {
 
 // ── Upload document ────────────────────────────────────────────────────────
 
-const ALLOWED_CATEGORIES = ["LOA", "Cut Sheet", "CSR", "Contract", "Design Doc", "Test Plan", "Other"] as const;
 const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
 app.post("/:id/documents", async (c) => {

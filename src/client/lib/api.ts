@@ -1,10 +1,11 @@
 const API_BASE = "/api";
+const DEV_HEADERS: Record<string, string> = import.meta.env.DEV ? { "x-dev-user-email": "rdyla@packetfusion.com" } : {};
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      "x-dev-user-email": "admin@packetfusion.com",
+      ...DEV_HEADERS,
     },
     ...options,
   });
@@ -25,12 +26,21 @@ export type User = {
   is_active: number;
 };
 
+export type DashboardTask = Task & { project_name: string };
+export type DashboardRisk = Risk & { project_name: string };
+
 export type DashboardSummaryResponse = {
   user: User;
   summary: {
     activeProjects: number;
     atRiskProjects: number;
+    openTasks: number;
+    openRisks: number;
   };
+  projects: Project[];
+  openTasks: DashboardTask[];
+  openRisks: DashboardRisk[];
+  phaseDistribution: { phase_name: string; count: number }[];
 };
 
 export type Project = {
@@ -45,9 +55,42 @@ export type Project = {
   target_go_live_date: string | null;
   actual_go_live_date: string | null;
   pm_user_id: string | null;
+  pm_name: string | null;
   ae_user_id: string | null;
+  ae_name: string | null;
+  sa_name: string | null;
+  csm_name: string | null;
+  engineer_name: string | null;
+  dynamics_account_id: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type DynamicsAccount = {
+  accountid: string;
+  name: string;
+  emailaddress1: string | null;
+  telephone1: string | null;
+  websiteurl: string | null;
+  address1_city: string | null;
+  address1_stateorprovince: string | null;
+};
+
+export type DynamicsContact = {
+  contactid: string;
+  firstname: string | null;
+  lastname: string | null;
+  emailaddress1: string | null;
+  telephone1: string | null;
+  jobtitle: string | null;
+};
+
+export type DynamicsUser = {
+  systemuserid: string;
+  firstname: string | null;
+  lastname: string | null;
+  internalemailaddress: string | null;
+  title: string | null;
 };
 
 export type Phase = {
@@ -131,8 +174,14 @@ export type Note = {
   created_at: string;
 };
 
+export type MeResponse = {
+  user: User;
+  role: string;
+  organization: string | null;
+};
+
 export const api = {
-  me: () => request<User>("/me"),
+  me: () => request<MeResponse>("/me"),
   users: () => request<User[]>("/users"),
   dashboardSummary: () => request<DashboardSummaryResponse>("/dashboard/summary"),
   projects: () => request<Project[]>("/projects"),
@@ -160,6 +209,27 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  searchDynamicsAccounts: (q: string) =>
+    request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
+
+  getDynamicsContacts: (accountId: string) =>
+    request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
+
+  getDynamicsPMs: () =>
+    request<DynamicsUser[]>(`/dynamics/staff/project-managers`),
+
+  getDynamicsAEs: () =>
+    request<DynamicsUser[]>(`/dynamics/staff/account-executives`),
+
+  getDynamicsSAs: () =>
+    request<DynamicsUser[]>(`/dynamics/staff/solution-architects`),
+
+  getDynamicsCSMs: () =>
+    request<DynamicsUser[]>(`/dynamics/staff/client-success-managers`),
+
+  getDynamicsEngineers: () =>
+    request<DynamicsUser[]>(`/dynamics/staff/engineers`),
+
   createProject: (payload: {
     name: string;
     customer_name?: string;
@@ -168,7 +238,13 @@ export const api = {
     kickoff_date?: string;
     target_go_live_date?: string;
     pm_user_id?: string | null;
+    pm_name?: string | null;
     ae_user_id?: string | null;
+    ae_name?: string | null;
+    sa_name?: string | null;
+    csm_name?: string | null;
+    engineer_name?: string | null;
+    dynamics_account_id?: string | null;
   }) =>
     request<Project>("/projects", {
       method: "POST",
@@ -183,7 +259,12 @@ export const api = {
       target_go_live_date?: string;
       actual_go_live_date?: string;
       pm_user_id?: string | null;
+      pm_name?: string | null;
       ae_user_id?: string | null;
+      ae_name?: string | null;
+      sa_name?: string | null;
+      csm_name?: string | null;
+      engineer_name?: string | null;
     }
   ) =>
     request<Project>(`/projects/${id}`, {
@@ -334,7 +415,7 @@ export const api = {
 
     const res = await fetch(`${API_BASE}/projects/${projectId}/documents`, {
       method: "POST",
-      headers: { "x-dev-user-email": "admin@packetfusion.com" },
+      headers: { ...DEV_HEADERS },
       body: form,
     });
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
