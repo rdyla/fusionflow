@@ -1,7 +1,51 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type DynamicsAccount, type DynamicsUser, type Project } from "../lib/api";
+import { api, type DynamicsAccount, type DynamicsUser, type Project, type Phase } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+
+const PHASE_STATUS_COLOR: Record<string, string> = {
+  completed: "#107c10",
+  in_progress: "#0078d4",
+  not_started: "#e1dfdd",
+  blocked: "#d13438",
+};
+
+function PhaseFlowIndicator({ phases }: { phases: Phase[] | undefined }) {
+  if (!phases || phases.length === 0) {
+    return <span style={{ color: "#c8c6c4", fontSize: 11 }}>—</span>;
+  }
+  const sorted = [...phases].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  return (
+    <div style={{ display: "flex", alignItems: "center" }}>
+      {sorted.map((phase, i) => {
+        const status = phase.status || "not_started";
+        const color = PHASE_STATUS_COLOR[status] ?? "#e1dfdd";
+        const isActive = status === "in_progress";
+        const prevDone = i > 0 && sorted[i - 1].status === "completed";
+        return (
+          <div key={phase.id} style={{ display: "flex", alignItems: "center" }}>
+            {i > 0 && (
+              <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#e1dfdd", flexShrink: 0 }} />
+            )}
+            <div
+              title={`${phase.name} — ${status.replace(/_/g, " ")}`}
+              style={{
+                width: isActive ? 13 : 10,
+                height: isActive ? 13 : 10,
+                borderRadius: "50%",
+                background: status === "not_started" ? "#e1dfdd" : color,
+                border: `1.5px solid ${status === "not_started" ? "#c8c6c4" : color}`,
+                boxShadow: isActive ? `0 0 0 2.5px ${color}55` : "none",
+                flexShrink: 0,
+                cursor: "default",
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 const STATUS_COLOR: Record<string, string> = {
   completed: "#107c10",
@@ -40,6 +84,7 @@ const EMPTY_FORM = {
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectPhases, setProjectPhases] = useState<Record<string, Phase[]>>({});
   const [dynamicsPMs, setDynamicsPMs] = useState<DynamicsUser[]>([]);
   const [dynamicsAEs, setDynamicsAEs] = useState<DynamicsUser[]>([]);
   const [dynamicsSAs, setDynamicsSAs] = useState<DynamicsUser[]>([]);
@@ -71,6 +116,16 @@ export default function ProjectsPage() {
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (projects.length === 0) return;
+    Promise.allSettled(projects.map((p) => api.phases(p.id).then((phases) => ({ id: p.id, phases }))))
+      .then((results) => {
+        const map: Record<string, Phase[]> = {};
+        results.forEach((r) => { if (r.status === "fulfilled") map[r.value.id] = r.value.phases; });
+        setProjectPhases(map);
+      });
+  }, [projects]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -175,12 +230,13 @@ export default function ProjectsPage() {
               <th>Status</th>
               <th>Health</th>
               <th>Go-Live</th>
+              <th>Phase Flow</th>
             </tr>
           </thead>
           <tbody>
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", color: "#605e5c", padding: "28px 16px" }}>
+                <td colSpan={7} style={{ textAlign: "center", color: "#605e5c", padding: "28px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -214,6 +270,7 @@ export default function ProjectsPage() {
                     ) : "—"}
                   </td>
                   <td style={{ color: "#605e5c" }}>{project.target_go_live_date ?? "—"}</td>
+                  <td><PhaseFlowIndicator phases={projectPhases[project.id]} /></td>
                 </tr>
               ))
             )}
