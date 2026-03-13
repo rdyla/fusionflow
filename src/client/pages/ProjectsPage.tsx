@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type Project } from "../lib/api";
+import { api, type Project, type User } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const EMPTY_FORM = {
@@ -10,10 +10,13 @@ const EMPTY_FORM = {
   solution_type: "",
   kickoff_date: "",
   target_go_live_date: "",
+  pm_user_id: "",
+  ae_user_id: "",
 };
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -23,8 +26,8 @@ export default function ProjectsPage() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    api.projects()
-      .then(setProjects)
+    Promise.all([api.projects(), api.users()])
+      .then(([p, u]) => { setProjects(p); setUsers(u); })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, []);
@@ -42,6 +45,8 @@ export default function ProjectsPage() {
         solution_type: form.solution_type.trim() || undefined,
         kickoff_date: form.kickoff_date || undefined,
         target_go_live_date: form.target_go_live_date || undefined,
+        pm_user_id: form.pm_user_id || null,
+        ae_user_id: form.ae_user_id || null,
       });
 
       showToast("Project created.", "success");
@@ -212,6 +217,32 @@ export default function ProjectsPage() {
                     onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })}
                     style={inputStyle}
                   />
+                </FormField>
+
+                <FormField label="Project Manager">
+                  <select
+                    value={form.pm_user_id}
+                    onChange={(e) => setForm({ ...form, pm_user_id: e.target.value })}
+                    style={inputStyle}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.filter((u) => u.role === "pm" || u.role === "admin").map((u) => (
+                      <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                    ))}
+                  </select>
+                </FormField>
+
+                <FormField label="Account Executive">
+                  <select
+                    value={form.ae_user_id}
+                    onChange={(e) => setForm({ ...form, ae_user_id: e.target.value })}
+                    style={inputStyle}
+                  >
+                    <option value="">Unassigned</option>
+                    {users.filter((u) => u.role === "pf_ae" || u.role === "admin").map((u) => (
+                      <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                    ))}
+                  </select>
                 </FormField>
               </div>
 

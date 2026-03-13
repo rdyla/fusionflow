@@ -20,5 +20,11 @@
       "binding": "KV",
       "id": "cc54227971144b93b20e97807053979a"
     }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "R2",
+      "bucket_name": "fusionflow-docs"
+    }
   ]
 }

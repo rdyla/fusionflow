@@ -10,6 +10,8 @@ import milestoneRoutes from "./routes/milestones";
 import taskRoutes from "./routes/tasks";
 import riskRoutes from "./routes/risks";
 import noteRoutes from "./routes/notes";
+import adminRoutes from "./routes/admin";
+import documentRoutes from "./routes/documents";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -27,5 +29,7 @@ app.route("/api/projects", milestoneRoutes);
 app.route("/api/projects", taskRoutes);
 app.route("/api/projects", riskRoutes);
 app.route("/api/projects", noteRoutes);
+app.route("/api/admin", adminRoutes);
+app.route("/api/projects", documentRoutes);
 
 export default app;

@@ -12,6 +12,7 @@
 		"publish": true
 	},
 	"dependencies": {
+		"claude": "^0.1.1",
 		"hono": "^4.11.1",
 		"react": "19.2.1",
 		"react-dom": "19.2.1",
@@ -46,7 +47,7 @@
 		"preview": "npm run build && vite preview",
 		"dev:client": "vite",
 		"dev:worker": "wrangler dev",
-    	"dev": "concurrently \"npm run dev:client\" \"npm run dev:worker\""
+		"dev": "concurrently \"npm run dev:client\" \"npm run dev:worker\""
 	},
 	"type": "module"
 }
