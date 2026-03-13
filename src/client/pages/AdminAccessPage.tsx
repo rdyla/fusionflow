@@ -83,8 +83,8 @@ export default function AdminAccessPage() {
 
       {selectedProject && (
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-          <span style={{ fontSize: 13, color: "#605e5c" }}>
-            Explicit access grants for <strong style={{ color: "#323130" }}>{selectedProject.name}</strong>
+          <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>
+            Explicit access grants for <strong style={{ color: "rgba(240,246,255,0.9)" }}>{selectedProject.name}</strong>
           </span>
           <button className="ms-btn-primary" onClick={() => setShowGrantModal(true)} disabled={grantableUsers.length === 0}>
             + Grant Access
@@ -94,7 +94,7 @@ export default function AdminAccessPage() {
 
       <div className="ms-card" style={{ overflow: "hidden" }}>
         {loadingAccess ? (
-          <div style={{ padding: 24, color: "#605e5c", textAlign: "center" }}>Loading...</div>
+          <div style={{ padding: 24, color: "rgba(240,246,255,0.5)", textAlign: "center" }}>Loading...</div>
         ) : (
           <table className="ms-table">
             <thead>
@@ -110,7 +110,7 @@ export default function AdminAccessPage() {
             <tbody>
               {accessList.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: "center", color: "#605e5c", padding: "28px 16px" }}>
+                  <td colSpan={6} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "28px 16px" }}>
                     No explicit access grants. Admins and assigned PM/AE always have access.
                   </td>
                 </tr>
@@ -119,15 +119,15 @@ export default function AdminAccessPage() {
                   <tr key={entry.id}>
                     <td style={{ fontWeight: 500 }}>{entry.name ?? "—"}</td>
                     <td>{entry.email}</td>
-                    <td style={{ color: "#605e5c" }}>{entry.organization_name ?? "—"}</td>
-                    <td style={{ color: "#605e5c" }}>{entry.role}</td>
+                    <td style={{ color: "rgba(240,246,255,0.5)" }}>{entry.organization_name ?? "—"}</td>
+                    <td style={{ color: "rgba(240,246,255,0.5)" }}>{entry.role}</td>
                     <td>
                       <span
                         className="ms-badge"
                         style={
                           entry.access_level === "collaborator"
-                            ? { background: "#dce9f8", color: "#0078d4", border: "1px solid rgba(0,120,212,0.3)" }
-                            : { background: "#f3f2f1", color: "#605e5c", border: "1px solid #edebe9" }
+                            ? { background: "rgba(0,200,224,0.12)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.3)" }
+                            : { background: "rgba(255,255,255,0.06)", color: "rgba(240,246,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
                         }
                       >
                         {entry.access_level ?? "viewer"}

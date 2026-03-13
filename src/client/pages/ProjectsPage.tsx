@@ -4,28 +4,28 @@ import { api, type DynamicsAccount, type DynamicsUser, type Project, type Phase 
 import { useToast } from "../components/ui/ToastProvider";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
-  completed: "#107c10",
-  in_progress: "#0078d4",
-  not_started: "#e1dfdd",
+  completed: "#059669",
+  in_progress: "#0891b2",
+  not_started: "#475569",
   blocked: "#d13438",
 };
 
 function PhaseFlowIndicator({ phases }: { phases: Phase[] | undefined }) {
   if (!phases || phases.length === 0) {
-    return <span style={{ color: "#c8c6c4", fontSize: 11 }}>—</span>;
+    return <span style={{ color: "#64748b", fontSize: 11 }}>—</span>;
   }
   const sorted = [...phases].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   return (
     <div style={{ display: "flex", alignItems: "center" }}>
       {sorted.map((phase, i) => {
         const status = phase.status || "not_started";
-        const color = PHASE_STATUS_COLOR[status] ?? "#e1dfdd";
+        const color = PHASE_STATUS_COLOR[status] ?? "#475569";
         const isActive = status === "in_progress";
         const prevDone = i > 0 && sorted[i - 1].status === "completed";
         return (
           <div key={phase.id} style={{ display: "flex", alignItems: "center" }}>
             {i > 0 && (
-              <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#e1dfdd", flexShrink: 0 }} />
+              <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#475569", flexShrink: 0 }} />
             )}
             <div
               title={`${phase.name} — ${status.replace(/_/g, " ")}`}
@@ -33,8 +33,8 @@ function PhaseFlowIndicator({ phases }: { phases: Phase[] | undefined }) {
                 width: isActive ? 13 : 10,
                 height: isActive ? 13 : 10,
                 borderRadius: "50%",
-                background: status === "not_started" ? "#e1dfdd" : color,
-                border: `1.5px solid ${status === "not_started" ? "#c8c6c4" : color}`,
+                background: status === "not_started" ? "#475569" : color,
+                border: `1.5px solid ${status === "not_started" ? "#64748b" : color}`,
                 boxShadow: isActive ? `0 0 0 2.5px ${color}55` : "none",
                 flexShrink: 0,
                 cursor: "default",
@@ -48,9 +48,9 @@ function PhaseFlowIndicator({ phases }: { phases: Phase[] | undefined }) {
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  completed: "#107c10",
-  in_progress: "#0078d4",
-  not_started: "#605e5c",
+  completed: "#059669",
+  in_progress: "#0891b2",
+  not_started: "#94a3b8",
   blocked: "#d13438",
 };
 const HEALTH_COLOR: Record<string, string> = {
@@ -208,7 +208,7 @@ export default function ProjectsPage() {
     setDynOpen(false);
   }
 
-  if (loading) return <div style={{ color: "#605e5c", padding: 32 }}>Loading projects...</div>;
+  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading projects...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
 
   return (
@@ -236,7 +236,7 @@ export default function ProjectsPage() {
           <tbody>
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "#605e5c", padding: "28px 16px" }}>
+                <td colSpan={7} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "28px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -246,30 +246,30 @@ export default function ProjectsPage() {
                   <td>
                     <Link
                       to={`/projects/${project.id}`}
-                      style={{ color: "#0078d4", textDecoration: "none", fontWeight: 600 }}
+                      style={{ color: "#00c8e0", textDecoration: "none", fontWeight: 600 }}
                     >
                       {project.name}
                     </Link>
                   </td>
-                  <td style={{ color: "#605e5c" }}>{project.customer_name ?? "—"}</td>
-                  <td style={{ color: "#605e5c" }}>{project.vendor ?? "—"}</td>
+                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{project.customer_name ?? "—"}</td>
+                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{project.vendor ?? "—"}</td>
                   <td>
                     {project.status ? (
                       <Badge
                         label={project.status.replace("_", " ")}
-                        color={STATUS_COLOR[project.status] ?? "#605e5c"}
+                        color={STATUS_COLOR[project.status] ?? "#94a3b8"}
                       />
                     ) : "—"}
                   </td>
                   <td>
                     {project.health ? (
                       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#605e5c", flexShrink: 0 }} />
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }} />
                         <span style={{ fontSize: 13 }}>{project.health.replace("_", " ")}</span>
                       </span>
                     ) : "—"}
                   </td>
-                  <td style={{ color: "#605e5c" }}>{project.target_go_live_date ?? "—"}</td>
+                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{project.target_go_live_date ?? "—"}</td>
                   <td><PhaseFlowIndicator phases={projectPhases[project.id]} /></td>
                 </tr>
               ))
@@ -316,7 +316,7 @@ export default function ProjectsPage() {
                       autoComplete="off"
                     />
                     {dynLoading && (
-                      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#605e5c" }}>
+                      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "rgba(240,246,255,0.5)" }}>
                         Searching…
                       </span>
                     )}
@@ -324,7 +324,7 @@ export default function ProjectsPage() {
                       <button
                         type="button"
                         onClick={clearAccount}
-                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#605e5c", fontSize: 16, lineHeight: 1 }}
+                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "rgba(240,246,255,0.5)", fontSize: 16, lineHeight: 1 }}
                         title="Clear selection"
                       >×</button>
                     )}
@@ -333,7 +333,7 @@ export default function ProjectsPage() {
                 {dynOpen && dynResults.length > 0 && (
                   <div style={{
                     position: "absolute", zIndex: 100, left: 0, right: 0,
-                    background: "#fff", border: "1px solid #edebe9", borderRadius: 4,
+                    background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 4,
                     boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto",
                   }}>
                     {dynResults.map((acct) => (
@@ -344,15 +344,15 @@ export default function ProjectsPage() {
                         style={{
                           display: "block", width: "100%", textAlign: "left",
                           padding: "8px 14px", background: "none", border: "none",
-                          cursor: "pointer", borderBottom: "1px solid #f3f2f1",
-                          fontSize: 13, color: "#323130",
+                          cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.06)",
+                          fontSize: 13, color: "rgba(240,246,255,0.9)",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "#f3f2f1")}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                       >
                         <div style={{ fontWeight: 600 }}>{acct.name}</div>
                         {(acct.address1_city || acct.address1_stateorprovince) && (
-                          <div style={{ fontSize: 11, color: "#605e5c" }}>
+                          <div style={{ fontSize: 11, color: "rgba(240,246,255,0.5)" }}>
                             {[acct.address1_city, acct.address1_stateorprovince].filter(Boolean).join(", ")}
                           </div>
                         )}

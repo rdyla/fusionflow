@@ -14,7 +14,7 @@ const ROLE_LABELS: Record<Role, string> = {
 
 const ROLE_COLOR: Record<Role, string> = {
   admin: "#ff8c00",
-  pm: "#0078d4",
+  pm: "#0891b2",
   pf_ae: "#8764b8",
   partner_ae: "#107c10",
 };
@@ -103,7 +103,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  if (loading) return <div style={{ color: "#605e5c", padding: 32 }}>Loading users...</div>;
+  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading users...</div>;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -126,17 +126,17 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", color: "#605e5c", padding: "28px 16px" }}>No users yet.</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "28px 16px" }}>No users yet.</td></tr>
             ) : (
               users.map((user) => (
                 <tr key={user.id}>
                   <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
                   <td>{user.email}</td>
-                  <td style={{ color: "#605e5c" }}>{user.organization_name ?? "—"}</td>
+                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{user.organization_name ?? "—"}</td>
                   <td>
                     <span
                       className="ms-badge"
-                      style={{ background: (ROLE_COLOR[user.role as Role] ?? "#605e5c") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#605e5c", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#605e5c")}40` }}
+                      style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
                     >
                       {ROLE_LABELS[user.role as Role] ?? user.role}
                     </span>

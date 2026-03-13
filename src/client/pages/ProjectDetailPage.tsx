@@ -20,20 +20,20 @@ import { useToast } from "../components/ui/ToastProvider";
 type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity" | "zoom";
 
 const STATUS_COLOR: Record<string, string> = {
-  completed: "#107c10",
-  in_progress: "#0078d4",
-  not_started: "#605e5c",
+  completed: "#059669",
+  in_progress: "#0891b2",
+  not_started: "#94a3b8",
   blocked: "#d13438",
 };
 const RISK_COLOR: Record<string, string> = {
   open: "#d13438",
   mitigated: "#ff8c00",
-  closed: "#107c10",
+  closed: "#059669",
 };
 const MILESTONE_COLOR: Record<string, string> = {
-  not_started: "#605e5c",
-  in_progress: "#0078d4",
-  completed: "#107c10",
+  not_started: "#94a3b8",
+  in_progress: "#0891b2",
+  completed: "#059669",
 };
 
 function formatDate(d: string | null) {
@@ -153,9 +153,9 @@ export default function ProjectDetailPage() {
     load();
   }, [id]);
 
-  if (loading) return <div style={{ color: "#605e5c", padding: 32 }}>Loading project...</div>;
+  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading project...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
-  if (!project) return <div style={{ color: "#605e5c", padding: 32 }}>Project not found.</div>;
+  if (!project) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Project not found.</div>;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -386,15 +386,15 @@ export default function ProjectDetailPage() {
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       {/* Breadcrumb */}
       <div style={{ marginBottom: 16 }}>
-        <Link to="/projects" style={{ color: "#0078d4", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
+        <Link to="/projects" style={{ color: "#00c8e0", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
           ← Projects
         </Link>
       </div>
 
       {/* Project header card */}
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#323130" }}>{project.name}</h1>
-        <p style={{ margin: "0 0 16px", color: "#605e5c", fontSize: 14 }}>
+        <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "rgba(240,246,255,0.9)" }}>{project.name}</h1>
+        <p style={{ margin: "0 0 16px", color: "rgba(240,246,255,0.5)", fontSize: 14 }}>
           {project.customer_name ?? "Unknown customer"} · {project.vendor ?? "Unknown vendor"} · {project.solution_type ?? "—"}
         </p>
 
@@ -404,7 +404,7 @@ export default function ProjectDetailPage() {
             <div className="ms-info-label">Status</div>
             <div className="ms-info-value">
               {project.status ? (
-                <Badge label={project.status.replace("_", " ")} color={STATUS_COLOR[project.status] ?? "#605e5c"} />
+                <Badge label={project.status.replace("_", " ")} color={STATUS_COLOR[project.status] ?? "#94a3b8"} />
               ) : "—"}
             </div>
           </div>
@@ -413,7 +413,7 @@ export default function ProjectDetailPage() {
             <div className="ms-info-value">
               {project.health ? (
                 <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#605e5c" }} />
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8" }} />
                   {project.health.replace("_", " ")}
                 </span>
               ) : "—"}
@@ -482,13 +482,13 @@ export default function ProjectDetailPage() {
                 const member = roster.find((u) => [u.firstname, u.lastname].filter(Boolean).join(" ") === name);
                 return (
                   <div key={label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#605e5c", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
                     {member ? (
                       <>
-                        <div style={{ fontWeight: 600, color: "#323130" }}>{[member.firstname, member.lastname].filter(Boolean).join(" ")}</div>
-                        {member.title && <div style={{ fontSize: 13, color: "#605e5c" }}>{member.title}</div>}
+                        <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{[member.firstname, member.lastname].filter(Boolean).join(" ")}</div>
+                        {member.title && <div style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{member.title}</div>}
                         {member.internalemailaddress && (
-                          <a href={`mailto:${member.internalemailaddress}`} style={{ fontSize: 13, color: "#0078d4", textDecoration: "none" }}>
+                          <a href={`mailto:${member.internalemailaddress}`} style={{ fontSize: 13, color: "#00c8e0", textDecoration: "none" }}>
                             {member.internalemailaddress}
                           </a>
                         )}
@@ -498,7 +498,7 @@ export default function ProjectDetailPage() {
                             title="Zoom Scheduler — coming next phase"
                             style={{
                               marginTop: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-                              background: "#f3f2f1", border: "1px solid #edebe9", borderRadius: 4,
+                              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
                               color: "#a19f9d", cursor: "not-allowed", width: "fit-content",
                             }}
                           >
@@ -596,7 +596,7 @@ export default function ProjectDetailPage() {
               <button className="ms-btn-primary" onClick={handleSaveProject} disabled={savingProject}>
                 {savingProject ? "Saving..." : "Save Changes"}
               </button>
-              {saveMessage && <span style={{ fontSize: 13, color: "#605e5c" }}>{saveMessage}</span>}
+              {saveMessage && <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{saveMessage}</span>}
             </div>
           </div>
 
@@ -607,7 +607,7 @@ export default function ProjectDetailPage() {
                 ([label, value]) => (
                   <div key={label as string} className="ms-info-item" style={{ textAlign: "center" }}>
                     <div className="ms-info-label">{label}</div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#0078d4", lineHeight: 1.2 }}>{value}</div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: "#00c8e0", lineHeight: 1.2 }}>{value}</div>
                   </div>
                 )
               )}
@@ -636,7 +636,7 @@ export default function ProjectDetailPage() {
           <div style={{ display: "grid", gap: 24 }}>
             {groupedTasks.map(({ phase, tasks: phaseTasks }) => (
               <div key={phase.id}>
-                <div style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#323130", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid #edebe9" }}>
+                <div style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "rgba(240,246,255,0.9)", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
                   {phase.name}
                 </div>
                 <div style={{ display: "grid", gap: 6 }}>
@@ -646,7 +646,7 @@ export default function ProjectDetailPage() {
 
                   {phaseTasks.map((task) =>
                     editingTask?.id === task.id ? (
-                      <div key={task.id} className="ms-section-card" style={{ borderColor: "#0078d4" }}>
+                      <div key={task.id} className="ms-section-card" style={{ borderColor: "#0891b2" }}>
                         <div style={{ display: "grid", gap: 12 }}>
                           <label className="ms-label">
                             <span>Title</span>
@@ -700,13 +700,13 @@ export default function ProjectDetailPage() {
                     ) : (
                       <div key={task.id} className="ms-row-item">
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, color: "#323130", marginBottom: 3 }}>{task.title}</div>
-                          <div style={{ fontSize: 12, color: "#605e5c" }}>
+                          <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", marginBottom: 3 }}>{task.title}</div>
+                          <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
                             Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
                           </div>
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                          <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#605e5c"} />
+                          <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
                           <button className="ms-btn-ghost" onClick={() => setEditingTask(task)}>Edit</button>
                         </div>
                       </div>
@@ -714,7 +714,7 @@ export default function ProjectDetailPage() {
                   )}
 
                   {addingTaskPhaseId === phase.id ? (
-                    <div className="ms-section-card" style={{ borderColor: "#0078d4" }}>
+                    <div className="ms-section-card" style={{ borderColor: "#0891b2" }}>
                       <div style={{ display: "grid", gap: 10 }}>
                         <label className="ms-label">
                           <span>Title</span>
@@ -756,7 +756,7 @@ export default function ProjectDetailPage() {
                     <button
                       className="ms-btn-ghost"
                       onClick={() => { setAddingTaskPhaseId(phase.id); setEditingTask(null); }}
-                      style={{ alignSelf: "start", border: "1px dashed #8a8886", color: "#605e5c" }}
+                      style={{ alignSelf: "start", border: "1px dashed rgba(255,255,255,0.2)", color: "rgba(240,246,255,0.5)" }}
                     >
                       + Add Task
                     </button>
@@ -782,12 +782,12 @@ export default function ProjectDetailPage() {
               {risks.map((risk) => (
                 <div key={risk.id} className="ms-row-item">
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: "#323130", marginBottom: 4 }}>{risk.title}</div>
-                    {risk.description && <div style={{ color: "#605e5c", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
-                    <div style={{ fontSize: 12, color: "#605e5c" }}>Severity: {risk.severity ?? "—"} · Owner: {userName(risk.owner_user_id)}</div>
+                    <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", marginBottom: 4 }}>{risk.title}</div>
+                    {risk.description && <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
+                    <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>Severity: {risk.severity ?? "—"} · Owner: {userName(risk.owner_user_id)}</div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#605e5c"} />
+                    <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
                     <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>
                     <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>
                   </div>
@@ -812,13 +812,13 @@ export default function ProjectDetailPage() {
               {milestones.map((ms) => (
                 <div key={ms.id} className="ms-row-item">
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: "#323130", marginBottom: 4 }}>{ms.name}</div>
-                    <div style={{ fontSize: 12, color: "#605e5c" }}>
+                    <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", marginBottom: 4 }}>{ms.name}</div>
+                    <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
                       Phase: {phases.find((p) => p.id === ms.phase_id)?.name ?? "—"} · Target: {ms.target_date ? formatDate(ms.target_date) : "—"} · Actual: {ms.actual_date ? formatDate(ms.actual_date) : "—"}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    <Badge label={ms.status?.replaceAll("_", " ") ?? "not started"} color={MILESTONE_COLOR[ms.status ?? "not_started"] ?? "#605e5c"} />
+                    <Badge label={ms.status?.replaceAll("_", " ") ?? "not started"} color={MILESTONE_COLOR[ms.status ?? "not_started"] ?? "#94a3b8"} />
                     <button className="ms-btn-ghost" onClick={() => openEditMilestone(ms)}>Edit</button>
                     <button className="ms-btn-danger" onClick={() => handleDeleteMilestone(ms.id)}>Delete</button>
                   </div>
@@ -869,7 +869,7 @@ export default function ProjectDetailPage() {
                 <button className="ms-btn-primary" onClick={handleAddNote} disabled={savingNote}>
                   {savingNote ? "Saving..." : "Add Note"}
                 </button>
-                {noteMessage && <span style={{ fontSize: 13, color: "#605e5c" }}>{noteMessage}</span>}
+                {noteMessage && <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{noteMessage}</span>}
               </div>
             </div>
           </div>
@@ -881,9 +881,9 @@ export default function ProjectDetailPage() {
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
                 {notes.map((note) => (
-                  <div key={note.id} style={{ padding: 14, background: "#faf9f8", border: "1px solid #edebe9", borderRadius: 2 }}>
-                    <div style={{ color: "#323130", marginBottom: 8, fontSize: 14 }}>{note.body}</div>
-                    <div style={{ fontSize: 12, color: "#605e5c" }}>
+                  <div key={note.id} style={{ padding: 14, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                    <div style={{ color: "rgba(240,246,255,0.9)", marginBottom: 8, fontSize: 14 }}>{note.body}</div>
+                    <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
                       Visibility: {note.visibility ?? "—"} · Author: {userName(note.author_user_id)} · {note.created_at}
                     </div>
                   </div>

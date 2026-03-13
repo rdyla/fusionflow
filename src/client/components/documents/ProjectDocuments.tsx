@@ -34,15 +34,15 @@ function formatBytes(bytes: number | null) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// Category badge colors — light-theme tints
+// Category badge colors — dark-theme tints
 const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
-  "LOA":        { bg: "#dce9f8", color: "#0078d4" },
-  "Cut Sheet":  { bg: "#f0ebfa", color: "#8764b8" },
-  "CSR":        { bg: "#dff6dd", color: "#107c10" },
-  "Contract":   { bg: "#fff4ce", color: "#835b00" },
-  "Design Doc": { bg: "#fff4ce", color: "#835b00" },
-  "Test Plan":  { bg: "#dce9f8", color: "#0078d4" },
-  "Other":      { bg: "#f3f2f1", color: "#605e5c" },
+  "LOA":        { bg: "rgba(0,200,224,0.12)", color: "#00c8e0" },
+  "Cut Sheet":  { bg: "rgba(135,100,184,0.15)", color: "#b39ddb" },
+  "CSR":        { bg: "rgba(5,150,105,0.15)", color: "#34d399" },
+  "Contract":   { bg: "rgba(245,158,11,0.15)", color: "#fbbf24" },
+  "Design Doc": { bg: "rgba(245,158,11,0.15)", color: "#fbbf24" },
+  "Test Plan":  { bg: "rgba(0,200,224,0.12)", color: "#00c8e0" },
+  "Other":      { bg: "rgba(255,255,255,0.06)", color: "rgba(240,246,255,0.5)" },
 };
 
 export default function ProjectDocuments({ projectId, documents, phases, tasks, onDocumentsChange }: Props) {
@@ -128,23 +128,23 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
           <div
             onClick={() => fileInputRef.current?.click()}
             style={{
-              border: `2px dashed ${selectedFile ? "#0078d4" : "#c8c6c4"}`,
+              border: `2px dashed ${selectedFile ? "#00c8e0" : "rgba(255,255,255,0.2)"}`,
               borderRadius: 4,
               padding: "20px 16px",
               textAlign: "center",
               cursor: "pointer",
-              background: selectedFile ? "#dce9f8" : "#faf9f8",
+              background: selectedFile ? "rgba(0,200,224,0.08)" : "rgba(255,255,255,0.03)",
               transition: "all 0.15s",
             }}
           >
             <div style={{ fontSize: 28, marginBottom: 6 }}>📁</div>
             {selectedFile ? (
               <>
-                <div style={{ color: "#0078d4", fontWeight: 600 }}>{selectedFile.name}</div>
-                <div style={{ color: "#605e5c", fontSize: 13 }}>{formatBytes(selectedFile.size)}</div>
+                <div style={{ color: "#00c8e0", fontWeight: 600 }}>{selectedFile.name}</div>
+                <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>{formatBytes(selectedFile.size)}</div>
               </>
             ) : (
-              <div style={{ color: "#605e5c", fontSize: 14 }}>Click to select a file (max 50 MB)</div>
+              <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 14 }}>Click to select a file (max 50 MB)</div>
             )}
             <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFileChange} />
           </div>
@@ -193,7 +193,7 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
               const catColors = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS["Other"];
               return (
                 <div key={cat}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#605e5c", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
                     {cat}
                   </div>
                   <div style={{ display: "grid", gap: 6 }}>
@@ -205,10 +205,10 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
                           <div style={{ fontSize: 22, flexShrink: 0 }}>{fileIcon(doc.content_type)}</div>
 
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: "#323130", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div style={{ color: "rgba(240,246,255,0.9)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {doc.name}
                             </div>
-                            <div style={{ color: "#605e5c", fontSize: 12, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 12, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
                               <span>{formatBytes(doc.size_bytes)}</span>
                               {phase && <span>· {phase.name}</span>}
                               {task && <span>· {task.title}</span>}
