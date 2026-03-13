@@ -1,0 +1,364 @@
+@import "tailwindcss";
+
+@layer base {
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+  }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background: #f3f2f1;
+    color: #323130;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  input, select, textarea, button {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+
+  .ms-page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .ms-page-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #323130;
+    margin: 0;
+  }
+  .ms-page-subtitle {
+    font-size: 13px;
+    color: #605e5c;
+    margin: 3px 0 0;
+  }
+
+  /* ── Cards ──────────────────────────────────────────────────── */
+
+  .ms-card {
+    background: #ffffff;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    box-shadow: 0 1.6px 3.6px rgba(0,0,0,.132), 0 0.3px 0.9px rgba(0,0,0,.108);
+  }
+
+  .ms-section-card {
+    background: #ffffff;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    box-shadow: 0 1.6px 3.6px rgba(0,0,0,.132);
+    padding: 20px 24px;
+  }
+  .ms-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #323130;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin: 0 0 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid #edebe9;
+  }
+
+  /* ── Metric cards ───────────────────────────────────────────── */
+
+  .ms-metric-card {
+    background: #ffffff;
+    border: 1px solid #edebe9;
+    border-radius: 4px;
+    padding: 20px 24px;
+    box-shadow: 0 1.6px 3.6px rgba(0,0,0,.132);
+    flex: 1;
+  }
+  .ms-metric-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #605e5c;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+  .ms-metric-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #323130;
+    line-height: 1;
+  }
+
+  /* ── Info grid (detail page) ────────────────────────────────── */
+
+  .ms-info-item {
+    padding: 12px 16px;
+    background: #faf9f8;
+    border: 1px solid #edebe9;
+    border-radius: 2px;
+  }
+  .ms-info-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #605e5c;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+  }
+  .ms-info-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: #323130;
+  }
+
+  /* ── Row items (tasks / risks / milestones) ─────────────────── */
+
+  .ms-row-item {
+    background: #faf9f8;
+    border: 1px solid #edebe9;
+    border-radius: 2px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 16px;
+    transition: background 0.1s;
+  }
+  .ms-row-item:hover { background: #f3f2f1; }
+
+  /* ── Buttons ────────────────────────────────────────────────── */
+
+  .ms-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #0078d4;
+    color: #fff;
+    border: 1px solid #0078d4;
+    border-radius: 2px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s, border-color 0.1s;
+    white-space: nowrap;
+  }
+  .ms-btn-primary:hover:not(:disabled) { background: #106ebe; border-color: #106ebe; }
+  .ms-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .ms-btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff;
+    color: #323130;
+    border: 1px solid #8a8886;
+    border-radius: 2px;
+    padding: 7px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  .ms-btn-secondary:hover:not(:disabled) { background: #f3f2f1; }
+  .ms-btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .ms-btn-danger {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #d13438;
+    color: #fff;
+    border: 1px solid #d13438;
+    border-radius: 2px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  .ms-btn-danger:hover:not(:disabled) { background: #a4262c; border-color: #a4262c; }
+
+  .ms-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    color: #0078d4;
+    border: 1px solid rgba(0,120,212,0.35);
+    border-radius: 2px;
+    padding: 4px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+  }
+  .ms-btn-ghost:hover:not(:disabled) { background: rgba(0,120,212,0.06); }
+
+  /* ── Form controls ──────────────────────────────────────────── */
+
+  .ms-label {
+    display: grid;
+    gap: 5px;
+  }
+  .ms-label > span {
+    font-size: 12px;
+    font-weight: 600;
+    color: #605e5c;
+  }
+
+  .ms-input {
+    width: 100%;
+    background: #fff;
+    color: #323130;
+    border: 1px solid #8a8886;
+    border-radius: 2px;
+    padding: 7px 10px;
+    font-size: 14px;
+    outline: none;
+    box-sizing: border-box;
+    transition: border-color 0.1s, box-shadow 0.1s;
+  }
+  .ms-input:focus {
+    border-color: #0078d4;
+    box-shadow: 0 0 0 1px #0078d4;
+  }
+  .ms-input::placeholder { color: #a19f9d; }
+
+  /* ── Table ──────────────────────────────────────────────────── */
+
+  .ms-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  .ms-table th {
+    text-align: left;
+    padding: 10px 16px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #605e5c;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: #faf9f8;
+    border-bottom: 2px solid #edebe9;
+  }
+  .ms-table td {
+    padding: 12px 16px;
+    color: #323130;
+    border-bottom: 1px solid #edebe9;
+    font-size: 14px;
+  }
+  .ms-table tbody tr:hover { background: #f3f2f1; }
+  .ms-table tbody tr:last-child td { border-bottom: none; }
+
+  /* ── Badges ─────────────────────────────────────────────────── */
+
+  .ms-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  /* ── Tabs ───────────────────────────────────────────────────── */
+
+  .ms-tabs {
+    display: flex;
+    border-bottom: 2px solid #edebe9;
+    margin-bottom: 20px;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .ms-tab-btn {
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #605e5c;
+    background: transparent;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: color 0.1s, border-color 0.1s;
+    white-space: nowrap;
+  }
+  .ms-tab-btn:hover { color: #323130; }
+  .ms-tab-btn.active {
+    color: #0078d4;
+    border-bottom-color: #0078d4;
+    font-weight: 600;
+  }
+
+  /* ── Modal ──────────────────────────────────────────────────── */
+
+  .ms-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .ms-modal {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 25.6px 57.6px rgba(0,0,0,.22), 0 4.8px 14.4px rgba(0,0,0,.18);
+    padding: 28px;
+    width: 100%;
+    max-width: 560px;
+  }
+  .ms-modal h2 {
+    margin: 0 0 20px;
+    font-size: 18px;
+    font-weight: 700;
+    color: #323130;
+  }
+
+  /* ── Nav sidebar ────────────────────────────────────────────── */
+
+  .ms-nav-link {
+    display: flex;
+    align-items: center;
+    padding: 9px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    color: rgba(255,255,255,0.72);
+    border-left: 3px solid transparent;
+    transition: all 0.1s;
+  }
+  .ms-nav-link:hover {
+    color: #fff;
+    background: rgba(255,255,255,0.08);
+  }
+  .ms-nav-link.active {
+    color: #fff;
+    background: rgba(0,120,212,0.22);
+    border-left-color: #0078d4;
+  }
+
+  /* ── Toast ──────────────────────────────────────────────────── */
+
+  .ms-toast {
+    border-radius: 4px;
+    padding: 12px 16px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.28);
+  }
+}
