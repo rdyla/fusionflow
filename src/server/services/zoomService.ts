@@ -37,7 +37,7 @@ export type ZoomStatus = {
     inactive: number;
   };
   phone: {
-    total_users: number;
+    total_users: number | null;
   };
   devices: ZoomDevice[];
   devices_total: number;
@@ -92,8 +92,15 @@ async function zoomGet<T>(token: string, path: string): Promise<T> {
   const res = await fetch(`${ZOOM_API_BASE}${path}`, {
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
   });
-  if (!res.ok) throw new Error(`Zoom API error: ${res.status} ${path}`);
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Zoom API ${res.status} ${path}: ${body}`);
+  }
   return res.json() as Promise<T>;
+}
+
+function settled<T>(result: PromiseSettledResult<T>): T | null {
+  return result.status === "fulfilled" ? result.value : null;
 }
 
 export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise<ZoomStatus | null> {
@@ -102,7 +109,8 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
 
   const token = await getToken(kv, creds, projectId);
 
-  const [accountData, plansData, activeUsers, inactiveUsers, phoneUsers, devicesData] = await Promise.all([
+  // Use allSettled so missing Zoom Phone license doesn't abort everything
+  const [accountRes, plansRes, activeRes, inactiveRes, phoneUsersRes, devicesRes] = await Promise.allSettled([
     zoomGet<{ id: string; account_name: string; account_type: number }>(token, "/accounts/me"),
     zoomGet<{
       plan_base?: { type: string; hosts: number };
@@ -114,6 +122,18 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     zoomGet<{ devices?: ZoomDevice[]; total_records: number }>(token, "/phone/devices?page_size=100"),
   ]);
 
+  // Account is the critical call — surface the error if it fails
+  if (accountRes.status === "rejected") {
+    throw new Error(`Zoom account lookup failed: ${accountRes.reason}`);
+  }
+
+  const accountData = accountRes.value;
+  const plansData = settled(plansRes);
+  const activeUsers = settled(activeRes);
+  const inactiveUsers = settled(inactiveRes);
+  const phoneUsers = settled(phoneUsersRes);
+  const devicesData = settled(devicesRes);
+
   return {
     account: {
       id: accountData.id,
@@ -121,18 +141,18 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
       account_type: accountData.account_type,
     },
     licenses: {
-      plan_name: plansData.plan_base?.type ?? "Unknown",
-      total_seats: plansData.plan_base?.hosts ?? 0,
-      phone_plans: plansData.plan_zoom_phone ?? [],
+      plan_name: plansData?.plan_base?.type ?? "Unknown",
+      total_seats: plansData?.plan_base?.hosts ?? 0,
+      phone_plans: plansData?.plan_zoom_phone ?? [],
     },
     users: {
-      active: activeUsers.total_records ?? 0,
-      inactive: inactiveUsers.total_records ?? 0,
+      active: activeUsers?.total_records ?? 0,
+      inactive: inactiveUsers?.total_records ?? 0,
     },
     phone: {
-      total_users: phoneUsers.total_records ?? 0,
+      total_users: phoneUsers?.total_records ?? null,
     },
-    devices: devicesData.devices ?? [],
-    devices_total: devicesData.total_records ?? 0,
+    devices: devicesData?.devices ?? [],
+    devices_total: devicesData?.total_records ?? 0,
   };
 }
