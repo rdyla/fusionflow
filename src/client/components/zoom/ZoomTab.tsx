@@ -328,5 +328,34 @@ export default function ZoomTab({ projectId }: { projectId: string }) {
     return <ConnectForm projectId={projectId} onConnected={load} />;
   }
 
+  if (zoomStatus.error) {
+    return (
+      <div className="ms-section-card">
+        <div style={{ fontWeight: 600, color: "#d13438", marginBottom: 8 }}>Zoom API Error</div>
+        <div style={{
+          background: "#fdf3f3",
+          border: "1px solid #f1c0c0",
+          borderRadius: 4,
+          padding: "10px 14px",
+          fontFamily: "monospace",
+          fontSize: 12,
+          color: "#a4262c",
+          marginBottom: 16,
+          wordBreak: "break-all",
+        }}>
+          {zoomStatus.error}
+        </div>
+        <p style={{ fontSize: 13, color: "#605e5c", margin: "0 0 14px" }}>
+          This usually means the credentials are incorrect, the S2S OAuth app hasn't been activated,
+          or the required scopes (<code>account:read:admin</code>, <code>user:read:admin</code>, <code>phone:read:admin</code>) haven't been added.
+        </p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button className="ms-btn-primary" onClick={load}>Retry</button>
+          <button className="ms-btn-secondary" onClick={handleDisconnect}>Clear Credentials</button>
+        </div>
+      </div>
+    );
+  }
+
   return <StatusDashboard status={zoomStatus} onDisconnect={handleDisconnect} />;
 }

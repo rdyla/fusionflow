@@ -44,8 +44,10 @@ app.get("/:projectId/zoom/status", async (c) => {
     if (!status) return c.json({ configured: false });
     return c.json({ configured: true, ...status });
   } catch (err) {
-    console.error("Zoom status fetch error:", err);
-    throw new HTTPException(502, { message: err instanceof Error ? err.message : "Zoom API error" });
+    // Return error detail as JSON (200) so the client can display it
+    const message = err instanceof Error ? err.message : "Unknown Zoom API error";
+    console.error("Zoom status fetch error:", message);
+    return c.json({ configured: true, error: message });
   }
 });
 

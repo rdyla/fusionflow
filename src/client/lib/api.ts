@@ -164,6 +164,7 @@ export type ZoomDevice = {
 
 export type ZoomStatus = {
   configured: boolean;
+  error?: string;
   account?: { id: string; account_name: string; account_type: number };
   licenses?: { plan_name: string; total_seats: number; phone_plans: { type: string; hosts: number }[] };
   users?: { active: number; inactive: number };
