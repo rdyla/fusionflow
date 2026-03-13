@@ -166,11 +166,11 @@ export type ZoomStatus = {
   configured: boolean;
   error?: string;
   account?: { id: string; account_name: string; account_type: number };
-  licenses?: { plan_name: string; total_seats: number; phone_plans: { type: string; hosts: number }[] };
-  users?: { active: number; inactive: number };
-  phone?: { total_users: number | null };
+  plans?: Record<string, unknown>;
+  total_users?: number | null;
   devices?: ZoomDevice[];
   devices_total?: number;
+  warnings?: string[];
 };
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 

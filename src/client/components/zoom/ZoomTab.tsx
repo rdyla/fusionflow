@@ -1,25 +1,153 @@
 import { useEffect, useState } from "react";
 import { api, type ZoomDevice, type ZoomStatus } from "../../lib/api";
 
-const ACCOUNT_TYPE_LABEL: Record<number, string> = {
-  1: "Basic",
-  2: "Pro",
-  3: "Business",
-  100: "Enterprise",
+// Human-readable labels for plan section keys returned by Zoom
+const PLAN_SECTION_LABELS: Record<string, string> = {
+  plan_base: "Base Plan",
+  plan_zoom_phone: "Zoom Phone",
+  plan_audio: "Audio Conferencing",
+  plan_recording: "Cloud Recording",
+  plan_large_meeting: "Large Meeting",
+  plan_webinar: "Webinar",
+  plan_room: "Zoom Rooms",
+  plan_rooms_connector: "Room Connector",
+  plan_zoom_events: "Zoom Events",
+  plan_contact_center: "Contact Center",
+  plan_zoom_virtual_agent: "Virtual Agent",
+  plan_zoom_revenue_accelerator: "Revenue Accelerator",
+  plan_zoom_iq: "Zoom IQ / Revenue Accelerator",
+  plan_whiteboard: "Whiteboard",
+  plan_translator: "Language Interpretation",
 };
 
-function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
+// Plan type code → friendly name (best-effort; falls back to formatted code)
+const PLAN_TYPE_LABELS: Record<string, string> = {
+  // Base
+  zoom_one_basic: "Zoom One Basic",
+  zoom_one_pro: "Zoom One Pro",
+  zoom_one_business: "Zoom One Business",
+  zoom_one_business_plus: "Zoom One Business Plus",
+  zoom_one_enterprise: "Zoom One Enterprise",
+  zoom_one_enterprise_plus: "Zoom One Enterprise Plus",
+  // Phone
+  zoom_phone_us_canada_pro: "US & Canada Pro",
+  zoom_phone_us_canada_metered: "US & Canada Metered",
+  zoom_phone_global_select: "Global Select",
+  zoom_phone_payg: "Pay As You Go",
+  zoom_phone_us_canada_unlimited: "US & Canada Unlimited",
+  // Contact Center
+  zoom_contact_center_standard: "Standard",
+  zoom_contact_center_premium: "Premium",
+  zoom_contact_center_elite: "Elite",
+};
+
+const ACCOUNT_TYPE_LABEL: Record<number, string> = {
+  1: "Basic", 2: "Pro", 3: "Business", 100: "Enterprise",
+};
+
+type PlanItem = { type: string; seats: string | number | null };
+type PlanSection = { key: string; label: string; items: PlanItem[] };
+
+function formatTypeCode(code: string): string {
+  return PLAN_TYPE_LABELS[code.toLowerCase()] ??
+    code.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function parsePlanValue(value: unknown): PlanItem[] {
+  if (!value || value === null) return [];
+  if (Array.isArray(value)) {
+    return value.flatMap((v) => parsePlanValue(v));
+  }
+  if (typeof value === "object") {
+    const v = value as Record<string, unknown>;
+    if (!v.type) return [];
+    const seats = v.hosts ?? v.storage ?? null;
+    return [{ type: String(v.type), seats: seats != null ? Number(seats) : null }];
+  }
+  return [];
+}
+
+function parsePlans(plans: Record<string, unknown>): PlanSection[] {
+  const sections: PlanSection[] = [];
+  // Put base plan first, then sort the rest alphabetically
+  const keys = Object.keys(plans).sort((a, b) => {
+    if (a === "plan_base") return -1;
+    if (b === "plan_base") return 1;
+    return a.localeCompare(b);
+  });
+  for (const key of keys) {
+    const items = parsePlanValue(plans[key]);
+    if (items.length === 0) continue;
+    sections.push({
+      key,
+      label: PLAN_SECTION_LABELS[key] ?? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+      items,
+    });
+  }
+  return sections;
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function PlanBadge({ item }: { item: PlanItem }) {
   return (
     <div style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
       background: "#f9f8f7",
       border: "1px solid #edebe9",
-      borderRadius: 6,
-      padding: "16px 20px",
-      minWidth: 140,
+      borderRadius: 4,
+      padding: "8px 12px",
+      gap: 16,
     }}>
-      <div style={{ fontSize: 11, color: "#605e5c", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 26, fontWeight: 700, color: "#0078d4", lineHeight: 1 }}>{value}</div>
-      {sub && <div style={{ fontSize: 11, color: "#605e5c", marginTop: 4 }}>{sub}</div>}
+      <span style={{ fontSize: 13, color: "#323130", fontWeight: 500 }}>
+        {formatTypeCode(item.type)}
+      </span>
+      {item.seats != null && (
+        <span style={{
+          fontSize: 12,
+          color: "#0078d4",
+          background: "#0078d41a",
+          border: "1px solid #0078d430",
+          borderRadius: 3,
+          padding: "2px 8px",
+          whiteSpace: "nowrap",
+          fontWeight: 600,
+        }}>
+          {item.seats} seats
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SubscriptionList({ plans }: { plans: Record<string, unknown> }) {
+  const sections = parsePlans(plans);
+
+  if (sections.length === 0) {
+    return <div style={{ color: "#605e5c", fontSize: 13 }}>No subscription data available.</div>;
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 16 }}>
+      {sections.map((section) => (
+        <div key={section.key}>
+          <div style={{
+            fontSize: 11,
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "#605e5c",
+            marginBottom: 6,
+          }}>
+            {section.label}
+          </div>
+          <div style={{ display: "grid", gap: 6 }}>
+            {section.items.map((item, i) => <PlanBadge key={i} item={item} />)}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -61,68 +189,42 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
       <p style={{ color: "#605e5c", fontSize: 13, marginBottom: 20, marginTop: 0 }}>
         Create a Server-to-Server OAuth app in the customer's Zoom account, then paste the credentials below.
       </p>
-
       <div style={{
-        background: "#f3f2f1",
-        borderRadius: 6,
-        padding: "14px 16px",
-        marginBottom: 20,
-        fontSize: 12,
-        color: "#605e5c",
-        lineHeight: 1.7,
+        background: "#f3f2f1", borderRadius: 6, padding: "14px 16px",
+        marginBottom: 20, fontSize: 12, color: "#605e5c", lineHeight: 1.7,
       }}>
         <strong style={{ color: "#323130" }}>Setup steps (in the customer's Zoom admin portal):</strong>
         <ol style={{ margin: "8px 0 0 0", paddingLeft: 18 }}>
-          <li>Sign in using the <code style={{ background: "#e1dfdd", padding: "1px 4px", borderRadius: 3 }}>zm-{"{customer}"}@packetfusion.com</code> account</li>
+          <li>Sign in using the <code style={{ background: "#e1dfdd", padding: "1px 4px", borderRadius: 3 }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
           <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
           <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
           <li>Add scopes: <code style={{ background: "#e1dfdd", padding: "1px 4px", borderRadius: 3 }}>account:read:admin</code>, <code style={{ background: "#e1dfdd", padding: "1px 4px", borderRadius: 3 }}>user:read:admin</code>, <code style={{ background: "#e1dfdd", padding: "1px 4px", borderRadius: 3 }}>phone:read:admin</code></li>
           <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
         </ol>
       </div>
-
       <form onSubmit={handleSubmit} style={{ display: "grid", gap: 12, maxWidth: 480 }}>
         <label className="ms-label">
           <span>Account ID</span>
-          <input
-            required
-            className="ms-input"
-            value={form.account_id}
+          <input required className="ms-input" value={form.account_id}
             onChange={(e) => setForm({ ...form, account_id: e.target.value.trim() })}
-            placeholder="e.g. abc123XYZ"
-            autoComplete="off"
-          />
+            placeholder="e.g. abc123XYZ" autoComplete="off" />
         </label>
         <label className="ms-label">
           <span>Client ID</span>
-          <input
-            required
-            className="ms-input"
-            value={form.client_id}
+          <input required className="ms-input" value={form.client_id}
             onChange={(e) => setForm({ ...form, client_id: e.target.value.trim() })}
-            placeholder="e.g. aBcDeFgHiJ1234"
-            autoComplete="off"
-          />
+            placeholder="e.g. aBcDeFgHiJ1234" autoComplete="off" />
         </label>
         <label className="ms-label">
           <span>Client Secret</span>
-          <input
-            required
-            type="password"
-            className="ms-input"
-            value={form.client_secret}
+          <input required type="password" className="ms-input" value={form.client_secret}
             onChange={(e) => setForm({ ...form, client_secret: e.target.value.trim() })}
-            placeholder="••••••••••••••••"
-            autoComplete="new-password"
-          />
+            placeholder="••••••••••••••••" autoComplete="new-password" />
         </label>
         {error && <div style={{ color: "#d13438", fontSize: 13 }}>{error}</div>}
         <div>
-          <button
-            type="submit"
-            className="ms-btn-primary"
-            disabled={saving || !form.account_id || !form.client_id || !form.client_secret}
-          >
+          <button type="submit" className="ms-btn-primary"
+            disabled={saving || !form.account_id || !form.client_id || !form.client_secret}>
             {saving ? "Connecting…" : "Connect Tenant"}
           </button>
         </div>
@@ -134,117 +236,67 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
 // ── Status Dashboard ──────────────────────────────────────────────────────────
 
 function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisconnect: () => void }) {
-  const [disconnecting, setDisconnecting] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   async function handleDisconnect() {
     setDisconnecting(true);
     await onDisconnect();
-    setDisconnecting(false);
-    setConfirmDisconnect(false);
   }
-
-  const phonePlanLabel = status.licenses?.phone_plans?.map((p) => p.type).join(", ") || "None";
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 700, color: "#323130" }}>
             {status.account?.account_name ?? "Zoom Tenant"}
           </div>
           <div style={{ fontSize: 12, color: "#605e5c", marginTop: 2 }}>
-            {ACCOUNT_TYPE_LABEL[status.account?.account_type ?? 0] ?? `Type ${status.account?.account_type}`} Plan
-            &nbsp;·&nbsp; Account ID: {status.account?.id}
+            {ACCOUNT_TYPE_LABEL[status.account?.account_type ?? 0] ?? `Type ${status.account?.account_type}`} Account
+            {status.total_users != null && <> &nbsp;·&nbsp; {status.total_users} users</>}
+            &nbsp;·&nbsp; ID: {status.account?.id}
           </div>
         </div>
         <div>
           {confirmDisconnect ? (
             <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span style={{ fontSize: 13, color: "#605e5c" }}>Remove credentials?</span>
-              <button
-                className="ms-btn-danger"
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-                style={{ fontSize: 12, padding: "4px 12px" }}
-              >
+              <button className="ms-btn-danger" onClick={handleDisconnect} disabled={disconnecting}
+                style={{ fontSize: 12, padding: "4px 12px" }}>
                 {disconnecting ? "Removing…" : "Yes, disconnect"}
               </button>
-              <button
-                className="ms-btn-secondary"
-                onClick={() => setConfirmDisconnect(false)}
-                style={{ fontSize: 12, padding: "4px 12px" }}
-              >
+              <button className="ms-btn-secondary" onClick={() => setConfirmDisconnect(false)}
+                style={{ fontSize: 12, padding: "4px 12px" }}>
                 Cancel
               </button>
             </span>
           ) : (
-            <button
-              className="ms-btn-secondary"
-              onClick={() => setConfirmDisconnect(true)}
-              style={{ fontSize: 12 }}
-            >
+            <button className="ms-btn-secondary" onClick={() => setConfirmDisconnect(true)}
+              style={{ fontSize: 12 }}>
               Disconnect
             </button>
           )}
         </div>
       </div>
 
-      {/* Stat cards */}
-      <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-        <StatCard
-          label="Licensed Seats"
-          value={status.licenses?.total_seats ?? "—"}
-          sub={status.licenses?.plan_name}
-        />
-        <StatCard
-          label="Active Users"
-          value={status.users?.active ?? "—"}
-          sub={`${status.users?.inactive ?? 0} inactive`}
-        />
-        <StatCard
-          label="Phone Users"
-          value={status.phone?.total_users ?? "—"}
-          sub={phonePlanLabel !== "None" ? phonePlanLabel : undefined}
-        />
-        <StatCard
-          label="Devices"
-          value={status.devices_total ?? status.devices?.length ?? "—"}
-          sub={
-            (status.devices_total ?? 0) > (status.devices?.length ?? 0)
-              ? `Showing first ${status.devices?.length}`
-              : undefined
-          }
-        />
-      </div>
-
-      {/* Phone plans */}
-      {status.licenses?.phone_plans && status.licenses.phone_plans.length > 0 && (
-        <div className="ms-section-card" style={{ padding: "14px 18px" }}>
-          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>Zoom Phone Plans</div>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {status.licenses.phone_plans.map((plan, i) => (
-              <span
-                key={i}
-                style={{
-                  background: "#0078d41a",
-                  color: "#0078d4",
-                  border: "1px solid #0078d440",
-                  borderRadius: 4,
-                  padding: "3px 10px",
-                  fontSize: 12,
-                  fontWeight: 500,
-                }}
-              >
-                {plan.type} · {plan.hosts} seats
-              </span>
-            ))}
-          </div>
+      {/* Warnings */}
+      {status.warnings && status.warnings.length > 0 && (
+        <div style={{ background: "#fff8f0", border: "1px solid #ff8c0040", borderRadius: 6, padding: "12px 16px" }}>
+          <div style={{ fontWeight: 600, fontSize: 12, color: "#ff8c00", marginBottom: 6 }}>Partial data — some API calls failed</div>
+          {status.warnings.map((w, i) => (
+            <div key={i} style={{ fontFamily: "monospace", fontSize: 11, color: "#7a5000", marginBottom: 2 }}>{w}</div>
+          ))}
         </div>
       )}
 
-      {/* Devices table */}
+      {/* Subscriptions */}
+      <div className="ms-section-card">
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Subscriptions</div>
+        <SubscriptionList plans={status.plans ?? {}} />
+      </div>
+
+      {/* Devices */}
       {status.devices && status.devices.length > 0 && (
         <div className="ms-section-card" style={{ padding: 0, overflow: "hidden" }}>
           <div style={{ padding: "14px 18px 10px", fontWeight: 600, fontSize: 13 }}>
@@ -280,10 +332,6 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
             </tbody>
           </table>
         </div>
-      )}
-
-      {status.devices?.length === 0 && (
-        <div style={{ color: "#605e5c", fontSize: 13, padding: "8px 0" }}>No devices registered on this account.</div>
       )}
     </div>
   );
@@ -324,30 +372,21 @@ export default function ZoomTab({ projectId }: { projectId: string }) {
     </div>
   );
 
-  if (!zoomStatus?.configured) {
-    return <ConnectForm projectId={projectId} onConnected={load} />;
-  }
+  if (!zoomStatus?.configured) return <ConnectForm projectId={projectId} onConnected={load} />;
 
   if (zoomStatus.error) {
     return (
       <div className="ms-section-card">
         <div style={{ fontWeight: 600, color: "#d13438", marginBottom: 8 }}>Zoom API Error</div>
         <div style={{
-          background: "#fdf3f3",
-          border: "1px solid #f1c0c0",
-          borderRadius: 4,
-          padding: "10px 14px",
-          fontFamily: "monospace",
-          fontSize: 12,
-          color: "#a4262c",
-          marginBottom: 16,
-          wordBreak: "break-all",
+          background: "#fdf3f3", border: "1px solid #f1c0c0", borderRadius: 4,
+          padding: "10px 14px", fontFamily: "monospace", fontSize: 12,
+          color: "#a4262c", marginBottom: 16, wordBreak: "break-all",
         }}>
           {zoomStatus.error}
         </div>
         <p style={{ fontSize: 13, color: "#605e5c", margin: "0 0 14px" }}>
-          This usually means the credentials are incorrect, the S2S OAuth app hasn't been activated,
-          or the required scopes (<code>account:read:admin</code>, <code>user:read:admin</code>, <code>phone:read:admin</code>) haven't been added.
+          Check that the S2S OAuth app is activated and has the required scopes.
         </p>
         <div style={{ display: "flex", gap: 10 }}>
           <button className="ms-btn-primary" onClick={load}>Retry</button>

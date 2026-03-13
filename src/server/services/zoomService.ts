@@ -27,20 +27,12 @@ export type ZoomStatus = {
     account_name: string;
     account_type: number;
   };
-  licenses: {
-    plan_name: string;
-    total_seats: number;
-    phone_plans: { type: string; hosts: number }[];
-  };
-  users: {
-    active: number;
-    inactive: number;
-  };
-  phone: {
-    total_users: number | null;
-  };
+  // Raw plans object — parsed dynamically on the frontend
+  plans: Record<string, unknown>;
+  total_users: number | null;
   devices: ZoomDevice[];
   devices_total: number;
+  warnings: string[];
 };
 
 function credsKey(projectId: string) { return `zoom:creds:${projectId}`; }
@@ -109,29 +101,28 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
 
   const token = await getToken(kv, creds, projectId);
 
-  // Use allSettled so missing Zoom Phone license doesn't abort everything
-  const [accountRes, plansRes, activeRes, inactiveRes, phoneUsersRes, devicesRes] = await Promise.allSettled([
+  const [accountRes, plansRes, usersRes, devicesRes] = await Promise.allSettled([
     zoomGet<{ id: string; account_name: string; account_type: number }>(token, "/accounts/me"),
-    zoomGet<{
-      plan_base?: { type: string; hosts: number };
-      plan_zoom_phone?: { type: string; hosts: number }[];
-    }>(token, "/accounts/me/plans"),
-    zoomGet<{ total_records: number }>(token, "/users?status=active&page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/users?status=inactive&page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/phone/users?page_size=1"),
+    zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
+    zoomGet<{ total_records: number }>(token, "/users?page_size=1"),
     zoomGet<{ devices?: ZoomDevice[]; total_records: number }>(token, "/phone/devices?page_size=100"),
   ]);
 
-  // Account is the critical call — surface the error if it fails
   if (accountRes.status === "rejected") {
     throw new Error(`Zoom account lookup failed: ${accountRes.reason}`);
   }
 
+  const warnings: string[] = [];
+  const checks: [PromiseSettledResult<unknown>, string][] = [
+    [plansRes, "/accounts/me/plans"],
+    [usersRes, "/users"],
+    [devicesRes, "/phone/devices"],
+  ];
+  for (const [res, label] of checks) {
+    if (res.status === "rejected") warnings.push(`${label}: ${(res as PromiseRejectedResult).reason}`);
+  }
+
   const accountData = accountRes.value;
-  const plansData = settled(plansRes);
-  const activeUsers = settled(activeRes);
-  const inactiveUsers = settled(inactiveRes);
-  const phoneUsers = settled(phoneUsersRes);
   const devicesData = settled(devicesRes);
 
   return {
@@ -140,19 +131,10 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
       account_name: accountData.account_name,
       account_type: accountData.account_type,
     },
-    licenses: {
-      plan_name: plansData?.plan_base?.type ?? "Unknown",
-      total_seats: plansData?.plan_base?.hosts ?? 0,
-      phone_plans: plansData?.plan_zoom_phone ?? [],
-    },
-    users: {
-      active: activeUsers?.total_records ?? 0,
-      inactive: inactiveUsers?.total_records ?? 0,
-    },
-    phone: {
-      total_users: phoneUsers?.total_records ?? null,
-    },
+    plans: settled(plansRes) ?? {},
+    total_users: settled(usersRes)?.total_records ?? null,
     devices: devicesData?.devices ?? [],
     devices_total: devicesData?.total_records ?? 0,
+    warnings,
   };
 }
