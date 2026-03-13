@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { searchAccounts, getAccountContacts, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers } from "../services/dynamicsService";
+import { searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -36,6 +36,23 @@ app.get("/accounts/:id/contacts", async (c) => {
     return c.json(contacts);
   } catch (err) {
     console.error("Dynamics contacts fetch error:", err);
+    return c.json([]);
+  }
+});
+
+// GET /api/dynamics/accounts/:id/opportunities
+app.get("/accounts/:id/opportunities", async (c) => {
+  const accountId = c.req.param("id");
+
+  if (!accountId) {
+    throw new HTTPException(400, { message: "Account ID required" });
+  }
+
+  try {
+    const opps = await getAccountOpportunities(c.env, accountId);
+    return c.json(opps);
+  } catch (err) {
+    console.error("Dynamics opportunities fetch error:", err);
     return c.json([]);
   }
 });

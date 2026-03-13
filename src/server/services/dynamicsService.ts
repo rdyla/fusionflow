@@ -183,6 +183,24 @@ export async function getPacketFusionCSMs(env: Env): Promise<DynamicsUser[]> {
   return data.value ?? [];
 }
 
+export type DynamicsOpportunity = {
+  opportunityid: string;
+  name: string;
+  estimatedclosedate: string | null;
+  statecode: number;
+};
+
+export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {
+  if (!isConfigured(env)) return [];
+
+  const select = "opportunityid,name,estimatedclosedate,statecode";
+  const filter = `_parentaccountid_value eq ${accountId} and statecode eq 0`;
+  const path = `/opportunities?$select=${select}&$filter=${filter}&$top=50&$orderby=name asc`;
+
+  const data = await dynamicsGet<{ value: DynamicsOpportunity[] }>(env, path);
+  return data.value ?? [];
+}
+
 export async function getPacketFusionEngineers(env: Env): Promise<DynamicsUser[]> {
   if (!isConfigured(env)) return [];
 

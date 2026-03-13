@@ -93,6 +93,13 @@ export type DynamicsUser = {
   title: string | null;
 };
 
+export type DynamicsOpportunity = {
+  opportunityid: string;
+  name: string;
+  estimatedclosedate: string | null;
+  statecode: number;
+};
+
 export type Phase = {
   id: string;
   project_id: string;
@@ -234,6 +241,9 @@ export const api = {
 
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
+
+  getDynamicsOpportunities: (accountId: string) =>
+    request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities`),
 
   getDynamicsPMs: () =>
     request<DynamicsUser[]>(`/dynamics/staff/project-managers`),
