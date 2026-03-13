@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { api, type User } from "../../lib/api";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -37,14 +37,14 @@ export default function AppShell() {
       <aside style={{ width: 210, flexShrink: 0, display: "flex", flexDirection: "column", background: "#1a1f3b" }}>
         {/* Logo */}
         <div style={{ height: 48, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
-          <span style={{ color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.01em" }}>
+          <Link to="/" style={{ textDecoration: "none", color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.01em" }}>
             Fusion<span style={{ color: "#0078d4" }}>Flow</span>
-          </span>
+          </Link>
         </div>
 
         {/* Nav */}
         <nav style={{ flex: 1, paddingTop: 8, overflowY: "auto" }}>
-          <SideLink to="/" end>Dashboard</SideLink>
+          <SideLink to="/dashboard" end>Dashboard</SideLink>
           <SideLink to="/projects">Projects</SideLink>
 
           {isAdmin && (
@@ -65,7 +65,7 @@ export default function AppShell() {
         {/* Top bar */}
         <header style={{ height: 48, background: "#1a1f3b", display: "flex", alignItems: "center", paddingLeft: 24, paddingRight: 16, flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.08)", justifyContent: "space-between" }}>
           <span style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", letterSpacing: "0.01em" }}>
-            Project Management Portal
+            Onboarding & Implementation
           </span>
 
           {currentUser && <UserChip user={currentUser} />}
