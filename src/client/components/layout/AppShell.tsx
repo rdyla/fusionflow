@@ -33,24 +33,37 @@ export default function AppShell() {
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+
       {/* Sidebar */}
-      <aside style={{ width: 210, flexShrink: 0, display: "flex", flexDirection: "column", background: "#1a1f3b" }}>
+      <aside style={{
+        width: 220,
+        flexShrink: 0,
+        display: "flex",
+        flexDirection: "column",
+        background: "#091525",
+        borderRight: "1px solid rgba(255,255,255,0.07)",
+      }}>
         {/* Logo */}
-        <div style={{ height: 48, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.1)", flexShrink: 0 }}>
-          <Link to="/" style={{ textDecoration: "none", color: "#fff", fontWeight: 700, fontSize: 17, letterSpacing: "-0.01em" }}>
-            Fusion<span style={{ color: "#0078d4" }}>Flow</span>
+        <div style={{ height: 56, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <Link to="/" style={{ textDecoration: "none" }}>
+            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", color: "#f0f6ff", lineHeight: 1 }}>
+              Fusion<span style={{ color: "#00c8e0" }}>Flow</span>
+            </div>
+            <div style={{ fontSize: 9, color: "rgba(240,246,255,0.35)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 3 }}>
+              Implementation
+            </div>
           </Link>
         </div>
 
         {/* Nav */}
-        <nav style={{ flex: 1, paddingTop: 8, overflowY: "auto" }}>
+        <nav style={{ flex: 1, paddingTop: 10, overflowY: "auto" }}>
           <SideLink to="/dashboard" end>Dashboard</SideLink>
           <SideLink to="/projects">Projects</SideLink>
 
           {isAdmin && (
             <>
-              <div style={{ height: 1, background: "rgba(255,255,255,0.1)", margin: "8px 16px" }} />
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(255,255,255,0.38)", padding: "6px 20px 4px" }}>
+              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
                 Admin
               </div>
               <SideLink to="/admin/users">Users</SideLink>
@@ -58,21 +71,62 @@ export default function AppShell() {
             </>
           )}
         </nav>
+
+        {/* Bottom user chip */}
+        {currentUser && (
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+            <UserChip user={currentUser} />
+          </div>
+        )}
       </aside>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f3f2f1" }}>
-        {/* Top bar */}
-        <header style={{ height: 48, background: "#1a1f3b", display: "flex", alignItems: "center", paddingLeft: 24, paddingRight: 16, flexShrink: 0, borderBottom: "1px solid rgba(255,255,255,0.08)", justifyContent: "space-between" }}>
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.45)", letterSpacing: "0.01em" }}>
-            Onboarding & Implementation
-          </span>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1b2e", position: "relative" }}>
 
-          {currentUser && <UserChip user={currentUser} />}
+        {/* Subtle grid background */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
+          backgroundImage: "linear-gradient(rgba(0,200,224,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,224,0.025) 1px, transparent 1px)",
+          backgroundSize: "60px 60px" }} />
+
+        {/* Radial glow */}
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
+          background: "radial-gradient(ellipse 70% 50% at 80% 10%, rgba(8,145,178,0.06) 0%, transparent 70%)" }} />
+
+        {/* Top bar */}
+        <header style={{
+          position: "relative",
+          zIndex: 10,
+          height: 56,
+          background: "rgba(9,21,37,0.85)",
+          backdropFilter: "blur(12px)",
+          display: "flex",
+          alignItems: "center",
+          paddingLeft: 28,
+          paddingRight: 20,
+          flexShrink: 0,
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          justifyContent: "space-between",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 12, color: "rgba(240,246,255,0.3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+              Module
+            </span>
+            <span style={{ color: "rgba(255,255,255,0.15)" }}>›</span>
+            <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: "#00c8e0", letterSpacing: "0.02em" }}>
+              Onboarding &amp; Implementation
+            </span>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 40, fontSize: 12, color: "rgba(240,246,255,0.4)" }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00c8e0", boxShadow: "0 0 6px #00c8e0", display: "inline-block" }} />
+              Live
+            </div>
+          </div>
         </header>
 
         {/* Content */}
-        <main style={{ flex: 1, overflowY: "auto", padding: "28px 36px" }}>
+        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px" }}>
           <Outlet />
         </main>
       </div>
@@ -86,34 +140,30 @@ function UserChip({ user }: { user: User }) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-      {/* Text block */}
-      <div style={{ textAlign: "right", lineHeight: 1.3 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "#fff", whiteSpace: "nowrap" }}>
+      <div style={{
+        width: 34,
+        height: 34,
+        borderRadius: "50%",
+        background: "linear-gradient(135deg, #00c8e0, #0891b2)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "'Syne', sans-serif",
+        fontSize: 12,
+        fontWeight: 700,
+        color: "#fff",
+        flexShrink: 0,
+        letterSpacing: "0.04em",
+      }}>
+        {abbr}
+      </div>
+      <div style={{ lineHeight: 1.35, minWidth: 0 }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {user.name ?? user.email}
         </div>
-        <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap" }}>
+        <div style={{ fontSize: 10, color: "rgba(240,246,255,0.35)", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
           {user.organization_name ? `${user.organization_name} · ` : ""}{roleLabel}
         </div>
-      </div>
-
-      {/* Avatar */}
-      <div
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50%",
-          background: "#0078d4",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          fontSize: 12,
-          fontWeight: 700,
-          color: "#fff",
-          flexShrink: 0,
-          letterSpacing: "0.02em",
-        }}
-      >
-        {abbr}
       </div>
     </div>
   );
