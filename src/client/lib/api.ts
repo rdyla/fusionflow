@@ -152,6 +152,25 @@ export type Document = {
 };
 
 export const DOCUMENT_CATEGORIES = ["LOA", "Cut Sheet", "CSR", "Contract", "Design Doc", "Test Plan", "Other"] as const;
+
+export type ZoomDevice = {
+  id: string;
+  display_name: string;
+  mac_address: string | null;
+  model: string | null;
+  status: string | null;
+  assignee: { name: string; extension_number: string | null } | null;
+};
+
+export type ZoomStatus = {
+  configured: boolean;
+  account?: { id: string; account_name: string; account_type: number };
+  licenses?: { plan_name: string; total_seats: number; phone_plans: { type: string; hosts: number }[] };
+  users?: { active: number; inactive: number };
+  phone?: { total_users: number };
+  devices?: ZoomDevice[];
+  devices_total?: number;
+};
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
 export type ProjectAccess = {
@@ -429,6 +448,19 @@ export const api = {
     request<{ success: boolean }>(`/projects/${projectId}/documents/${docId}`, {
       method: "DELETE",
     }),
+
+  // Zoom
+  zoomConfigured: (projectId: string) =>
+    request<{ configured: boolean }>(`/projects/${projectId}/zoom/configured`),
+  zoomStatus: (projectId: string) =>
+    request<ZoomStatus>(`/projects/${projectId}/zoom/status`),
+  zoomSaveCredentials: (projectId: string, creds: { account_id: string; client_id: string; client_secret: string }) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, {
+      method: "PUT",
+      body: JSON.stringify(creds),
+    }),
+  zoomDeleteCredentials: (projectId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, { method: "DELETE" }),
 
   // Admin
   adminUsers: () => request<User[]>("/admin/users"),

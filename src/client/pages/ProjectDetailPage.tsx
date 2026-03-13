@@ -14,9 +14,10 @@ import {
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
+import ZoomTab from "../components/zoom/ZoomTab";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity";
+type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity" | "zoom";
 
 const STATUS_COLOR: Record<string, string> = {
   completed: "#107c10",
@@ -431,7 +432,7 @@ export default function ProjectDetailPage() {
 
       {/* Tab navigation */}
       <div className="ms-tabs">
-        {(["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity"] as DetailTab[]).map((t) => (
+        {(["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity", "zoom"] as DetailTab[]).map((t) => (
           <button
             key={t}
             className={`ms-tab-btn${tab === t ? " active" : ""}`}
@@ -892,6 +893,9 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Zoom ──────────────────────────────────────────────────────────── */}
+      {tab === "zoom" && <ZoomTab projectId={project.id} />}
 
       {/* ── Risk Modal ────────────────────────────────────────────────────── */}
       {showRiskModal && (
