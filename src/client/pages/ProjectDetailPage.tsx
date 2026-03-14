@@ -100,6 +100,7 @@ export default function ProjectDetailPage() {
   const [milestoneForm, setMilestoneForm] = useState({ name: "", phase_id: "", target_date: "", actual_date: "", status: "not_started" });
   const [savingMilestone, setSavingMilestone] = useState(false);
 
+  const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const { showToast } = useToast();
 
   const groupedTasks = useMemo(
@@ -117,11 +118,12 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData] =
+        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData, meData] =
           await Promise.all([
             api.project(id), api.phases(id), api.milestones(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users(), api.documents(id),
             api.getDynamicsPMs(), api.getDynamicsAEs(), api.getDynamicsSAs(), api.getDynamicsCSMs(), api.getDynamicsEngineers(),
+            api.me(),
           ]);
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
@@ -144,6 +146,7 @@ export default function ProjectDetailPage() {
         setNotes(noteData);
         setUsers(userData);
         setDocuments(docData);
+        setCurrentUserRole(meData.role);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load project");
       } finally {
@@ -156,6 +159,8 @@ export default function ProjectDetailPage() {
   if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading project...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
   if (!project) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Project not found.</div>;
+
+  const canEdit = currentUserRole === "admin" || currentUserRole === "pm";
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -515,7 +520,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          <div className="ms-section-card">
+          {canEdit && <div className="ms-section-card">
             <div className="ms-section-title">Project Controls</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               <label className="ms-label">
@@ -598,7 +603,7 @@ export default function ProjectDetailPage() {
               </button>
               {saveMessage && <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{saveMessage}</span>}
             </div>
-          </div>
+          </div>}
 
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
@@ -707,13 +712,13 @@ export default function ProjectDetailPage() {
                         </div>
                         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                           <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
-                          <button className="ms-btn-ghost" onClick={() => setEditingTask(task)}>Edit</button>
+                          {canEdit && <button className="ms-btn-ghost" onClick={() => setEditingTask(task)}>Edit</button>}
                         </div>
                       </div>
                     )
                   )}
 
-                  {addingTaskPhaseId === phase.id ? (
+                  {canEdit && addingTaskPhaseId === phase.id ? (
                     <div className="ms-section-card" style={{ borderColor: "#0891b2" }}>
                       <div style={{ display: "grid", gap: 10 }}>
                         <label className="ms-label">
@@ -752,7 +757,7 @@ export default function ProjectDetailPage() {
                         </div>
                       </div>
                     </div>
-                  ) : (
+                  ) : canEdit ? (
                     <button
                       className="ms-btn-ghost"
                       onClick={() => { setAddingTaskPhaseId(phase.id); setEditingTask(null); }}
@@ -760,7 +765,7 @@ export default function ProjectDetailPage() {
                     >
                       + Add Task
                     </button>
-                  )}
+                  ) : null}
                 </div>
               </div>
             ))}
@@ -773,7 +778,7 @@ export default function ProjectDetailPage() {
         <div className="ms-section-card">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Risks & Blockers</div>
-            <button className="ms-btn-primary" onClick={openNewRisk}>+ Add Risk</button>
+            {canEdit && <button className="ms-btn-primary" onClick={openNewRisk}>+ Add Risk</button>}
           </div>
           {risks.length === 0 ? (
             <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No risks recorded.</div>
@@ -788,8 +793,8 @@ export default function ProjectDetailPage() {
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                     <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
-                    <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>
-                    <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>
+                    {canEdit && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
+                    {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
                   </div>
                 </div>
               ))}
@@ -803,7 +808,7 @@ export default function ProjectDetailPage() {
         <div className="ms-section-card">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
             <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Milestones</div>
-            <button className="ms-btn-primary" onClick={openNewMilestone}>+ Add Milestone</button>
+            {canEdit && <button className="ms-btn-primary" onClick={openNewMilestone}>+ Add Milestone</button>}
           </div>
           {milestones.length === 0 ? (
             <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No milestones recorded.</div>
@@ -819,8 +824,8 @@ export default function ProjectDetailPage() {
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                     <Badge label={ms.status?.replaceAll("_", " ") ?? "not started"} color={MILESTONE_COLOR[ms.status ?? "not_started"] ?? "#94a3b8"} />
-                    <button className="ms-btn-ghost" onClick={() => openEditMilestone(ms)}>Edit</button>
-                    <button className="ms-btn-danger" onClick={() => handleDeleteMilestone(ms.id)}>Delete</button>
+                    {canEdit && <button className="ms-btn-ghost" onClick={() => openEditMilestone(ms)}>Edit</button>}
+                    {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteMilestone(ms.id)}>Delete</button>}
                   </div>
                 </div>
               ))}
@@ -843,7 +848,7 @@ export default function ProjectDetailPage() {
       {/* ── Activity ──────────────────────────────────────────────────────── */}
       {tab === "activity" && (
         <div style={{ display: "grid", gap: 16 }}>
-          <div className="ms-section-card">
+          {canEdit && <div className="ms-section-card">
             <div className="ms-section-title">Add Note</div>
             <div style={{ display: "grid", gap: 12 }}>
               <label className="ms-label">
@@ -872,7 +877,7 @@ export default function ProjectDetailPage() {
                 {noteMessage && <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{noteMessage}</span>}
               </div>
             </div>
-          </div>
+          </div>}
 
           <div className="ms-section-card">
             <div className="ms-section-title">Notes & Activity</div>

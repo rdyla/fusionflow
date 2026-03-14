@@ -39,11 +39,16 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings, "at_risk")
     .first<{ count: number }>();
 
+  // AEs only see tasks assigned to them; PMs/admins see all tasks on their projects
+  const isAE = auth.role === "pf_ae" || auth.role === "partner_ae";
+  const taskAssigneeClause = isAE ? " AND assignee_user_id = ?" : "";
+  const taskAssigneeBinding: string[] = isAE ? [auth.user.id] : [];
+
   const openTasksCount = await db
     .prepare(
-      `SELECT COUNT(*) as count FROM tasks WHERE status != 'completed' AND project_id IN (${projectSubquery})`
+      `SELECT COUNT(*) as count FROM tasks WHERE status != 'completed' AND project_id IN (${projectSubquery})${taskAssigneeClause}`
     )
-    .bind(...filterBindings)
+    .bind(...filterBindings, ...taskAssigneeBinding)
     .first<{ count: number }>();
 
   const openRisksCount = await db
@@ -74,13 +79,13 @@ app.get("/summary", async (c) => {
        FROM tasks t
        JOIN projects p ON p.id = t.project_id
        WHERE t.status != 'completed'
-         AND t.project_id IN (${projectSubquery})
+         AND t.project_id IN (${projectSubquery})${taskAssigneeClause.replace("assignee_user_id", "t.assignee_user_id")}
        ORDER BY
          CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
          t.due_date ASC
        LIMIT 8`
     )
-    .bind(...filterBindings)
+    .bind(...filterBindings, ...taskAssigneeBinding)
     .all();
 
   // Open risks with project name, highest severity first
