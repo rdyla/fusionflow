@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { api, type User } from "../lib/api";
+import { useNavigate } from "react-router-dom";
+import { api, type User, IMPERSONATE_KEY } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const ROLES = ["admin", "pm", "pf_ae", "partner_ae"] as const;
@@ -30,8 +31,15 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState<Partial<User & { role: Role }>>({});
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
+  const navigate = useNavigate();
 
   useEffect(() => { loadUsers(); }, []);
+
+  function handleViewAs(user: User) {
+    localStorage.setItem(IMPERSONATE_KEY, user.email);
+    navigate("/dashboard");
+    window.location.reload();
+  }
 
   async function loadUsers() {
     try {
@@ -159,6 +167,15 @@ export default function AdminUsersPage() {
                       >
                         {user.is_active ? "Deactivate" : "Activate"}
                       </button>
+                      {user.role !== "admin" && user.is_active ? (
+                        <button
+                          className="ms-btn-ghost"
+                          onClick={() => handleViewAs(user)}
+                          style={{ color: "#ff8c00", borderColor: "rgba(255,140,0,0.35)" }}
+                        >
+                          View As
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

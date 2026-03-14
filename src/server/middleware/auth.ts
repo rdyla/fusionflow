@@ -89,6 +89,19 @@ export const authMiddleware: AppMiddleware = async (c, next) => {
     });
   }
 
+  // Impersonation: admins may pass x-impersonate-email to view as another user
+  if (user.role === "admin") {
+    const impersonateEmail = c.req.header("x-impersonate-email");
+    if (impersonateEmail) {
+      const target = await findUserByEmail(c.env.DB, impersonateEmail.trim().toLowerCase());
+      if (target && target.is_active) {
+        c.set("auth", { user: target, role: target.role, organization: target.organization_name });
+        await next();
+        return;
+      }
+    }
+  }
+
   c.set("auth", {
     user,
     role: user.role,

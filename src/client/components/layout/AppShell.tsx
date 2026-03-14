@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
-import { api, type User } from "../../lib/api";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { api, type User, IMPERSONATE_KEY } from "../../lib/api";
 
 const ROLE_LABELS: Record<string, string> = {
   admin:      "Admin",
@@ -21,15 +21,26 @@ function initials(name: string | null, email: string): string {
 export default function AppShell() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [impersonating, setImpersonating] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
+    const imp = localStorage.getItem(IMPERSONATE_KEY);
+    setImpersonating(imp);
+
     api.me()
       .then((res) => {
         setCurrentUser(res.user);
-        setIsAdmin(res.role === "admin");
+        setIsAdmin(res.role === "admin" && !imp);
       })
       .catch(() => {});
   }, []);
+
+  function exitImpersonation() {
+    localStorage.removeItem(IMPERSONATE_KEY);
+    navigate("/admin/users");
+    window.location.reload();
+  }
 
   return (
     <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
@@ -124,6 +135,25 @@ export default function AppShell() {
             </div>
           </div>
         </header>
+
+        {/* Impersonation banner */}
+        {impersonating && (
+          <div style={{
+            position: "relative", zIndex: 10,
+            background: "rgba(255,140,0,0.12)", borderBottom: "1px solid rgba(255,140,0,0.35)",
+            padding: "8px 28px", display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <span style={{ fontSize: 12, color: "#ff8c00", fontWeight: 600 }}>
+              Viewing as <strong>{impersonating}</strong> — changes are live
+            </span>
+            <button
+              onClick={exitImpersonation}
+              style={{ fontSize: 12, fontWeight: 600, color: "#ff8c00", background: "rgba(255,140,0,0.15)", border: "1px solid rgba(255,140,0,0.4)", borderRadius: 4, padding: "3px 10px", cursor: "pointer" }}
+            >
+              Exit
+            </button>
+          </div>
+        )}
 
         {/* Content */}
         <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px" }}>

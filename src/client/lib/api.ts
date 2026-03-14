@@ -1,11 +1,23 @@
 const API_BASE = "/api";
 const DEV_HEADERS: Record<string, string> = import.meta.env.DEV ? { "x-dev-user-email": "rdyla@packetfusion.com" } : {};
 
+export const IMPERSONATE_KEY = "impersonate_email";
+
+function getImpersonationHeaders(): Record<string, string> {
+  try {
+    const email = localStorage.getItem(IMPERSONATE_KEY);
+    return email ? { "x-impersonate-email": email } : {};
+  } catch {
+    return {};
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
       ...DEV_HEADERS,
+      ...getImpersonationHeaders(),
     },
     ...options,
   });
@@ -445,7 +457,7 @@ export const api = {
 
     const res = await fetch(`${API_BASE}/projects/${projectId}/documents`, {
       method: "POST",
-      headers: { ...DEV_HEADERS },
+      headers: { ...DEV_HEADERS, ...getImpersonationHeaders() },
       body: form,
     });
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
