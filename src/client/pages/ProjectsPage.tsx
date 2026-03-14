@@ -396,12 +396,15 @@ export default function ProjectsPage() {
                     }}
                   >
                     <option value="">— select an opportunity —</option>
-                    {opportunities.map((opp) => (
-                      <option key={opp.opportunityid} value={opp.opportunityid}>
-                        {opp.name}
-                        {opp.estimatedclosedate ? ` (close ${opp.estimatedclosedate.slice(0, 10)})` : ""}
-                      </option>
-                    ))}
+                    {opportunities.map((opp) => {
+                      const stateLabel = opp.statecode === 1 ? "Won" : opp.statecode === 2 ? "Lost" : "Open";
+                      const closeSuffix = opp.estimatedclosedate ? ` · close ${opp.estimatedclosedate.slice(0, 10)}` : "";
+                      return (
+                        <option key={opp.opportunityid} value={opp.opportunityid}>
+                          {opp.name} [{stateLabel}{closeSuffix}]
+                        </option>
+                      );
+                    })}
                   </select>
                 </label>
               )}

@@ -194,7 +194,7 @@ export async function getAccountOpportunities(env: Env, accountId: string): Prom
   if (!isConfigured(env)) return [];
 
   const select = "opportunityid,name,estimatedclosedate,statecode";
-  const filter = `_parentaccountid_value eq ${accountId} and statecode eq 0`;
+  const filter = `_parentaccountid_value eq ${accountId}`;
   const path = `/opportunities?$select=${select}&$filter=${filter}&$top=50&$orderby=name asc`;
 
   const data = await dynamicsGet<{ value: DynamicsOpportunity[] }>(env, path);
