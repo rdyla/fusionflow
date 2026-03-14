@@ -57,11 +57,6 @@ const STATUS_COLOR: Record<string, string> = {
   completed:   "#059669",
 };
 
-// Light surface styles shared by both timeline cards
-const LIGHT_CARD: React.CSSProperties = {
-  background: "#ffffff",
-  border: "1px solid #e2e8f0",
-};
 
 const STATUS_LABEL: Record<string, string> = {
   not_started: "Not Started",
@@ -96,7 +91,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
     const LABEL_W = 180;
 
     ganttContent = (
-      <div className="ms-section-card" style={{ marginBottom: 20, ...LIGHT_CARD }}>
+      <div className="ms-section-card" style={{ marginBottom: 20 }}>
         <div className="ms-section-title">Schedule</div>
         <div style={{ overflowX: "auto" }}>
           <div style={{ minWidth: 600 }}>
@@ -111,7 +106,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                       left: `${pct(m.ms, minMs, totalMs)}%`,
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "#64748b",
+                      color: "rgba(240,246,255,0.45)",
                       whiteSpace: "nowrap",
                       transform: "translateX(-50%)",
                     }}
@@ -124,7 +119,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
 
             {/* Grid line track */}
             <div style={{ display: "flex", marginBottom: 2, paddingLeft: LABEL_W }}>
-              <div style={{ flex: 1, height: 1, background: "#e2e8f0" }} />
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
 
             {/* Phase rows */}
@@ -140,7 +135,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
               return (
                 <div key={phase.id} style={{ display: "flex", alignItems: "center", marginBottom: 6, minHeight: 28 }}>
                   {/* Label */}
-                  <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#334155", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "rgba(240,246,255,0.7)", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {phase.name}
                   </div>
 
@@ -270,7 +265,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
     <div>
       {ganttContent}
 
-      <div className="ms-section-card" style={LIGHT_CARD}>
+      <div className="ms-section-card">
         <div className="ms-section-title">Phase Details</div>
         <div style={{ display: "grid", gap: 8 }}>
           {phases.map((phase) => {
@@ -282,7 +277,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
               <div key={phase.id} className="ms-row-item">
                 {isEditing ? (
                   <div style={{ flex: 1, display: "grid", gap: 12 }}>
-                    <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{phase.name}</div>
+                    <div style={{ fontWeight: 700, color: "rgba(240,246,255,0.9)", fontSize: 14 }}>{phase.name}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
                       <label className="ms-label">
                         <span>Status</span>
@@ -324,7 +319,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                   <div style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
-                        <div style={{ fontWeight: 600, color: "#0f172a", fontSize: 14 }}>{phase.name}</div>
+                        <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", fontSize: 14 }}>{phase.name}</div>
                         <span
                           className="ms-badge"
                           style={{ background: color + "1a", color, border: `1px solid ${color}40` }}
@@ -333,7 +328,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                         </span>
                       </div>
 
-                      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.45)", marginBottom: 8 }}>
                         Planned: {phase.planned_start ?? "—"} → {phase.planned_end ?? "—"}
                         {(phase.actual_start || phase.actual_end) && (
                           <span style={{ marginLeft: 14, color: "#059669" }}>
@@ -343,7 +338,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                       </div>
 
                       {/* Progress track */}
-                      <div style={{ height: 6, borderRadius: 3, background: "#e2e8f0", overflow: "hidden", maxWidth: 280 }}>
+                      <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.1)", overflow: "hidden", maxWidth: 280 }}>
                         <div style={{ width: progressWidth(phase.status), height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
                       </div>
 
@@ -352,7 +347,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                           {phaseMilestones.map((ms) => (
                             <span
                               key={ms.id}
-                              style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "#fef3c7", color: "#92400e", border: "1px solid #fbbf2440" }}
+                              style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "rgba(255,140,0,0.12)", color: "#ff8c00", border: "1px solid rgba(255,140,0,0.3)" }}
                             >
                               ◆ {ms.name}{ms.target_date ? ` (${ms.target_date})` : ""}
                             </span>
