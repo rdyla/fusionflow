@@ -1,0 +1,1 @@
+ALTER TABLE projects ADD COLUMN archived INTEGER DEFAULT 0;

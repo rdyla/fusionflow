@@ -116,6 +116,61 @@ app.patch("/users/:id", async (c) => {
   return c.json(updated);
 });
 
+// ── Project Management ─────────────────────────────────────────────────────────
+
+app.get("/projects", async (c) => {
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT id, name, customer_name, vendor, solution_type, status, health,
+              kickoff_date, target_go_live_date, archived, created_at, updated_at
+       FROM projects
+       ORDER BY updated_at DESC`
+    )
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+app.patch("/projects/:id", async (c) => {
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const { archived } = await c.req.json() as { archived?: number };
+
+  if (archived === undefined || (archived !== 0 && archived !== 1)) {
+    throw new HTTPException(400, { message: "archived must be 0 or 1" });
+  }
+
+  const existing = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
+  if (!existing) throw new HTTPException(404, { message: "Project not found" });
+
+  await db
+    .prepare("UPDATE projects SET archived = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(archived, projectId)
+    .run();
+
+  const updated = await db.prepare("SELECT * FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
+  return c.json(updated);
+});
+
+app.delete("/projects/:id", async (c) => {
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const existing = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
+  if (!existing) throw new HTTPException(404, { message: "Project not found" });
+
+  // Cascade delete in dependency order
+  await db.prepare("DELETE FROM documents WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM project_access WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM notes WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM risks WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM tasks WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM milestones WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM phases WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
+
+  return c.json({ success: true });
+});
+
 // ── Project Access ─────────────────────────────────────────────────────────────
 
 app.get("/projects/:projectId/access", async (c) => {

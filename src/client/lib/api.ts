@@ -74,6 +74,7 @@ export type Project = {
   csm_name: string | null;
   engineer_name: string | null;
   dynamics_account_id: string | null;
+  archived: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -486,6 +487,17 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, { method: "DELETE" }),
 
   // Admin
+  adminProjects: () => request<Project[]>("/admin/projects"),
+
+  adminArchiveProject: (id: string, archived: boolean) =>
+    request<Project>(`/admin/projects/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ archived: archived ? 1 : 0 }),
+    }),
+
+  adminDeleteProject: (id: string) =>
+    request<{ success: boolean }>(`/admin/projects/${id}`, { method: "DELETE" }),
+
   adminUsers: () => request<User[]>("/admin/users"),
 
   adminCreateUser: (payload: {

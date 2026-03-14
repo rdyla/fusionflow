@@ -77,6 +77,7 @@ export default function AppShell() {
               <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
                 Admin
               </div>
+              <SideLink to="/admin/projects">Projects</SideLink>
               <SideLink to="/admin/users">Users</SideLink>
               <SideLink to="/admin/access">Access</SideLink>
             </>

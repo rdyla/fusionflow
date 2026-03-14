@@ -17,18 +17,19 @@ app.get("/", async (c) => {
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
     FROM projects
+    WHERE (archived = 0 OR archived IS NULL)
   `;
   let bindings: string[] = [];
 
   if (auth.role === "pm") {
-    sql += " WHERE pm_user_id = ?";
+    sql += " AND pm_user_id = ?";
     bindings = [auth.user.id];
   } else if (auth.role === "pf_ae") {
-    sql += " WHERE ae_user_id = ?";
+    sql += " AND ae_user_id = ?";
     bindings = [auth.user.id];
   } else if (auth.role === "partner_ae") {
     sql += `
-      WHERE id IN (
+      AND id IN (
         SELECT project_id FROM project_access WHERE user_id = ?
       )
     `;
