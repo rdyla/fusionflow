@@ -16,7 +16,6 @@ import dynamicsRoutes from "./routes/dynamics";
 import zoomRoutes from "./routes/zoom";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
-import type { Bindings } from "./types";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
