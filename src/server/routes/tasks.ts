@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject } from "../services/accessService";
+import { sendEmail } from "../services/emailService";
+import { taskAssigned, taskBlocked } from "../lib/emailTemplates";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -72,7 +74,23 @@ app.post("/:id/tasks", async (c) => {
   const created = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
-    .first();
+    .first<{ id: string; title: string; assignee_user_id: string | null; due_date: string | null; priority: string | null }>();
+
+  // Notify assignee if one was set
+  if (created?.assignee_user_id) {
+    const [assignee, project] = await Promise.all([
+      db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(created.assignee_user_id).first<{ email: string; name: string }>(),
+      db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>(),
+    ]);
+    if (assignee && project) {
+      const appUrl = c.env.APP_URL ?? "";
+      sendEmail(c.env, {
+        to: assignee.email,
+        subject: `You've been assigned: ${created.title}`,
+        html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: created.title, projectName: project.name, dueDate: created.due_date, priority: created.priority, appUrl, projectId }),
+      });
+    }
+  }
 
   return c.json(created, 201);
 });
@@ -98,9 +116,9 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   }
 
   const existing = await db
-    .prepare(`SELECT id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
+    .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first();
+    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -143,7 +161,41 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const updated = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
-    .first();
+    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+
+  const appUrl = c.env.APP_URL ?? "";
+  const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
+
+  // Notify new assignee if assignee changed
+  const assigneeChanged = updates.assignee_user_id !== undefined && updates.assignee_user_id !== existing.assignee_user_id;
+  if (assigneeChanged && updated?.assignee_user_id) {
+    const assignee = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(updated.assignee_user_id).first<{ email: string; name: string }>();
+    if (assignee && project) {
+      sendEmail(c.env, {
+        to: assignee.email,
+        subject: `You've been assigned: ${updated.title}`,
+        html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: updated.title, projectName: project.name, dueDate: updated.due_date, priority: updated.priority, appUrl, projectId }),
+      });
+    }
+  }
+
+  // Notify PM if task just became blocked
+  const justBlocked = updates.status === "blocked" && existing.status !== "blocked";
+  if (justBlocked && project?.pm_user_id) {
+    const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
+    let assigneeName: string | null = null;
+    if (updated?.assignee_user_id) {
+      const a = await db.prepare("SELECT name FROM users WHERE id = ? LIMIT 1").bind(updated.assignee_user_id).first<{ name: string }>();
+      assigneeName = a?.name ?? null;
+    }
+    if (pm && project) {
+      sendEmail(c.env, {
+        to: pm.email,
+        subject: `Task blocked: ${updated?.title ?? ""}`,
+        html: taskBlocked({ pmName: pm.name ?? pm.email, taskTitle: updated?.title ?? "", projectName: project.name, assigneeName, appUrl, projectId }),
+      });
+    }
+  }
 
   return c.json(updated);
 });

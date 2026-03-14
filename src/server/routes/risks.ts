@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject } from "../services/accessService";
+import { sendEmail } from "../services/emailService";
+import { highRiskAdded } from "../lib/emailTemplates";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -57,7 +59,24 @@ app.post("/:id/risks", async (c) => {
     .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null)
     .run();
 
-  const created = await db.prepare("SELECT * FROM risks WHERE id = ? LIMIT 1").bind(id).first();
+  const created = await db.prepare("SELECT * FROM risks WHERE id = ? LIMIT 1").bind(id).first<{ id: string; title: string; description: string | null; severity: string | null }>();
+
+  // Notify PM on high severity risks
+  if (created?.severity === "high") {
+    const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
+    if (project?.pm_user_id) {
+      const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
+      if (pm) {
+        const appUrl = c.env.APP_URL ?? "";
+        sendEmail(c.env, {
+          to: pm.email,
+          subject: `High severity risk logged: ${created.title}`,
+          html: highRiskAdded({ pmName: pm.name ?? pm.email, riskTitle: created.title, riskDescription: created.description, projectName: project.name, appUrl, projectId }),
+        });
+      }
+    }
+  }
+
   return c.json(created, 201);
 });
 

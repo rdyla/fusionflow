@@ -23,6 +23,10 @@ export type Bindings = {
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;
   DYNAMICS_CLIENT_SECRET?: string;
+  // Email (set via wrangler secret put RESEND_API_KEY)
+  RESEND_API_KEY?: string;
+  // App base URL for email links (set in wrangler.json vars)
+  APP_URL?: string;
 };
 
 export type Variables = {

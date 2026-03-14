@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
+import { sendEmail } from "../services/emailService";
+import { userInvite } from "../lib/emailTemplates";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -59,7 +61,19 @@ app.post("/users", async (c) => {
     .bind(id, email.toLowerCase(), name ?? null, organization_name ?? null, role)
     .run();
 
-  const created = await db.prepare("SELECT * FROM users WHERE id = ? LIMIT 1").bind(id).first();
+  const created = await db.prepare("SELECT * FROM users WHERE id = ? LIMIT 1").bind(id).first<{ id: string; email: string; name: string | null; role: string }>();
+
+  // Send invite email
+  if (created) {
+    const auth = c.get("auth");
+    const appUrl = c.env.APP_URL ?? "";
+    sendEmail(c.env, {
+      to: created.email,
+      subject: "You've been invited to FusionFlow",
+      html: userInvite({ recipientName: created.name ?? created.email, invitedByName: auth.user.name ?? auth.user.email, role: created.role, appUrl }),
+    });
+  }
+
   return c.json(created, 201);
 });
 
