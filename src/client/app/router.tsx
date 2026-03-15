@@ -7,6 +7,8 @@ import ProjectDetailPage from "../pages/ProjectDetailPage";
 import AdminUsersPage from "../pages/AdminUsersPage";
 import AdminAccessPage from "../pages/AdminAccessPage";
 import AdminProjectsPage from "../pages/AdminProjectsPage";
+import SolutionsPage from "../pages/SolutionsPage";
+import SolutionDetailPage from "../pages/SolutionDetailPage";
 
 export default function Router() {
   return (
@@ -20,6 +22,8 @@ export default function Router() {
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          <Route path="/solutions" element={<SolutionsPage />} />
+          <Route path="/solutions/:id" element={<SolutionDetailPage />} />
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/access" element={<AdminAccessPage />} />
           <Route path="/admin/projects" element={<AdminProjectsPage />} />

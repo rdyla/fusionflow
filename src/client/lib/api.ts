@@ -38,6 +38,36 @@ export type User = {
   is_active: number;
 };
 
+export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "rc_ace";
+export type SolutionStatus = "draft" | "assessment" | "requirements" | "scope" | "handoff" | "won" | "lost";
+export type SolutionVendor = "zoom" | "ringcentral";
+
+export type Solution = {
+  id: string;
+  name: string;
+  customer_name: string;
+  dynamics_account_id: string | null;
+  vendor: SolutionVendor;
+  solution_type: SolutionType;
+  status: SolutionStatus;
+  pf_ae_user_id: string | null;
+  partner_ae_user_id: string | null;
+  partner_ae_name: string | null;
+  partner_ae_email: string | null;
+  needs_assessment: string | null;
+  requirements: string | null;
+  scope_of_work: string | null;
+  handoff_notes: string | null;
+  linked_project_id: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  pf_ae_name: string | null;
+  pf_ae_email_addr: string | null;
+  partner_ae_display_name: string | null;
+};
+
 export type DashboardTask = Task & { project_name: string };
 export type DashboardRisk = Risk & { project_name: string };
 
@@ -542,4 +572,56 @@ export const api = {
     request<{ success: boolean }>(`/admin/projects/${projectId}/access/${userId}`, {
       method: "DELETE",
     }),
+
+  // ── Solutions ───────────────────────────────────────────────────────────────
+
+  solutions: () => request<Solution[]>("/solutions"),
+
+  solution: (id: string) => request<Solution>(`/solutions/${id}`),
+
+  createSolution: (payload: {
+    customer_name: string;
+    dynamics_account_id?: string;
+    vendor: SolutionVendor;
+    solution_type: SolutionType;
+    pf_ae_user_id?: string;
+    partner_ae_user_id?: string;
+    partner_ae_name?: string;
+    partner_ae_email?: string;
+  }) =>
+    request<Solution>("/solutions", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  updateSolution: (
+    id: string,
+    payload: Partial<{
+      name: string;
+      customer_name: string;
+      dynamics_account_id: string | null;
+      vendor: SolutionVendor;
+      solution_type: SolutionType;
+      status: SolutionStatus;
+      pf_ae_user_id: string | null;
+      partner_ae_user_id: string | null;
+      partner_ae_name: string | null;
+      partner_ae_email: string | null;
+      needs_assessment: string | null;
+      requirements: string | null;
+      scope_of_work: string | null;
+      handoff_notes: string | null;
+      linked_project_id: string | null;
+    }>
+  ) =>
+    request<Solution>(`/solutions/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteSolution: (id: string) =>
+    request<{ success: boolean }>(`/solutions/${id}`, { method: "DELETE" }),
+
+  createProjectFromSolution: (id: string) =>
+    request<Project>(`/solutions/${id}/create-project`, { method: "POST" }),
 };

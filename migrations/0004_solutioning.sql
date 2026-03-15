@@ -1,0 +1,21 @@
+CREATE TABLE solutions (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  customer_name TEXT NOT NULL,
+  dynamics_account_id TEXT,
+  vendor TEXT NOT NULL,
+  solution_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'draft',
+  pf_ae_user_id TEXT,
+  partner_ae_user_id TEXT,
+  partner_ae_name TEXT,
+  partner_ae_email TEXT,
+  needs_assessment TEXT,
+  requirements TEXT,
+  scope_of_work TEXT,
+  handoff_notes TEXT,
+  linked_project_id TEXT,
+  created_by TEXT,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
