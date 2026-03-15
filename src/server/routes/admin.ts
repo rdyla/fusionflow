@@ -11,22 +11,6 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // All admin routes require admin role
 app.use("*", requireRole("admin"));
 
-// ── Email Test (temporary) ────────────────────────────────────────────────────
-
-app.post("/test-email", async (c) => {
-  const auth = c.get("auth");
-  await sendEmail(c.env, {
-    to: auth.user.email,
-    subject: "FusionFlow email test",
-    html: `<div style="font-family:sans-serif;padding:24px;background:#142236;color:#f0f6ff;">
-      <h2 style="color:#00c8e0;">It works!</h2>
-      <p>Email notifications are configured correctly for FusionFlow.</p>
-      <p style="color:rgba(240,246,255,0.5);font-size:13px;">Sent to: ${auth.user.email}</p>
-    </div>`,
-  });
-  return c.json({ ok: true, to: auth.user.email });
-});
-
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 app.get("/users", async (c) => {
@@ -144,6 +128,19 @@ app.patch("/users/:id", async (c) => {
 
   const updated = await db.prepare("SELECT * FROM users WHERE id = ? LIMIT 1").bind(userId).first();
   return c.json(updated);
+});
+
+app.delete("/users/:id", async (c) => {
+  const db = c.env.DB;
+  const userId = c.req.param("id");
+
+  const existing = await db.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(userId).first();
+  if (!existing) throw new HTTPException(404, { message: "User not found" });
+
+  await db.prepare("DELETE FROM project_access WHERE user_id = ?").bind(userId).run();
+  await db.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+
+  return c.json({ success: true });
 });
 
 // ── Project Management ─────────────────────────────────────────────────────────

@@ -500,6 +500,9 @@ export const api = {
 
   adminUsers: () => request<User[]>("/admin/users"),
 
+  adminDeleteUser: (id: string) =>
+    request<{ success: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
+
   adminCreateUser: (payload: {
     email: string;
     name?: string;

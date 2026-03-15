@@ -30,6 +30,7 @@ export default function AdminUsersPage() {
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
   const [editForm, setEditForm] = useState<Partial<User & { role: Role }>>({});
   const [saving, setSaving] = useState(false);
+  const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -97,6 +98,18 @@ export default function AdminUsersPage() {
       showToast(err instanceof Error ? err.message : "Failed to update user", "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deletingUser) return;
+    try {
+      await api.adminDeleteUser(deletingUser.id);
+      setUsers((prev) => prev.filter((u) => u.id !== deletingUser.id));
+      setDeletingUser(null);
+      showToast("User deleted.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to delete user", "error");
     }
   }
 
@@ -176,6 +189,15 @@ export default function AdminUsersPage() {
                           View As
                         </button>
                       ) : null}
+                      {user.role !== "admin" ? (
+                        <button
+                          className="ms-btn-ghost"
+                          onClick={() => setDeletingUser(user)}
+                          style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
+                        >
+                          Delete
+                        </button>
+                      ) : null}
                     </div>
                   </td>
                 </tr>
@@ -220,6 +242,22 @@ export default function AdminUsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm */}
+      {deletingUser && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setDeletingUser(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 420 }}>
+            <h2 style={{ color: "#d13438" }}>Delete User</h2>
+            <p style={{ color: "rgba(240,246,255,0.7)", margin: "12px 0 20px" }}>
+              Permanently delete <strong style={{ color: "#f0f6ff" }}>{deletingUser.name ?? deletingUser.email}</strong>? This removes them from all project access and cannot be undone.
+            </p>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button className="ms-btn-primary" style={{ background: "#d13438", borderColor: "#d13438" }} onClick={handleDelete}>Delete</button>
+              <button className="ms-btn-secondary" onClick={() => setDeletingUser(null)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
