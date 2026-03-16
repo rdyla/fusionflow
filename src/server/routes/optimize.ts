@@ -242,6 +242,16 @@ app.patch("/accounts/:projectId/assessments/:assessmentId", async (c) => {
   `).bind(assessmentId).first());
 });
 
+app.delete("/accounts/:projectId/assessments/:assessmentId", async (c) => {
+  assertOptimizeEdit(c.get("auth").role);
+  const { projectId, assessmentId } = c.req.param();
+  const existing = await c.env.DB.prepare("SELECT id FROM assessments WHERE id = ? AND project_id = ? LIMIT 1")
+    .bind(assessmentId, projectId).first();
+  if (!existing) throw new HTTPException(404, { message: "Assessment not found" });
+  await c.env.DB.prepare("DELETE FROM assessments WHERE id = ?").bind(assessmentId).run();
+  return c.json({ success: true });
+});
+
 // ── Tech Stack ─────────────────────────────────────────────────────────────────
 
 app.get("/accounts/:projectId/tech-stack", async (c) => {

@@ -899,7 +899,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  optimizeAssessments: (projectId: string) => request<Assessment[]>(`/optimize/assessments?project_id=${projectId}`),
+  optimizeAssessments: (projectId: string) => request<Assessment[]>(`/optimize/accounts/${projectId}/assessments`),
   optimizeCreateAssessment: (payload: {
     project_id: string;
     assessment_type: string;
@@ -911,11 +911,11 @@ export const api = {
     action_items?: string | null;
     next_review_date?: string | null;
   }) =>
-    request<Assessment>("/optimize/assessments", {
+    request<Assessment>(`/optimize/accounts/${payload.project_id}/assessments`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  optimizeUpdateAssessment: (id: string, payload: Partial<{
+  optimizeUpdateAssessment: (projectId: string, assessmentId: string, payload: Partial<{
     assessment_type: string;
     conducted_date: string;
     overall_score: number | null;
@@ -925,14 +925,14 @@ export const api = {
     action_items: string | null;
     next_review_date: string | null;
   }>) =>
-    request<Assessment>(`/optimize/assessments/${id}`, {
+    request<Assessment>(`/optimize/accounts/${projectId}/assessments/${assessmentId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  optimizeDeleteAssessment: (id: string) =>
-    request<{ success: boolean }>(`/optimize/assessments/${id}`, { method: "DELETE" }),
+  optimizeDeleteAssessment: (projectId: string, assessmentId: string) =>
+    request<{ success: boolean }>(`/optimize/accounts/${projectId}/assessments/${assessmentId}`, { method: "DELETE" }),
 
-  optimizeTechStack: (projectId: string) => request<TechStackItem[]>(`/optimize/tech-stack?project_id=${projectId}`),
+  optimizeTechStack: (projectId: string) => request<TechStackItem[]>(`/optimize/accounts/${projectId}/tech-stack`),
   optimizeCreateTechStack: (payload: {
     project_id: string;
     tech_area: string;
@@ -942,11 +942,11 @@ export const api = {
     time_rating?: string | null;
     notes?: string | null;
   }) =>
-    request<TechStackItem>("/optimize/tech-stack", {
+    request<TechStackItem>(`/optimize/accounts/${payload.project_id}/tech-stack`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  optimizeUpdateTechStack: (id: string, payload: Partial<{
+  optimizeUpdateTechStack: (projectId: string, areaId: string, payload: Partial<{
     tech_area: string;
     tech_area_label: string | null;
     current_vendor: string | null;
@@ -954,14 +954,14 @@ export const api = {
     time_rating: string | null;
     notes: string | null;
   }>) =>
-    request<TechStackItem>(`/optimize/tech-stack/${id}`, {
+    request<TechStackItem>(`/optimize/accounts/${projectId}/tech-stack/${areaId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  optimizeDeleteTechStack: (id: string) =>
-    request<{ success: boolean }>(`/optimize/tech-stack/${id}`, { method: "DELETE" }),
+  optimizeDeleteTechStack: (projectId: string, areaId: string) =>
+    request<{ success: boolean }>(`/optimize/accounts/${projectId}/tech-stack/${areaId}`, { method: "DELETE" }),
 
-  optimizeRoadmap: (projectId: string) => request<RoadmapItem[]>(`/optimize/roadmap?project_id=${projectId}`),
+  optimizeRoadmap: (projectId: string) => request<RoadmapItem[]>(`/optimize/accounts/${projectId}/roadmap`),
   optimizeCreateRoadmapItem: (payload: {
     project_id: string;
     title: string;
@@ -973,11 +973,11 @@ export const api = {
     target_date?: string | null;
     tech_stack_id?: string | null;
   }) =>
-    request<RoadmapItem>("/optimize/roadmap", {
+    request<RoadmapItem>(`/optimize/accounts/${payload.project_id}/roadmap`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  optimizeUpdateRoadmapItem: (id: string, payload: Partial<{
+  optimizeUpdateRoadmapItem: (projectId: string, itemId: string, payload: Partial<{
     title: string;
     description: string | null;
     category: string;
@@ -986,12 +986,12 @@ export const api = {
     status: string;
     target_date: string | null;
   }>) =>
-    request<RoadmapItem>(`/optimize/roadmap/${id}`, {
+    request<RoadmapItem>(`/optimize/accounts/${projectId}/roadmap/${itemId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
-  optimizeDeleteRoadmapItem: (id: string) =>
-    request<{ success: boolean }>(`/optimize/roadmap/${id}`, { method: "DELETE" }),
+  optimizeDeleteRoadmapItem: (projectId: string, itemId: string) =>
+    request<{ success: boolean }>(`/optimize/accounts/${projectId}/roadmap/${itemId}`, { method: "DELETE" }),
 
   optimizeUtilization: (projectId: string) =>
     request<UtilizationSnapshot[]>(`/optimize/accounts/${projectId}/utilization`),

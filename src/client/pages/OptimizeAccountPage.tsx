@@ -118,7 +118,7 @@ export default function OptimizeAccountPage() {
 
   async function handleDeleteAssessment(id: string) {
     try {
-      await api.optimizeDeleteAssessment(id);
+      await api.optimizeDeleteAssessment(projectId!, id);
       setAssessments((prev) => prev.filter((a) => a.id !== id));
       showToast("Assessment deleted.", "success");
     } catch {
@@ -153,7 +153,7 @@ export default function OptimizeAccountPage() {
 
   async function handleDeleteTech(id: string) {
     try {
-      await api.optimizeDeleteTechStack(id);
+      await api.optimizeDeleteTechStack(projectId!, id);
       setTechStack((prev) => prev.filter((t) => t.id !== id));
       showToast("Tech area deleted.", "success");
     } catch {
@@ -189,7 +189,7 @@ export default function OptimizeAccountPage() {
 
   async function handleDeleteRoadmap(id: string) {
     try {
-      await api.optimizeDeleteRoadmapItem(id);
+      await api.optimizeDeleteRoadmapItem(projectId!, id);
       setRoadmap((prev) => prev.filter((r) => r.id !== id));
       showToast("Roadmap item deleted.", "success");
     } catch {
