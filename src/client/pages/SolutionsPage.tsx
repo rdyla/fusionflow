@@ -137,8 +137,8 @@ export default function SolutionsPage() {
     }
   }
 
-  const pfAes = users.filter((u) => u.role === "pf_ae" && u.is_active);
-  const partnerAes = users.filter((u) => u.role === "partner_ae" && u.is_active);
+  const pfAes = users.filter((u) => u.role === "pf_ae");
+  const partnerAes = users.filter((u) => u.role === "partner_ae");
   const availableTypes = VENDOR_TYPES[form.vendor];
 
   const filtered = solutions.filter((s) => {
