@@ -750,7 +750,7 @@ export const api = {
     email: string;
     name?: string;
     organization_name?: string;
-    role: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "partner_ae";
+    role: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae";
   }) =>
     request<User>("/admin/users", {
       method: "POST",
@@ -763,7 +763,7 @@ export const api = {
       email?: string;
       name?: string;
       organization_name?: string;
-      role?: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "partner_ae";
+      role?: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae";
       is_active?: number;
     }
   ) =>
