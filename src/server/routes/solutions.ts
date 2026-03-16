@@ -20,7 +20,9 @@ const SOLUTION_TYPE_LABELS: Record<string, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
   zoom_ra: "Zoom Revenue Accelerator",
+  zoom_va: "Zoom Virtual Agent",
   rc_ace: "RingCentral ACE",
+  rc_air: "RingCentral AIR",
 };
 
 function accessClause(role: string, userId: string): { where: string; bindings: string[] } {
@@ -47,7 +49,7 @@ const createSolutionSchema = z.object({
   customer_name: z.string().min(1).max(500),
   dynamics_account_id: z.string().optional(),
   vendor: z.enum(["zoom", "ringcentral"]),
-  solution_type: z.enum(["ucaas", "ccaas", "zoom_ra", "rc_ace"]),
+  solution_type: z.enum(["ucaas", "ccaas", "zoom_ra", "zoom_va", "rc_ace", "rc_air"]),
   pf_ae_user_id: z.string().optional(),
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
@@ -88,16 +90,16 @@ app.post("/", async (c) => {
       resolvedPartnerAeUserId = newUserId;
 
       const appUrl = c.env.APP_URL ?? "";
-      sendEmail(c.env, {
+      c.executionCtx.waitUntil(sendEmail(c.env, {
         to: partner_ae_email,
-        subject: "You've been invited to FusionFlow",
+        subject: "You've been invited to FusionFlow360",
         html: userInvite({
           recipientName: partner_ae_name,
           invitedByName: auth.user.name ?? auth.user.email,
           role: "partner_ae",
           appUrl,
         }),
-      });
+      }));
     }
   }
 

@@ -9,7 +9,9 @@ const SOLUTION_TYPE_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
   zoom_ra: "Zoom Revenue Accelerator",
+  zoom_va: "Zoom Virtual Agent",
   rc_ace: "RingCentral ACE",
+  rc_air: "RingCentral AIR",
 };
 
 const STATUS_LABELS: Record<SolutionStatus, string> = {
@@ -39,8 +41,8 @@ const VENDOR_COLOR: Record<SolutionVendor, string> = {
 
 // Which solution types belong to which vendor
 const VENDOR_TYPES: Record<SolutionVendor, SolutionType[]> = {
-  zoom: ["ucaas", "ccaas", "zoom_ra"],
-  ringcentral: ["ucaas", "ccaas", "rc_ace"],
+  zoom: ["ucaas", "ccaas", "zoom_ra", "zoom_va"],
+  ringcentral: ["ucaas", "ccaas", "rc_ace", "rc_air"],
 };
 
 const EMPTY_FORM = {

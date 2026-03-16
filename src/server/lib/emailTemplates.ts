@@ -1,4 +1,4 @@
-const APP_NAME = "FusionFlow";
+const APP_NAME = "FusionFlow360";
 
 function base(body: string): string {
   return `<!DOCTYPE html>
@@ -8,17 +8,17 @@ function base(body: string): string {
   <div style="max-width:600px;margin:40px auto;background:#142236;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
     <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);">
       <span style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;">
-        Fusion<span style="color:#00c8e0;">Flow</span>
+        Fusion<span style="color:#00c8e0;">Flow</span><span style="color:rgba(240,246,255,0.6);font-weight:400;">360</span>
       </span>
       <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:rgba(240,246,255,0.3);margin-left:10px;">
-        Implementation
+        Intelligence Platform
       </span>
     </div>
     <div style="padding:28px 28px 24px;">
       ${body}
     </div>
     <div style="padding:14px 28px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(240,246,255,0.3);">
-      FusionFlow · Packet Fusion · This is an automated notification.
+      FusionFlow360 · Packet Fusion · This is an automated notification.
     </div>
   </div>
 </body>
@@ -56,7 +56,7 @@ export function taskAssigned(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a task</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.55);">Hi ${data.assigneeName}, a task has been assigned to you in FusionFlow.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.55);">Hi ${data.assigneeName}, a task has been assigned to you in FusionFlow360.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${data.taskTitle}</div>
       <table style="border-collapse:collapse;">
@@ -164,9 +164,9 @@ export function userInvite(data: {
   };
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You're invited to FusionFlow</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You're invited to FusionFlow360</h2>
     <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.55);">
-      Hi ${data.recipientName}, <strong style="color:rgba(240,246,255,0.9);">${data.invitedByName}</strong> has added you to FusionFlow — Packet Fusion's implementation platform.
+      Hi ${data.recipientName}, <strong style="color:rgba(240,246,255,0.9);">${data.invitedByName}</strong> has added you to FusionFlow360 — Packet Fusion's intelligence platform.
     </p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
@@ -174,6 +174,6 @@ export function userInvite(data: {
         ${detail("Access", "Sign in with your company SSO to get started")}
       </table>
     </div>
-    ${ctaButton("Open FusionFlow", data.appUrl)}
+    ${ctaButton("Open FusionFlow360", data.appUrl)}
   `);
 }

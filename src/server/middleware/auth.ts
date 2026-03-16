@@ -78,7 +78,7 @@ export const authMiddleware: AppMiddleware = async (c, next) => {
       user = await provisionUser(c.env.DB, email, PARTNER_DOMAINS[domain], "partner_ae");
     } else {
       throw new HTTPException(403, {
-        message: "Forbidden: user is not provisioned in FusionFlow",
+        message: "Forbidden: user is not provisioned in FusionFlow360",
       });
     }
   }

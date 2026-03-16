@@ -31,7 +31,9 @@ const TYPE_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
   zoom_ra: "Zoom Revenue Accelerator",
+  zoom_va: "Zoom Virtual Agent",
   rc_ace: "RingCentral ACE",
+  rc_air: "RingCentral AIR",
 };
 
 // ── Assessment Schema ─────────────────────────────────────────────────────────
@@ -212,6 +214,71 @@ const ASSESSMENT_SCHEMA: Record<SolutionType, SectionDef[]> = {
     },
   ],
 
+  zoom_va: [
+    {
+      title: "Current State",
+      fields: [
+        { type: "text", key: "current_va_solution", label: "Current Virtual Agent / Chatbot Solution (if any)" },
+        { type: "select", key: "primary_use_case", label: "Primary Use Case", options: ["", "Customer Support", "IT Helpdesk", "Sales Assistance", "HR Self-Service", "Other"] },
+        { type: "number", key: "monthly_interactions", label: "Estimated Monthly Interactions" },
+      ],
+    },
+    {
+      title: "Zoom Environment",
+      fields: [
+        { type: "checkbox", key: "has_zoom_contact_center", label: "Zoom Contact Center" },
+        { type: "checkbox", key: "has_zoom_phone", label: "Zoom Phone" },
+        { type: "checkbox", key: "has_zoom_meetings", label: "Zoom Meetings" },
+        { type: "number", key: "zoom_seat_count", label: "Zoom Seat Count" },
+      ],
+    },
+    {
+      title: "Channels",
+      fields: [
+        { type: "checkbox", key: "ch_web_chat", label: "Website Chat Widget" },
+        { type: "checkbox", key: "ch_mobile", label: "Mobile App" },
+        { type: "checkbox", key: "ch_sms", label: "SMS" },
+        { type: "checkbox", key: "ch_voice", label: "Voice IVR" },
+        { type: "checkbox", key: "ch_slack", label: "Slack" },
+        { type: "checkbox", key: "ch_teams", label: "Microsoft Teams" },
+      ],
+    },
+    {
+      title: "Escalation & Routing",
+      fields: [
+        { type: "checkbox", key: "live_agent_escalation", label: "Live Agent Escalation Required" },
+        { type: "select", key: "escalation_target", label: "Escalation Target", options: ["", "Zoom Contact Center", "External Contact Center", "Email Queue", "Other"] },
+        { type: "checkbox", key: "context_handoff", label: "Conversation Context Passed on Escalation" },
+      ],
+    },
+    {
+      title: "Integrations & Knowledge",
+      fields: [
+        { type: "select", key: "crm_system", label: "CRM System", options: ["", "Salesforce", "HubSpot", "Microsoft Dynamics", "ServiceNow", "Zendesk", "Other", "None"] },
+        { type: "checkbox", key: "ticketing_integration", label: "Ticketing System Integration (e.g. Zendesk, ServiceNow)" },
+        { type: "text", key: "ticketing_platform", label: "Ticketing Platform" },
+        { type: "checkbox", key: "knowledge_base", label: "Existing Knowledge Base to Connect" },
+        { type: "textarea", key: "key_intents", label: "Key Topics / Intents to Handle" },
+      ],
+    },
+    {
+      title: "Compliance & Language",
+      fields: [
+        { type: "checkbox", key: "compliance_hipaa", label: "HIPAA Required" },
+        { type: "checkbox", key: "compliance_pci", label: "PCI Compliance" },
+        { type: "text", key: "languages", label: "Languages Required (e.g. English, Spanish)" },
+      ],
+    },
+    {
+      title: "Timeline",
+      fields: [
+        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
+        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
+        { type: "textarea", key: "notes", label: "Additional Notes" },
+      ],
+    },
+  ],
+
   rc_ace: [
     {
       title: "Current State",
@@ -244,6 +311,69 @@ const ASSESSMENT_SCHEMA: Record<SolutionType, SectionDef[]> = {
         { type: "checkbox", key: "uc_analytics", label: "Conversation Analytics" },
         { type: "checkbox", key: "uc_forecasting", label: "Revenue Forecasting" },
         { type: "checkbox", key: "uc_onboarding", label: "Rep Onboarding & Training" },
+      ],
+    },
+    {
+      title: "Timeline",
+      fields: [
+        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
+        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
+        { type: "textarea", key: "notes", label: "Additional Notes" },
+      ],
+    },
+  ],
+
+  rc_air: [
+    {
+      title: "Current State",
+      fields: [
+        { type: "text", key: "current_va_solution", label: "Current Virtual Agent / Chatbot Solution (if any)" },
+        { type: "select", key: "primary_use_case", label: "Primary Use Case", options: ["", "Customer Support", "IT Helpdesk", "Sales Assistance", "HR Self-Service", "Other"] },
+        { type: "number", key: "monthly_interactions", label: "Estimated Monthly Interactions" },
+      ],
+    },
+    {
+      title: "RingCentral Environment",
+      fields: [
+        { type: "checkbox", key: "has_ring_cx", label: "RingCX (Contact Center)" },
+        { type: "checkbox", key: "has_ring_ex", label: "RingEX (UCaaS)" },
+        { type: "number", key: "rc_seat_count", label: "RingCentral Seat Count" },
+      ],
+    },
+    {
+      title: "Channels",
+      fields: [
+        { type: "checkbox", key: "ch_web_chat", label: "Website Chat Widget" },
+        { type: "checkbox", key: "ch_mobile", label: "Mobile App" },
+        { type: "checkbox", key: "ch_sms", label: "SMS" },
+        { type: "checkbox", key: "ch_voice", label: "Voice IVR" },
+        { type: "checkbox", key: "ch_social", label: "Social / Messaging Platforms" },
+      ],
+    },
+    {
+      title: "Escalation & Routing",
+      fields: [
+        { type: "checkbox", key: "live_agent_escalation", label: "Live Agent Escalation Required" },
+        { type: "select", key: "escalation_target", label: "Escalation Target", options: ["", "RingCX Agents", "External Contact Center", "Email Queue", "Other"] },
+        { type: "checkbox", key: "context_handoff", label: "Conversation Context Passed on Escalation" },
+      ],
+    },
+    {
+      title: "Integrations & Knowledge",
+      fields: [
+        { type: "select", key: "crm_system", label: "CRM System", options: ["", "Salesforce", "HubSpot", "Microsoft Dynamics", "ServiceNow", "Zendesk", "Other", "None"] },
+        { type: "checkbox", key: "ticketing_integration", label: "Ticketing System Integration" },
+        { type: "text", key: "ticketing_platform", label: "Ticketing Platform" },
+        { type: "checkbox", key: "knowledge_base", label: "Existing Knowledge Base to Connect" },
+        { type: "textarea", key: "key_intents", label: "Key Topics / Intents to Handle" },
+      ],
+    },
+    {
+      title: "Compliance & Language",
+      fields: [
+        { type: "checkbox", key: "compliance_hipaa", label: "HIPAA Required" },
+        { type: "checkbox", key: "compliance_pci", label: "PCI Compliance" },
+        { type: "text", key: "languages", label: "Languages Required (e.g. English, Spanish)" },
       ],
     },
     {

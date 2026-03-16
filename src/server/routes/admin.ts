@@ -67,11 +67,11 @@ app.post("/users", async (c) => {
   if (created) {
     const auth = c.get("auth");
     const appUrl = c.env.APP_URL ?? "";
-    sendEmail(c.env, {
+    c.executionCtx.waitUntil(sendEmail(c.env, {
       to: created.email,
-      subject: "You've been invited to FusionFlow",
+      subject: "You've been invited to FusionFlow360",
       html: userInvite({ recipientName: created.name ?? created.email, invitedByName: auth.user.name ?? auth.user.email, role: created.role, appUrl }),
-    });
+    }));
   }
 
   return c.json(created, 201);

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import logoUrl from "../../assets/fusion flow transparent.png";
 import { api, type User, IMPERSONATE_KEY } from "../../lib/api";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -56,13 +57,8 @@ export default function AppShell() {
       }}>
         {/* Logo */}
         <div style={{ height: 56, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-          <Link to="/" style={{ textDecoration: "none" }}>
-            <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 800, letterSpacing: "-0.02em", color: "#f0f6ff", lineHeight: 1 }}>
-              Fusion<span style={{ color: "#00c8e0" }}>Flow</span>
-            </div>
-            <div style={{ fontSize: 9, color: "rgba(240,246,255,0.35)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 3 }}>
-              Implementation
-            </div>
+          <Link to="/" style={{ textDecoration: "none", display: "block", overflow: "hidden", height: 44, width: 196 }}>
+            <img src={logoUrl} alt="FusionFlow360" style={{ width: 196, height: "auto", display: "block" }} />
           </Link>
         </div>
 

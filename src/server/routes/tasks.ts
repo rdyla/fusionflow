@@ -84,11 +84,11 @@ app.post("/:id/tasks", async (c) => {
     ]);
     if (assignee && project) {
       const appUrl = c.env.APP_URL ?? "";
-      sendEmail(c.env, {
+      c.executionCtx.waitUntil(sendEmail(c.env, {
         to: assignee.email,
         subject: `You've been assigned: ${created.title}`,
         html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: created.title, projectName: project.name, dueDate: created.due_date, priority: created.priority, appUrl, projectId }),
-      });
+      }));
     }
   }
 
@@ -171,11 +171,11 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   if (assigneeChanged && updated?.assignee_user_id) {
     const assignee = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(updated.assignee_user_id).first<{ email: string; name: string }>();
     if (assignee && project) {
-      sendEmail(c.env, {
+      c.executionCtx.waitUntil(sendEmail(c.env, {
         to: assignee.email,
         subject: `You've been assigned: ${updated.title}`,
         html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: updated.title, projectName: project.name, dueDate: updated.due_date, priority: updated.priority, appUrl, projectId }),
-      });
+      }));
     }
   }
 
@@ -189,11 +189,11 @@ app.patch("/:id/tasks/:taskId", async (c) => {
       assigneeName = a?.name ?? null;
     }
     if (pm && project) {
-      sendEmail(c.env, {
+      c.executionCtx.waitUntil(sendEmail(c.env, {
         to: pm.email,
         subject: `Task blocked: ${updated?.title ?? ""}`,
         html: taskBlocked({ pmName: pm.name ?? pm.email, taskTitle: updated?.title ?? "", projectName: project.name, assigneeName, appUrl, projectId }),
-      });
+      }));
     }
   }
 

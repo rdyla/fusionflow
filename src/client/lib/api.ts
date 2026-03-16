@@ -38,7 +38,7 @@ export type User = {
   is_active: number;
 };
 
-export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "rc_ace";
+export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "zoom_va" | "rc_ace" | "rc_air";
 export type SolutionStatus = "draft" | "assessment" | "requirements" | "scope" | "handoff" | "won" | "lost";
 export type SolutionVendor = "zoom" | "ringcentral";
 

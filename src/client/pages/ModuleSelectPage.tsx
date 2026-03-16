@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import logoUrl from "../assets/fusion flow transparent.png";
 import { api, type User } from "../lib/api";
 
 function initials(name: string | null, email: string): string {
@@ -34,7 +35,7 @@ const MODULES: Module[] = [
     features: ["Stakeholder intake forms", "Requirements matrix builder", "Gap & risk analysis", "Solution scope documentation"],
     accent: "#2563eb",
     glow: "rgba(37,99,235,0.25)",
-    route: null,
+    route: "/solutions",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
@@ -126,15 +127,7 @@ export default function ModuleSelectPage() {
         backgroundSize: "60px 60px" }} />
 
       {/* Header */}
-      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)", background: "rgba(13,27,46,0.8)" }}>
-        <div>
-          <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
-            Fusion<span style={{ color: "#00c8e0" }}>Flow</span>
-          </div>
-          <div style={{ fontSize: 11, color: "rgba(240,246,255,0.45)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 2 }}>
-            Packet Fusion's Intelligence Platform
-          </div>
-        </div>
+      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)", background: "rgba(13,27,46,0.8)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 40, fontSize: 13, color: "rgba(240,246,255,0.5)" }}>
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#00c8e0", boxShadow: "0 0 8px #00c8e0", display: "inline-block", animation: "ff-pulse 2s ease-in-out infinite" }} />
@@ -148,9 +141,10 @@ export default function ModuleSelectPage() {
 
       {/* Hero */}
       <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "72px 48px 48px" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "5px 16px", border: "1px solid rgba(0,200,224,0.3)", borderRadius: 40, fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#00c8e0", marginBottom: 24, background: "rgba(0,200,224,0.06)" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 12, height: 12 }}><circle cx="12" cy="12" r="10"/><path d="M12 8v4l2 2"/></svg>
-          Client Success Platform
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
+          <div style={{ overflow: "hidden", height: 90, width: 440 }}>
+            <img src={logoUrl} alt="FusionFlow360" style={{ width: 440, height: "auto", display: "block" }} />
+          </div>
         </div>
         <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(36px, 5vw, 58px)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 18 }}>
           Where Every Engagement<br />

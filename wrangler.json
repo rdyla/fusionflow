@@ -10,7 +10,7 @@
     "crons": ["0 14 * * *"]
   },
   "vars": {
-    "APP_URL": "https://fusionflow.us"
+    "APP_URL": "https://fusionflow360.com"
   },
   "compatibility_date": "2025-10-08",
   "compatibility_flags": ["nodejs_compat"],

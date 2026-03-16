@@ -1,4 +1,4 @@
-const RESEND_API = "https://api.resend.com/emails";
+import { Resend } from "resend";
 
 type Env = {
   RESEND_API_KEY?: string;
@@ -11,7 +11,7 @@ type EmailPayload = {
 };
 
 /**
- * Fire-and-forget email via Resend. Never throws — a failed email
+ * Fire-and-forget email via Resend SDK. Never throws — a failed email
  * should never break the API response that triggered it.
  */
 export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> {
@@ -24,25 +24,16 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
   const validRecipients = recipients.filter(Boolean);
   if (validRecipients.length === 0) return;
 
-  try {
-    const res = await fetch(RESEND_API, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.RESEND_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "FusionFlow <noreply@packetfusion.com>",
-        to: validRecipients,
-        subject: payload.subject,
-        html: payload.html,
-      }),
-    });
+  const resend = new Resend(env.RESEND_API_KEY);
 
-    if (!res.ok) {
-      console.error(`[email] Resend ${res.status}:`, await res.text());
-    }
-  } catch (err) {
-    console.error("[email] Send failed:", err);
+  const { error } = await resend.emails.send({
+    from: "FusionFlow360 <noreply@fusionflow360.com>",
+    to: validRecipients,
+    subject: payload.subject,
+    html: payload.html,
+  });
+
+  if (error) {
+    console.error("[email] Resend error:", error);
   }
 }

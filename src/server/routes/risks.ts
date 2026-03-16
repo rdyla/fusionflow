@@ -68,11 +68,11 @@ app.post("/:id/risks", async (c) => {
       const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
       if (pm) {
         const appUrl = c.env.APP_URL ?? "";
-        sendEmail(c.env, {
+        c.executionCtx.waitUntil(sendEmail(c.env, {
           to: pm.email,
           subject: `High severity risk logged: ${created.title}`,
           html: highRiskAdded({ pmName: pm.name ?? pm.email, riskTitle: created.title, riskDescription: created.description, projectName: project.name, appUrl, projectId }),
-        });
+        }));
       }
     }
   }
