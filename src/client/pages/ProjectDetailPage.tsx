@@ -1243,7 +1243,7 @@ export default function ProjectDetailPage() {
                 <span>Team Member</span>
                 <select className="ms-input" value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
                   <option value="">— Select team member —</option>
-                  {users.filter((u) => u.role !== "partner_ae" && u.is_active).map((u) => (
+                  {users.filter((u) => u.role !== "partner_ae").map((u) => (
                     <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
                   ))}
                 </select>
