@@ -214,25 +214,18 @@ export default function ModuleSelectPage() {
                       opacity={isH ? 0.85 : 0.22}
                       style={{ transition: "opacity 0.22s" }}
                     />
-                    {/* Label bubble */}
-                    <circle
-                      cx={lp.x} cy={lp.y} r="24"
-                      fill={hexToRgba(p.color, isH ? 0.2 : 0.05)}
-                      stroke={p.color}
-                      strokeWidth={isH ? 1.5 : 0}
-                      style={{ transition: "fill 0.22s, stroke-width 0.22s" }}
-                    />
+                    {/* Label text */}
                     <text
-                      x={lp.x} y={lp.y - 8}
-                      textAnchor="middle" fontSize="13" fontWeight="700"
+                      x={lp.x} y={lp.y - 6}
+                      textAnchor="middle" fontSize={isH ? "15" : "13"} fontWeight="700"
                       fill={p.color} opacity={isH ? 1 : 0.55}
-                      style={{ transition: "opacity 0.22s", pointerEvents: "none" }}
+                      style={{ pointerEvents: "none" }}
                     >{p.name}</text>
                     <text
-                      x={lp.x} y={lp.y + 8}
+                      x={lp.x} y={lp.y + 9}
                       textAnchor="middle" fontSize="10"
                       fill={isH ? "#a0bfd6" : "#99b5cc"}
-                      style={{ transition: "fill 0.22s", pointerEvents: "none" }}
+                      style={{ pointerEvents: "none" }}
                     >Phase {p.n}</text>
                   </g>
                 );
