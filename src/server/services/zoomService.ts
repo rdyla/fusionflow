@@ -236,7 +236,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     { name: "daily_curr",  path: `/report/daily?year=${currYear}&month=${currMonth}` },
     ...(needsPrevMonth ? [{ name: "daily_prev", path: `/report/daily?year=${prevYear}&month=${prevMonth}` }] : []),
     { name: "phone_users", path: "/phone/users?page_size=1" },
-    { name: "phone_usage", path: `/report/phone/usage?from=${from30}&to=${to}&page_size=300` },
+    { name: "phone_usage", path: `/phone/reports/users?from=${from30}&to=${to}&page_size=300` },
   ];
 
   const responses = await Promise.allSettled(callDefs.map((c) => zoomGet<unknown>(token, c.path)));
