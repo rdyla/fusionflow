@@ -998,4 +998,7 @@ export const api = {
 
   optimizeUtilization: (projectId: string) =>
     request<UtilizationSnapshot[]>(`/optimize/accounts/${projectId}/utilization`),
+
+  optimizeUtilizationSync: (projectId: string) =>
+    request<UtilizationSnapshot>(`/optimize/accounts/${projectId}/utilization/sync`, { method: "POST" }),
 };

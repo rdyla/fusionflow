@@ -183,6 +183,67 @@ function settled<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
 }
 
+// ── Utilization snapshot ──────────────────────────────────────────────────────
+
+type ZoomReportUsersResponse = { total_records: number };
+
+type ZoomDailyReportResponse = {
+  dates?: Array<{ date: string; new_meeting: number; participants: number; meeting_minutes: number }>;
+};
+
+export type ZoomUtilizationData = {
+  licenses_purchased: number | null;
+  licenses_assigned: number | null;
+  active_users_30d: number | null;
+  active_users_90d: number | null;
+  total_meetings: number | null;
+  raw_data: Record<string, unknown>;
+};
+
+export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: string): Promise<ZoomUtilizationData> {
+  const creds = await getCreds(kv, projectId);
+  if (!creds) throw new Error("No Zoom credentials configured for this project");
+
+  const token = await getToken(kv, creds, projectId);
+
+  const today = new Date();
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const ago = (days: number) => { const d = new Date(today); d.setDate(d.getDate() - days); return d; };
+
+  const from30 = fmt(ago(30));
+  const from90 = fmt(ago(90));
+  const to = fmt(today);
+
+  const [plansRes, usersRes, active30Res, active90Res, dailyRes] = await Promise.allSettled([
+    zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
+    zoomGet<{ total_records: number }>(token, "/users?page_size=1"),
+    zoomGet<ZoomReportUsersResponse>(token, `/report/users?type=active&from=${from30}&to=${to}&page_size=1`),
+    zoomGet<ZoomReportUsersResponse>(token, `/report/users?type=active&from=${from90}&to=${to}&page_size=1`),
+    zoomGet<ZoomDailyReportResponse>(token, `/report/daily?year=${today.getFullYear()}&month=${today.getMonth() + 1}`),
+  ]);
+
+  const plans = settled(plansRes) ?? {};
+
+  // licenses_purchased: use plan_base hosts as the primary seat count
+  let licenses_purchased: number | null = null;
+  const planBase = plans.plan_base as { hosts?: number } | undefined;
+  if (planBase?.hosts != null) {
+    licenses_purchased = planBase.hosts;
+  }
+
+  const licenses_assigned = settled(usersRes)?.total_records ?? null;
+  const active_users_30d = settled(active30Res)?.total_records ?? null;
+  const active_users_90d = settled(active90Res)?.total_records ?? null;
+
+  let total_meetings: number | null = null;
+  const daily = settled(dailyRes);
+  if (daily?.dates && daily.dates.length > 0) {
+    total_meetings = daily.dates.reduce((sum, d) => sum + (d.new_meeting ?? 0), 0);
+  }
+
+  return { licenses_purchased, licenses_assigned, active_users_30d, active_users_90d, total_meetings, raw_data: { plans } };
+}
+
 export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise<ZoomStatus | null> {
   const creds = await getCreds(kv, projectId);
   if (!creds) return null;

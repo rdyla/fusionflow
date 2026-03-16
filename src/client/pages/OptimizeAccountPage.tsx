@@ -62,6 +62,8 @@ export default function OptimizeAccountPage() {
 
   // Utilization
   const [utilization, setUtilization] = useState<UtilizationSnapshot[]>([]);
+  const [zoomConfigured, setZoomConfigured] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     if (projectId) loadAll(projectId);
@@ -70,22 +72,39 @@ export default function OptimizeAccountPage() {
   async function loadAll(pid: string) {
     try {
       setLoading(true);
-      const [acc, ass, tech, road, util] = await Promise.all([
+      const [acc, ass, tech, road, util, zoomCfg] = await Promise.all([
         api.optimizeAccount(pid),
         api.optimizeAssessments(pid),
         api.optimizeTechStack(pid),
         api.optimizeRoadmap(pid),
         api.optimizeUtilization(pid),
+        api.zoomConfigured(pid).catch(() => ({ configured: false })),
       ]);
       setAccount(acc);
       setAssessments(ass);
       setTechStack(tech);
       setRoadmap(road);
       setUtilization(util);
+      setZoomConfigured(zoomCfg.configured);
     } catch {
       showToast("Failed to load account data", "error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSyncUtilization() {
+    if (!projectId) return;
+    setSyncing(true);
+    try {
+      const snapshot = await api.optimizeUtilizationSync(projectId);
+      setUtilization((prev) => [snapshot, ...prev]);
+      showToast("Utilization snapshot captured.", "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Sync failed";
+      showToast(msg, "error");
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -588,17 +607,29 @@ export default function OptimizeAccountPage() {
       {/* Utilization Tab */}
       {tab === "utilization" && (
         <div>
-          <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: "3px solid #0b9aad" }}>
-            <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.8)", marginBottom: 6 }}>Utilization Integration</div>
-            <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0, lineHeight: 1.6 }}>
-              Zoom and RingCentral utilization data will be pulled automatically once API credentials are configured on the project.
-              Snapshots track license consumption, active users, and call/meeting volume over time.
-            </p>
+          <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${zoomConfigured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.8)", marginBottom: 6 }}>Zoom Utilization</div>
+              {zoomConfigured ? (
+                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0, lineHeight: 1.6 }}>
+                  Zoom credentials are connected. Snapshots capture license counts, active users, and meeting volume. Sync manually or let the daily cron handle it.
+                </p>
+              ) : (
+                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0, lineHeight: 1.6 }}>
+                  No Zoom credentials found for this project. Add them on the project's Zoom tab to enable utilization tracking.
+                </p>
+              )}
+            </div>
+            {zoomConfigured && (
+              <button className="ms-btn-primary" onClick={handleSyncUtilization} disabled={syncing} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
+                {syncing ? "Syncing…" : "↻ Sync Now"}
+              </button>
+            )}
           </div>
 
           {utilization.length === 0 ? (
             <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "rgba(240,246,255,0.4)" }}>
-              No utilization snapshots yet.
+              No utilization snapshots yet.{zoomConfigured ? " Click 'Sync Now' to capture the first snapshot." : ""}
             </div>
           ) : (
             <div className="ms-card" style={{ overflow: "hidden" }}>

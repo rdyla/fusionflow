@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -433,6 +434,39 @@ app.get("/accounts/:projectId/utilization", async (c) => {
     "SELECT * FROM utilization_snapshots WHERE project_id = ? ORDER BY snapshot_date DESC"
   ).bind(c.req.param("projectId")).all();
   return c.json(rows.results ?? []);
+});
+
+app.post("/accounts/:projectId/utilization/sync", async (c) => {
+  assertOptimizeAccess(c.get("auth").role);
+  const projectId = c.req.param("projectId");
+  const db = c.env.DB;
+
+  let data;
+  try {
+    data = await fetchZoomUtilizationSnapshot(c.env.KV, projectId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Zoom sync failed";
+    throw new HTTPException(400, { message });
+  }
+
+  const id = crypto.randomUUID();
+  const snapshot_date = new Date().toISOString().slice(0, 10);
+
+  await db.prepare(`
+    INSERT INTO utilization_snapshots
+      (id, project_id, platform, snapshot_date, licenses_purchased, licenses_assigned,
+       active_users_30d, active_users_90d, total_meetings, raw_data)
+    VALUES (?, ?, 'zoom', ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id, projectId, snapshot_date,
+    data.licenses_purchased, data.licenses_assigned,
+    data.active_users_30d, data.active_users_90d,
+    data.total_meetings,
+    JSON.stringify(data.raw_data)
+  ).run();
+
+  const created = await db.prepare("SELECT * FROM utilization_snapshots WHERE id = ? LIMIT 1").bind(id).first();
+  return c.json(created, 201);
 });
 
 export default app;

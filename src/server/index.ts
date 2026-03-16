@@ -20,6 +20,7 @@ import staffRoutes from "./routes/staff";
 import optimizeRoutes from "./routes/optimize";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
+import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -88,9 +89,42 @@ async function runGoLiveReminders(env: Bindings): Promise<void> {
   }
 }
 
+async function runUtilizationSnapshots(env: Bindings): Promise<void> {
+  // Find all projects that have actual_go_live_date set (i.e. live accounts in Optimize)
+  const rows = await env.DB
+    .prepare("SELECT id FROM projects WHERE actual_go_live_date IS NOT NULL AND (archived = 0 OR archived IS NULL)")
+    .all<{ id: string }>();
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  for (const { id: projectId } of rows.results ?? []) {
+    try {
+      const data = await fetchZoomUtilizationSnapshot(env.KV, projectId);
+      const snapshotId = crypto.randomUUID();
+      await env.DB.prepare(`
+        INSERT INTO utilization_snapshots
+          (id, project_id, platform, snapshot_date, licenses_purchased, licenses_assigned,
+           active_users_30d, active_users_90d, total_meetings, raw_data)
+        VALUES (?, ?, 'zoom', ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        snapshotId, projectId, today,
+        data.licenses_purchased, data.licenses_assigned,
+        data.active_users_30d, data.active_users_90d,
+        data.total_meetings,
+        JSON.stringify(data.raw_data)
+      ).run();
+    } catch {
+      // No credentials or API error — skip silently
+    }
+  }
+}
+
 export default {
   fetch: app.fetch.bind(app),
   async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
-    ctx.waitUntil(runGoLiveReminders(env));
+    ctx.waitUntil(Promise.all([
+      runGoLiveReminders(env),
+      runUtilizationSnapshots(env),
+    ]));
   },
 };
