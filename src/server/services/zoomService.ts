@@ -193,7 +193,8 @@ type ZoomDailyReportResponse = {
 
 type ZoomPhoneCallLogsResponse = {
   total_records?: number;
-  call_logs?: Array<{ duration?: number; caller_id?: string }>;
+  // owner = the internal Zoom user on this call, regardless of direction
+  call_logs?: Array<{ duration?: number; owner?: { id?: string } }>;
 };
 
 export type ZoomUtilizationData = {
@@ -269,18 +270,22 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   const active_users_90d = getResult<ZoomReportUsersResponse>("active90")?.total_records ?? null;
 
   // Rolling 30-day meetings — merge prev + curr month, filter to window
+  // Use `participants` (total participant-sessions) rather than `new_meeting`
+  // (new_meeting only counts meetings explicitly started, often 0 for scheduled/recurring)
   const currDates = getResult<ZoomDailyReportResponse>("daily_curr")?.dates ?? [];
   const prevDates = needsPrevMonth ? (getResult<ZoomDailyReportResponse>("daily_prev")?.dates ?? []) : [];
   const windowDates = [...prevDates, ...currDates].filter((d) => d.date >= from30 && d.date <= to);
-  const total_meetings = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.new_meeting ?? 0), 0) : null;
+  const total_meetings = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.participants ?? 0), 0) : null;
+  const meeting_minutes_30d = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.meeting_minutes ?? 0), 0) : null;
 
-  // Zoom Phone
+  // Zoom Phone — owner.id identifies the internal user on each call (inbound or outbound)
   const phoneUsersTotal = getResult<{ total_records: number }>("phone_users")?.total_records ?? null;
   const callLogs = getResult<ZoomPhoneCallLogsResponse>("phone_call_logs");
-  // total_records is the exact count; call_logs array is capped at page_size=1000
   const phoneTotalCalls30d = callLogs?.total_records ?? null;
   const logs = callLogs?.call_logs ?? null;
-  const phoneActiveUsers30d = logs != null ? new Set(logs.map((l) => l.caller_id).filter(Boolean)).size : null;
+  const phoneActiveUsers30d = logs != null
+    ? new Set(logs.map((l) => l.owner?.id).filter(Boolean)).size
+    : null;
   const phoneCallMinutes30d = logs != null
     ? Math.round(logs.reduce((sum, l) => sum + (l.duration ?? 0), 0) / 60)
     : null;
@@ -294,6 +299,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     raw_data: {
       plans,
       api_calls,
+      meeting_minutes_30d,
       phone: { users_total: phoneUsersTotal, total_calls_30d: phoneTotalCalls30d, active_users_30d: phoneActiveUsers30d, call_minutes_30d: phoneCallMinutes30d },
     },
   };

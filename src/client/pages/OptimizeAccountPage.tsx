@@ -642,11 +642,15 @@ export default function OptimizeAccountPage() {
                     <th>Assigned</th>
                     <th>Active 30d</th>
                     <th>Active 90d</th>
-                    <th>Meetings / Minutes</th>
+                    <th>Participants (30d)</th>
+                    <th>Mtg Minutes (30d)</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {utilization.map((u) => (
+                  {utilization.map((u) => {
+                    let mtgMinutes: number | null = null;
+                    try { mtgMinutes = (JSON.parse(u.raw_data ?? "{}") as { meeting_minutes_30d?: number }).meeting_minutes_30d ?? null; } catch { /* ignore */ }
+                    return (
                     <tr key={u.id}>
                       <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{u.snapshot_date}</td>
                       <td>
@@ -660,11 +664,15 @@ export default function OptimizeAccountPage() {
                       <td>{u.active_users_90d ?? "—"}</td>
                       <td style={{ color: "rgba(240,246,255,0.6)" }}>
                         {u.platform === "zoom"
-                          ? (u.total_meetings != null ? `${u.total_meetings} mtgs` : "—")
+                          ? (u.total_meetings != null ? u.total_meetings.toLocaleString() : "—")
                           : (u.total_call_minutes != null ? `${u.total_call_minutes} min` : "—")}
                       </td>
+                      <td style={{ color: "rgba(240,246,255,0.6)" }}>
+                        {u.platform === "zoom" ? (mtgMinutes != null ? mtgMinutes.toLocaleString() : "—") : "—"}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
