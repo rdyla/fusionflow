@@ -196,8 +196,7 @@ function sectionTable(rows: { label: string; value: string }[]) {
       bottom: { style: BorderStyle.SINGLE, size: 1, color: "DDDDDD" },
       left: { style: BorderStyle.NONE },
       right: { style: BorderStyle.NONE },
-      insideH: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
-      insideV: { style: BorderStyle.NONE },
+      inside: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
     },
     rows: rows.map((r, i) =>
       new TableRow({
