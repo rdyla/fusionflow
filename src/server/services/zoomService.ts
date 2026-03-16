@@ -191,6 +191,11 @@ type ZoomDailyReportResponse = {
   dates?: Array<{ date: string; new_meeting: number; participants: number; meeting_minutes: number }>;
 };
 
+type ZoomPhoneUsageResponse = {
+  total_records?: number;
+  users?: Array<{ calls_duration?: number }>;
+};
+
 export type ZoomUtilizationData = {
   licenses_purchased: number | null;
   licenses_assigned: number | null;
@@ -210,56 +215,85 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   const ago = (days: number) => { const d = new Date(today); d.setDate(d.getDate() - days); return d; };
 
-  const from30 = fmt(ago(30));
+  const from30Date = ago(30);
+  const from30 = fmt(from30Date);
   const from90 = fmt(ago(90));
   const to = fmt(today);
 
-  const calls: Array<[string, string]> = [
-    ["plans",     "/accounts/me/plans"],
-    ["users",     "/users?page_size=1"],
-    ["active30",  `/report/users?type=active&from=${from30}&to=${to}&page_size=1`],
-    ["active90",  `/report/users?type=active&from=${from90}&to=${to}&page_size=1`],
-    ["daily",     `/report/daily?year=${today.getFullYear()}&month=${today.getMonth() + 1}`],
+  // For rolling 30d meetings we may need two calendar months
+  const currYear = today.getFullYear();
+  const currMonth = today.getMonth() + 1;
+  const needsPrevMonth = from30Date.getMonth() !== today.getMonth() || from30Date.getFullYear() !== today.getFullYear();
+  const prevYear  = currMonth === 1 ? currYear - 1 : currYear;
+  const prevMonth = currMonth === 1 ? 12 : currMonth - 1;
+
+  type CallDef = { name: string; path: string };
+  const callDefs: CallDef[] = [
+    { name: "plans",       path: "/accounts/me/plans" },
+    { name: "users",       path: "/users?page_size=1" },
+    { name: "active30",    path: `/report/users?type=active&from=${from30}&to=${to}&page_size=1` },
+    { name: "active90",    path: `/report/users?type=active&from=${from90}&to=${to}&page_size=1` },
+    { name: "daily_curr",  path: `/report/daily?year=${currYear}&month=${currMonth}` },
+    ...(needsPrevMonth ? [{ name: "daily_prev", path: `/report/daily?year=${prevYear}&month=${prevMonth}` }] : []),
+    { name: "phone_users", path: "/phone/users?page_size=1" },
+    { name: "phone_usage", path: `/report/phone/usage?from=${from30}&to=${to}&page_size=300` },
   ];
 
-  const [plansRes, usersRes, active30Res, active90Res, dailyRes] = await Promise.allSettled([
-    zoomGet<Record<string, unknown>>(token, calls[0][1]),
-    zoomGet<{ total_records: number }>(token, calls[1][1]),
-    zoomGet<ZoomReportUsersResponse>(token, calls[2][1]),
-    zoomGet<ZoomReportUsersResponse>(token, calls[3][1]),
-    zoomGet<ZoomDailyReportResponse>(token, calls[4][1]),
-  ]);
+  const responses = await Promise.allSettled(callDefs.map((c) => zoomGet<unknown>(token, c.path)));
 
-  const results = [plansRes, usersRes, active30Res, active90Res, dailyRes];
-  const api_calls = calls.map(([name, path], i) => ({
-    name,
-    path,
-    ok: results[i].status === "fulfilled",
-    error: results[i].status === "rejected"
-      ? String((results[i] as PromiseRejectedResult).reason)
+  function getResult<T>(name: string): T | null {
+    const idx = callDefs.findIndex((c) => c.name === name);
+    if (idx === -1) return null;
+    return settled(responses[idx] as PromiseSettledResult<T>);
+  }
+
+  const api_calls = callDefs.map((c, i) => ({
+    name: c.name,
+    path: c.path,
+    ok: responses[i].status === "fulfilled",
+    error: responses[i].status === "rejected"
+      ? String((responses[i] as PromiseRejectedResult).reason)
       : null,
   }));
 
-  const plans = settled(plansRes) ?? {};
-
-  // licenses_purchased: use plan_base hosts as the primary seat count
+  // Licenses
+  const plans = getResult<Record<string, unknown>>("plans") ?? {};
   let licenses_purchased: number | null = null;
   const planBase = plans.plan_base as { hosts?: number } | undefined;
-  if (planBase?.hosts != null) {
-    licenses_purchased = planBase.hosts;
-  }
+  if (planBase?.hosts != null) licenses_purchased = planBase.hosts;
 
-  const licenses_assigned = settled(usersRes)?.total_records ?? null;
-  const active_users_30d = settled(active30Res)?.total_records ?? null;
-  const active_users_90d = settled(active90Res)?.total_records ?? null;
+  const licenses_assigned = getResult<{ total_records: number }>("users")?.total_records ?? null;
 
-  let total_meetings: number | null = null;
-  const daily = settled(dailyRes);
-  if (daily?.dates && daily.dates.length > 0) {
-    total_meetings = daily.dates.reduce((sum, d) => sum + (d.new_meeting ?? 0), 0);
-  }
+  // Active users
+  const active_users_30d = getResult<ZoomReportUsersResponse>("active30")?.total_records ?? null;
+  const active_users_90d = getResult<ZoomReportUsersResponse>("active90")?.total_records ?? null;
 
-  return { licenses_purchased, licenses_assigned, active_users_30d, active_users_90d, total_meetings, raw_data: { plans, api_calls } };
+  // Rolling 30-day meetings — merge prev + curr month, filter to window
+  const currDates = getResult<ZoomDailyReportResponse>("daily_curr")?.dates ?? [];
+  const prevDates = needsPrevMonth ? (getResult<ZoomDailyReportResponse>("daily_prev")?.dates ?? []) : [];
+  const windowDates = [...prevDates, ...currDates].filter((d) => d.date >= from30 && d.date <= to);
+  const total_meetings = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.new_meeting ?? 0), 0) : null;
+
+  // Zoom Phone
+  const phoneUsersTotal = getResult<{ total_records: number }>("phone_users")?.total_records ?? null;
+  const phoneUsage = getResult<ZoomPhoneUsageResponse>("phone_usage");
+  const phoneActiveUsers30d = phoneUsage?.users != null ? phoneUsage.users.length : null;
+  const phoneCallMinutes30d = phoneUsage?.users != null
+    ? Math.round(phoneUsage.users.reduce((sum, u) => sum + (u.calls_duration ?? 0), 0) / 60)
+    : null;
+
+  return {
+    licenses_purchased,
+    licenses_assigned,
+    active_users_30d,
+    active_users_90d,
+    total_meetings,
+    raw_data: {
+      plans,
+      api_calls,
+      phone: { users_total: phoneUsersTotal, active_users_30d: phoneActiveUsers30d, call_minutes_30d: phoneCallMinutes30d },
+    },
+  };
 }
 
 export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise<ZoomStatus | null> {

@@ -670,6 +670,35 @@ export default function OptimizeAccountPage() {
             </div>
           )}
 
+          {/* Zoom Phone panel — shown when latest snapshot has phone data */}
+          {utilization.length > 0 && (() => {
+            const latest = utilization[0];
+            let phone: { users_total?: number | null; active_users_30d?: number | null; call_minutes_30d?: number | null } | null = null;
+            try { phone = (JSON.parse(latest.raw_data ?? "{}") as { phone?: typeof phone }).phone ?? null; } catch { /* ignore */ }
+            if (!phone || (phone.users_total == null && phone.active_users_30d == null && phone.call_minutes_30d == null)) return null;
+            return (
+              <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: "3px solid #2563eb" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 12 }}>
+                  Zoom Phone — last sync ({latest.snapshot_date})
+                </div>
+                <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+                  {[
+                    { label: "Assigned Users",    value: phone.users_total },
+                    { label: "Active Users (30d)", value: phone.active_users_30d },
+                    { label: "Call Minutes (30d)", value: phone.call_minutes_30d != null ? phone.call_minutes_30d.toLocaleString() : null },
+                  ].map(({ label, value }) => (
+                    <div key={label} style={{ textAlign: "center" }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? "rgba(240,246,255,0.9)" : "rgba(240,246,255,0.25)" }}>
+                        {value ?? "—"}
+                      </div>
+                      <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* API call diagnostics from most recent snapshot */}
           {utilization.length > 0 && (() => {
             const latest = utilization[0];

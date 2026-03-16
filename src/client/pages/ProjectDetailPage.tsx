@@ -18,9 +18,17 @@ import {
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
+import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import { useToast } from "../components/ui/ToastProvider";
 
 type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity" | "zoom";
+
+function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
+  const v = vendor?.toLowerCase() ?? "";
+  if (v.includes("zoom")) return "zoom";
+  if (v.includes("ring") || v.includes("rc")) return "ringcentral";
+  return null;
+}
 
 const STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -563,17 +571,23 @@ export default function ProjectDetailPage() {
       </div>
 
       {/* Tab navigation */}
-      <div className="ms-tabs">
-        {(["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity", "zoom"] as DetailTab[]).map((t) => (
-          <button
-            key={t}
-            className={`ms-tab-btn${tab === t ? " active" : ""}`}
-            onClick={() => setTab(t)}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
-      </div>
+      {(() => {
+        const platform = detectPlatform(project.vendor);
+        const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
+        return (
+          <div className="ms-tabs">
+            {(["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity", "zoom"] as DetailTab[]).map((t) => (
+              <button
+                key={t}
+                className={`ms-tab-btn${tab === t ? " active" : ""}`}
+                onClick={() => setTab(t)}
+              >
+                {t === "zoom" ? platformLabel : t.charAt(0).toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* ── Overview ──────────────────────────────────────────────────────── */}
       {tab === "overview" && (
@@ -942,7 +956,12 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Zoom ──────────────────────────────────────────────────────────── */}
-      {tab === "zoom" && <ZoomTab projectId={project.id} />}
+      {tab === "zoom" && (() => {
+        const platform = detectPlatform(project.vendor);
+        return platform === "ringcentral"
+          ? <RingCentralTab projectId={project.id} />
+          : <ZoomTab projectId={project.id} />;
+      })()}
 
       {/* ── Risk Modal ────────────────────────────────────────────────────── */}
       {showRiskModal && (
