@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logoUrl from "../assets/fusion flow transparent logo.png";
-import { api, type User } from "../lib/api";
+import { api, type User, type SystemStatusResponse } from "../lib/api";
+import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
 
 function initials(name: string | null, email: string): string {
   if (name) {
@@ -98,9 +99,19 @@ export default function ModuleSelectPage() {
   const [user, setUser] = useState<User | null>(null);
   const [hovered, setHovered] = useState<number | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [sysStatus, setSysStatus] = useState<SystemStatusResponse | null>(null);
 
   useEffect(() => {
     api.me().then((r) => setUser(r.user)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    function fetchStatus() {
+      api.systemStatus().then(setSysStatus).catch(() => {});
+    }
+    fetchStatus();
+    const id = setInterval(fetchStatus, 90_000);
+    return () => clearInterval(id);
   }, []);
 
   function handleCardClick(mod: Module) {
@@ -129,10 +140,7 @@ export default function ModuleSelectPage() {
       {/* Header */}
       <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)", background: "rgba(13,27,46,0.8)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 40, fontSize: 13, color: "rgba(240,246,255,0.5)" }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#00c8e0", boxShadow: "0 0 8px #00c8e0", display: "inline-block", animation: "ff-pulse 2s ease-in-out infinite" }} />
-            All Systems Operational
-          </div>
+          <SystemStatusBadge status={sysStatus} />
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #00c8e0, #2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em" }}>
             {abbr}
           </div>
