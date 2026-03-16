@@ -73,6 +73,32 @@ app.patch("/:id/phases/:phaseId", async (c) => {
     .run();
 
   const updated = await db.prepare("SELECT * FROM phases WHERE id = ? LIMIT 1").bind(phaseId).first();
+
+  // Auto-graduation: if all phases are now completed, graduate to Optimize
+  if (updates.status === "completed") {
+    const incomplete = await db
+      .prepare("SELECT COUNT(*) as cnt FROM phases WHERE project_id = ? AND status != 'completed'")
+      .bind(projectId)
+      .first<{ cnt: number }>();
+
+    if ((incomplete?.cnt ?? 1) === 0) {
+      const existing = await db
+        .prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1")
+        .bind(projectId)
+        .first();
+
+      if (!existing) {
+        await db
+          .prepare(
+            `INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method)
+             VALUES (?, ?, ?, 'auto')`
+          )
+          .bind(crypto.randomUUID(), projectId, auth.user.id)
+          .run();
+      }
+    }
+  }
+
   return c.json(updated);
 });
 

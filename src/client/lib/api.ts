@@ -338,6 +338,95 @@ export type SystemStatusResponse = {
   ringcentral: VendorStatus | null;
 };
 
+// ── Optimize types ───────────────────────────────────────────────────────────
+
+export type OptimizeAccount = {
+  id: string;
+  project_id: string;
+  project_name: string;
+  customer_name: string | null;
+  graduated_at: string;
+  graduation_method: "auto" | "manual";
+  optimize_status: "active" | "paused" | "churned";
+  sa_user_id: string | null;
+  sa_name: string | null;
+  csm_user_id: string | null;
+  csm_name: string | null;
+  next_review_date: string | null;
+  notes: string | null;
+  last_assessment_date: string | null;
+  last_assessment_score: number | null;
+};
+
+export type OptimizeEligible = {
+  id: string;
+  name: string;
+  customer_name: string | null;
+  vendor: string | null;
+  actual_go_live_date: string | null;
+};
+
+export type Assessment = {
+  id: string;
+  project_id: string;
+  assessment_type: "impact" | "adoption" | "qbr" | "other";
+  conducted_date: string;
+  conducted_by_user_id: string | null;
+  conducted_by_name: string | null;
+  overall_score: number | null;
+  adoption_score: number | null;
+  satisfaction_score: number | null;
+  notes: string | null;
+  action_items: string | null;
+  next_review_date: string | null;
+  created_at: string;
+};
+
+export type TechStackItem = {
+  id: string;
+  project_id: string;
+  tech_area: "uc" | "security" | "network" | "datacenter" | "backup_dr" | "tem" | "other";
+  tech_area_label: string | null;
+  current_vendor: string | null;
+  current_solution: string | null;
+  time_rating: "tolerate" | "invest" | "migrate" | "eliminate" | null;
+  notes: string | null;
+  last_reviewed: string | null;
+  reviewed_by_user_id: string | null;
+  reviewed_by_name: string | null;
+};
+
+export type RoadmapItem = {
+  id: string;
+  project_id: string;
+  tech_stack_id: string | null;
+  title: string;
+  description: string | null;
+  category: "enhancement" | "new_project" | "optimization" | "replacement";
+  priority: "high" | "medium" | "low";
+  time_rating: "tolerate" | "invest" | "migrate" | "eliminate" | null;
+  status: "identified" | "evaluating" | "approved" | "in_progress" | "completed" | "deferred";
+  target_date: string | null;
+  linked_solution_id: string | null;
+  linked_project_id: string | null;
+  created_at: string;
+};
+
+export type UtilizationSnapshot = {
+  id: string;
+  project_id: string;
+  platform: "zoom" | "ringcentral";
+  snapshot_date: string;
+  licenses_purchased: number | null;
+  licenses_assigned: number | null;
+  active_users_30d: number | null;
+  active_users_90d: number | null;
+  total_meetings: number | null;
+  total_call_minutes: number | null;
+  raw_data: string | null;
+  created_at: string;
+};
+
 export const api = {
   me: () => request<MeResponse>("/me"),
   systemStatus: () => request<SystemStatusResponse>("/status"),
@@ -774,4 +863,119 @@ export const api = {
     request<{ success: boolean }>(`/solutions/${solutionId}/contacts/${contactId}`, {
       method: "DELETE",
     }),
+
+  // ── Optimize ─────────────────────────────────────────────────────────────
+  optimizeAccounts: () => request<OptimizeAccount[]>("/optimize/accounts"),
+  optimizeEligible: () => request<OptimizeEligible[]>("/optimize/eligible"),
+  optimizeAccount: (projectId: string) => request<OptimizeAccount>(`/optimize/accounts/${projectId}`),
+  optimizeGraduate: (projectId: string) =>
+    request<OptimizeAccount>(`/optimize/accounts/${projectId}/graduate`, { method: "POST" }),
+  optimizeUpdateAccount: (projectId: string, payload: {
+    sa_user_id?: string | null;
+    csm_user_id?: string | null;
+    optimize_status?: "active" | "paused" | "churned";
+    next_review_date?: string | null;
+    notes?: string | null;
+  }) =>
+    request<OptimizeAccount>(`/optimize/accounts/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+
+  optimizeAssessments: (projectId: string) => request<Assessment[]>(`/optimize/assessments?project_id=${projectId}`),
+  optimizeCreateAssessment: (payload: {
+    project_id: string;
+    assessment_type: string;
+    conducted_date: string;
+    overall_score?: number | null;
+    adoption_score?: number | null;
+    satisfaction_score?: number | null;
+    notes?: string | null;
+    action_items?: string | null;
+    next_review_date?: string | null;
+  }) =>
+    request<Assessment>("/optimize/assessments", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  optimizeUpdateAssessment: (id: string, payload: Partial<{
+    assessment_type: string;
+    conducted_date: string;
+    overall_score: number | null;
+    adoption_score: number | null;
+    satisfaction_score: number | null;
+    notes: string | null;
+    action_items: string | null;
+    next_review_date: string | null;
+  }>) =>
+    request<Assessment>(`/optimize/assessments/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  optimizeDeleteAssessment: (id: string) =>
+    request<{ success: boolean }>(`/optimize/assessments/${id}`, { method: "DELETE" }),
+
+  optimizeTechStack: (projectId: string) => request<TechStackItem[]>(`/optimize/tech-stack?project_id=${projectId}`),
+  optimizeCreateTechStack: (payload: {
+    project_id: string;
+    tech_area: string;
+    tech_area_label?: string | null;
+    current_vendor?: string | null;
+    current_solution?: string | null;
+    time_rating?: string | null;
+    notes?: string | null;
+  }) =>
+    request<TechStackItem>("/optimize/tech-stack", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  optimizeUpdateTechStack: (id: string, payload: Partial<{
+    tech_area: string;
+    tech_area_label: string | null;
+    current_vendor: string | null;
+    current_solution: string | null;
+    time_rating: string | null;
+    notes: string | null;
+  }>) =>
+    request<TechStackItem>(`/optimize/tech-stack/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  optimizeDeleteTechStack: (id: string) =>
+    request<{ success: boolean }>(`/optimize/tech-stack/${id}`, { method: "DELETE" }),
+
+  optimizeRoadmap: (projectId: string) => request<RoadmapItem[]>(`/optimize/roadmap?project_id=${projectId}`),
+  optimizeCreateRoadmapItem: (payload: {
+    project_id: string;
+    title: string;
+    description?: string | null;
+    category?: string;
+    priority?: string;
+    time_rating?: string | null;
+    status?: string;
+    target_date?: string | null;
+    tech_stack_id?: string | null;
+  }) =>
+    request<RoadmapItem>("/optimize/roadmap", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  optimizeUpdateRoadmapItem: (id: string, payload: Partial<{
+    title: string;
+    description: string | null;
+    category: string;
+    priority: string;
+    time_rating: string | null;
+    status: string;
+    target_date: string | null;
+  }>) =>
+    request<RoadmapItem>(`/optimize/roadmap/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  optimizeDeleteRoadmapItem: (id: string) =>
+    request<{ success: boolean }>(`/optimize/roadmap/${id}`, { method: "DELETE" }),
+
+  optimizeUtilization: (projectId: string) =>
+    request<UtilizationSnapshot[]>(`/optimize/accounts/${projectId}/utilization`),
 };

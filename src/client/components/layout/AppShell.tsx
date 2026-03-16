@@ -89,6 +89,13 @@ export default function AppShell() {
           <SideLink to="/dashboard" end>Dashboard</SideLink>
           <SideLink to="/projects">Projects</SideLink>
 
+          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+            Optimize
+          </div>
+          <SideLink to="/optimize">Accounts</SideLink>
+
           {isAdmin && (
             <>
               <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
