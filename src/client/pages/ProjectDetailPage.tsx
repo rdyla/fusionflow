@@ -817,7 +817,7 @@ export default function ProjectDetailPage() {
                   {phase.name}
                 </div>
                 <div style={{ display: "grid", gap: 6 }}>
-                  {phaseTasks.length === 0 && addingTaskPhaseId !== phase.id && (
+                  {phaseTasks.length === 0 && (
                     <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
                   )}
 
