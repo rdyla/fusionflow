@@ -153,10 +153,10 @@ export default function ModuleSelectPage() {
 
       {/* Wheel + blurb — side by side */}
       <section style={{ position: "relative", zIndex: 5, padding: "4px 40px 0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 28, maxWidth: 1100, margin: "0 auto" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, maxWidth: 1100, margin: "0 auto" }}>
 
           {/* Left column: wheel + detail panel */}
-          <div style={{ flex: "0 0 340px", minWidth: 0 }}>
+          <div style={{ flex: "0 0 380px", minWidth: 0 }}>
             <svg
               viewBox="0 0 600 540"
               width="100%"
@@ -314,7 +314,7 @@ export default function ModuleSelectPage() {
                       )}
                     </div>
                   </div>
-                  <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8 }}>
+                  <div style={{ display: "flex", flexWrap: "nowrap" as const, gap: 8, overflowX: "auto" }}>
                     {activePhase.steps.map((step) => (
                       <span key={step} style={{
                         display: "inline-flex", alignItems: "center", gap: 6,
