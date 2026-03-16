@@ -338,6 +338,30 @@ export type SystemStatusResponse = {
   ringcentral: VendorStatus | null;
 };
 
+// ── Staff types ──────────────────────────────────────────────────────────────
+
+export type ProjectStaffMember = {
+  id: string;
+  project_id: string;
+  user_id: string;
+  staff_role: string; // 'ae' | 'sa' | 'csm' | 'engineer'
+  name: string | null;
+  email: string;
+  role: string;
+  created_at: string;
+};
+
+export type SolutionStaffMember = {
+  id: string;
+  solution_id: string;
+  user_id: string;
+  staff_role: string; // 'pf_ae' | 'pf_sa'
+  name: string | null;
+  email: string;
+  role: string;
+  created_at: string;
+};
+
 // ── Optimize types ───────────────────────────────────────────────────────────
 
 export type OptimizeAccount = {
@@ -468,21 +492,6 @@ export const api = {
   getDynamicsOpportunities: (accountId: string) =>
     request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities`),
 
-  getDynamicsPMs: () =>
-    request<DynamicsUser[]>(`/dynamics/staff/project-managers`),
-
-  getDynamicsAEs: () =>
-    request<DynamicsUser[]>(`/dynamics/staff/account-executives`),
-
-  getDynamicsSAs: () =>
-    request<DynamicsUser[]>(`/dynamics/staff/solution-architects`),
-
-  getDynamicsCSMs: () =>
-    request<DynamicsUser[]>(`/dynamics/staff/client-success-managers`),
-
-  getDynamicsEngineers: () =>
-    request<DynamicsUser[]>(`/dynamics/staff/engineers`),
-
   createProject: (payload: {
     name: string;
     customer_name?: string;
@@ -491,12 +500,6 @@ export const api = {
     kickoff_date?: string;
     target_go_live_date?: string;
     pm_user_id?: string | null;
-    pm_name?: string | null;
-    ae_user_id?: string | null;
-    ae_name?: string | null;
-    sa_name?: string | null;
-    csm_name?: string | null;
-    engineer_name?: string | null;
     dynamics_account_id?: string | null;
   }) =>
     request<Project>("/projects", {
@@ -512,12 +515,6 @@ export const api = {
       target_go_live_date?: string;
       actual_go_live_date?: string;
       pm_user_id?: string | null;
-      pm_name?: string | null;
-      ae_user_id?: string | null;
-      ae_name?: string | null;
-      sa_name?: string | null;
-      csm_name?: string | null;
-      engineer_name?: string | null;
     }
   ) =>
     request<Project>(`/projects/${id}`, {
@@ -863,6 +860,26 @@ export const api = {
     request<{ success: boolean }>(`/solutions/${solutionId}/contacts/${contactId}`, {
       method: "DELETE",
     }),
+
+  // ── Project Staff ─────────────────────────────────────────────────────────
+  projectStaff: (projectId: string) => request<ProjectStaffMember[]>(`/projects/${projectId}/staff`),
+  addProjectStaff: (projectId: string, payload: { user_id: string; staff_role: string }) =>
+    request<ProjectStaffMember>(`/projects/${projectId}/staff`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  removeProjectStaff: (projectId: string, staffId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/staff/${staffId}`, { method: "DELETE" }),
+
+  // ── Solution Staff ────────────────────────────────────────────────────────
+  solutionStaff: (solutionId: string) => request<SolutionStaffMember[]>(`/solutions/${solutionId}/staff`),
+  addSolutionStaff: (solutionId: string, payload: { user_id: string; staff_role: string }) =>
+    request<SolutionStaffMember>(`/solutions/${solutionId}/staff`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  removeSolutionStaff: (solutionId: string, staffId: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/staff/${staffId}`, { method: "DELETE" }),
 
   // ── Optimize ─────────────────────────────────────────────────────────────
   optimizeAccounts: () => request<OptimizeAccount[]>("/optimize/accounts"),

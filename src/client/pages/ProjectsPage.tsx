@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type DynamicsAccount, type DynamicsOpportunity, type DynamicsUser, type Project, type Phase } from "../lib/api";
+import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase, type User } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
@@ -74,22 +74,14 @@ const EMPTY_FORM = {
   solution_type: "",
   kickoff_date: "",
   target_go_live_date: "",
-  pm_name: "",
-  ae_name: "",
-  sa_name: "",
-  csm_name: "",
-  engineer_name: "",
+  pm_user_id: "",
   dynamics_account_id: "",
 };
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectPhases, setProjectPhases] = useState<Record<string, Phase[]>>({});
-  const [dynamicsPMs, setDynamicsPMs] = useState<DynamicsUser[]>([]);
-  const [dynamicsAEs, setDynamicsAEs] = useState<DynamicsUser[]>([]);
-  const [dynamicsSAs, setDynamicsSAs] = useState<DynamicsUser[]>([]);
-  const [dynamicsCSMs, setDynamicsCSMs] = useState<DynamicsUser[]>([]);
-  const [dynamicsEngineers, setDynamicsEngineers] = useState<DynamicsUser[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -112,11 +104,8 @@ export default function ProjectsPage() {
   const [oppsLoading, setOppsLoading] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.projects(), api.getDynamicsPMs(), api.getDynamicsAEs(), api.getDynamicsSAs(), api.getDynamicsCSMs(), api.getDynamicsEngineers()])
-      .then(([p, pms, aes, sas, csms, engineers]) => {
-        setProjects(p); setDynamicsPMs(pms); setDynamicsAEs(aes);
-        setDynamicsSAs(sas); setDynamicsCSMs(csms); setDynamicsEngineers(engineers);
-      })
+    Promise.all([api.projects(), api.users()])
+      .then(([p, u]) => { setProjects(p); setUsers(u); })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, []);
@@ -199,11 +188,7 @@ export default function ProjectsPage() {
         solution_type: form.solution_type.trim() || undefined,
         kickoff_date: form.kickoff_date || undefined,
         target_go_live_date: form.target_go_live_date || undefined,
-        pm_name: form.pm_name || null,
-        ae_name: form.ae_name || null,
-        sa_name: form.sa_name || null,
-        csm_name: form.csm_name || null,
-        engineer_name: form.engineer_name || null,
+        pm_user_id: form.pm_user_id || null,
         dynamics_account_id: form.dynamics_account_id || null,
       });
       showToast("Project created.", "success");
@@ -426,56 +411,18 @@ export default function ProjectsPage() {
                   <span>Target Go-Live</span>
                   <input type="date" className="ms-input" value={form.target_go_live_date} onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })} />
                 </label>
-                <label className="ms-label">
+                <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
                   <span>Project Manager</span>
-                  <select className="ms-input" value={form.pm_name} onChange={(e) => setForm({ ...form, pm_name: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {dynamicsPMs.map((u) => {
-                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                    })}
+                  <select className="ms-input" value={form.pm_user_id} onChange={(e) => setForm({ ...form, pm_user_id: e.target.value })}>
+                    <option value="">— Unassigned —</option>
+                    {users.filter((u) => (u.role === "pm" || u.role === "admin") && u.is_active).map((u) => (
+                      <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                    ))}
                   </select>
                 </label>
-                <label className="ms-label">
-                  <span>Account Executive</span>
-                  <select className="ms-input" value={form.ae_name} onChange={(e) => setForm({ ...form, ae_name: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {dynamicsAEs.map((u) => {
-                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                    })}
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Solution Architect</span>
-                  <select className="ms-input" value={form.sa_name} onChange={(e) => setForm({ ...form, sa_name: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {dynamicsSAs.map((u) => {
-                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                    })}
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Client Success Manager</span>
-                  <select className="ms-input" value={form.csm_name} onChange={(e) => setForm({ ...form, csm_name: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {dynamicsCSMs.map((u) => {
-                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                    })}
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Implementation Engineer</span>
-                  <select className="ms-input" value={form.engineer_name} onChange={(e) => setForm({ ...form, engineer_name: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {dynamicsEngineers.map((u) => {
-                      const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                      return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                    })}
-                  </select>
-                </label>
+                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>
+                  Additional team members (AEs, SAs, CSMs, Engineers) can be assigned from the project detail page.
+                </div>
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>

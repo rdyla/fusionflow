@@ -275,4 +275,59 @@ app.delete("/:id/contacts/:contactId", requireRole("admin", "pm", "pf_ae"), asyn
   return c.json({ success: true });
 });
 
+// ── Project Staff ─────────────────────────────────────────────────────────────
+
+app.get("/:id/staff", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await db.prepare(`
+    SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
+           u.name, u.email, u.role
+    FROM project_staff ps
+    JOIN users u ON u.id = ps.user_id
+    WHERE ps.project_id = ?
+    ORDER BY ps.staff_role, u.name
+  `).bind(projectId).all();
+  return c.json(rows.results ?? []);
+});
+
+app.post("/:id/staff", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const { user_id, staff_role } = await c.req.json<{ user_id: string; staff_role: string }>();
+  if (!user_id || !staff_role) throw new HTTPException(400, { message: "user_id and staff_role required" });
+
+  const id = crypto.randomUUID();
+  await db.prepare("INSERT OR IGNORE INTO project_staff (id, project_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
+    .bind(id, projectId, user_id, staff_role).run();
+
+  const created = await db.prepare(`
+    SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
+           u.name, u.email, u.role
+    FROM project_staff ps JOIN users u ON u.id = ps.user_id
+    WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
+  `).bind(projectId, user_id, staff_role).first();
+  return c.json(created, 201);
+});
+
+app.delete("/:id/staff/:staffId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  await db.prepare("DELETE FROM project_staff WHERE id = ? AND project_id = ?")
+    .bind(c.req.param("staffId"), projectId).run();
+  return c.json({ success: true });
+});
+
 export default app;

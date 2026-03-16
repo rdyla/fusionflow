@@ -4,12 +4,12 @@ import {
   api,
   type Document,
   type DynamicsContact,
-  type DynamicsUser,
   type Milestone,
   type Note,
   type Phase,
   type Project,
   type ProjectContact,
+  type ProjectStaffMember,
   type Risk,
   type Task,
   type TaskComment,
@@ -96,17 +96,6 @@ export default function ProjectDetailPage() {
   const [editStatus, setEditStatus] = useState("");
   const [editHealth, setEditHealth] = useState("");
   const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
-  const [editPmName, setEditPmName] = useState("");
-  const [editAeName, setEditAeName] = useState("");
-  const [editSaName, setEditSaName] = useState("");
-  const [editCsmName, setEditCsmName] = useState("");
-  const [editEngineerName, setEditEngineerName] = useState("");
-  const [dynamicsPMs, setDynamicsPMs] = useState<DynamicsUser[]>([]);
-  const [dynamicsAEs, setDynamicsAEs] = useState<DynamicsUser[]>([]);
-  const [dynamicsSAs, setDynamicsSAs] = useState<DynamicsUser[]>([]);
-  const [dynamicsCSMs, setDynamicsCSMs] = useState<DynamicsUser[]>([]);
-  const [dynamicsEngineers, setDynamicsEngineers] = useState<DynamicsUser[]>([]);
-  const [staffPhotos, setStaffPhotos] = useState<Record<string, string | null>>({});
   const [savingProject, setSavingProject] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -134,6 +123,10 @@ export default function ProjectDetailPage() {
   const [savingMilestone, setSavingMilestone] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
+  const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
+  const [addStaffUserId, setAddStaffUserId] = useState("");
+  const [addStaffRole, setAddStaffRole] = useState("ae");
+  const [addingStaff, setAddingStaff] = useState(false);
   const { showToast } = useToast();
 
   const groupedTasks = useMemo(
@@ -151,11 +144,11 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData, meData] =
+        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, staffData, meData] =
           await Promise.all([
             api.project(id), api.phases(id), api.milestones(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users(), api.documents(id),
-            api.getDynamicsPMs(), api.getDynamicsAEs(), api.getDynamicsSAs(), api.getDynamicsCSMs(), api.getDynamicsEngineers(),
+            api.projectStaff(id),
             api.me(),
           ]);
         api.projectContacts(id).then(setContacts).catch(() => {});
@@ -163,23 +156,7 @@ export default function ProjectDetailPage() {
         setEditStatus(projectData.status ?? "");
         setEditHealth(projectData.health ?? "");
         setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
-        setEditPmName(projectData.pm_name ?? "");
-        setEditAeName(projectData.ae_name ?? "");
-        setEditSaName(projectData.sa_name ?? "");
-        setEditCsmName(projectData.csm_name ?? "");
-        setEditEngineerName(projectData.engineer_name ?? "");
-        setDynamicsPMs(pmsData);
-        setDynamicsAEs(aesData);
-        setDynamicsSAs(sasData);
-        setDynamicsCSMs(csmsData);
-        setDynamicsEngineers(engData);
-
-        // Fetch Zoom profile photos for all staff
-        const allStaff = [...pmsData, ...aesData, ...sasData, ...csmsData, ...engData];
-        const emails = [...new Set(allStaff.map((u) => u.internalemailaddress).filter((e): e is string => !!e))];
-        if (emails.length > 0) {
-          api.staffPhotos(emails).then(setStaffPhotos).catch(() => {});
-        }
+        setProjectStaff(staffData);
         setPhases(phaseData);
         setMilestones(milestoneData);
         setTasks(taskData);
@@ -234,17 +211,7 @@ export default function ProjectDetailPage() {
         status: editStatus || undefined,
         health: editHealth || undefined,
         target_go_live_date: editTargetGoLiveDate || undefined,
-        pm_name: editPmName || null,
-        ae_name: editAeName || null,
-        sa_name: editSaName || null,
-        csm_name: editCsmName || null,
-        engineer_name: editEngineerName || null,
       });
-      setEditPmName(updated.pm_name ?? "");
-      setEditAeName(updated.ae_name ?? "");
-      setEditSaName(updated.sa_name ?? "");
-      setEditCsmName(updated.csm_name ?? "");
-      setEditEngineerName(updated.engineer_name ?? "");
       setProject(updated);
       setSaveMessage("Saved.");
       showToast("Project updated successfully.", "success");
@@ -254,6 +221,32 @@ export default function ProjectDetailPage() {
       showToast(message, "error");
     } finally {
       setSavingProject(false);
+    }
+  }
+
+  async function handleAddStaff() {
+    if (!addStaffUserId || !project) return;
+    setAddingStaff(true);
+    try {
+      const added = await api.addProjectStaff(project.id, { user_id: addStaffUserId, staff_role: addStaffRole });
+      setProjectStaff((prev) => [...prev, added]);
+      setAddStaffUserId("");
+      showToast("Staff member added.", "success");
+    } catch {
+      showToast("Failed to add staff member", "error");
+    } finally {
+      setAddingStaff(false);
+    }
+  }
+
+  async function handleRemoveStaff(staffId: string) {
+    if (!project) return;
+    try {
+      await api.removeProjectStaff(project.id, staffId);
+      setProjectStaff((prev) => prev.filter((s) => s.id !== staffId));
+      showToast("Staff member removed.", "success");
+    } catch {
+      showToast("Failed to remove staff member", "error");
     }
   }
 
@@ -580,70 +573,64 @@ export default function ProjectDetailPage() {
           {/* ── Project Team ──────────────────────────────────────────────── */}
           <div className="ms-section-card">
             <div className="ms-section-title">PF Team</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
-              {(
-                [
-                  { label: "Project Manager",        name: project.pm_name,       roster: dynamicsPMs,       showZoom: true  },
-                  { label: "Account Executive",       name: project.ae_name,       roster: dynamicsAEs,       showZoom: true  },
-                  { label: "Solution Architect",      name: project.sa_name,       roster: dynamicsSAs,       showZoom: true  },
-                  { label: "Client Success Manager",  name: project.csm_name,      roster: dynamicsCSMs,      showZoom: true  },
-                  { label: "Implementation Engineer", name: project.engineer_name, roster: dynamicsEngineers, showZoom: false },
-                ] as { label: string; name: string | null; roster: DynamicsUser[]; showZoom: boolean }[]
-              ).map(({ label, name, roster, showZoom }) => {
-                const member = roster.find((u) => [u.firstname, u.lastname].filter(Boolean).join(" ") === name);
-                const displayName = member ? [member.firstname, member.lastname].filter(Boolean).join(" ") : name;
-                const initials = displayName
-                  ? displayName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
-                  : "?";
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: 14 }}>
+              {/* Primary PM */}
+              {project.pm_user_id && (() => {
+                const pm = userMap.get(project.pm_user_id);
+                if (!pm) return null;
+                const abbr = pm.name ? pm.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : pm.email.slice(0, 2).toUpperCase();
                 return (
-                  <div key={label} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)" }}>
-                    {member?.internalemailaddress && staffPhotos[member.internalemailaddress] ? (
-                      <img
-                        src={staffPhotos[member.internalemailaddress]!}
-                        alt={displayName ?? ""}
-                        style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid rgba(0,200,224,0.25)" }}
-                      />
-                    ) : (
-                      <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#00c8e0", letterSpacing: "0.02em" }}>
-                        {displayName ? initials : "—"}
-                      </div>
-                    )}
+                  <div key="pm" style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.4)", marginBottom: 3 }}>{label}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: displayName ? "rgba(240,246,255,0.9)" : "rgba(240,246,255,0.3)", marginBottom: 2 }}>
-                        {displayName ?? "Unassigned"}
-                      </div>
-                      {member?.title && (
-                        <div style={{ fontSize: 12, color: "rgba(240,246,255,0.45)", marginBottom: 3 }}>{member.title}</div>
-                      )}
-                      {member?.internalemailaddress && (
-                        <a href={`mailto:${member.internalemailaddress}`} style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none", display: "block", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {member.internalemailaddress}
-                        </a>
-                      )}
-                      {showZoom && displayName && (
-                        <a
-                          href={member?.internalemailaddress
-                            ? `https://zoom.us/meeting/schedule?invitees=${encodeURIComponent(member.internalemailaddress)}`
-                            : "https://zoom.us/meeting/schedule"}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          style={{
-                            display: "inline-flex", alignItems: "center", gap: 5,
-                            padding: "4px 10px", fontSize: 11, fontWeight: 600,
-                            background: "rgba(0,120,212,0.15)", border: "1px solid rgba(0,120,212,0.35)",
-                            borderRadius: 4, color: "#4fc3f7", textDecoration: "none",
-                          }}
-                        >
-                          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 12, height: 12 }}><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-                          Schedule via Zoom
-                        </a>
-                      )}
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>Project Manager</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{pm.name ?? pm.email}</div>
+                      <a href={`mailto:${pm.email}`} style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none" }}>{pm.email}</a>
                     </div>
                   </div>
                 );
+              })()}
+              {/* Additional staff */}
+              {projectStaff.map((s) => {
+                const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
+                const roleLabel: Record<string, string> = { ae: "Account Executive", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer" };
+                return (
+                  <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{s.name ?? s.email}</div>
+                      <a href={`mailto:${s.email}`} style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none" }}>{s.email}</a>
+                    </div>
+                    {canEdit && (
+                      <button onClick={() => handleRemoveStaff(s.id)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
+                    )}
+                  </div>
+                );
               })}
+              {projectStaff.length === 0 && !project.pm_user_id && (
+                <div style={{ color: "rgba(240,246,255,0.3)", fontSize: 13, fontStyle: "italic", gridColumn: "1 / -1" }}>No staff assigned.</div>
+              )}
             </div>
+            {canEdit && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <select className="ms-input" style={{ flex: 2 }} value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
+                  <option value="">— Select staff member —</option>
+                  {users.filter((u) => u.role !== "partner_ae" && u.is_active).map((u) => (
+                    <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                  ))}
+                </select>
+                <select className="ms-input" style={{ flex: 1 }} value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
+                  <option value="ae">Account Executive</option>
+                  <option value="sa">Solution Architect</option>
+                  <option value="csm">Client Success Manager</option>
+                  <option value="engineer">Engineer</option>
+                </select>
+                <button className="ms-btn-secondary" onClick={handleAddStaff} disabled={!addStaffUserId || addingStaff}>
+                  {addingStaff ? "Adding..." : "Add"}
+                </button>
+              </div>
+            )}
           </div>
 
           {canEdit && <div className="ms-section-card">
@@ -671,56 +658,6 @@ export default function ProjectDetailPage() {
               <label className="ms-label">
                 <span>Target Go-Live</span>
                 <input type="date" className="ms-input" value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
-              </label>
-              <label className="ms-label">
-                <span>Project Manager</span>
-                <select className="ms-input" value={editPmName} onChange={(e) => setEditPmName(e.target.value)}>
-                  <option value="">Unassigned</option>
-                  {dynamicsPMs.map((u) => {
-                    const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                    return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                  })}
-                </select>
-              </label>
-              <label className="ms-label">
-                <span>Account Executive</span>
-                <select className="ms-input" value={editAeName} onChange={(e) => setEditAeName(e.target.value)}>
-                  <option value="">Unassigned</option>
-                  {dynamicsAEs.map((u) => {
-                    const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                    return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                  })}
-                </select>
-              </label>
-              <label className="ms-label">
-                <span>Solution Architect</span>
-                <select className="ms-input" value={editSaName} onChange={(e) => setEditSaName(e.target.value)}>
-                  <option value="">Unassigned</option>
-                  {dynamicsSAs.map((u) => {
-                    const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                    return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                  })}
-                </select>
-              </label>
-              <label className="ms-label">
-                <span>Client Success Manager</span>
-                <select className="ms-input" value={editCsmName} onChange={(e) => setEditCsmName(e.target.value)}>
-                  <option value="">Unassigned</option>
-                  {dynamicsCSMs.map((u) => {
-                    const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                    return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                  })}
-                </select>
-              </label>
-              <label className="ms-label">
-                <span>Implementation Engineer</span>
-                <select className="ms-input" value={editEngineerName} onChange={(e) => setEditEngineerName(e.target.value)}>
-                  <option value="">Unassigned</option>
-                  {dynamicsEngineers.map((u) => {
-                    const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ");
-                    return <option key={u.systemuserid} value={fullName}>{fullName}</option>;
-                  })}
-                </select>
               </label>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>

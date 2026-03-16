@@ -27,7 +27,7 @@ const SOLUTION_TYPE_LABELS: Record<string, string> = {
 
 function accessClause(role: string, userId: string): { where: string; bindings: string[] } {
   if (role === "admin" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
-  if (role === "pf_ae") return { where: "(s.pf_ae_user_id = ? OR s.created_by = ?)", bindings: [userId, userId] };
+  if (role === "pf_ae") return { where: "(s.pf_ae_user_id = ? OR s.created_by = ? OR s.id IN (SELECT solution_id FROM solution_staff WHERE user_id = ? AND staff_role = 'pf_ae'))", bindings: [userId, userId, userId] };
   return { where: "s.partner_ae_user_id = ?", bindings: [userId] };
 }
 
@@ -339,6 +339,56 @@ app.post("/:id/create-project", async (c) => {
 
   const project = await db.prepare("SELECT * FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
   return c.json(project, 201);
+});
+
+// ── Solution Staff ────────────────────────────────────────────────────────────
+
+app.get("/:id/staff", async (c) => {
+  const auth = c.get("auth");
+  const { role } = auth;
+  if (!["admin", "pm", "pf_ae", "pf_sa", "pf_csm"].includes(role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await c.env.DB.prepare(`
+    SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
+           u.name, u.email, u.role
+    FROM solution_staff ss
+    JOIN users u ON u.id = ss.user_id
+    WHERE ss.solution_id = ?
+    ORDER BY ss.staff_role, u.name
+  `).bind(c.req.param("id")).all();
+  return c.json(rows.results ?? []);
+});
+
+app.post("/:id/staff", async (c) => {
+  const auth = c.get("auth");
+  const { role } = auth;
+  if (!["admin", "pm", "pf_ae", "pf_sa"].includes(role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const { user_id, staff_role } = await c.req.json<{ user_id: string; staff_role: string }>();
+  if (!user_id || !staff_role) throw new HTTPException(400, { message: "user_id and staff_role required" });
+
+  const solutionId = c.req.param("id");
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
+    .bind(id, solutionId, user_id, staff_role).run();
+
+  const created = await c.env.DB.prepare(`
+    SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
+           u.name, u.email, u.role
+    FROM solution_staff ss JOIN users u ON u.id = ss.user_id
+    WHERE ss.solution_id = ? AND ss.user_id = ? AND ss.staff_role = ? LIMIT 1
+  `).bind(solutionId, user_id, staff_role).first();
+  return c.json(created, 201);
+});
+
+app.delete("/:id/staff/:staffId", async (c) => {
+  const auth = c.get("auth");
+  const { role } = auth;
+  if (!["admin", "pm", "pf_ae", "pf_sa"].includes(role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  await c.env.DB.prepare("DELETE FROM solution_staff WHERE id = ? AND solution_id = ?")
+    .bind(c.req.param("staffId"), c.req.param("id")).run();
+  return c.json({ success: true });
 });
 
 export default app;

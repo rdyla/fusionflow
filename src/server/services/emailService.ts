@@ -2,6 +2,7 @@ import { Resend } from "resend";
 
 type Env = {
   RESEND_API_KEY?: string;
+  DEV_EMAIL?: string;
 };
 
 type EmailPayload = {
@@ -24,12 +25,16 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
   const validRecipients = recipients.filter(Boolean);
   if (validRecipients.length === 0) return;
 
+  // DEV_EMAIL override: redirect all mail to the dev address during testing.
+  // Remove DEV_EMAIL from wrangler.json vars to restore normal routing.
+  const finalRecipients = env.DEV_EMAIL ? [env.DEV_EMAIL] : validRecipients;
+
   const resend = new Resend(env.RESEND_API_KEY);
 
   const { error } = await resend.emails.send({
     from: "FusionFlow360 <noreply@fusionflow360.com>",
-    to: validRecipients,
-    subject: payload.subject,
+    to: finalRecipients,
+    subject: env.DEV_EMAIL ? `[DEV → ${validRecipients.join(", ")}] ${payload.subject}` : payload.subject,
     html: payload.html,
   });
 

@@ -31,6 +31,9 @@ export type Bindings = {
   RESEND_API_KEY?: string;
   // App base URL for email links (set in wrangler.json vars)
   APP_URL?: string;
+  // Dev override: when set, ALL outbound emails are redirected to this address
+  // Remove this var from wrangler.json when going to production
+  DEV_EMAIL?: string;
 };
 
 export type Variables = {

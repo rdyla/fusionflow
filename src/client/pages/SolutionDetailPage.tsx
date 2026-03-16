@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis, type SolutionStaffMember } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
 
@@ -474,6 +474,12 @@ export default function SolutionDetailPage() {
   const [riskForm, setRiskForm] = useState<Omit<RiskItem, "id">>(BLANK_RISK);
   const [savingGapRisk, setSavingGapRisk] = useState(false);
 
+  // Solution staff
+  const [solutionStaff, setSolutionStaff] = useState<SolutionStaffMember[]>([]);
+  const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
+  const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("pf_ae");
+  const [addingSolutionStaff, setAddingSolutionStaff] = useState(false);
+
   const load = useCallback(async () => {
     if (!id) return;
     const [s, u, me] = await Promise.all([api.solution(id), api.users(), api.me()]);
@@ -500,6 +506,7 @@ export default function SolutionDetailPage() {
       api.getDynamicsContacts(s.dynamics_account_id).then(setCrmContacts).catch(() => {});
     }
     api.solutionContacts(id).then(setSolutionContacts).catch(() => {});
+    api.solutionStaff(id).then(setSolutionStaff).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -530,6 +537,32 @@ export default function SolutionDetailPage() {
 
   async function markLost() {
     await save({ status: "lost" });
+  }
+
+  async function handleAddSolutionStaff() {
+    if (!addSolutionStaffUser || !id) return;
+    setAddingSolutionStaff(true);
+    try {
+      const added = await api.addSolutionStaff(id, { user_id: addSolutionStaffUser, staff_role: addSolutionStaffRole });
+      setSolutionStaff((prev) => [...prev, added]);
+      setAddSolutionStaffUser("");
+      showToast("Staff member added.", "success");
+    } catch {
+      showToast("Failed to add staff member", "error");
+    } finally {
+      setAddingSolutionStaff(false);
+    }
+  }
+
+  async function handleRemoveSolutionStaff(staffId: string) {
+    if (!id) return;
+    try {
+      await api.removeSolutionStaff(id, staffId);
+      setSolutionStaff((prev) => prev.filter((s) => s.id !== staffId));
+      showToast("Staff member removed.", "success");
+    } catch {
+      showToast("Failed to remove staff member", "error");
+    }
   }
 
   async function handleCreateProject() {
@@ -684,22 +717,62 @@ export default function SolutionDetailPage() {
                 </label>
               )}
             </div>
+            {canEdit && (
+              <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
+                onClick={() => save({ name: overview.name, customer_name: overview.customer_name })}>
+                {saving ? "Saving…" : "Save Changes"}
+              </button>
+            )}
           </div>
 
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Team</h3>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-              <label className="ms-label">
-                <span>PF Account Executive</span>
-                {canEdit ? (
-                  <select className="ms-input" value={overview.pf_ae_user_id} onChange={(e) => setOverview((o) => ({ ...o, pf_ae_user_id: e.target.value }))}>
-                    <option value="">— Unassigned —</option>
-                    {pfAes.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                ) : (
-                  <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{solution.pf_ae_name ?? "—"}</div>
-                )}
-              </label>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>PF Team</h3>
+
+            {/* Staff list */}
+            {solutionStaff.length > 0 && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 16 }}>
+                {solutionStaff.map((s) => {
+                  const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
+                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect" };
+                  return (
+                    <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{s.name ?? s.email}</div>
+                      </div>
+                      {canEdit && (
+                        <button onClick={() => handleRemoveSolutionStaff(s.id)} style={{ position: "absolute", top: 6, right: 6, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {solutionStaff.length === 0 && (
+              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", marginBottom: 16 }}>No PF staff assigned yet.</div>
+            )}
+
+            {canEdit && (
+              <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 }}>
+                <select className="ms-input" style={{ flex: 2 }} value={addSolutionStaffUser} onChange={(e) => setAddSolutionStaffUser(e.target.value)}>
+                  <option value="">— Select team member —</option>
+                  {users.filter((u) => (u.role === "pf_ae" || u.role === "pf_sa" || u.role === "admin") && u.is_active).map((u) => (
+                    <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                  ))}
+                </select>
+                <select className="ms-input" style={{ flex: 1 }} value={addSolutionStaffRole} onChange={(e) => setAddSolutionStaffRole(e.target.value)}>
+                  <option value="pf_ae">Account Executive</option>
+                  <option value="pf_sa">Solution Architect</option>
+                </select>
+                <button className="ms-btn-secondary" onClick={handleAddSolutionStaff} disabled={!addSolutionStaffUser || addingSolutionStaff}>
+                  {addingSolutionStaff ? "Adding..." : "Add"}
+                </button>
+              </div>
+            )}
+
+            {/* Partner AE - unchanged */}
+            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 14 }}>
               <label className="ms-label">
                 <span>Partner AE</span>
                 {canEdit ? (
@@ -711,17 +784,13 @@ export default function SolutionDetailPage() {
                   <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"}</div>
                 )}
               </label>
+              {canEdit && (
+                <button className="ms-btn-primary" style={{ marginTop: 12 }} disabled={saving}
+                  onClick={() => save({ partner_ae_user_id: overview.partner_ae_user_id || null })}>
+                  {saving ? "Saving…" : "Save Partner AE"}
+                </button>
+              )}
             </div>
-            {canEdit && (
-              <button
-                className="ms-btn-primary"
-                style={{ marginTop: 16 }}
-                disabled={saving}
-                onClick={() => save({ name: overview.name, customer_name: overview.customer_name, pf_ae_user_id: overview.pf_ae_user_id || null, partner_ae_user_id: overview.partner_ae_user_id || null })}
-              >
-                {saving ? "Saving…" : "Save Changes"}
-              </button>
-            )}
           </div>
 
           {/* ── Customer Contacts ── */}
