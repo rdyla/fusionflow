@@ -124,8 +124,9 @@ export default function ProjectDetailPage() {
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
+  const [showStaffModal, setShowStaffModal] = useState(false);
   const [addStaffUserId, setAddStaffUserId] = useState("");
-  const [addStaffRole, setAddStaffRole] = useState("ae");
+  const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
   const { showToast } = useToast();
 
@@ -225,12 +226,14 @@ export default function ProjectDetailPage() {
   }
 
   async function handleAddStaff() {
-    if (!addStaffUserId || !project) return;
+    if (!addStaffUserId || !addStaffRole || !project) return;
     setAddingStaff(true);
     try {
       const added = await api.addProjectStaff(project.id, { user_id: addStaffUserId, staff_role: addStaffRole });
       setProjectStaff((prev) => [...prev, added]);
       setAddStaffUserId("");
+      setAddStaffRole("");
+      setShowStaffModal(false);
       showToast("Staff member added.", "success");
     } catch {
       showToast("Failed to add staff member", "error");
@@ -613,21 +616,9 @@ export default function ProjectDetailPage() {
               )}
             </div>
             {canEdit && (
-              <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-                <select className="ms-input" style={{ flex: 2 }} value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
-                  <option value="">— Select staff member —</option>
-                  {users.filter((u) => u.role !== "partner_ae" && u.is_active).map((u) => (
-                    <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-                  ))}
-                </select>
-                <select className="ms-input" style={{ flex: 1 }} value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
-                  <option value="ae">Account Executive</option>
-                  <option value="sa">Solution Architect</option>
-                  <option value="csm">Client Success Manager</option>
-                  <option value="engineer">Engineer</option>
-                </select>
-                <button className="ms-btn-secondary" onClick={handleAddStaff} disabled={!addStaffUserId || addingStaff}>
-                  {addingStaff ? "Adding..." : "Add"}
+              <div style={{ paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                <button className="ms-btn-secondary" onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>
+                  + Add Staff Member
                 </button>
               </div>
             )}
@@ -1225,6 +1216,45 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Staff Modal ──────────────────────────────────────────────── */}
+      {showStaffModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowStaffModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Add Staff Member</h2>
+              <button onClick={() => setShowStaffModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+            <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
+              <label className="ms-label">
+                <span>Role on Project</span>
+                <select className="ms-input" value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
+                  <option value="">— Select role —</option>
+                  <option value="ae">Account Executive</option>
+                  <option value="sa">Solution Architect</option>
+                  <option value="csm">Client Success Manager</option>
+                  <option value="engineer">Implementation Engineer</option>
+                </select>
+              </label>
+              <label className="ms-label">
+                <span>Team Member</span>
+                <select className="ms-input" value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
+                  <option value="">— Select team member —</option>
+                  {users.filter((u) => u.role !== "partner_ae" && u.is_active).map((u) => (
+                    <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <button className="ms-btn-primary" disabled={!addStaffUserId || !addStaffRole || addingStaff} onClick={handleAddStaff}>
+                {addingStaff ? "Adding…" : "Add Staff Member"}
+              </button>
+              <button className="ms-btn-secondary" onClick={() => setShowStaffModal(false)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}

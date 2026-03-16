@@ -476,8 +476,9 @@ export default function SolutionDetailPage() {
 
   // Solution staff
   const [solutionStaff, setSolutionStaff] = useState<SolutionStaffMember[]>([]);
+  const [showSolutionStaffModal, setShowSolutionStaffModal] = useState(false);
   const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
-  const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("pf_ae");
+  const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("");
   const [addingSolutionStaff, setAddingSolutionStaff] = useState(false);
 
   const load = useCallback(async () => {
@@ -540,12 +541,14 @@ export default function SolutionDetailPage() {
   }
 
   async function handleAddSolutionStaff() {
-    if (!addSolutionStaffUser || !id) return;
+    if (!addSolutionStaffUser || !addSolutionStaffRole || !id) return;
     setAddingSolutionStaff(true);
     try {
       const added = await api.addSolutionStaff(id, { user_id: addSolutionStaffUser, staff_role: addSolutionStaffRole });
       setSolutionStaff((prev) => [...prev, added]);
       setAddSolutionStaffUser("");
+      setAddSolutionStaffRole("");
+      setShowSolutionStaffModal(false);
       showToast("Staff member added.", "success");
     } catch {
       showToast("Failed to add staff member", "error");
@@ -732,7 +735,7 @@ export default function SolutionDetailPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 16 }}>
                 {solutionStaff.map((s) => {
                   const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect" };
+                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager" };
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
                       <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
@@ -753,19 +756,9 @@ export default function SolutionDetailPage() {
             )}
 
             {canEdit && (
-              <div style={{ display: "flex", gap: 10, alignItems: "center", paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 }}>
-                <select className="ms-input" style={{ flex: 2 }} value={addSolutionStaffUser} onChange={(e) => setAddSolutionStaffUser(e.target.value)}>
-                  <option value="">— Select team member —</option>
-                  {users.filter((u) => (u.role === "pf_ae" || u.role === "pf_sa" || u.role === "admin") && u.is_active).map((u) => (
-                    <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-                  ))}
-                </select>
-                <select className="ms-input" style={{ flex: 1 }} value={addSolutionStaffRole} onChange={(e) => setAddSolutionStaffRole(e.target.value)}>
-                  <option value="pf_ae">Account Executive</option>
-                  <option value="pf_sa">Solution Architect</option>
-                </select>
-                <button className="ms-btn-secondary" onClick={handleAddSolutionStaff} disabled={!addSolutionStaffUser || addingSolutionStaff}>
-                  {addingSolutionStaff ? "Adding..." : "Add"}
+              <div style={{ paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 }}>
+                <button className="ms-btn-secondary" onClick={() => { setShowSolutionStaffModal(true); setAddSolutionStaffUser(""); setAddSolutionStaffRole(""); }}>
+                  + Add Staff Member
                 </button>
               </div>
             )}
@@ -853,6 +846,44 @@ export default function SolutionDetailPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Staff Modal ── */}
+      {showSolutionStaffModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowSolutionStaffModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Add PF Team Member</h2>
+              <button onClick={() => setShowSolutionStaffModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+            <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
+              <label className="ms-label">
+                <span>Role on Solution</span>
+                <select className="ms-input" value={addSolutionStaffRole} onChange={(e) => setAddSolutionStaffRole(e.target.value)}>
+                  <option value="">— Select role —</option>
+                  <option value="pf_ae">Account Executive</option>
+                  <option value="pf_sa">Solution Architect</option>
+                  <option value="pf_csm">Client Success Manager</option>
+                </select>
+              </label>
+              <label className="ms-label">
+                <span>Team Member</span>
+                <select className="ms-input" value={addSolutionStaffUser} onChange={(e) => setAddSolutionStaffUser(e.target.value)}>
+                  <option value="">— Select team member —</option>
+                  {users.filter((u) => u.role !== "partner_ae" && u.is_active).map((u) => (
+                    <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <button className="ms-btn-primary" disabled={!addSolutionStaffUser || !addSolutionStaffRole || addingSolutionStaff} onClick={handleAddSolutionStaff}>
+                {addingSolutionStaff ? "Adding…" : "Add Team Member"}
+              </button>
+              <button className="ms-btn-secondary" onClick={() => setShowSolutionStaffModal(false)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}
