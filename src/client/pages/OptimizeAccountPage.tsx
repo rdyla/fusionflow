@@ -672,7 +672,7 @@ export default function OptimizeAccountPage() {
 
           {/* Zoom Phone panel — shown when latest snapshot has phone data */}
           {utilization.length > 0 && (() => {
-            type PhoneData = { users_total?: number | null; active_users_30d?: number | null; call_minutes_30d?: number | null };
+            type PhoneData = { users_total?: number | null; total_calls_30d?: number | null; active_users_30d?: number | null; call_minutes_30d?: number | null };
             const latest = utilization[0];
             let phone: PhoneData | null = null;
             try { phone = (JSON.parse(latest.raw_data ?? "{}") as { phone?: PhoneData }).phone ?? null; } catch { /* ignore */ }
@@ -684,9 +684,10 @@ export default function OptimizeAccountPage() {
                 </div>
                 <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
                   {[
-                    { label: "Assigned Users",    value: phone.users_total },
-                    { label: "Active Users (30d)", value: phone.active_users_30d },
-                    { label: "Call Minutes (30d)", value: phone.call_minutes_30d != null ? phone.call_minutes_30d.toLocaleString() : null },
+                    { label: "Assigned Users",     value: phone.users_total },
+                    { label: "Total Calls (30d)",   value: phone.total_calls_30d?.toLocaleString() ?? null },
+                    { label: "Active Callers (30d)", value: phone.active_users_30d },
+                    { label: "Call Minutes (30d)",  value: phone.call_minutes_30d != null ? phone.call_minutes_30d.toLocaleString() : null },
                   ].map(({ label, value }) => (
                     <div key={label} style={{ textAlign: "center" }}>
                       <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? "rgba(240,246,255,0.9)" : "rgba(240,246,255,0.25)" }}>

@@ -191,9 +191,9 @@ type ZoomDailyReportResponse = {
   dates?: Array<{ date: string; new_meeting: number; participants: number; meeting_minutes: number }>;
 };
 
-type ZoomPhoneUsageResponse = {
+type ZoomPhoneCallLogsResponse = {
   total_records?: number;
-  users?: Array<{ calls_duration?: number }>;
+  call_logs?: Array<{ duration?: number; caller_id?: string }>;
 };
 
 export type ZoomUtilizationData = {
@@ -235,8 +235,8 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     { name: "active90",    path: `/report/users?type=active&from=${from90}&to=${to}&page_size=1` },
     { name: "daily_curr",  path: `/report/daily?year=${currYear}&month=${currMonth}` },
     ...(needsPrevMonth ? [{ name: "daily_prev", path: `/report/daily?year=${prevYear}&month=${prevMonth}` }] : []),
-    { name: "phone_users", path: "/phone/users?page_size=1" },
-    { name: "phone_usage", path: `/phone/reports/users?from=${from30}&to=${to}&page_size=300` },
+    { name: "phone_users",    path: "/phone/users?page_size=1" },
+    { name: "phone_call_logs", path: `/phone/call_logs?from=${from30}&to=${to}&type=all&page_size=1000` },
   ];
 
   const responses = await Promise.allSettled(callDefs.map((c) => zoomGet<unknown>(token, c.path)));
@@ -276,10 +276,13 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
 
   // Zoom Phone
   const phoneUsersTotal = getResult<{ total_records: number }>("phone_users")?.total_records ?? null;
-  const phoneUsage = getResult<ZoomPhoneUsageResponse>("phone_usage");
-  const phoneActiveUsers30d = phoneUsage?.users != null ? phoneUsage.users.length : null;
-  const phoneCallMinutes30d = phoneUsage?.users != null
-    ? Math.round(phoneUsage.users.reduce((sum, u) => sum + (u.calls_duration ?? 0), 0) / 60)
+  const callLogs = getResult<ZoomPhoneCallLogsResponse>("phone_call_logs");
+  // total_records is the exact count; call_logs array is capped at page_size=1000
+  const phoneTotalCalls30d = callLogs?.total_records ?? null;
+  const logs = callLogs?.call_logs ?? null;
+  const phoneActiveUsers30d = logs != null ? new Set(logs.map((l) => l.caller_id).filter(Boolean)).size : null;
+  const phoneCallMinutes30d = logs != null
+    ? Math.round(logs.reduce((sum, l) => sum + (l.duration ?? 0), 0) / 60)
     : null;
 
   return {
@@ -291,7 +294,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     raw_data: {
       plans,
       api_calls,
-      phone: { users_total: phoneUsersTotal, active_users_30d: phoneActiveUsers30d, call_minutes_30d: phoneCallMinutes30d },
+      phone: { users_total: phoneUsersTotal, total_calls_30d: phoneTotalCalls30d, active_users_30d: phoneActiveUsers30d, call_minutes_30d: phoneCallMinutes30d },
     },
   };
 }
