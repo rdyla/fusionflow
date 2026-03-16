@@ -21,6 +21,7 @@ app.get("/summary", async (c) => {
     projectFilter = `WHERE id IN (SELECT project_id FROM project_access WHERE user_id = ?)`;
     filterBindings = [auth.user.id];
   }
+  // pf_sa and admin: no filter — portfolio-wide visibility
 
   const projectSubquery = projectFilter
     ? `SELECT id FROM projects ${projectFilter}`
@@ -40,7 +41,7 @@ app.get("/summary", async (c) => {
     .first<{ count: number }>();
 
   // AEs only see tasks assigned to them; PMs/admins see all tasks on their projects
-  const isAE = auth.role === "pf_ae" || auth.role === "partner_ae";
+  const isAE = auth.role === "pf_ae" || auth.role === "partner_ae" || auth.role === "pf_sa";
   const taskAssigneeClause = isAE ? " AND assignee_user_id = ?" : "";
   const taskAssigneeBinding: string[] = isAE ? [auth.user.id] : [];
 

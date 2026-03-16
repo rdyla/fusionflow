@@ -212,7 +212,7 @@ async function getCached(
 
 // ── Contextual vendor selection ───────────────────────────────────────────────
 
-const PF_ROLES = new Set(["admin", "pm", "pf_ae", "partner_ae"]);
+const PF_ROLES = new Set(["admin", "pm", "pf_ae", "pf_sa", "partner_ae"]);
 
 async function vendorsForUser(
   db: D1Database,

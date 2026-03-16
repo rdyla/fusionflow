@@ -8,6 +8,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin:      "Admin",
   pm:         "Project Manager",
   pf_ae:      "Account Executive",
+  pf_sa:      "Solution Architect",
   partner_ae: "Partner AE",
 };
 

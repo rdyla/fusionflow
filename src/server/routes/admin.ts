@@ -29,7 +29,7 @@ const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(500).optional(),
   organization_name: z.string().max(500).optional(),
-  role: z.enum(["admin", "pm", "pf_ae", "partner_ae"]),
+  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "partner_ae"]),
 });
 
 app.post("/users", async (c) => {
@@ -81,7 +81,7 @@ const updateUserSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   email: z.string().email().optional(),
   organization_name: z.string().max(500).optional(),
-  role: z.enum(["admin", "pm", "pf_ae", "partner_ae"]).optional(),
+  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "partner_ae"]).optional(),
   is_active: z.number().int().min(0).max(1).optional(),
 });
 

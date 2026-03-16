@@ -35,6 +35,7 @@ app.get("/", async (c) => {
     `;
     bindings = [auth.user.id];
   }
+  // pf_sa and admin: no filter — portfolio-wide visibility
 
   sql += " ORDER BY updated_at DESC";
 

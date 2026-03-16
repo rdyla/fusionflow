@@ -6,6 +6,7 @@ export async function canViewProject(
   projectId: string
 ): Promise<boolean> {
   if (user.role === "admin") return true;
+  if (user.role === "pf_sa") return true; // SAs have portfolio-wide visibility
 
   if (user.role === "pm") {
     const owned = await db
@@ -60,6 +61,14 @@ export async function canEditProject(
   projectId: string
 ): Promise<boolean> {
   if (user.role === "admin") return true;
+
+  if (user.role === "pf_sa") {
+    const access = await db
+      .prepare("SELECT id FROM project_access WHERE project_id = ? AND user_id = ? LIMIT 1")
+      .bind(projectId, user.id)
+      .first();
+    return !!access;
+  }
 
   if (user.role === "pm") {
     const owned = await db
