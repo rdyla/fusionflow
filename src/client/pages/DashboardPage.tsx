@@ -226,9 +226,12 @@ export default function DashboardPage() {
                 >
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLOR[t.status ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "rgba(240,246,255,0.9)", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <Link
+                      to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}
+                      style={{ fontSize: 13, color: "rgba(240,246,255,0.9)", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "none" }}
+                    >
                       {t.title}
-                    </div>
+                    </Link>
                     <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)", display: "flex", gap: 6 }}>
                       <Link to={`/projects/${t.project_id}`} style={{ color: "#00c8e0", textDecoration: "none" }}>
                         {t.project_name}

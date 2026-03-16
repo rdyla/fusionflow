@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   type Document,
@@ -53,6 +53,7 @@ function Badge({ label, color }: { label: string; color: string }) {
 
 export default function ProjectDetailPage() {
   const { id = "" } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
 
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
@@ -147,6 +148,15 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
+
+        const tabParam = searchParams.get("tab") as DetailTab | null;
+        if (tabParam) setTab(tabParam);
+
+        const taskIdParam = searchParams.get("taskId");
+        if (taskIdParam && tabParam === "tasks") {
+          const matched = taskData.find((t) => t.id === taskIdParam);
+          if (matched) setEditingTask(matched);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load project");
       } finally {
