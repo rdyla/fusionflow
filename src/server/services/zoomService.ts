@@ -214,13 +214,31 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   const from90 = fmt(ago(90));
   const to = fmt(today);
 
+  const calls: Array<[string, string]> = [
+    ["plans",     "/accounts/me/plans"],
+    ["users",     "/users?page_size=1"],
+    ["active30",  `/report/users?type=active&from=${from30}&to=${to}&page_size=1`],
+    ["active90",  `/report/users?type=active&from=${from90}&to=${to}&page_size=1`],
+    ["daily",     `/report/daily?year=${today.getFullYear()}&month=${today.getMonth() + 1}`],
+  ];
+
   const [plansRes, usersRes, active30Res, active90Res, dailyRes] = await Promise.allSettled([
-    zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
-    zoomGet<{ total_records: number }>(token, "/users?page_size=1"),
-    zoomGet<ZoomReportUsersResponse>(token, `/report/users?type=active&from=${from30}&to=${to}&page_size=1`),
-    zoomGet<ZoomReportUsersResponse>(token, `/report/users?type=active&from=${from90}&to=${to}&page_size=1`),
-    zoomGet<ZoomDailyReportResponse>(token, `/report/daily?year=${today.getFullYear()}&month=${today.getMonth() + 1}`),
+    zoomGet<Record<string, unknown>>(token, calls[0][1]),
+    zoomGet<{ total_records: number }>(token, calls[1][1]),
+    zoomGet<ZoomReportUsersResponse>(token, calls[2][1]),
+    zoomGet<ZoomReportUsersResponse>(token, calls[3][1]),
+    zoomGet<ZoomDailyReportResponse>(token, calls[4][1]),
   ]);
+
+  const results = [plansRes, usersRes, active30Res, active90Res, dailyRes];
+  const api_calls = calls.map(([name, path], i) => ({
+    name,
+    path,
+    ok: results[i].status === "fulfilled",
+    error: results[i].status === "rejected"
+      ? String((results[i] as PromiseRejectedResult).reason)
+      : null,
+  }));
 
   const plans = settled(plansRes) ?? {};
 
@@ -241,7 +259,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     total_meetings = daily.dates.reduce((sum, d) => sum + (d.new_meeting ?? 0), 0);
   }
 
-  return { licenses_purchased, licenses_assigned, active_users_30d, active_users_90d, total_meetings, raw_data: { plans } };
+  return { licenses_purchased, licenses_assigned, active_users_30d, active_users_90d, total_meetings, raw_data: { plans, api_calls } };
 }
 
 export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise<ZoomStatus | null> {

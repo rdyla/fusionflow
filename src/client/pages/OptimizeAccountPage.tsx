@@ -669,6 +669,31 @@ export default function OptimizeAccountPage() {
               </table>
             </div>
           )}
+
+          {/* API call diagnostics from most recent snapshot */}
+          {utilization.length > 0 && (() => {
+            const latest = utilization[0];
+            let apiCalls: Array<{ name: string; path: string; ok: boolean; error: string | null }> = [];
+            try { apiCalls = (JSON.parse(latest.raw_data ?? "{}") as { api_calls?: typeof apiCalls }).api_calls ?? []; } catch { /* ignore */ }
+            if (apiCalls.length === 0) return null;
+            const hasFailed = apiCalls.some((c) => !c.ok);
+            return (
+              <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: `3px solid ${hasFailed ? "#f59e0b" : "#22c55e"}` }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
+                  API Call Diagnostics — last sync ({latest.snapshot_date})
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  {apiCalls.map((c) => (
+                    <div key={c.name} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: c.ok ? "#22c55e" : "#f59e0b", flexShrink: 0, minWidth: 36 }}>{c.ok ? "✓ OK" : "✗ ERR"}</span>
+                      <code style={{ color: "rgba(240,246,255,0.7)", fontSize: 12, background: "rgba(255,255,255,0.04)", padding: "1px 6px", borderRadius: 4, flexShrink: 0 }}>{c.path}</code>
+                      {c.error && <span style={{ color: "#fbbf24", fontSize: 12, wordBreak: "break-word" }}>{c.error}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
