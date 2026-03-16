@@ -59,7 +59,7 @@ app.post("/:id/risks", async (c) => {
     .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null)
     .run();
 
-  const created = await db.prepare("SELECT * FROM risks WHERE id = ? LIMIT 1").bind(id).first<{ id: string; title: string; description: string | null; severity: string | null }>();
+  const created = await db.prepare("SELECT * FROM risks WHERE id = ? LIMIT 1").bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null }>();
 
   if (created) {
     const appUrl = c.env.APP_URL ?? "";
