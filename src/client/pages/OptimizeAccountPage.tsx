@@ -672,9 +672,10 @@ export default function OptimizeAccountPage() {
 
           {/* Zoom Phone panel — shown when latest snapshot has phone data */}
           {utilization.length > 0 && (() => {
+            type PhoneData = { users_total?: number | null; active_users_30d?: number | null; call_minutes_30d?: number | null };
             const latest = utilization[0];
-            let phone: { users_total?: number | null; active_users_30d?: number | null; call_minutes_30d?: number | null } | null = null;
-            try { phone = (JSON.parse(latest.raw_data ?? "{}") as { phone?: typeof phone }).phone ?? null; } catch { /* ignore */ }
+            let phone: PhoneData | null = null;
+            try { phone = (JSON.parse(latest.raw_data ?? "{}") as { phone?: PhoneData }).phone ?? null; } catch { /* ignore */ }
             if (!phone || (phone.users_total == null && phone.active_users_30d == null && phone.call_minutes_30d == null)) return null;
             return (
               <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: "3px solid #2563eb" }}>
