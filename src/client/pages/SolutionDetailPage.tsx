@@ -415,7 +415,7 @@ export default function SolutionDetailPage() {
   // Contacts
   const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
   const [projectContacts, setProjectContacts] = useState<ProjectContact[]>([]);
-  const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsLoading] = useState(false);
   const [savingContact, setSavingContact] = useState(false);
 
   // Tab-local state
