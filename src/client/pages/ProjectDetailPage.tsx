@@ -659,74 +659,24 @@ export default function ProjectDetailPage() {
                     <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
                   )}
 
-                  {phaseTasks.map((task) =>
-                    editingTask?.id === task.id ? (
-                      <div key={task.id} className="ms-section-card" style={{ borderColor: "#0891b2" }}>
-                        <div style={{ display: "grid", gap: 12 }}>
-                          <label className="ms-label">
-                            <span>Title</span>
-                            <input className="ms-input" value={editingTask.title} onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })} />
-                          </label>
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                            <label className="ms-label">
-                              <span>Status</span>
-                              <select className="ms-input" value={editingTask.status ?? ""} onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })}>
-                                <option value="not_started">Not Started</option>
-                                <option value="in_progress">In Progress</option>
-                                <option value="completed">Completed</option>
-                                <option value="blocked">Blocked</option>
-                              </select>
-                            </label>
-                            <label className="ms-label">
-                              <span>Priority</span>
-                              <select className="ms-input" value={editingTask.priority ?? ""} onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value || null })}>
-                                <option value="">None</option>
-                                <option value="low">Low</option>
-                                <option value="medium">Medium</option>
-                                <option value="high">High</option>
-                              </select>
-                            </label>
-                            <label className="ms-label">
-                              <span>Due Date</span>
-                              <input type="date" className="ms-input" value={editingTask.due_date ?? ""} onChange={(e) => setEditingTask({ ...editingTask, due_date: e.target.value || null })} />
-                            </label>
-                            <label className="ms-label">
-                              <span>Assignee</span>
-                              <select className="ms-input" value={editingTask.assignee_user_id ?? ""} onChange={(e) => setEditingTask({ ...editingTask, assignee_user_id: e.target.value || null })}>
-                                <option value="">Unassigned</option>
-                                {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                              </select>
-                            </label>
-                            <label className="ms-label">
-                              <span>Move to Phase</span>
-                              <select className="ms-input" value={editingTask.phase_id ?? ""} onChange={(e) => setEditingTask({ ...editingTask, phase_id: e.target.value || null })}>
-                                <option value="">No phase</option>
-                                {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                              </select>
-                            </label>
-                          </div>
-                          <div style={{ display: "flex", gap: 8 }}>
-                            <button className="ms-btn-primary" onClick={handleUpdateTask} disabled={savingTask}>{savingTask ? "Saving..." : "Save"}</button>
-                            <button className="ms-btn-secondary" onClick={() => setEditingTask(null)}>Cancel</button>
-                            <button className="ms-btn-danger" onClick={() => handleDeleteTask(task.id)} style={{ marginLeft: "auto" }}>Delete</button>
-                          </div>
+                  {phaseTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="ms-row-item"
+                      onClick={() => setEditingTask(task)}
+                      style={{ cursor: "pointer" }}
+                    >
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", marginBottom: 3 }}>{task.title}</div>
+                        <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
+                          Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
                         </div>
                       </div>
-                    ) : (
-                      <div key={task.id} className="ms-row-item">
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", marginBottom: 3 }}>{task.title}</div>
-                          <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
-                            Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                          <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
-                          {canEdit && <button className="ms-btn-ghost" onClick={() => setEditingTask(task)}>Edit</button>}
-                        </div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                        <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
                       </div>
-                    )
-                  )}
+                    </div>
+                  ))}
 
                   {canEdit && addingTaskPhaseId === phase.id ? (
                     <div className="ms-section-card" style={{ borderColor: "#0891b2" }}>
@@ -1007,6 +957,101 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+      {/* ── Task Modal ─────────────────────────────────────────────────────── */}
+      {editingTask && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 600, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
+
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Task Details</h2>
+              <button onClick={() => setEditingTask(null)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: 24, overflowY: "auto", flex: 1, display: "grid", gap: 16 }}>
+
+              {/* Title */}
+              <label className="ms-label">
+                <span>Title</span>
+                <input className="ms-input" value={editingTask.title} onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })} disabled={!canEdit} />
+              </label>
+
+              {/* Status + Priority */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label className="ms-label">
+                  <span>Status</span>
+                  <select className="ms-input" value={editingTask.status ?? ""} onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })} disabled={!canEdit}>
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="completed">Completed</option>
+                    <option value="blocked">Blocked</option>
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Priority</span>
+                  <select className="ms-input" value={editingTask.priority ?? ""} onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value || null })} disabled={!canEdit}>
+                    <option value="">None</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Due Date + Assignee */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label className="ms-label">
+                  <span>Due Date</span>
+                  <input type="date" className="ms-input" value={editingTask.due_date ?? ""} onChange={(e) => setEditingTask({ ...editingTask, due_date: e.target.value || null })} disabled={!canEdit} />
+                </label>
+                <label className="ms-label">
+                  <span>Assignee</span>
+                  <select className="ms-input" value={editingTask.assignee_user_id ?? ""} onChange={(e) => setEditingTask({ ...editingTask, assignee_user_id: e.target.value || null })} disabled={!canEdit}>
+                    <option value="">Unassigned</option>
+                    {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                  </select>
+                </label>
+              </div>
+
+              {/* Phase */}
+              {canEdit && (
+                <label className="ms-label">
+                  <span>Phase</span>
+                  <select className="ms-input" value={editingTask.phase_id ?? ""} onChange={(e) => setEditingTask({ ...editingTask, phase_id: e.target.value || null })}>
+                    <option value="">No phase</option>
+                    {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+              )}
+
+              {/* Comments — placeholder for future feature */}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 8 }}>Comments</div>
+                <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>Comments coming soon.</div>
+              </div>
+
+              {/* Attachments — placeholder for future feature */}
+              <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 8 }}>Attachments</div>
+                <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>Attachments coming soon.</div>
+              </div>
+
+            </div>
+
+            {/* Footer */}
+            {canEdit && (
+              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+                <button className="ms-btn-primary" onClick={handleUpdateTask} disabled={savingTask}>{savingTask ? "Saving..." : "Save"}</button>
+                <button className="ms-btn-secondary" onClick={() => setEditingTask(null)}>Cancel</button>
+                <button className="ms-btn-danger" onClick={() => handleDeleteTask(editingTask.id)} style={{ marginLeft: "auto" }}>Delete</button>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
