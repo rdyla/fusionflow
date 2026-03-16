@@ -201,6 +201,16 @@ export default function ProjectDetailPage() {
     load();
   }, [id]);
 
+  // Must be before early returns — hooks must always run in the same order
+  useEffect(() => {
+    if (!editingTask || !project) {
+      setTaskComments([]);
+      setTaskCommentBody("");
+      return;
+    }
+    api.taskComments(project.id, editingTask.id).then(setTaskComments).catch(() => {});
+  }, [editingTask?.id]);
+
   if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading project...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
   if (!project) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Project not found.</div>;
@@ -297,16 +307,6 @@ export default function ProjectDetailPage() {
       showToast(err instanceof Error ? err.message : "Failed to delete task", "error");
     }
   }
-
-  // Fetch comments whenever the task modal opens
-  useEffect(() => {
-    if (!editingTask || !project) {
-      setTaskComments([]);
-      setTaskCommentBody("");
-      return;
-    }
-    api.taskComments(project.id, editingTask.id).then(setTaskComments).catch(() => {});
-  }, [editingTask?.id]);
 
   async function handleAddTaskComment() {
     if (!project || !editingTask || !taskCommentBody.trim()) return;
