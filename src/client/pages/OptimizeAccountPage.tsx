@@ -607,15 +607,17 @@ export default function OptimizeAccountPage() {
       {/* Utilization Tab */}
       {tab === "utilization" && (
         <div>
-          <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${zoomConfigured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+          <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${zoomConfigured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.8)", marginBottom: 6 }}>Zoom Utilization</div>
+              <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.8)", marginBottom: 4 }}>Zoom Utilization</div>
               {zoomConfigured ? (
-                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0, lineHeight: 1.6 }}>
-                  Zoom credentials are connected. Snapshots capture license counts, active users, and meeting volume. Sync manually or let the daily cron handle it.
+                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0 }}>
+                  {utilization.length > 0
+                    ? <>Last synced: <strong style={{ color: "rgba(240,246,255,0.7)" }}>{utilization[0].snapshot_date}</strong></>
+                    : "Credentials connected — click Sync Now to pull the first snapshot."}
                 </p>
               ) : (
-                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0, lineHeight: 1.6 }}>
+                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0 }}>
                   No Zoom credentials found for this project. Add them on the project's Zoom tab to enable utilization tracking.
                 </p>
               )}
@@ -627,54 +629,9 @@ export default function OptimizeAccountPage() {
             )}
           </div>
 
-          {utilization.length === 0 ? (
+          {utilization.length === 0 && (
             <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "rgba(240,246,255,0.4)" }}>
-              No utilization snapshots yet.{zoomConfigured ? " Click 'Sync Now' to capture the first snapshot." : ""}
-            </div>
-          ) : (
-            <div className="ms-card" style={{ overflow: "hidden" }}>
-              <table className="ms-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Platform</th>
-                    <th>Purchased</th>
-                    <th>Assigned</th>
-                    <th>Active 30d</th>
-                    <th>Active 90d</th>
-                    <th>Participants (30d)</th>
-                    <th>Mtg Minutes (30d)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {utilization.map((u) => {
-                    let mtgMinutes: number | null = null;
-                    try { mtgMinutes = (JSON.parse(u.raw_data ?? "{}") as { meeting_minutes_30d?: number }).meeting_minutes_30d ?? null; } catch { /* ignore */ }
-                    return (
-                    <tr key={u.id}>
-                      <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{u.snapshot_date}</td>
-                      <td>
-                        <span className="ms-badge" style={{ background: u.platform === "zoom" ? "rgba(0,100,200,0.15)" : "rgba(255,140,0,0.12)", color: u.platform === "zoom" ? "#60a5fa" : "#ff8c00", border: `1px solid ${u.platform === "zoom" ? "rgba(96,165,250,0.3)" : "rgba(255,140,0,0.3)"}`, textTransform: "capitalize" }}>
-                          {u.platform}
-                        </span>
-                      </td>
-                      <td>{u.licenses_purchased ?? "—"}</td>
-                      <td>{u.licenses_assigned ?? "—"}</td>
-                      <td>{u.active_users_30d ?? "—"}</td>
-                      <td>{u.active_users_90d ?? "—"}</td>
-                      <td style={{ color: "rgba(240,246,255,0.6)" }}>
-                        {u.platform === "zoom"
-                          ? (u.total_meetings != null ? u.total_meetings.toLocaleString() : "—")
-                          : (u.total_call_minutes != null ? `${u.total_call_minutes} min` : "—")}
-                      </td>
-                      <td style={{ color: "rgba(240,246,255,0.6)" }}>
-                        {u.platform === "zoom" ? (mtgMinutes != null ? mtgMinutes.toLocaleString() : "—") : "—"}
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              No utilization data yet.{zoomConfigured ? " Click 'Sync Now' to capture the first snapshot." : ""}
             </div>
           )}
 
@@ -688,7 +645,7 @@ export default function OptimizeAccountPage() {
             return (
               <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: "3px solid #2563eb" }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 12 }}>
-                  Zoom Phone — last sync ({latest.snapshot_date})
+                  Zoom Phone
                 </div>
                 <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
                   {[
@@ -741,7 +698,7 @@ export default function OptimizeAccountPage() {
                 {/* Adoption rate summary */}
                 <div className="ms-card" style={{ padding: "16px 20px", borderLeft: "3px solid #8764b8" }}>
                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 12 }}>
-                    Adoption Rates — last sync ({latest.snapshot_date})
+                    Adoption Rates
                   </div>
                   <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
                     {[
@@ -827,7 +784,7 @@ export default function OptimizeAccountPage() {
             return (
               <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: `3px solid ${hasFailed ? "#f59e0b" : "#22c55e"}` }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
-                  API Call Diagnostics — last sync ({latest.snapshot_date})
+                  API Call Diagnostics
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {apiCalls.map((c) => (
