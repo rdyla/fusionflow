@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api, type Solution, type SolutionStatus, type SolutionType, type User } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import { generateSOR } from "../lib/generateSOR";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -482,8 +483,8 @@ export default function SolutionDetailPage() {
   }
 
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae";
-  const pfAes = users.filter((u) => u.role === "pf_ae" && u.is_active);
-  const partnerAes = users.filter((u) => u.role === "partner_ae" && u.is_active);
+  const pfAes = users.filter((u) => u.role === "pf_ae");
+  const partnerAes = users.filter((u) => u.role === "partner_ae");
 
   if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading…</div>;
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
@@ -749,10 +750,21 @@ export default function SolutionDetailPage() {
       {tab === "requirements" && (
         <div style={{ display: "grid", gap: 20 }}>
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Statement of Requirements</h3>
-            <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: "0 0 16px" }}>
-              Document the customer's specific technical and business requirements for this solution.
-            </p>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 12 }}>
+              <div>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Statement of Requirements</h3>
+                <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: 0 }}>
+                  Document the customer's specific technical and business requirements for this solution.
+                </p>
+              </div>
+              <button
+                className="ms-btn-secondary"
+                style={{ flexShrink: 0 }}
+                onClick={() => generateSOR(solution, assessment, requirements, solution.pf_ae_name ?? "Packet Fusion, Inc.")}
+              >
+                ↓ Export SOR
+              </button>
+            </div>
             <textarea
               className="ms-input"
               rows={18}
