@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   type Document,
+  type DynamicsContact,
   type DynamicsUser,
   type Milestone,
   type Note,
@@ -62,6 +63,13 @@ export default function ProjectDetailPage() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
+  const [crmContactsLoading, setCrmContactsLoading] = useState(false);
+  const [contactModalTab, setContactModalTab] = useState<"crm" | "manual">("crm");
+  const [contactRole, setContactRole] = useState("");
+  const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
+  const [savingContact, setSavingContact] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -618,26 +626,73 @@ export default function ProjectDetailPage() {
             </div>
           </div>}
 
-          {contacts.length > 0 && (
-            <div className="ms-section-card">
-              <div className="ms-section-title">Customer Contacts</div>
+          {/* ── Customer Contacts ─────────────────────────────────────────── */}
+          <div className="ms-section-card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+              <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Customer Contacts</div>
+              {canEdit && (
+                <button
+                  className="ms-btn-secondary"
+                  onClick={() => {
+                    setShowContactModal(true);
+                    setContactModalTab(project.dynamics_account_id ? "crm" : "manual");
+                    setContactRole("");
+                    setManualContact({ name: "", email: "", phone: "", job_title: "" });
+                    if (project.dynamics_account_id && crmContacts.length === 0) {
+                      setCrmContactsLoading(true);
+                      api.getDynamicsContacts(project.dynamics_account_id)
+                        .then(setCrmContacts)
+                        .catch(() => {})
+                        .finally(() => setCrmContactsLoading(false));
+                    }
+                  }}
+                >
+                  + Add Contact
+                </button>
+              )}
+            </div>
+
+            {contacts.length === 0 ? (
+              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>
+                No customer contacts added yet.
+              </div>
+            ) : (
               <div style={{ display: "grid", gap: 8 }}>
                 {contacts.map((c) => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#00c8e0" }}>
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#00c8e0" }}>
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</div>
-                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</span>
+                        {c.contact_role && (
+                          <span className="ms-badge" style={{ background: "rgba(0,200,224,0.1)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.2)", fontSize: 11 }}>
+                            {c.contact_role}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 3 }}>
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
                       </div>
                     </div>
+                    {canEdit && (
+                      <button
+                        className="ms-btn-ghost"
+                        style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
+                        onClick={async () => {
+                          await api.removeProjectContact(project.id, c.id);
+                          setContacts((prev) => prev.filter((x) => x.id !== c.id));
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
@@ -1069,6 +1124,174 @@ export default function ProjectDetailPage() {
                 <button className="ms-btn-primary" onClick={handleUpdateTask} disabled={savingTask}>{savingTask ? "Saving..." : "Save"}</button>
                 <button className="ms-btn-secondary" onClick={() => setEditingTask(null)}>Cancel</button>
                 <button className="ms-btn-danger" onClick={() => handleDeleteTask(editingTask.id)} style={{ marginLeft: "auto" }}>Delete</button>
+              </div>
+            )}
+
+          </div>
+        </div>
+      )}
+
+      {/* ── Add Contact Modal ──────────────────────────────────────────────── */}
+      {showContactModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowContactModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 580, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
+
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Add Customer Contact</h2>
+              <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+
+            {/* Role selector — always shown */}
+            <div style={{ padding: "16px 24px 0", flexShrink: 0 }}>
+              <label className="ms-label">
+                <span>Role on Project</span>
+                <select className="ms-input" value={contactRole} onChange={(e) => setContactRole(e.target.value)}>
+                  <option value="">— Select role —</option>
+                  <option>Customer Project Manager</option>
+                  <option>Technical Contact</option>
+                  <option>Executive Sponsor</option>
+                  <option>Billing Contact</option>
+                  <option>End User Champion</option>
+                  <option>Other</option>
+                </select>
+              </label>
+            </div>
+
+            {/* Tab toggle — only if CRM account is linked */}
+            {project.dynamics_account_id && (
+              <div style={{ display: "flex", gap: 0, padding: "12px 24px 0", flexShrink: 0 }}>
+                {(["crm", "manual"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setContactModalTab(t)}
+                    style={{
+                      flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                      background: "none", border: "none",
+                      borderBottom: `2px solid ${contactModalTab === t ? "#00c8e0" : "transparent"}`,
+                      color: contactModalTab === t ? "#00c8e0" : "rgba(240,246,255,0.35)",
+                      marginBottom: -1,
+                    }}
+                  >
+                    {t === "crm" ? "From CRM" : "Enter Manually"}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Body */}
+            <div style={{ padding: "16px 24px", overflowY: "auto", flex: 1 }}>
+
+              {/* CRM tab */}
+              {contactModalTab === "crm" && (
+                <div>
+                  {crmContactsLoading ? (
+                    <div style={{ color: "rgba(240,246,255,0.4)", fontSize: 13, padding: "20px 0" }}>Loading CRM contacts…</div>
+                  ) : crmContacts.length === 0 ? (
+                    <div style={{ color: "rgba(240,246,255,0.35)", fontSize: 13, fontStyle: "italic", padding: "20px 0" }}>No contacts found in CRM for this account.</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {crmContacts
+                        .filter((c) => !contacts.some((p) => p.dynamics_contact_id === c.contactid))
+                        .map((c) => {
+                          const fullName = [c.firstname, c.lastname].filter(Boolean).join(" ");
+                          return (
+                            <div key={c.contactid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6 }}>
+                              <div>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.85)" }}>{fullName || "—"}</div>
+                                <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                                  {[c.jobtitle, c.emailaddress1, c.telephone1].filter(Boolean).join(" · ")}
+                                </div>
+                              </div>
+                              <button
+                                className="ms-btn-secondary"
+                                style={{ fontSize: 12, flexShrink: 0 }}
+                                disabled={savingContact || !contactRole}
+                                title={!contactRole ? "Select a role first" : ""}
+                                onClick={async () => {
+                                  setSavingContact(true);
+                                  try {
+                                    const added = await api.addProjectContact(project.id, {
+                                      dynamics_contact_id: c.contactid,
+                                      name: fullName || "Unknown",
+                                      email: c.emailaddress1,
+                                      phone: c.telephone1,
+                                      job_title: c.jobtitle,
+                                      contact_role: contactRole || null,
+                                    });
+                                    setContacts((prev) => [...prev, added]);
+                                    setContactRole("");
+                                  } catch {
+                                    showToast("Failed to add contact", "error");
+                                  } finally {
+                                    setSavingContact(false);
+                                  }
+                                }}
+                              >
+                                + Add
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Manual tab */}
+              {(!project.dynamics_account_id || contactModalTab === "manual") && (
+                <div style={{ display: "grid", gap: 14 }}>
+                  <label className="ms-label">
+                    <span>Name *</span>
+                    <input className="ms-input" placeholder="Full name" value={manualContact.name} onChange={(e) => setManualContact((m) => ({ ...m, name: e.target.value }))} />
+                  </label>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <label className="ms-label">
+                      <span>Email</span>
+                      <input className="ms-input" type="email" placeholder="email@company.com" value={manualContact.email} onChange={(e) => setManualContact((m) => ({ ...m, email: e.target.value }))} />
+                    </label>
+                    <label className="ms-label">
+                      <span>Phone</span>
+                      <input className="ms-input" placeholder="(555) 555-5555" value={manualContact.phone} onChange={(e) => setManualContact((m) => ({ ...m, phone: e.target.value }))} />
+                    </label>
+                  </div>
+                  <label className="ms-label">
+                    <span>Job Title</span>
+                    <input className="ms-input" placeholder="e.g. IT Director" value={manualContact.job_title} onChange={(e) => setManualContact((m) => ({ ...m, job_title: e.target.value }))} />
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Footer — manual only */}
+            {(!project.dynamics_account_id || contactModalTab === "manual") && (
+              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+                <button
+                  className="ms-btn-primary"
+                  disabled={savingContact || !manualContact.name.trim() || !contactRole}
+                  onClick={async () => {
+                    setSavingContact(true);
+                    try {
+                      const added = await api.addProjectContact(project.id, {
+                        name: manualContact.name.trim(),
+                        email: manualContact.email || null,
+                        phone: manualContact.phone || null,
+                        job_title: manualContact.job_title || null,
+                        contact_role: contactRole || null,
+                      });
+                      setContacts((prev) => [...prev, added]);
+                      setManualContact({ name: "", email: "", phone: "", job_title: "" });
+                      setContactRole("");
+                    } catch {
+                      showToast("Failed to add contact", "error");
+                    } finally {
+                      setSavingContact(false);
+                    }
+                  }}
+                >
+                  {savingContact ? "Adding…" : "Add Contact"}
+                </button>
+                <button className="ms-btn-secondary" onClick={() => setShowContactModal(false)}>Cancel</button>
               </div>
             )}
 

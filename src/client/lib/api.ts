@@ -151,6 +151,7 @@ export type ProjectContact = {
   email: string | null;
   phone: string | null;
   job_title: string | null;
+  contact_role: string | null;
   added_at: string;
 };
 
@@ -488,6 +489,7 @@ export const api = {
     email?: string | null;
     phone?: string | null;
     job_title?: string | null;
+    contact_role?: string | null;
   }) =>
     request<ProjectContact>(`/projects/${projectId}/contacts`, {
       method: "POST",

@@ -58,7 +58,8 @@ app.get("/:id", async (c) => {
       `
       SELECT id, name, customer_name, vendor, solution_type, status, health,
              kickoff_date, target_go_live_date, actual_go_live_date,
-             pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
+             pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
+             dynamics_account_id, created_at, updated_at
       FROM projects
       WHERE id = ?
       LIMIT 1
@@ -232,6 +233,7 @@ const addContactSchema = z.object({
   email: z.string().max(500).nullable().optional(),
   phone: z.string().max(100).nullable().optional(),
   job_title: z.string().max(500).nullable().optional(),
+  contact_role: z.string().max(100).nullable().optional(),
 });
 
 app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae"), async (c) => {
@@ -245,12 +247,12 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae"), async (c) => {
   const parsed = addContactSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { dynamics_contact_id, name, email, phone, job_title } = parsed.data;
+  const { dynamics_contact_id, name, email, phone, job_title, contact_role } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
-    .prepare("INSERT INTO project_contacts (id, project_id, dynamics_contact_id, name, email, phone, job_title) VALUES (?, ?, ?, ?, ?, ?, ?)")
-    .bind(id, projectId, dynamics_contact_id ?? null, name, email ?? null, phone ?? null, job_title ?? null)
+    .prepare("INSERT INTO project_contacts (id, project_id, dynamics_contact_id, name, email, phone, job_title, contact_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, projectId, dynamics_contact_id ?? null, name, email ?? null, phone ?? null, job_title ?? null, contact_role ?? null)
     .run();
 
   const created = await db.prepare("SELECT * FROM project_contacts WHERE id = ? LIMIT 1").bind(id).first();
