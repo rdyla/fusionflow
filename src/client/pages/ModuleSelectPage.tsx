@@ -72,7 +72,7 @@ const PHASES: Phase[] = [
     n: 3, name: "Optimize", color: "#60a5fa", s: 50, e: 130,
     headline: "Performance, sustained.",
     steps: ["Audit", "Impact Assessment", "Utilization", "Enhancement", "Strategy"],
-    route: null,
+    route: "/optimize",
   },
   {
     n: 4, name: "Transform", color: "#0b9aad", s: 140, e: 220,
@@ -156,7 +156,7 @@ export default function ModuleSelectPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, maxWidth: 1100, margin: "0 auto" }}>
 
           {/* Left column: wheel + detail panel */}
-          <div style={{ flex: "0 0 420px", minWidth: 0 }}>
+          <div style={{ flex: "0 0 540px", minWidth: 0 }}>
             <svg
               viewBox="0 0 600 540"
               width="100%"
@@ -302,7 +302,7 @@ export default function ModuleSelectPage() {
         </div>
 
         {/* Detail panel — below wheel+blurb, unconstrained width */}
-        <div style={{ margin: "0 auto", width: "fit-content", minWidth: 420, minHeight: 80, paddingTop: 4 }}>
+        <div style={{ margin: "0 auto", width: "fit-content", minWidth: 540, minHeight: 80, paddingTop: 4 }}>
           {activePhase ? (
             <div style={{
               background: "rgba(255,255,255,0.03)",
