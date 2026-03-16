@@ -84,6 +84,7 @@ export default function AppShell() {
                 Admin
               </div>
               <SideLink to="/admin/projects">Projects</SideLink>
+              <SideLink to="/admin/solutions">Solutions</SideLink>
               <SideLink to="/admin/users">Users</SideLink>
               <SideLink to="/admin/access">Access</SideLink>
             </>

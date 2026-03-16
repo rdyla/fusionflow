@@ -7,6 +7,7 @@ import ProjectDetailPage from "../pages/ProjectDetailPage";
 import AdminUsersPage from "../pages/AdminUsersPage";
 import AdminAccessPage from "../pages/AdminAccessPage";
 import AdminProjectsPage from "../pages/AdminProjectsPage";
+import AdminSolutionsPage from "../pages/AdminSolutionsPage";
 import SolutionsPage from "../pages/SolutionsPage";
 import SolutionDetailPage from "../pages/SolutionDetailPage";
 
@@ -27,6 +28,7 @@ export default function Router() {
           <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/access" element={<AdminAccessPage />} />
           <Route path="/admin/projects" element={<AdminProjectsPage />} />
+          <Route path="/admin/solutions" element={<AdminSolutionsPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
