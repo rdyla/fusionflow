@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type ProjectContact } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type ProjectContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
 
@@ -35,6 +35,41 @@ const TYPE_LABELS: Record<SolutionType, string> = {
   zoom_va: "Zoom Virtual Agent",
   rc_ace: "RingCentral ACE",
   rc_air: "RingCentral AIR",
+};
+
+// ── Gap & Risk helpers ────────────────────────────────────────────────────────
+
+const GAP_CATEGORIES: GapCategory[] = ["Feature", "Integration", "Infrastructure", "Process", "Compliance"];
+const RISK_CATEGORIES: RiskCategory[] = ["Technical", "Commercial", "Operational", "Timeline", "Compliance"];
+const PRIORITIES: Priority[] = ["high", "medium", "low"];
+
+const GAP_CATEGORY_COLOR: Record<GapCategory, string> = {
+  Feature:        "#0891b2",
+  Integration:    "#8764b8",
+  Infrastructure: "#ff8c00",
+  Process:        "#059669",
+  Compliance:     "#d13438",
+};
+
+function riskScore(probability: Priority, impact: Priority): { label: string; color: string } {
+  const rank: Record<Priority, number> = { high: 2, medium: 1, low: 0 };
+  const score = rank[probability] + rank[impact];
+  if (score >= 4) return { label: "Critical", color: "#991b1b" };
+  if (score >= 3) return { label: "High",     color: "#d13438" };
+  if (score >= 2) return { label: "Medium",   color: "#f59e0b" };
+  return              { label: "Low",      color: "#22c55e" };
+}
+
+function parseGapAnalysis(raw: string | null | undefined): GapAnalysis {
+  if (!raw) return { gaps: [], risks: [] };
+  try { return JSON.parse(raw) as GapAnalysis; } catch { return { gaps: [], risks: [] }; }
+}
+
+const BLANK_GAP: Omit<GapItem, "id"> = {
+  category: "Feature", description: "", current_state: "", required_state: "", priority: "medium", notes: "",
+};
+const BLANK_RISK: Omit<RiskItem, "id"> = {
+  category: "Technical", description: "", probability: "medium", impact: "medium", mitigation: "",
 };
 
 // ── Assessment Schema ─────────────────────────────────────────────────────────
@@ -397,7 +432,7 @@ function parseJSON(raw: string | null): Record<string, string> {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "assessment" | "requirements" | "scope" | "handoff";
+type Tab = "overview" | "assessment" | "requirements" | "gap_risk" | "scope" | "handoff";
 
 export default function SolutionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -429,6 +464,17 @@ export default function SolutionDetailPage() {
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
+  // Gap & Risk state
+  const [gapItems, setGapItems] = useState<GapItem[]>([]);
+  const [riskItems, setRiskItems] = useState<RiskItem[]>([]);
+  const [showGapModal, setShowGapModal] = useState(false);
+  const [editingGap, setEditingGap] = useState<GapItem | null>(null);
+  const [gapForm, setGapForm] = useState<Omit<GapItem, "id">>(BLANK_GAP);
+  const [showRiskModal, setShowRiskModal] = useState(false);
+  const [editingRisk, setEditingRisk] = useState<RiskItem | null>(null);
+  const [riskForm, setRiskForm] = useState<Omit<RiskItem, "id">>(BLANK_RISK);
+  const [savingGapRisk, setSavingGapRisk] = useState(false);
+
   const load = useCallback(async () => {
     if (!id) return;
     const [s, u, me] = await Promise.all([api.solution(id), api.users(), api.me()]);
@@ -446,6 +492,9 @@ export default function SolutionDetailPage() {
     setRequirements(s.requirements ?? "");
     setScope(s.scope_of_work ?? "");
     setHandoffNotes(s.handoff_notes ?? "");
+    const ga = parseGapAnalysis(s.gap_analysis);
+    setGapItems(ga.gaps);
+    setRiskItems(ga.risks);
 
     // Load CRM contacts and project contacts in parallel if we have the data
     if (s.dynamics_account_id) {
@@ -512,11 +561,12 @@ export default function SolutionDetailPage() {
   const isTerminal = solution.status === "won" || solution.status === "lost";
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "assessment", label: "Needs Assessment" },
-    { key: "requirements", label: "Requirements" },
-    { key: "scope", label: "Scope of Work" },
-    { key: "handoff", label: "Handoff" },
+    { key: "overview",     label: "Overview"         },
+    { key: "assessment",   label: "Needs Assessment" },
+    { key: "requirements", label: "Requirements"     },
+    { key: "gap_risk",     label: "Gap & Risk"       },
+    { key: "scope",        label: "Scope of Work"    },
+    { key: "handoff",      label: "Handoff"          },
   ];
 
   return (
@@ -966,6 +1016,164 @@ export default function SolutionDetailPage() {
         </div>
       )}
 
+      {/* ── Gap & Risk Tab ── */}
+      {tab === "gap_risk" && (
+        <div style={{ display: "grid", gap: 28 }}>
+
+          {/* Gaps */}
+          <div className="ms-card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Identified Gaps</h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "rgba(240,246,255,0.35)" }}>Differences between current state and what the solution must deliver</p>
+              </div>
+              {canEdit && (
+                <button className="ms-btn-primary" onClick={() => { setEditingGap(null); setGapForm(BLANK_GAP); setShowGapModal(true); }}>+ Add Gap</button>
+              )}
+            </div>
+
+            {gapItems.length === 0 ? (
+              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", padding: "12px 0" }}>No gaps identified yet.</div>
+            ) : (
+              <div className="ms-card" style={{ overflow: "hidden", padding: 0 }}>
+                <table className="ms-table">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Description</th>
+                      <th>Current State</th>
+                      <th>Required State</th>
+                      <th>Priority</th>
+                      {canEdit && <th>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gapItems.map((g) => (
+                      <tr key={g.id}>
+                        <td>
+                          <span className="ms-badge" style={{ background: GAP_CATEGORY_COLOR[g.category] + "1a", color: GAP_CATEGORY_COLOR[g.category], border: `1px solid ${GAP_CATEGORY_COLOR[g.category]}40`, whiteSpace: "nowrap" }}>
+                            {g.category}
+                          </span>
+                        </td>
+                        <td style={{ color: "rgba(240,246,255,0.85)", fontWeight: 500 }}>
+                          {g.description}
+                          {g.notes && <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", marginTop: 2 }}>{g.notes}</div>}
+                        </td>
+                        <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{g.current_state || "—"}</td>
+                        <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{g.required_state || "—"}</td>
+                        <td>
+                          <span className="ms-badge" style={{
+                            background: g.priority === "high" ? "#d1343818" : g.priority === "medium" ? "#f59e0b18" : "#22c55e18",
+                            color: g.priority === "high" ? "#d13438" : g.priority === "medium" ? "#f59e0b" : "#22c55e",
+                            border: `1px solid ${g.priority === "high" ? "#d1343840" : g.priority === "medium" ? "#f59e0b40" : "#22c55e40"}`,
+                          }}>
+                            {g.priority.charAt(0).toUpperCase() + g.priority.slice(1)}
+                          </span>
+                        </td>
+                        {canEdit && (
+                          <td>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button className="ms-btn-ghost" onClick={() => { setEditingGap(g); setGapForm({ category: g.category, description: g.description, current_state: g.current_state, required_state: g.required_state, priority: g.priority, notes: g.notes }); setShowGapModal(true); }}>Edit</button>
+                              <button className="ms-btn-ghost" style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }} onClick={() => {
+                                const updated = gapItems.filter((x) => x.id !== g.id);
+                                setGapItems(updated);
+                                save({ gap_analysis: JSON.stringify({ gaps: updated, risks: riskItems }) });
+                              }}>Delete</button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Risks */}
+          <div className="ms-card">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Risk Register</h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "rgba(240,246,255,0.35)" }}>Factors that could impact the success or timeline of this solution</p>
+              </div>
+              {canEdit && (
+                <button className="ms-btn-primary" onClick={() => { setEditingRisk(null); setRiskForm(BLANK_RISK); setShowRiskModal(true); }}>+ Add Risk</button>
+              )}
+            </div>
+
+            {riskItems.length === 0 ? (
+              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", padding: "12px 0" }}>No risks identified yet.</div>
+            ) : (
+              <div className="ms-card" style={{ overflow: "hidden", padding: 0 }}>
+                <table className="ms-table">
+                  <thead>
+                    <tr>
+                      <th>Category</th>
+                      <th>Description</th>
+                      <th>Probability</th>
+                      <th>Impact</th>
+                      <th>Score</th>
+                      <th>Mitigation</th>
+                      {canEdit && <th>Actions</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {riskItems.map((r) => {
+                      const score = riskScore(r.probability, r.impact);
+                      return (
+                        <tr key={r.id}>
+                          <td><span className="ms-badge" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(240,246,255,0.6)", border: "1px solid rgba(255,255,255,0.1)", whiteSpace: "nowrap" }}>{r.category}</span></td>
+                          <td style={{ color: "rgba(240,246,255,0.85)", fontWeight: 500 }}>{r.description}</td>
+                          <td style={{ fontSize: 12, color: "rgba(240,246,255,0.6)", textTransform: "capitalize" }}>{r.probability}</td>
+                          <td style={{ fontSize: 12, color: "rgba(240,246,255,0.6)", textTransform: "capitalize" }}>{r.impact}</td>
+                          <td>
+                            <span className="ms-badge" style={{ background: score.color + "18", color: score.color, border: `1px solid ${score.color}40`, whiteSpace: "nowrap" }}>
+                              {score.label}
+                            </span>
+                          </td>
+                          <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{r.mitigation || "—"}</td>
+                          {canEdit && (
+                            <td>
+                              <div style={{ display: "flex", gap: 6 }}>
+                                <button className="ms-btn-ghost" onClick={() => { setEditingRisk(r); setRiskForm({ category: r.category, description: r.description, probability: r.probability, impact: r.impact, mitigation: r.mitigation }); setShowRiskModal(true); }}>Edit</button>
+                                <button className="ms-btn-ghost" style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }} onClick={() => {
+                                  const updated = riskItems.filter((x) => x.id !== r.id);
+                                  setRiskItems(updated);
+                                  save({ gap_analysis: JSON.stringify({ gaps: gapItems, risks: updated }) });
+                                }}>Delete</button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Summary counts */}
+          {(gapItems.length > 0 || riskItems.length > 0) && (
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+              {(["high", "medium", "low"] as Priority[]).map((p) => {
+                const gCount = gapItems.filter((g) => g.priority === p).length;
+                const rCount = riskItems.filter((r) => riskScore(r.probability, r.impact).label.toLowerCase() === p || (p === "high" && riskScore(r.probability, r.impact).label === "Critical")).length;
+                if (!gCount && !rCount) return null;
+                const color = p === "high" ? "#d13438" : p === "medium" ? "#f59e0b" : "#22c55e";
+                return (
+                  <div key={p} style={{ padding: "8px 16px", background: color + "0f", border: `1px solid ${color}30`, borderRadius: 6, fontSize: 12 }}>
+                    <span style={{ color, fontWeight: 700, textTransform: "capitalize" }}>{p}</span>
+                    <span style={{ color: "rgba(240,246,255,0.5)", marginLeft: 8 }}>{gCount} gap{gCount !== 1 ? "s" : ""} · {rCount} risk{rCount !== 1 ? "s" : ""}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Scope Tab ── */}
       {tab === "scope" && (
         <div style={{ display: "grid", gap: 20 }}>
@@ -1183,6 +1391,137 @@ export default function SolutionDetailPage() {
           )}
         </div>
       )}
+
+      {/* ── Gap Modal ── */}
+      {showGapModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGapModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 580 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>{editingGap ? "Edit Gap" : "Add Gap"}</h2>
+              <button onClick={() => setShowGapModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ padding: 24, display: "grid", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label className="ms-label">
+                  <span>Category</span>
+                  <select className="ms-input" value={gapForm.category} onChange={(e) => setGapForm({ ...gapForm, category: e.target.value as GapCategory })}>
+                    {GAP_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Priority</span>
+                  <select className="ms-input" value={gapForm.priority} onChange={(e) => setGapForm({ ...gapForm, priority: e.target.value as Priority })}>
+                    {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="ms-label">
+                <span>Description</span>
+                <textarea className="ms-input" rows={2} value={gapForm.description} onChange={(e) => setGapForm({ ...gapForm, description: e.target.value })} placeholder="What is the gap?" style={{ resize: "vertical" }} />
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label className="ms-label">
+                  <span>Current State</span>
+                  <textarea className="ms-input" rows={2} value={gapForm.current_state} onChange={(e) => setGapForm({ ...gapForm, current_state: e.target.value })} placeholder="What do they have today?" style={{ resize: "vertical" }} />
+                </label>
+                <label className="ms-label">
+                  <span>Required State</span>
+                  <textarea className="ms-input" rows={2} value={gapForm.required_state} onChange={(e) => setGapForm({ ...gapForm, required_state: e.target.value })} placeholder="What do they need?" style={{ resize: "vertical" }} />
+                </label>
+              </div>
+              <label className="ms-label">
+                <span>Notes / Proposed Approach</span>
+                <textarea className="ms-input" rows={2} value={gapForm.notes} onChange={(e) => setGapForm({ ...gapForm, notes: e.target.value })} placeholder="How will this be addressed?" style={{ resize: "vertical" }} />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <button
+                className="ms-btn-primary"
+                disabled={savingGapRisk || !gapForm.description.trim()}
+                onClick={async () => {
+                  setSavingGapRisk(true);
+                  const updated = editingGap
+                    ? gapItems.map((g) => g.id === editingGap.id ? { ...gapForm, id: editingGap.id } : g)
+                    : [...gapItems, { ...gapForm, id: crypto.randomUUID() }];
+                  setGapItems(updated);
+                  await save({ gap_analysis: JSON.stringify({ gaps: updated, risks: riskItems }) });
+                  setSavingGapRisk(false);
+                  setShowGapModal(false);
+                }}
+              >{savingGapRisk ? "Saving…" : editingGap ? "Save Changes" : "Add Gap"}</button>
+              <button className="ms-btn-secondary" onClick={() => setShowGapModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Risk Modal ── */}
+      {showRiskModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 560 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>{editingRisk ? "Edit Risk" : "Add Risk"}</h2>
+              <button onClick={() => setShowRiskModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ padding: 24, display: "grid", gap: 14 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+                <label className="ms-label">
+                  <span>Category</span>
+                  <select className="ms-input" value={riskForm.category} onChange={(e) => setRiskForm({ ...riskForm, category: e.target.value as RiskCategory })}>
+                    {RISK_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Probability</span>
+                  <select className="ms-input" value={riskForm.probability} onChange={(e) => setRiskForm({ ...riskForm, probability: e.target.value as Priority })}>
+                    {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Impact</span>
+                  <select className="ms-input" value={riskForm.impact} onChange={(e) => setRiskForm({ ...riskForm, impact: e.target.value as Priority })}>
+                    {PRIORITIES.map((p) => <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>)}
+                  </select>
+                </label>
+              </div>
+              {(riskForm.probability || riskForm.impact) && (
+                <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
+                  Risk Score: {" "}
+                  <span style={{ fontWeight: 700, color: riskScore(riskForm.probability, riskForm.impact).color }}>
+                    {riskScore(riskForm.probability, riskForm.impact).label}
+                  </span>
+                </div>
+              )}
+              <label className="ms-label">
+                <span>Description</span>
+                <textarea className="ms-input" rows={2} value={riskForm.description} onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })} placeholder="What is the risk?" style={{ resize: "vertical" }} />
+              </label>
+              <label className="ms-label">
+                <span>Mitigation Strategy</span>
+                <textarea className="ms-input" rows={3} value={riskForm.mitigation} onChange={(e) => setRiskForm({ ...riskForm, mitigation: e.target.value })} placeholder="How will this risk be managed or reduced?" style={{ resize: "vertical" }} />
+              </label>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <button
+                className="ms-btn-primary"
+                disabled={savingGapRisk || !riskForm.description.trim()}
+                onClick={async () => {
+                  setSavingGapRisk(true);
+                  const updated = editingRisk
+                    ? riskItems.map((r) => r.id === editingRisk.id ? { ...riskForm, id: editingRisk.id } : r)
+                    : [...riskItems, { ...riskForm, id: crypto.randomUUID() }];
+                  setRiskItems(updated);
+                  await save({ gap_analysis: JSON.stringify({ gaps: gapItems, risks: updated }) });
+                  setSavingGapRisk(false);
+                  setShowRiskModal(false);
+                }}
+              >{savingGapRisk ? "Saving…" : editingRisk ? "Save Changes" : "Add Risk"}</button>
+              <button className="ms-btn-secondary" onClick={() => setShowRiskModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

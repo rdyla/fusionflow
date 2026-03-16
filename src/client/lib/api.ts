@@ -39,6 +39,31 @@ export type User = {
 };
 
 export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "zoom_va" | "rc_ace" | "rc_air";
+
+export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
+export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
+export type Priority = "high" | "medium" | "low";
+
+export type GapItem = {
+  id: string;
+  category: GapCategory;
+  description: string;
+  current_state: string;
+  required_state: string;
+  priority: Priority;
+  notes: string;
+};
+
+export type RiskItem = {
+  id: string;
+  category: RiskCategory;
+  description: string;
+  probability: Priority;
+  impact: Priority;
+  mitigation: string;
+};
+
+export type GapAnalysis = { gaps: GapItem[]; risks: RiskItem[] };
 export type SolutionStatus = "draft" | "assessment" | "requirements" | "scope" | "handoff" | "won" | "lost";
 export type SolutionVendor = "zoom" | "ringcentral";
 
@@ -58,6 +83,7 @@ export type Solution = {
   requirements: string | null;
   scope_of_work: string | null;
   handoff_notes: string | null;
+  gap_analysis: string | null;
   linked_project_id: string | null;
   created_by: string | null;
   created_at: string;
@@ -696,6 +722,7 @@ export const api = {
       requirements: string | null;
       scope_of_work: string | null;
       handoff_notes: string | null;
+      gap_analysis: string | null;
       linked_project_id: string | null;
     }>
   ) =>

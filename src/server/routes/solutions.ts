@@ -152,6 +152,7 @@ const updateSolutionSchema = z.object({
   requirements: z.string().nullable().optional(),
   scope_of_work: z.string().nullable().optional(),
   handoff_notes: z.string().nullable().optional(),
+  gap_analysis: z.string().nullable().optional(),
   linked_project_id: z.string().nullable().optional(),
 });
 
