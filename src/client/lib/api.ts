@@ -143,6 +143,17 @@ export type DynamicsOpportunity = {
   statecode: number;
 };
 
+export type ProjectContact = {
+  id: string;
+  project_id: string;
+  dynamics_contact_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  job_title: string | null;
+  added_at: string;
+};
+
 export type Phase = {
   id: string;
   project_id: string;
@@ -464,6 +475,27 @@ export const api = {
 
   deleteTask: (projectId: string, taskId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}`, {
+      method: "DELETE",
+    }),
+
+  // Project Contacts
+  projectContacts: (projectId: string) =>
+    request<ProjectContact[]>(`/projects/${projectId}/contacts`),
+
+  addProjectContact: (projectId: string, contact: {
+    dynamics_contact_id?: string;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    job_title?: string | null;
+  }) =>
+    request<ProjectContact>(`/projects/${projectId}/contacts`, {
+      method: "POST",
+      body: JSON.stringify(contact),
+    }),
+
+  removeProjectContact: (projectId: string, contactId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/contacts/${contactId}`, {
       method: "DELETE",
     }),
 

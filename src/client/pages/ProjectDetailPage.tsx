@@ -8,6 +8,7 @@ import {
   type Note,
   type Phase,
   type Project,
+  type ProjectContact,
   type Risk,
   type Task,
   type User,
@@ -60,6 +61,7 @@ export default function ProjectDetailPage() {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [risks, setRisks] = useState<Risk[]>([]);
+  const [contacts, setContacts] = useState<ProjectContact[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -119,12 +121,12 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData, meData] =
+        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData, meData, contactData] =
           await Promise.all([
             api.project(id), api.phases(id), api.milestones(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users(), api.documents(id),
             api.getDynamicsPMs(), api.getDynamicsAEs(), api.getDynamicsSAs(), api.getDynamicsCSMs(), api.getDynamicsEngineers(),
-            api.me(),
+            api.me(), api.projectContacts(id),
           ]);
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
@@ -148,6 +150,7 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
+        setContacts(contactData);
 
         const tabParam = searchParams.get("tab") as DetailTab | null;
         if (tabParam) setTab(tabParam);
@@ -614,6 +617,27 @@ export default function ProjectDetailPage() {
               {saveMessage && <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{saveMessage}</span>}
             </div>
           </div>}
+
+          {contacts.length > 0 && (
+            <div className="ms-section-card">
+              <div className="ms-section-title">Customer Contacts</div>
+              <div style={{ display: "grid", gap: 8 }}>
+                {contacts.map((c) => (
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#00c8e0" }}>
+                      {c.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</div>
+                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                        {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>

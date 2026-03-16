@@ -205,4 +205,67 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
   return c.json(updated);
 });
 
+// ── Project Contacts ──────────────────────────────────────────────────────────
+
+app.get("/:id/contacts", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await db
+    .prepare("SELECT * FROM project_contacts WHERE project_id = ? ORDER BY name ASC")
+    .bind(projectId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+const addContactSchema = z.object({
+  dynamics_contact_id: z.string().optional(),
+  name: z.string().min(1).max(500),
+  email: z.string().max(500).nullable().optional(),
+  phone: z.string().max(100).nullable().optional(),
+  job_title: z.string().max(500).nullable().optional(),
+});
+
+app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const parsed = addContactSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+
+  const { dynamics_contact_id, name, email, phone, job_title } = parsed.data;
+  const id = crypto.randomUUID();
+
+  await db
+    .prepare("INSERT INTO project_contacts (id, project_id, dynamics_contact_id, name, email, phone, job_title) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, projectId, dynamics_contact_id ?? null, name, email ?? null, phone ?? null, job_title ?? null)
+    .run();
+
+  const created = await db.prepare("SELECT * FROM project_contacts WHERE id = ? LIMIT 1").bind(id).first();
+  return c.json(created, 201);
+});
+
+app.delete("/:id/contacts/:contactId", requireRole("admin", "pm", "pf_ae"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  await db
+    .prepare("DELETE FROM project_contacts WHERE id = ? AND project_id = ?")
+    .bind(c.req.param("contactId"), projectId)
+    .run();
+  return c.json({ success: true });
+});
+
 export default app;

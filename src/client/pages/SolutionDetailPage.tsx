@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type ProjectContact } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
 
@@ -412,6 +412,12 @@ export default function SolutionDetailPage() {
   const [creatingProject, setCreatingProject] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
 
+  // Contacts
+  const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
+  const [projectContacts, setProjectContacts] = useState<ProjectContact[]>([]);
+  const [contactsLoading, setContactsLoading] = useState(false);
+  const [savingContact, setSavingContact] = useState(false);
+
   // Tab-local state
   const [overview, setOverview] = useState({ name: "", customer_name: "", pf_ae_user_id: "", partner_ae_user_id: "", status: "" as SolutionStatus });
   const [assessment, setAssessment] = useState<Record<string, string>>({});
@@ -436,6 +442,14 @@ export default function SolutionDetailPage() {
     setRequirements(s.requirements ?? "");
     setScope(s.scope_of_work ?? "");
     setHandoffNotes(s.handoff_notes ?? "");
+
+    // Load CRM contacts and project contacts in parallel if we have the data
+    if (s.dynamics_account_id) {
+      api.getDynamicsContacts(s.dynamics_account_id).then(setCrmContacts).catch(() => {});
+    }
+    if (s.linked_project_id) {
+      api.projectContacts(s.linked_project_id).then(setProjectContacts).catch(() => {});
+    }
   }, [id]);
 
   useEffect(() => {
@@ -853,6 +867,113 @@ export default function SolutionDetailPage() {
               <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ handoff_notes: handoffNotes })}>
                 {saving ? "Saving…" : "Save Notes"}
               </button>
+            )}
+          </div>
+
+          {/* Customer Contacts */}
+          <div className="ms-card">
+            <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
+            <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: "0 0 16px" }}>
+              Select contacts from the CRM to attach to this project.
+            </p>
+
+            {!solution.dynamics_account_id ? (
+              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>
+                No CRM account linked — search and link a customer account on the Overview tab to see contacts.
+              </div>
+            ) : !solution.linked_project_id ? (
+              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>
+                Create the implementation project below to start attaching contacts.
+              </div>
+            ) : (
+              <>
+                {/* Already-saved contacts */}
+                {projectContacts.length > 0 && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 8 }}>Attached Contacts</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {projectContacts.map((c) => (
+                        <div key={c.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(0,200,224,0.06)", border: "1px solid rgba(0,200,224,0.15)", borderRadius: 6 }}>
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</div>
+                            <div style={{ fontSize: 12, color: "rgba(240,246,255,0.45)", marginTop: 2 }}>
+                              {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
+                            </div>
+                          </div>
+                          {canEdit && (
+                            <button
+                              className="ms-btn-ghost"
+                              style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.3)", fontSize: 12 }}
+                              onClick={async () => {
+                                if (!solution.linked_project_id) return;
+                                await api.removeProjectContact(solution.linked_project_id, c.id);
+                                setProjectContacts((prev) => prev.filter((x) => x.id !== c.id));
+                              }}
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* CRM contact picker */}
+                {canEdit && (
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 8 }}>
+                      Add from CRM {contactsLoading && <span style={{ fontWeight: 400, textTransform: "none" }}>Loading…</span>}
+                    </div>
+                    {crmContacts.length === 0 && !contactsLoading ? (
+                      <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>No contacts found in CRM for this account.</div>
+                    ) : (
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {crmContacts
+                          .filter((c) => !projectContacts.some((p) => p.dynamics_contact_id === c.contactid))
+                          .map((c) => {
+                            const fullName = [c.firstname, c.lastname].filter(Boolean).join(" ");
+                            return (
+                              <div key={c.contactid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6 }}>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.85)" }}>{fullName || "—"}</div>
+                                  <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                                    {[c.jobtitle, c.emailaddress1, c.telephone1].filter(Boolean).join(" · ")}
+                                  </div>
+                                </div>
+                                <button
+                                  className="ms-btn-secondary"
+                                  style={{ fontSize: 12 }}
+                                  disabled={savingContact}
+                                  onClick={async () => {
+                                    if (!solution.linked_project_id) return;
+                                    setSavingContact(true);
+                                    try {
+                                      const added = await api.addProjectContact(solution.linked_project_id, {
+                                        dynamics_contact_id: c.contactid,
+                                        name: fullName || "Unknown",
+                                        email: c.emailaddress1,
+                                        phone: c.telephone1,
+                                        job_title: c.jobtitle,
+                                      });
+                                      setProjectContacts((prev) => [...prev, added]);
+                                    } catch {
+                                      showToast("Failed to add contact", "error");
+                                    } finally {
+                                      setSavingContact(false);
+                                    }
+                                  }}
+                                >
+                                  + Add
+                                </button>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </div>
 
