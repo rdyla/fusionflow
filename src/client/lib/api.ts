@@ -262,8 +262,34 @@ export type MeResponse = {
   organization: string | null;
 };
 
+export type ComponentStatus =
+  | "operational"
+  | "degraded_performance"
+  | "partial_outage"
+  | "major_outage"
+  | "under_maintenance";
+
+export type VendorComponentStatus = {
+  name: string;
+  label: string;
+  status: ComponentStatus;
+};
+
+export type VendorStatus = {
+  overall: "operational" | "degraded" | "outage";
+  components: VendorComponentStatus[];
+  fetched_at: number;
+};
+
+export type SystemStatusResponse = {
+  vendors: ("zoom" | "ringcentral")[];
+  zoom: VendorStatus | null;
+  ringcentral: VendorStatus | null;
+};
+
 export const api = {
   me: () => request<MeResponse>("/me"),
+  systemStatus: () => request<SystemStatusResponse>("/status"),
   users: () => request<User[]>("/users"),
   dashboardSummary: () => request<DashboardSummaryResponse>("/dashboard/summary"),
   projects: () => request<Project[]>("/projects"),

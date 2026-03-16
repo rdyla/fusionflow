@@ -15,6 +15,7 @@ import documentRoutes from "./routes/documents";
 import dynamicsRoutes from "./routes/dynamics";
 import zoomRoutes from "./routes/zoom";
 import solutionRoutes from "./routes/solutions";
+import statusRoutes from "./routes/status";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 
@@ -39,6 +40,7 @@ app.route("/api/projects", documentRoutes);
 app.route("/api/projects", zoomRoutes);
 app.route("/api/dynamics", dynamicsRoutes);
 app.route("/api/solutions", solutionRoutes);
+app.route("/api", statusRoutes);
 
 async function runGoLiveReminders(env: Bindings): Promise<void> {
   const appUrl = env.APP_URL ?? "";
