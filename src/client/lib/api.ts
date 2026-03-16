@@ -256,6 +256,17 @@ export type Note = {
   created_at: string;
 };
 
+export type TaskComment = {
+  id: string;
+  task_id: string;
+  project_id: string;
+  author_user_id: string | null;
+  author_name: string | null;
+  author_email: string | null;
+  body: string;
+  created_at: string;
+};
+
 export type MeResponse = {
   user: User;
   role: string;
@@ -452,6 +463,20 @@ export const api = {
 
   deleteMilestone: (projectId: string, milestoneId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/milestones/${milestoneId}`, {
+      method: "DELETE",
+    }),
+
+  taskComments: (projectId: string, taskId: string) =>
+    request<TaskComment[]>(`/projects/${projectId}/tasks/${taskId}/comments`),
+
+  addTaskComment: (projectId: string, taskId: string, body: string) =>
+    request<TaskComment>(`/projects/${projectId}/tasks/${taskId}/comments`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
+
+  deleteTaskComment: (projectId: string, taskId: string, commentId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}/comments/${commentId}`, {
       method: "DELETE",
     }),
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
@@ -12,6 +12,7 @@ import {
   type ProjectContact,
   type Risk,
   type Task,
+  type TaskComment,
   type User,
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
@@ -41,6 +42,22 @@ const MILESTONE_COLOR: Record<string, string> = {
 function formatDate(d: string | null) {
   if (!d) return "—";
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function taskCommentTimeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function fmtBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function Badge({ label, color }: { label: string; color: string }) {
@@ -100,6 +117,12 @@ export default function ProjectDetailPage() {
   const [newTaskFields, setNewTaskFields] = useState({ title: "", due_date: "", priority: "", assignee_user_id: "" });
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [savingTask, setSavingTask] = useState(false);
+  const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
+  const [taskCommentBody, setTaskCommentBody] = useState("");
+  const [addingComment, setAddingComment] = useState(false);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
+  const [currentUserId, setCurrentUserId] = useState<string>("");
+  const attachFileRef = useRef<HTMLInputElement>(null);
 
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
@@ -159,6 +182,7 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
+        setCurrentUserId(meData.user.id);
 
         const tabParam = searchParams.get("tab") as DetailTab | null;
         if (tabParam) setTab(tabParam);
@@ -271,6 +295,67 @@ export default function ProjectDetailPage() {
       showToast("Task deleted.", "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to delete task", "error");
+    }
+  }
+
+  // Fetch comments whenever the task modal opens
+  useEffect(() => {
+    if (!editingTask || !project) {
+      setTaskComments([]);
+      setTaskCommentBody("");
+      return;
+    }
+    api.taskComments(project.id, editingTask.id).then(setTaskComments).catch(() => {});
+  }, [editingTask?.id]);
+
+  async function handleAddTaskComment() {
+    if (!project || !editingTask || !taskCommentBody.trim()) return;
+    setAddingComment(true);
+    try {
+      const comment = await api.addTaskComment(project.id, editingTask.id, taskCommentBody.trim());
+      setTaskComments((prev) => [...prev, comment]);
+      setTaskCommentBody("");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to add comment", "error");
+    } finally {
+      setAddingComment(false);
+    }
+  }
+
+  async function handleDeleteTaskComment(commentId: string) {
+    if (!project || !editingTask) return;
+    try {
+      await api.deleteTaskComment(project.id, editingTask.id, commentId);
+      setTaskComments((prev) => prev.filter((c) => c.id !== commentId));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to delete comment", "error");
+    }
+  }
+
+  async function handleTaskAttachmentUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!project || !editingTask) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setUploadingAttachment(true);
+    try {
+      const doc = await api.uploadDocument(project.id, { file, category: "Other", task_id: editingTask.id });
+      setDocuments((prev) => [doc, ...prev]);
+      showToast("File attached.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Upload failed", "error");
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+
+  async function handleDeleteTaskAttachment(docId: string) {
+    if (!project) return;
+    try {
+      await api.deleteDocument(project.id, docId);
+      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed", "error");
     }
   }
 
@@ -1039,7 +1124,7 @@ export default function ProjectDetailPage() {
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}
       {editingTask && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
-          <div className="ms-modal" style={{ maxWidth: 600, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
+          <div className="ms-modal" style={{ maxWidth: 660, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
 
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
@@ -1104,16 +1189,105 @@ export default function ProjectDetailPage() {
                 </label>
               )}
 
-              {/* Comments — placeholder for future feature */}
+              {/* Comments */}
               <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 8 }}>Comments</div>
-                <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>Comments coming soon.</div>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 10 }}>
+                  Comments {taskComments.length > 0 && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({taskComments.length})</span>}
+                </div>
+
+                {taskComments.length === 0 && (
+                  <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", marginBottom: 10 }}>No comments yet.</div>
+                )}
+
+                {taskComments.map((c) => {
+                  const canDeleteComment = c.author_user_id === currentUserId || canEdit;
+                  const authorLabel = c.author_name ?? c.author_email ?? "Unknown";
+                  const ago = taskCommentTimeAgo(c.created_at);
+                  return (
+                    <div key={c.id} style={{ marginBottom: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#00c8e0" }}>{authorLabel}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 11, color: "rgba(240,246,255,0.3)" }}>{ago}</span>
+                          {canDeleteComment && (
+                            <button
+                              onClick={() => handleDeleteTaskComment(c.id)}
+                              style={{ background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px" }}
+                              title="Delete comment"
+                            >×</button>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 13, color: "rgba(240,246,255,0.8)", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{c.body}</div>
+                    </div>
+                  );
+                })}
+
+                <textarea
+                  className="ms-input"
+                  rows={2}
+                  placeholder="Add a comment..."
+                  value={taskCommentBody}
+                  onChange={(e) => setTaskCommentBody(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAddTaskComment(); }}
+                  style={{ resize: "vertical", minHeight: 56 }}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
+                  <button
+                    className="ms-btn-primary"
+                    onClick={handleAddTaskComment}
+                    disabled={addingComment || !taskCommentBody.trim()}
+                    style={{ fontSize: 12, padding: "5px 14px" }}
+                  >
+                    {addingComment ? "Posting..." : "Add Comment"}
+                  </button>
+                </div>
               </div>
 
-              {/* Attachments — placeholder for future feature */}
+              {/* Attachments */}
               <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 8 }}>Attachments</div>
-                <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>Attachments coming soon.</div>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 10 }}>
+                  Attachments
+                </div>
+
+                {documents.filter((d) => d.task_id === editingTask.id).length === 0 && (
+                  <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", marginBottom: 10 }}>No attachments yet.</div>
+                )}
+
+                {documents.filter((d) => d.task_id === editingTask.id).map((doc) => (
+                  <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)", marginBottom: 6 }}>
+                    <span style={{ fontSize: 18, flexShrink: 0 }}>📎</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, color: "rgba(240,246,255,0.85)", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{doc.name}</div>
+                      <div style={{ fontSize: 11, color: "rgba(240,246,255,0.3)", marginTop: 1 }}>
+                        {doc.uploader_name ?? "—"} · {doc.size_bytes ? fmtBytes(doc.size_bytes) : ""}
+                      </div>
+                    </div>
+                    <a
+                      href={api.downloadDocumentUrl(project!.id, doc.id)}
+                      download
+                      style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none", flexShrink: 0 }}
+                      title="Download"
+                    >↓</a>
+                    {canEdit && (
+                      <button
+                        onClick={() => handleDeleteTaskAttachment(doc.id)}
+                        style={{ background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}
+                        title="Remove attachment"
+                      >×</button>
+                    )}
+                  </div>
+                ))}
+
+                <input ref={attachFileRef} type="file" style={{ display: "none" }} onChange={handleTaskAttachmentUpload} />
+                <button
+                  className="ms-btn-secondary"
+                  onClick={() => attachFileRef.current?.click()}
+                  disabled={uploadingAttachment}
+                  style={{ fontSize: 12, padding: "5px 14px" }}
+                >
+                  {uploadingAttachment ? "Uploading..." : "+ Attach File"}
+                </button>
               </div>
 
             </div>

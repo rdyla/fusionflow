@@ -200,6 +200,96 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   return c.json(updated);
 });
 
+// ── Task Comments ─────────────────────────────────────────────────────────────
+
+app.get("/:id/tasks/:taskId/comments", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await db
+    .prepare(
+      `SELECT tc.id, tc.task_id, tc.project_id, tc.author_user_id, tc.body, tc.created_at,
+              u.name AS author_name, u.email AS author_email
+       FROM task_comments tc
+       LEFT JOIN users u ON u.id = tc.author_user_id
+       WHERE tc.task_id = ? AND tc.project_id = ?
+       ORDER BY tc.created_at ASC`
+    )
+    .bind(taskId, projectId)
+    .all();
+
+  return c.json(rows.results ?? []);
+});
+
+app.post("/:id/tasks/:taskId/comments", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const task = await db
+    .prepare("SELECT id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1")
+    .bind(taskId, projectId)
+    .first();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const { body } = await c.req.json<{ body: string }>();
+  if (!body?.trim()) throw new HTTPException(400, { message: "Comment body required" });
+
+  const commentId = crypto.randomUUID();
+  await db
+    .prepare(
+      `INSERT INTO task_comments (id, task_id, project_id, author_user_id, body)
+       VALUES (?, ?, ?, ?, ?)`
+    )
+    .bind(commentId, taskId, projectId, auth.user.id, body.trim())
+    .run();
+
+  const created = await db
+    .prepare(
+      `SELECT tc.id, tc.task_id, tc.project_id, tc.author_user_id, tc.body, tc.created_at,
+              u.name AS author_name, u.email AS author_email
+       FROM task_comments tc
+       LEFT JOIN users u ON u.id = tc.author_user_id
+       WHERE tc.id = ? LIMIT 1`
+    )
+    .bind(commentId)
+    .first();
+
+  return c.json(created, 201);
+});
+
+app.delete("/:id/tasks/:taskId/comments/:commentId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+  const commentId = c.req.param("commentId");
+
+  const comment = await db
+    .prepare("SELECT id, author_user_id FROM task_comments WHERE id = ? AND task_id = ? AND project_id = ? LIMIT 1")
+    .bind(commentId, taskId, projectId)
+    .first<{ id: string; author_user_id: string | null }>();
+
+  if (!comment) throw new HTTPException(404, { message: "Comment not found" });
+
+  // Only author, admins, or PMs can delete
+  const isOwner = comment.author_user_id === auth.user.id;
+  const isPrivileged = auth.role === "admin" || auth.role === "pm";
+  if (!isOwner && !isPrivileged) throw new HTTPException(403, { message: "Forbidden" });
+
+  await db.prepare("DELETE FROM task_comments WHERE id = ?").bind(commentId).run();
+  return c.json({ success: true });
+});
+
 app.delete("/:id/tasks/:taskId", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
