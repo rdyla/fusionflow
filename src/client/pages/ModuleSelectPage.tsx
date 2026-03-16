@@ -346,7 +346,7 @@ export default function ModuleSelectPage() {
             borderLeft: "3px solid #00c8e0",
             borderRadius: 10,
             padding: "24px 20px",
-            alignSelf: "center",
+            alignSelf: "stretch",
           }}>
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.15em", color: "#00c8e0", marginBottom: 14 }}>
               FusionFlow360

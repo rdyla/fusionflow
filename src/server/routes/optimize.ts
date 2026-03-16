@@ -7,7 +7,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Only internal PF roles can access Optimize
 function assertOptimizeAccess(role: string) {
-  if (!["admin", "pm", "pf_ae", "pf_sa", "pf_csm"].includes(role)) {
+  if (!["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer"].includes(role)) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 }

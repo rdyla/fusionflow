@@ -735,7 +735,7 @@ export default function SolutionDetailPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 16 }}>
                 {solutionStaff.map((s) => {
                   const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager" };
+                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager", pf_engineer: "Implementation Engineer" };
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
                       <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
@@ -866,6 +866,7 @@ export default function SolutionDetailPage() {
                   <option value="pf_ae">Account Executive</option>
                   <option value="pf_sa">Solution Architect</option>
                   <option value="pf_csm">Client Success Manager</option>
+                  <option value="pf_engineer">Implementation Engineer</option>
                 </select>
               </label>
               <label className="ms-label">

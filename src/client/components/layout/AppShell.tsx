@@ -9,8 +9,9 @@ const ROLE_LABELS: Record<string, string> = {
   pm:         "Project Manager",
   pf_ae:      "Account Executive",
   pf_sa:      "Solution Architect",
-  pf_csm:     "Customer Success Manager",
-  partner_ae: "Partner AE",
+  pf_csm:      "Customer Success Manager",
+  pf_engineer: "Implementation Engineer",
+  partner_ae:  "Partner AE",
 };
 
 function initials(name: string | null, email: string): string {
