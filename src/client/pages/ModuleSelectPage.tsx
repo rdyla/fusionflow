@@ -82,7 +82,6 @@ const PHASES: Phase[] = [
   },
 ];
 
-// Clockwise flow arrows sit in the gap between each pair of adjacent phases
 const ARROWS: [number, number][] = [[315, 0], [45, 1], [135, 2], [225, 3]];
 
 // ── Component ──────────────────────────────────────────────────────────────────
@@ -143,215 +142,228 @@ export default function ModuleSelectPage() {
       </header>
 
       {/* Logo */}
-      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "40px 48px 8px" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-          <div style={{ overflow: "hidden", height: 108, width: 528 }}>
-            <img src={logoUrl} alt="FusionFlow360" style={{ width: 528, height: "auto", display: "block" }} />
-          </div>
+      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "36px 48px 4px" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+          <img src={logoUrl} alt="FusionFlow360" style={{ width: 660, height: "auto", display: "block" }} />
         </div>
         <p style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(15px, 2vw, 20px)", fontWeight: 700, color: "rgba(240,246,255,0.6)", letterSpacing: "-0.01em", margin: 0 }}>
           Where Every Engagement <span style={{ color: "#00c8e0" }}>Finds Its Flow</span>
         </p>
       </section>
 
-      {/* Wheel */}
-      <section style={{ position: "relative", zIndex: 5, padding: "4px 32px 0" }}>
-        <svg
-          viewBox="0 0 600 540"
-          width="100%"
-          style={{ display: "block", maxWidth: 780, margin: "0 auto" }}
-        >
-          {/* Animated outer guide ring */}
-          <circle className="ff-spin-ring" cx={CX} cy={CY} r={RO + 28}
-            fill="none" stroke="#c2d6ed" strokeWidth="1" strokeDasharray="5 11" />
-          <circle cx={CX} cy={CY} r={RO + 13} fill="none" stroke="#dce9f6" strokeWidth="0.5" />
+      {/* Wheel + blurb — side by side */}
+      <section style={{ position: "relative", zIndex: 5, padding: "4px 40px 0" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 28, maxWidth: 1100, margin: "0 auto" }}>
 
-          {/* Center dark fill */}
-          <circle cx={CX} cy={CY} r={RI - 4} fill="#0d1c30" />
+          {/* Left column: wheel + detail panel */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <svg
+              viewBox="0 0 600 540"
+              width="100%"
+              style={{ display: "block" }}
+            >
+              {/* Animated outer guide ring */}
+              <circle className="ff-spin-ring" cx={CX} cy={CY} r={RO + 28}
+                fill="none" stroke="#c2d6ed" strokeWidth="1" strokeDasharray="5 11" />
+              <circle cx={CX} cy={CY} r={RO + 13} fill="none" stroke="#dce9f6" strokeWidth="0.5" />
 
-          {/* Phase segments */}
-          {PHASES.map((p, i) => {
-            const isH = hovered === i;
-            const mid = midDeg(p.s, p.e);
-            const segPt = pt((RO + RI) / 2, mid);
-            const lp = pt(RO + 55, mid);
-            const ep = pt(RO + 2, mid);
-            const cp = pt(RO + 45, mid);
+              {/* Center dark fill */}
+              <circle cx={CX} cy={CY} r={RI - 4} fill="#0d1c30" />
 
-            return (
-              <g
-                key={i}
-                style={{ cursor: "pointer" }}
-                onMouseEnter={() => setHovered(i)}
-                onMouseLeave={() => setHovered(null)}
-                onClick={() => handlePhaseClick(p)}
-              >
-                {/* Outer glow halo on hover */}
-                {isH && (
-                  <path
-                    d={donutPath(RO + 9, RI - 2, p.s + 1, p.e - 1)}
-                    fill={p.color}
-                    opacity={0.15}
-                  />
-                )}
-                {/* Main segment */}
-                <path
-                  d={donutPath(RO, RI, p.s, p.e)}
-                  fill={p.color}
-                  opacity={isH ? 1 : 0.38}
-                  style={{ transition: "opacity 0.22s" }}
-                />
-                {/* Phase number in segment */}
-                <text
-                  x={segPt.x} y={segPt.y}
-                  textAnchor="middle" dominantBaseline="central"
-                  fontSize="20" fontWeight="700" fill="white"
-                  opacity={isH ? 1 : 0.6}
-                  style={{ transition: "opacity 0.22s", pointerEvents: "none" }}
-                >
-                  {p.n}
-                </text>
+              {/* Phase segments */}
+              {PHASES.map((p, i) => {
+                const isH = hovered === i;
+                const mid = midDeg(p.s, p.e);
+                const segPt = pt((RO + RI) / 2, mid);
+                const lp = pt(RO + 55, mid);
+                const ep = pt(RO + 2, mid);
+                const cp = pt(RO + 45, mid);
 
-                {/* Connector line to label */}
-                <line
-                  x1={ep.x} y1={ep.y} x2={cp.x} y2={cp.y}
-                  stroke={p.color} strokeWidth="1"
-                  opacity={isH ? 0.85 : 0.22}
-                  style={{ transition: "opacity 0.22s" }}
-                />
-                {/* Label bubble */}
-                <circle
-                  cx={lp.x} cy={lp.y} r="24"
-                  fill={hexToRgba(p.color, isH ? 0.2 : 0.05)}
-                  stroke={p.color}
-                  strokeWidth={isH ? 1.5 : 0}
-                  style={{ transition: "fill 0.22s, stroke-width 0.22s" }}
-                />
-                <text
-                  x={lp.x} y={lp.y - 8}
-                  textAnchor="middle" fontSize="13" fontWeight="700"
-                  fill={p.color} opacity={isH ? 1 : 0.55}
-                  style={{ transition: "opacity 0.22s", pointerEvents: "none" }}
-                >
-                  {p.name}
-                </text>
-                <text
-                  x={lp.x} y={lp.y + 8}
-                  textAnchor="middle" fontSize="10"
-                  fill={isH ? "#a0bfd6" : "#99b5cc"}
-                  style={{ transition: "fill 0.22s", pointerEvents: "none" }}
-                >
-                  Phase {p.n}
-                </text>
-              </g>
-            );
-          })}
+                return (
+                  <g
+                    key={i}
+                    style={{ cursor: "pointer" }}
+                    onMouseEnter={() => setHovered(i)}
+                    onMouseLeave={() => setHovered(null)}
+                    onClick={() => handlePhaseClick(p)}
+                  >
+                    {/* Outer glow halo on hover */}
+                    {isH && (
+                      <path d={donutPath(RO + 9, RI - 2, p.s + 1, p.e - 1)} fill={p.color} opacity={0.15} />
+                    )}
+                    {/* Main segment */}
+                    <path
+                      d={donutPath(RO, RI, p.s, p.e)}
+                      fill={p.color}
+                      opacity={isH ? 1 : 0.38}
+                      style={{ transition: "opacity 0.22s" }}
+                    />
+                    {/* Phase number */}
+                    <text
+                      x={segPt.x} y={segPt.y}
+                      textAnchor="middle" dominantBaseline="central"
+                      fontSize="20" fontWeight="700" fill="white"
+                      opacity={isH ? 1 : 0.6}
+                      style={{ transition: "opacity 0.22s", pointerEvents: "none" }}
+                    >{p.n}</text>
 
-          {/* Clockwise flow arrows in gaps */}
-          {ARROWS.map(([deg, phaseIdx]) => {
-            const ap = pt(RO + 20, deg);
-            const col = PHASES[phaseIdx].color;
-            return (
-              <g key={deg} transform={`translate(${ap.x},${ap.y}) rotate(${deg + 180})`}>
-                <circle r="10" fill="#0d1b2e" stroke={hexToRgba(col, 0.45)} strokeWidth="1" />
-                <path d="M0,-5.5 L4,3 L0,0.5 L-4,3Z" fill={col} opacity="0.85" />
-              </g>
-            );
-          })}
+                    {/* Connector line */}
+                    <line
+                      x1={ep.x} y1={ep.y} x2={cp.x} y2={cp.y}
+                      stroke={p.color} strokeWidth="1"
+                      opacity={isH ? 0.85 : 0.22}
+                      style={{ transition: "opacity 0.22s" }}
+                    />
+                    {/* Label bubble */}
+                    <circle
+                      cx={lp.x} cy={lp.y} r="24"
+                      fill={hexToRgba(p.color, isH ? 0.2 : 0.05)}
+                      stroke={p.color}
+                      strokeWidth={isH ? 1.5 : 0}
+                      style={{ transition: "fill 0.22s, stroke-width 0.22s" }}
+                    />
+                    <text
+                      x={lp.x} y={lp.y - 8}
+                      textAnchor="middle" fontSize="13" fontWeight="700"
+                      fill={p.color} opacity={isH ? 1 : 0.55}
+                      style={{ transition: "opacity 0.22s", pointerEvents: "none" }}
+                    >{p.name}</text>
+                    <text
+                      x={lp.x} y={lp.y + 8}
+                      textAnchor="middle" fontSize="10"
+                      fill={isH ? "#a0bfd6" : "#99b5cc"}
+                      style={{ transition: "fill 0.22s", pointerEvents: "none" }}
+                    >Phase {p.n}</text>
+                  </g>
+                );
+              })}
 
-          {/* Inner dashed ring */}
-          <circle cx={CX} cy={CY} r={RI - 14}
-            fill="none" stroke="#1a4070" strokeWidth="1" strokeDasharray="3 5" opacity="0.6" />
+              {/* Clockwise flow arrows */}
+              {ARROWS.map(([deg, phaseIdx]) => {
+                const ap = pt(RO + 20, deg);
+                const col = PHASES[phaseIdx].color;
+                return (
+                  <g key={deg} transform={`translate(${ap.x},${ap.y}) rotate(${deg + 180})`}>
+                    <circle r="10" fill="#0d1b2e" stroke={hexToRgba(col, 0.45)} strokeWidth="1" />
+                    <path d="M0,-5.5 L4,3 L0,0.5 L-4,3Z" fill={col} opacity="0.85" />
+                  </g>
+                );
+              })}
 
-          {/* Center label — changes on hover */}
-          {activePhase ? (
-            <>
-              <text x={CX} y={CY + 4} textAnchor="middle" fontSize="17" fontWeight="700" fill="white">
-                {activePhase.name}
-              </text>
-              <text x={CX} y={CY + 21} textAnchor="middle" fontSize="8" fill="#4ade80" letterSpacing="0.12em" fontWeight="700">
-                PHASE {activePhase.n} · FF360
-              </text>
-            </>
-          ) : (
-            <>
-              <text x={CX} y={CY + 3} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgba(240,246,255,0.55)">
-                Intelligence
-              </text>
-              <text x={CX} y={CY + 19} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgba(240,246,255,0.55)">
-                Platform
-              </text>
-            </>
-          )}
-        </svg>
-      </section>
+              {/* Inner dashed ring */}
+              <circle cx={CX} cy={CY} r={RI - 14}
+                fill="none" stroke="#1a4070" strokeWidth="1" strokeDasharray="3 5" opacity="0.6" />
 
-      {/* Hover detail panel */}
-      <section style={{ position: "relative", zIndex: 5, padding: "0 32px 20px", minHeight: 112 }}>
-        <div style={{ maxWidth: 780, margin: "0 auto" }}>
-          {activePhase ? (
-            <div style={{
-              background: "rgba(255,255,255,0.03)",
-              border: `1px solid ${hexToRgba(activePhase.color, 0.2)}`,
-              borderTop: `3px solid ${activePhase.color}`,
-              borderRadius: "0 0 12px 12px",
-              padding: "16px 28px",
-            }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" as const }}>
-                <span style={{
-                  fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".12em",
-                  background: hexToRgba(activePhase.color, 0.12), color: activePhase.color,
-                  border: `1px solid ${hexToRgba(activePhase.color, 0.3)}`, padding: "3px 10px", borderRadius: 4,
-                }}>Phase {activePhase.n}</span>
-                <span style={{ fontSize: 16, fontWeight: 700, color: "#f0f6ff" }}>{activePhase.name}</span>
-                <span style={{ fontSize: 12, color: activePhase.color, fontStyle: "italic" }}>{activePhase.headline}</span>
-                <div style={{ marginLeft: "auto" }}>
-                  {activePhase.route ? (
-                    <button
-                      onClick={() => navigate(activePhase.route!)}
-                      style={{
-                        padding: "7px 18px", borderRadius: 6,
-                        background: hexToRgba(activePhase.color, 0.15),
-                        border: `1px solid ${hexToRgba(activePhase.color, 0.45)}`,
-                        color: activePhase.color, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                      }}
-                    >
-                      Enter Module →
-                    </button>
-                  ) : (
+              {/* Center label */}
+              {activePhase ? (
+                <>
+                  <text x={CX} y={CY + 4} textAnchor="middle" fontSize="17" fontWeight="700" fill="white">
+                    {activePhase.name}
+                  </text>
+                  <text x={CX} y={CY + 21} textAnchor="middle" fontSize="8" fill="#4ade80" letterSpacing="0.12em" fontWeight="700">
+                    PHASE {activePhase.n} · FF360
+                  </text>
+                </>
+              ) : (
+                <>
+                  <text x={CX} y={CY + 3} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgba(240,246,255,0.55)">
+                    Intelligence
+                  </text>
+                  <text x={CX} y={CY + 19} textAnchor="middle" fontSize="13" fontWeight="600" fill="rgba(240,246,255,0.55)">
+                    Platform
+                  </text>
+                </>
+              )}
+            </svg>
+
+            {/* Detail panel — sits flush under the wheel */}
+            <div style={{ minHeight: 100 }}>
+              {activePhase ? (
+                <div style={{
+                  background: "rgba(255,255,255,0.03)",
+                  border: `1px solid ${hexToRgba(activePhase.color, 0.2)}`,
+                  borderTop: `3px solid ${activePhase.color}`,
+                  borderRadius: "0 0 12px 12px",
+                  padding: "16px 28px",
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" as const }}>
                     <span style={{
-                      fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".1em",
-                      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-                      color: "rgba(240,246,255,0.35)", padding: "4px 10px", borderRadius: 4,
-                    }}>Coming Soon</span>
-                  )}
+                      fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".12em",
+                      background: hexToRgba(activePhase.color, 0.12), color: activePhase.color,
+                      border: `1px solid ${hexToRgba(activePhase.color, 0.3)}`, padding: "3px 10px", borderRadius: 4,
+                    }}>Phase {activePhase.n}</span>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: "#f0f6ff" }}>{activePhase.name}</span>
+                    <span style={{ fontSize: 12, color: activePhase.color, fontStyle: "italic" }}>{activePhase.headline}</span>
+                    <div style={{ marginLeft: "auto" }}>
+                      {activePhase.route ? (
+                        <button
+                          onClick={() => navigate(activePhase.route!)}
+                          style={{
+                            padding: "7px 18px", borderRadius: 6,
+                            background: hexToRgba(activePhase.color, 0.15),
+                            border: `1px solid ${hexToRgba(activePhase.color, 0.45)}`,
+                            color: activePhase.color, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                          }}
+                        >Enter Module →</button>
+                      ) : (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".1em",
+                          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                          color: "rgba(240,246,255,0.35)", padding: "4px 10px", borderRadius: 4,
+                        }}>Coming Soon</span>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8 }}>
+                    {activePhase.steps.map((step) => (
+                      <span key={step} style={{
+                        display: "inline-flex", alignItems: "center", gap: 6,
+                        padding: "5px 13px",
+                        background: hexToRgba(activePhase.color, 0.08),
+                        border: `1.5px solid ${hexToRgba(activePhase.color, 0.3)}`,
+                        borderRadius: 20, fontSize: 12, color: activePhase.color, fontWeight: 500, whiteSpace: "nowrap" as const,
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: activePhase.color, display: "inline-block", flexShrink: 0 }} />
+                        {step}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap" as const, gap: 8 }}>
-                {activePhase.steps.map((step) => (
-                  <span key={step} style={{
-                    display: "inline-flex", alignItems: "center", gap: 6,
-                    padding: "5px 13px",
-                    background: hexToRgba(activePhase.color, 0.08),
-                    border: `1.5px solid ${hexToRgba(activePhase.color, 0.3)}`,
-                    borderRadius: 20, fontSize: 12, color: activePhase.color, fontWeight: 500, whiteSpace: "nowrap" as const,
-                  }}>
-                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: activePhase.color, display: "inline-block", flexShrink: 0 }} />
-                    {step}
-                  </span>
-                ))}
-              </div>
+              ) : (
+                <div style={{ textAlign: "center", padding: "16px 0", fontSize: 11, color: "rgba(240,246,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>
+                  hover a phase to explore
+                </div>
+              )}
             </div>
-          ) : (
-            <div style={{ textAlign: "center", padding: "16px 0", fontSize: 11, color: "rgba(240,246,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>
-              hover a phase to explore
+          </div>
+
+          {/* Right column: blurb card */}
+          <div style={{
+            width: 220,
+            flexShrink: 0,
+            background: "rgba(255,255,255,0.03)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderLeft: "3px solid #00c8e0",
+            borderRadius: 10,
+            padding: "24px 20px",
+            alignSelf: "center",
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.15em", color: "#00c8e0", marginBottom: 14 }}>
+              FusionFlow360
             </div>
-          )}
+            <p style={{ margin: 0, fontSize: 13, color: "rgba(240,246,255,0.65)", lineHeight: 1.75, fontStyle: "italic" }}>
+              "From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
+            </p>
+            <p style={{ margin: "14px 0 0", fontSize: 12, fontWeight: 700, color: "rgba(240,246,255,0.4)", letterSpacing: "0.04em" }}>
+              Circular. Evolving. Never static.
+            </p>
+          </div>
+
         </div>
       </section>
 
       {/* Bottom strip */}
-      <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 0, padding: "18px 48px 28px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+      <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", padding: "18px 48px 28px", borderTop: "1px solid rgba(255,255,255,0.07)", marginTop: 20 }}>
         {[
           { label: "SOC 2 Compliant" },
           { label: "Multi-region Available" },
