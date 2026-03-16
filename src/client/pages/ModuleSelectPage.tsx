@@ -156,7 +156,7 @@ export default function ModuleSelectPage() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 28, maxWidth: 1100, margin: "0 auto" }}>
 
           {/* Left column: wheel + detail panel */}
-          <div style={{ flex: "0 0 380px", minWidth: 0 }}>
+          <div style={{ flex: "0 0 420px", minWidth: 0 }}>
             <svg
               viewBox="0 0 600 540"
               width="100%"
@@ -275,71 +275,11 @@ export default function ModuleSelectPage() {
                 </>
               )}
             </svg>
-
-            {/* Detail panel — sits flush under the wheel */}
-            <div style={{ minHeight: 100 }}>
-              {activePhase ? (
-                <div style={{
-                  background: "rgba(255,255,255,0.03)",
-                  border: `1px solid ${hexToRgba(activePhase.color, 0.2)}`,
-                  borderTop: `3px solid ${activePhase.color}`,
-                  borderRadius: "0 0 12px 12px",
-                  padding: "16px 28px",
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" as const }}>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".12em",
-                      background: hexToRgba(activePhase.color, 0.12), color: activePhase.color,
-                      border: `1px solid ${hexToRgba(activePhase.color, 0.3)}`, padding: "3px 10px", borderRadius: 4,
-                    }}>Phase {activePhase.n}</span>
-                    <span style={{ fontSize: 16, fontWeight: 700, color: "#f0f6ff" }}>{activePhase.name}</span>
-                    <span style={{ fontSize: 12, color: activePhase.color, fontStyle: "italic" }}>{activePhase.headline}</span>
-                    <div style={{ marginLeft: "auto" }}>
-                      {activePhase.route ? (
-                        <button
-                          onClick={() => navigate(activePhase.route!)}
-                          style={{
-                            padding: "7px 18px", borderRadius: 6,
-                            background: hexToRgba(activePhase.color, 0.15),
-                            border: `1px solid ${hexToRgba(activePhase.color, 0.45)}`,
-                            color: activePhase.color, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                          }}
-                        >Enter Module →</button>
-                      ) : (
-                        <span style={{
-                          fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".1em",
-                          background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-                          color: "rgba(240,246,255,0.35)", padding: "4px 10px", borderRadius: 4,
-                        }}>Coming Soon</span>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", flexWrap: "nowrap" as const, gap: 8, overflowX: "auto" }}>
-                    {activePhase.steps.map((step) => (
-                      <span key={step} style={{
-                        display: "inline-flex", alignItems: "center", gap: 6,
-                        padding: "5px 13px",
-                        background: hexToRgba(activePhase.color, 0.08),
-                        border: `1.5px solid ${hexToRgba(activePhase.color, 0.3)}`,
-                        borderRadius: 20, fontSize: 12, color: activePhase.color, fontWeight: 500, whiteSpace: "nowrap" as const,
-                      }}>
-                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: activePhase.color, display: "inline-block", flexShrink: 0 }} />
-                        {step}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ textAlign: "center", padding: "16px 0", fontSize: 11, color: "rgba(240,246,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>
-                  hover a phase to explore
-                </div>
-              )}
-            </div>
           </div>
 
           {/* Right column: blurb card */}
           <div style={{
-            width: 220,
+            width: 270,
             flexShrink: 0,
             background: "rgba(255,255,255,0.03)",
             border: "1px solid rgba(255,255,255,0.08)",
@@ -359,6 +299,66 @@ export default function ModuleSelectPage() {
             </p>
           </div>
 
+        </div>
+
+        {/* Detail panel — below wheel+blurb, unconstrained width */}
+        <div style={{ margin: "0 auto", width: "fit-content", minWidth: 420, minHeight: 80, paddingTop: 4 }}>
+          {activePhase ? (
+            <div style={{
+              background: "rgba(255,255,255,0.03)",
+              border: `1px solid ${hexToRgba(activePhase.color, 0.2)}`,
+              borderTop: `3px solid ${activePhase.color}`,
+              borderRadius: "0 0 12px 12px",
+              padding: "16px 28px",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+                <span style={{
+                  fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".12em",
+                  background: hexToRgba(activePhase.color, 0.12), color: activePhase.color,
+                  border: `1px solid ${hexToRgba(activePhase.color, 0.3)}`, padding: "3px 10px", borderRadius: 4,
+                }}>Phase {activePhase.n}</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: "#f0f6ff" }}>{activePhase.name}</span>
+                <span style={{ fontSize: 12, color: activePhase.color, fontStyle: "italic" }}>{activePhase.headline}</span>
+                <div style={{ marginLeft: "auto" }}>
+                  {activePhase.route ? (
+                    <button
+                      onClick={() => navigate(activePhase.route!)}
+                      style={{
+                        padding: "7px 18px", borderRadius: 6,
+                        background: hexToRgba(activePhase.color, 0.15),
+                        border: `1px solid ${hexToRgba(activePhase.color, 0.45)}`,
+                        color: activePhase.color, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >Enter Module →</button>
+                  ) : (
+                    <span style={{
+                      fontSize: 10, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: ".1em",
+                      background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                      color: "rgba(240,246,255,0.35)", padding: "4px 10px", borderRadius: 4,
+                    }}>Coming Soon</span>
+                  )}
+                </div>
+              </div>
+              <div style={{ display: "flex", flexWrap: "nowrap" as const, gap: 8 }}>
+                {activePhase.steps.map((step) => (
+                  <span key={step} style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "5px 13px",
+                    background: hexToRgba(activePhase.color, 0.08),
+                    border: `1.5px solid ${hexToRgba(activePhase.color, 0.3)}`,
+                    borderRadius: 20, fontSize: 12, color: activePhase.color, fontWeight: 500, whiteSpace: "nowrap" as const,
+                  }}>
+                    <span style={{ width: 5, height: 5, borderRadius: "50%", background: activePhase.color, display: "inline-block", flexShrink: 0 }} />
+                    {step}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: "center", padding: "16px 0", fontSize: 11, color: "rgba(240,246,255,0.22)", letterSpacing: "0.08em", textTransform: "uppercase" as const }}>
+              hover a phase to explore
+            </div>
+          )}
         </div>
       </section>
 
