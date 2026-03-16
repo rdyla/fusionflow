@@ -502,10 +502,24 @@ export default function ProjectDetailPage() {
 
       {/* Project header card */}
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "rgba(240,246,255,0.9)" }}>{project.name}</h1>
-        <p style={{ margin: "0 0 16px", color: "rgba(240,246,255,0.5)", fontSize: 14 }}>
-          {project.customer_name ?? "Unknown customer"} · {project.vendor ?? "Unknown vendor"} · {project.solution_type ?? "—"}
-        </p>
+        <h1 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 700, color: "rgba(240,246,255,0.9)" }}>{project.name}</h1>
+        <div style={{ fontSize: 14, color: "rgba(240,246,255,0.5)", marginBottom: 14 }}>
+          {project.customer_name ?? "Unknown customer"}
+        </div>
+
+        {/* Vendor + solution type badges */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+          {project.vendor && (
+            <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
+              {project.vendor}
+            </span>
+          )}
+          {project.solution_type && (
+            <span className="ms-badge" style={{ background: "rgba(135,100,184,0.15)", color: "#b39ddb", border: "1px solid rgba(135,100,184,0.35)", fontSize: 12, padding: "4px 12px" }}>
+              {project.solution_type}
+            </span>
+          )}
+        </div>
 
         {/* Summary info tiles */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
@@ -555,69 +569,61 @@ export default function ProjectDetailPage() {
       {/* ── Overview ──────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <div style={{ display: "grid", gap: 16 }}>
-          <div className="ms-section-card">
-            <div className="ms-section-title">Project Summary</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
-              {[
-                ["Customer", project.customer_name],
-                ["Vendor", project.vendor],
-                ["Solution Type", project.solution_type],
-                ["Kickoff", project.kickoff_date],
-                ["Actual Go-Live", project.actual_go_live_date],
-                ["Project Manager", project.pm_name ?? "—"],
-                ["Account Executive", project.ae_name ?? "—"],
-              ].map(([label, value]) => (
-                <div key={label} className="ms-info-item">
-                  <div className="ms-info-label">{label}</div>
-                  <div className="ms-info-value">{value ?? "—"}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
           {/* ── Project Team ──────────────────────────────────────────────── */}
           <div className="ms-section-card">
-            <div className="ms-section-title">Project Team</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 20 }}>
+            <div className="ms-section-title">PF Team</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 12 }}>
               {(
                 [
-                  { label: "Project Manager",       name: project.pm_name,       roster: dynamicsPMs,       showZoom: true },
-                  { label: "Account Executive",      name: project.ae_name,       roster: dynamicsAEs,       showZoom: true },
-                  { label: "Solution Architect",     name: project.sa_name,       roster: dynamicsSAs,       showZoom: false },
-                  { label: "Client Success Manager", name: project.csm_name,      roster: dynamicsCSMs,      showZoom: false },
-                  { label: "Implementation Engineer",name: project.engineer_name, roster: dynamicsEngineers, showZoom: false },
+                  { label: "Project Manager",        name: project.pm_name,       roster: dynamicsPMs,       showZoom: true  },
+                  { label: "Account Executive",       name: project.ae_name,       roster: dynamicsAEs,       showZoom: true  },
+                  { label: "Solution Architect",      name: project.sa_name,       roster: dynamicsSAs,       showZoom: true  },
+                  { label: "Client Success Manager",  name: project.csm_name,      roster: dynamicsCSMs,      showZoom: true  },
+                  { label: "Implementation Engineer", name: project.engineer_name, roster: dynamicsEngineers, showZoom: false },
                 ] as { label: string; name: string | null; roster: DynamicsUser[]; showZoom: boolean }[]
               ).map(({ label, name, roster, showZoom }) => {
                 const member = roster.find((u) => [u.firstname, u.lastname].filter(Boolean).join(" ") === name);
+                const displayName = member ? [member.firstname, member.lastname].filter(Boolean).join(" ") : name;
+                const initials = displayName
+                  ? displayName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
+                  : "?";
                 return (
-                  <div key={label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
-                    {member ? (
-                      <>
-                        <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{[member.firstname, member.lastname].filter(Boolean).join(" ")}</div>
-                        {member.title && <div style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>{member.title}</div>}
-                        {member.internalemailaddress && (
-                          <a href={`mailto:${member.internalemailaddress}`} style={{ fontSize: 13, color: "#00c8e0", textDecoration: "none" }}>
-                            {member.internalemailaddress}
-                          </a>
-                        )}
-                        {showZoom && (
-                          <button
-                            disabled
-                            title="Zoom Scheduler — coming next phase"
-                            style={{
-                              marginTop: 6, padding: "5px 12px", fontSize: 12, fontWeight: 600,
-                              background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4,
-                              color: "#a19f9d", cursor: "not-allowed", width: "fit-content",
-                            }}
-                          >
-                            Schedule via Zoom
-                          </button>
-                        )}
-                      </>
-                    ) : (
-                      <div style={{ color: "#a19f9d", fontSize: 13 }}>{name ?? "Unassigned"}</div>
-                    )}
+                  <div key={label} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)" }}>
+                    <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#00c8e0", letterSpacing: "0.02em" }}>
+                      {displayName ? initials : "—"}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.4)", marginBottom: 3 }}>{label}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: displayName ? "rgba(240,246,255,0.9)" : "rgba(240,246,255,0.3)", marginBottom: 2 }}>
+                        {displayName ?? "Unassigned"}
+                      </div>
+                      {member?.title && (
+                        <div style={{ fontSize: 12, color: "rgba(240,246,255,0.45)", marginBottom: 3 }}>{member.title}</div>
+                      )}
+                      {member?.internalemailaddress && (
+                        <a href={`mailto:${member.internalemailaddress}`} style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none", display: "block", marginBottom: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {member.internalemailaddress}
+                        </a>
+                      )}
+                      {showZoom && displayName && (
+                        <a
+                          href={member?.internalemailaddress
+                            ? `https://zoom.us/meeting/schedule?invitees=${encodeURIComponent(member.internalemailaddress)}`
+                            : "https://zoom.us/meeting/schedule"}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "inline-flex", alignItems: "center", gap: 5,
+                            padding: "4px 10px", fontSize: 11, fontWeight: 600,
+                            background: "rgba(0,120,212,0.15)", border: "1px solid rgba(0,120,212,0.35)",
+                            borderRadius: 4, color: "#4fc3f7", textDecoration: "none",
+                          }}
+                        >
+                          <svg viewBox="0 0 24 24" fill="currentColor" style={{ width: 12, height: 12 }}><path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                          Schedule via Zoom
+                        </a>
+                      )}
+                    </div>
                   </div>
                 );
               })}
