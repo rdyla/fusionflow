@@ -106,6 +106,7 @@ export default function ProjectDetailPage() {
   const [dynamicsSAs, setDynamicsSAs] = useState<DynamicsUser[]>([]);
   const [dynamicsCSMs, setDynamicsCSMs] = useState<DynamicsUser[]>([]);
   const [dynamicsEngineers, setDynamicsEngineers] = useState<DynamicsUser[]>([]);
+  const [staffPhotos, setStaffPhotos] = useState<Record<string, string | null>>({});
   const [savingProject, setSavingProject] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -172,6 +173,13 @@ export default function ProjectDetailPage() {
         setDynamicsSAs(sasData);
         setDynamicsCSMs(csmsData);
         setDynamicsEngineers(engData);
+
+        // Fetch Zoom profile photos for all staff
+        const allStaff = [...pmsData, ...aesData, ...sasData, ...csmsData, ...engData];
+        const emails = [...new Set(allStaff.map((u) => u.internalemailaddress).filter((e): e is string => !!e))];
+        if (emails.length > 0) {
+          api.staffPhotos(emails).then(setStaffPhotos).catch(() => {});
+        }
         setPhases(phaseData);
         setMilestones(milestoneData);
         setTasks(taskData);
@@ -589,9 +597,17 @@ export default function ProjectDetailPage() {
                   : "?";
                 return (
                   <div key={label} style={{ display: "flex", alignItems: "flex-start", gap: 14, padding: "14px 16px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#00c8e0", letterSpacing: "0.02em" }}>
-                      {displayName ? initials : "—"}
-                    </div>
+                    {member?.internalemailaddress && staffPhotos[member.internalemailaddress] ? (
+                      <img
+                        src={staffPhotos[member.internalemailaddress]!}
+                        alt={displayName ?? ""}
+                        style={{ width: 42, height: 42, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid rgba(0,200,224,0.25)" }}
+                      />
+                    ) : (
+                      <div style={{ width: 42, height: 42, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#00c8e0", letterSpacing: "0.02em" }}>
+                        {displayName ? initials : "—"}
+                      </div>
+                    )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.4)", marginBottom: 3 }}>{label}</div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: displayName ? "rgba(240,246,255,0.9)" : "rgba(240,246,255,0.3)", marginBottom: 2 }}>

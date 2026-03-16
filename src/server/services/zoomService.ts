@@ -38,6 +38,94 @@ export type ZoomStatus = {
 function credsKey(projectId: string) { return `zoom:creds:${projectId}`; }
 function tokenKey(projectId: string) { return `zoom:token:${projectId}`; }
 
+// ── Org-level (S2S) token ─────────────────────────────────────────────────────
+
+const ORG_TOKEN_KEY = "zoom:org:token";
+const PHOTO_CACHE_TTL = 86_400; // 24 hours
+
+type OrgEnv = { ZOOM_ORG_ACCOUNT_ID?: string; ZOOM_ORG_CLIENT_ID?: string; ZOOM_ORG_CLIENT_SECRET?: string };
+
+export async function getOrgToken(kv: KVNamespace, env: OrgEnv): Promise<string> {
+  const cached = await kv.get<TokenCache>(ORG_TOKEN_KEY, "json");
+  if (cached && cached.expires_at > Date.now() + 60_000) return cached.access_token;
+
+  const { ZOOM_ORG_ACCOUNT_ID, ZOOM_ORG_CLIENT_ID, ZOOM_ORG_CLIENT_SECRET } = env;
+  if (!ZOOM_ORG_ACCOUNT_ID || !ZOOM_ORG_CLIENT_ID || !ZOOM_ORG_CLIENT_SECRET) {
+    throw new Error("Zoom org credentials not configured");
+  }
+
+  const res = await fetch(
+    `${ZOOM_OAUTH_URL}?grant_type=account_credentials&account_id=${encodeURIComponent(ZOOM_ORG_ACCOUNT_ID)}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${btoa(`${ZOOM_ORG_CLIENT_ID}:${ZOOM_ORG_CLIENT_SECRET}`)}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    }
+  );
+
+  if (!res.ok) throw new Error(`Zoom org token fetch failed: ${res.status} ${await res.text()}`);
+
+  const data = await res.json() as { access_token: string; expires_in: number };
+  await kv.put(
+    ORG_TOKEN_KEY,
+    JSON.stringify({ access_token: data.access_token, expires_at: Date.now() + data.expires_in * 1000 }),
+    { expirationTtl: data.expires_in - 60 }
+  );
+  return data.access_token;
+}
+
+export async function getStaffPhotos(
+  kv: KVNamespace,
+  env: OrgEnv,
+  emails: string[]
+): Promise<Record<string, string | null>> {
+  if (emails.length === 0) return {};
+
+  const result: Record<string, string | null> = {};
+  const toFetch: string[] = [];
+
+  // Check KV cache first
+  await Promise.all(
+    emails.map(async (email) => {
+      const cached = await kv.get(`zoom:photo:${email.toLowerCase()}`);
+      if (cached !== null) {
+        result[email] = cached === "" ? null : cached;
+      } else {
+        toFetch.push(email);
+      }
+    })
+  );
+
+  if (toFetch.length === 0) return result;
+
+  const token = await getOrgToken(kv, env);
+
+  await Promise.all(
+    toFetch.map(async (email) => {
+      try {
+        const res = await fetch(`${ZOOM_API_BASE}/users/${encodeURIComponent(email)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) {
+          await kv.put(`zoom:photo:${email.toLowerCase()}`, "", { expirationTtl: PHOTO_CACHE_TTL });
+          result[email] = null;
+          return;
+        }
+        const data = await res.json() as { pic_url?: string };
+        const url = data.pic_url ?? null;
+        await kv.put(`zoom:photo:${email.toLowerCase()}`, url ?? "", { expirationTtl: PHOTO_CACHE_TTL });
+        result[email] = url;
+      } catch {
+        result[email] = null;
+      }
+    })
+  );
+
+  return result;
+}
+
 export async function saveCreds(kv: KVNamespace, projectId: string, creds: ZoomCreds): Promise<void> {
   await kv.put(credsKey(projectId), JSON.stringify(creds));
 }
