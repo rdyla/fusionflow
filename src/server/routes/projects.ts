@@ -286,7 +286,7 @@ app.get("/:id/staff", async (c) => {
 
   const rows = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role
+           u.name, u.email, u.role, u.avatar_url
     FROM project_staff ps
     JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ?
@@ -311,7 +311,7 @@ app.post("/:id/staff", async (c) => {
 
   const created = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role
+           u.name, u.email, u.role, u.avatar_url
     FROM project_staff ps JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
   `).bind(projectId, user_id, staff_role).first();

@@ -36,6 +36,7 @@ export type User = {
   organization_name: string | null;
   role: string;
   is_active: number;
+  avatar_url?: string | null;
 };
 
 export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "zoom_va" | "rc_ace" | "rc_air";
@@ -344,10 +345,11 @@ export type ProjectStaffMember = {
   id: string;
   project_id: string;
   user_id: string;
-  staff_role: string; // 'ae' | 'sa' | 'csm' | 'engineer'
+  staff_role: string;
   name: string | null;
   email: string;
   role: string;
+  avatar_url: string | null;
   created_at: string;
 };
 
@@ -355,10 +357,11 @@ export type SolutionStaffMember = {
   id: string;
   solution_id: string;
   user_id: string;
-  staff_role: string; // 'pf_ae' | 'pf_sa'
+  staff_role: string;
   name: string | null;
   email: string;
   role: string;
+  avatar_url: string | null;
   created_at: string;
 };
 

@@ -350,7 +350,7 @@ app.get("/:id/staff", async (c) => {
 
   const rows = await c.env.DB.prepare(`
     SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
-           u.name, u.email, u.role
+           u.name, u.email, u.role, u.avatar_url
     FROM solution_staff ss
     JOIN users u ON u.id = ss.user_id
     WHERE ss.solution_id = ?
@@ -374,7 +374,7 @@ app.post("/:id/staff", async (c) => {
 
   const created = await c.env.DB.prepare(`
     SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
-           u.name, u.email, u.role
+           u.name, u.email, u.role, u.avatar_url
     FROM solution_staff ss JOIN users u ON u.id = ss.user_id
     WHERE ss.solution_id = ? AND ss.user_id = ? AND ss.staff_role = ? LIMIT 1
   `).bind(solutionId, user_id, staff_role).first();

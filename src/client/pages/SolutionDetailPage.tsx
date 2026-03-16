@@ -480,6 +480,7 @@ export default function SolutionDetailPage() {
   const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
   const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("");
   const [addingSolutionStaff, setAddingSolutionStaff] = useState(false);
+  const [solutionStaffPhotoMap, setSolutionStaffPhotoMap] = useState<Record<string, string | null>>({});
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -507,7 +508,13 @@ export default function SolutionDetailPage() {
       api.getDynamicsContacts(s.dynamics_account_id).then(setCrmContacts).catch(() => {});
     }
     api.solutionContacts(id).then(setSolutionContacts).catch(() => {});
-    api.solutionStaff(id).then(setSolutionStaff).catch(() => {});
+    api.solutionStaff(id).then((staff) => {
+      setSolutionStaff(staff);
+      if (staff.length > 0) {
+        const emails = staff.map((s) => s.email);
+        api.staffPhotos(emails).then(setSolutionStaffPhotoMap).catch(() => {});
+      }
+    }).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -735,10 +742,14 @@ export default function SolutionDetailPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 16 }}>
                 {solutionStaff.map((s) => {
                   const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager", pf_engineer: "Implementation Engineer" };
+                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager", pf_engineer: "Implementation Engineer", pm: "Project Manager" };
+                  const photo = solutionStaffPhotoMap[s.email] ?? s.avatar_url;
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
-                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                      {photo
+                        ? <img src={photo} alt={s.name ?? s.email} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                        : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                      }
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
                         <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{s.name ?? s.email}</div>
@@ -867,6 +878,7 @@ export default function SolutionDetailPage() {
                   <option value="pf_sa">Solution Architect</option>
                   <option value="pf_csm">Client Success Manager</option>
                   <option value="pf_engineer">Implementation Engineer</option>
+                  <option value="pm">Project Manager</option>
                 </select>
               </label>
               <label className="ms-label">
