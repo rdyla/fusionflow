@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import logoUrl from "../../assets/fusion flow transparent.png";
+import logoUrl from "../../assets/fusion flow transparent logo.png";
 import { api, type User, IMPERSONATE_KEY } from "../../lib/api";
 
 const ROLE_LABELS: Record<string, string> = {

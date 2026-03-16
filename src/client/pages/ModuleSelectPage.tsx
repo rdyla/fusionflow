@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logoUrl from "../assets/fusion flow transparent.png";
+import logoUrl from "../assets/fusion flow transparent logo.png";
 import { api, type User } from "../lib/api";
 
 function initials(name: string | null, email: string): string {
