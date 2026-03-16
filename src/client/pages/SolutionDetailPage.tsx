@@ -580,7 +580,6 @@ export default function SolutionDetailPage() {
   }
 
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae";
-  const pfAes = users.filter((u) => u.role === "pf_ae");
   const partnerAes = users.filter((u) => u.role === "partner_ae");
 
   if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading…</div>;
