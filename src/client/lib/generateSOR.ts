@@ -5,7 +5,6 @@ import {
   TextRun,
   HeadingLevel,
   AlignmentType,
-  BorderStyle,
   Table,
   TableRow,
   TableCell,
@@ -191,13 +190,6 @@ function body(text: string) {
 function sectionTable(rows: { label: string; value: string }[]) {
   return new Table({
     width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: {
-      top: { style: BorderStyle.SINGLE, size: 1, color: "DDDDDD" },
-      bottom: { style: BorderStyle.SINGLE, size: 1, color: "DDDDDD" },
-      left: { style: BorderStyle.NONE },
-      right: { style: BorderStyle.NONE },
-      inside: { style: BorderStyle.SINGLE, size: 1, color: "EEEEEE" },
-    },
     rows: rows.map((r, i) =>
       new TableRow({
         children: [
