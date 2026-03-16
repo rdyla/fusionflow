@@ -251,32 +251,32 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleCreateTask(phaseId: string) {
-    if (!project || !newTaskFields.title.trim()) return;
-    setSavingTask(true);
-    try {
-      const created = await api.createTask(project.id, {
-        title: newTaskFields.title.trim(),
-        phase_id: phaseId,
-        due_date: newTaskFields.due_date || null,
-        priority: (newTaskFields.priority as "low" | "medium" | "high") || null,
-        assignee_user_id: newTaskFields.assignee_user_id.trim() || null,
-        status: "not_started",
-      });
-      setTasks((prev) => [...prev, created]);
-      setAddingTaskPhaseId(null);
-      setNewTaskFields({ title: "", due_date: "", priority: "", assignee_user_id: "" });
-      showToast("Task created.", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to create task", "error");
-    } finally {
-      setSavingTask(false);
-    }
-  }
-
   async function handleUpdateTask() {
     if (!project || !editingTask) return;
     setSavingTask(true);
+
+    // New task (sentinel id = "")
+    if (editingTask.id === "") {
+      try {
+        const created = await api.createTask(project.id, {
+          title: editingTask.title.trim(),
+          phase_id: editingTask.phase_id,
+          due_date: editingTask.due_date || null,
+          priority: (editingTask.priority as "low" | "medium" | "high") || null,
+          assignee_user_id: editingTask.assignee_user_id || null,
+          status: (editingTask.status as "not_started") ?? "not_started",
+        });
+        setTasks((prev) => [...prev, created]);
+        setEditingTask(null);
+        showToast("Task created.", "success");
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Failed to create task", "error");
+      } finally {
+        setSavingTask(false);
+      }
+      return;
+    }
+
     try {
       const updated = await api.updateTask(project.id, editingTask.id, {
         title: editingTask.title,
@@ -842,54 +842,15 @@ export default function ProjectDetailPage() {
                     </div>
                   ))}
 
-                  {canEdit && addingTaskPhaseId === phase.id ? (
-                    <div className="ms-section-card" style={{ borderColor: "#0891b2" }}>
-                      <div style={{ display: "grid", gap: 10 }}>
-                        <label className="ms-label">
-                          <span>Title</span>
-                          <input autoFocus className="ms-input" value={newTaskFields.title} onChange={(e) => setNewTaskFields({ ...newTaskFields, title: e.target.value })} placeholder="Task title" />
-                        </label>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                          <label className="ms-label">
-                            <span>Due Date</span>
-                            <input type="date" className="ms-input" value={newTaskFields.due_date} onChange={(e) => setNewTaskFields({ ...newTaskFields, due_date: e.target.value })} />
-                          </label>
-                          <label className="ms-label">
-                            <span>Priority</span>
-                            <select className="ms-input" value={newTaskFields.priority} onChange={(e) => setNewTaskFields({ ...newTaskFields, priority: e.target.value })}>
-                              <option value="">None</option>
-                              <option value="low">Low</option>
-                              <option value="medium">Medium</option>
-                              <option value="high">High</option>
-                            </select>
-                          </label>
-                          <label className="ms-label">
-                            <span>Assignee</span>
-                            <select className="ms-input" value={newTaskFields.assignee_user_id} onChange={(e) => setNewTaskFields({ ...newTaskFields, assignee_user_id: e.target.value })}>
-                              <option value="">Unassigned</option>
-                              {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                            </select>
-                          </label>
-                        </div>
-                        <div style={{ display: "flex", gap: 8 }}>
-                          <button className="ms-btn-primary" onClick={() => handleCreateTask(phase.id)} disabled={savingTask || !newTaskFields.title.trim()}>
-                            {savingTask ? "Saving..." : "Add Task"}
-                          </button>
-                          <button className="ms-btn-secondary" onClick={() => { setAddingTaskPhaseId(null); setNewTaskFields({ title: "", due_date: "", priority: "", assignee_user_id: "" }); }}>
-                            Cancel
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : canEdit ? (
+                  {canEdit && (
                     <button
                       className="ms-btn-ghost"
-                      onClick={() => { setAddingTaskPhaseId(phase.id); setEditingTask(null); }}
+                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, due_date: null, completed_at: null, status: "not_started", priority: null })}
                       style={{ alignSelf: "start", border: "1px dashed rgba(255,255,255,0.2)", color: "rgba(240,246,255,0.5)" }}
                     >
                       + Add Task
                     </button>
-                  ) : null}
+                  )}
                 </div>
               </div>
             ))}
@@ -1128,7 +1089,7 @@ export default function ProjectDetailPage() {
 
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Task Details</h2>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>{editingTask.id === "" ? "New Task" : "Task Details"}</h2>
               <button onClick={() => setEditingTask(null)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
             </div>
 
@@ -1189,7 +1150,8 @@ export default function ProjectDetailPage() {
                 </label>
               )}
 
-              {/* Comments */}
+              {/* Comments + Attachments only shown for existing tasks */}
+              {editingTask.id !== "" && <>
               <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(240,246,255,0.35)", marginBottom: 10 }}>
                   Comments {taskComments.length > 0 && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({taskComments.length})</span>}
@@ -1289,15 +1251,20 @@ export default function ProjectDetailPage() {
                   {uploadingAttachment ? "Uploading..." : "+ Attach File"}
                 </button>
               </div>
+              </>}
 
             </div>
 
             {/* Footer */}
             {canEdit && (
               <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-                <button className="ms-btn-primary" onClick={handleUpdateTask} disabled={savingTask}>{savingTask ? "Saving..." : "Save"}</button>
+                <button className="ms-btn-primary" onClick={handleUpdateTask} disabled={savingTask || !editingTask.title.trim()}>
+                  {savingTask ? "Saving..." : editingTask.id === "" ? "Create Task" : "Save"}
+                </button>
                 <button className="ms-btn-secondary" onClick={() => setEditingTask(null)}>Cancel</button>
-                <button className="ms-btn-danger" onClick={() => handleDeleteTask(editingTask.id)} style={{ marginLeft: "auto" }}>Delete</button>
+                {editingTask.id !== "" && (
+                  <button className="ms-btn-danger" onClick={() => handleDeleteTask(editingTask.id)} style={{ marginLeft: "auto" }}>Delete</button>
+                )}
               </div>
             )}
 
