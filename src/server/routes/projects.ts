@@ -215,11 +215,15 @@ app.get("/:id/contacts", async (c) => {
   const allowed = await canViewProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const rows = await db
-    .prepare("SELECT * FROM project_contacts WHERE project_id = ? ORDER BY name ASC")
-    .bind(projectId)
-    .all();
-  return c.json(rows.results ?? []);
+  try {
+    const rows = await db
+      .prepare("SELECT * FROM project_contacts WHERE project_id = ? ORDER BY name ASC")
+      .bind(projectId)
+      .all();
+    return c.json(rows.results ?? []);
+  } catch {
+    return c.json([]);
+  }
 });
 
 const addContactSchema = z.object({

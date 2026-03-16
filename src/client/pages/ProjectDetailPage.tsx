@@ -121,13 +121,14 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData, meData, contactData] =
+        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, pmsData, aesData, sasData, csmsData, engData, meData] =
           await Promise.all([
             api.project(id), api.phases(id), api.milestones(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users(), api.documents(id),
             api.getDynamicsPMs(), api.getDynamicsAEs(), api.getDynamicsSAs(), api.getDynamicsCSMs(), api.getDynamicsEngineers(),
-            api.me(), api.projectContacts(id),
+            api.me(),
           ]);
+        api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
         setEditHealth(projectData.health ?? "");
@@ -150,7 +151,6 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
-        setContacts(contactData);
 
         const tabParam = searchParams.get("tab") as DetailTab | null;
         if (tabParam) setTab(tabParam);
