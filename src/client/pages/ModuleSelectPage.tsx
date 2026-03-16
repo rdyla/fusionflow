@@ -156,7 +156,7 @@ export default function ModuleSelectPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 28, maxWidth: 1100, margin: "0 auto" }}>
 
           {/* Left column: wheel + detail panel */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: "0 0 340px", minWidth: 0 }}>
             <svg
               viewBox="0 0 600 540"
               width="100%"
@@ -346,7 +346,7 @@ export default function ModuleSelectPage() {
             borderLeft: "3px solid #00c8e0",
             borderRadius: 10,
             padding: "24px 20px",
-            alignSelf: "stretch",
+            alignSelf: "center",
           }}>
             <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.15em", color: "#00c8e0", marginBottom: 14 }}>
               FusionFlow360
