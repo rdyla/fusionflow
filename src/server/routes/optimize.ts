@@ -51,12 +51,7 @@ app.get("/eligible", async (c) => {
     FROM projects p
     WHERE (p.archived = 0 OR p.archived IS NULL)
       AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
-      AND (
-        SELECT COUNT(*) FROM phases ph WHERE ph.project_id = p.id
-      ) > 0
-      AND (
-        SELECT COUNT(*) FROM phases ph WHERE ph.project_id = p.id AND ph.status != 'completed'
-      ) = 0
+      AND p.actual_go_live_date IS NOT NULL
     ORDER BY p.actual_go_live_date DESC
   `).all();
   return c.json(rows.results ?? []);
