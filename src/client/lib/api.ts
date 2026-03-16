@@ -181,6 +181,18 @@ export type ProjectContact = {
   added_at: string;
 };
 
+export type SolutionContact = {
+  id: string;
+  solution_id: string;
+  dynamics_contact_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  job_title: string | null;
+  contact_role: string | null;
+  added_at: string;
+};
+
 export type Phase = {
   id: string;
   project_id: string;
@@ -736,4 +748,26 @@ export const api = {
 
   createProjectFromSolution: (id: string) =>
     request<Project>(`/solutions/${id}/create-project`, { method: "POST" }),
+
+  // Solution Contacts
+  solutionContacts: (solutionId: string) =>
+    request<SolutionContact[]>(`/solutions/${solutionId}/contacts`),
+
+  addSolutionContact: (solutionId: string, contact: {
+    dynamics_contact_id?: string;
+    name: string;
+    email?: string | null;
+    phone?: string | null;
+    job_title?: string | null;
+    contact_role?: string | null;
+  }) =>
+    request<SolutionContact>(`/solutions/${solutionId}/contacts`, {
+      method: "POST",
+      body: JSON.stringify(contact),
+    }),
+
+  removeSolutionContact: (solutionId: string, contactId: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/contacts/${contactId}`, {
+      method: "DELETE",
+    }),
 };

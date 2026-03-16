@@ -205,6 +205,67 @@ app.delete("/:id", async (c) => {
   return c.json({ success: true });
 });
 
+// ── Solution Contacts ─────────────────────────────────────────────────────────
+
+app.get("/:id/contacts", async (c) => {
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+  const rows = await db
+    .prepare("SELECT * FROM solution_contacts WHERE solution_id = ? ORDER BY added_at ASC")
+    .bind(solutionId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+const contactSchema = z.object({
+  dynamics_contact_id: z.string().optional(),
+  name: z.string().min(1).max(200),
+  email: z.string().email().nullable().optional().or(z.literal("")),
+  phone: z.string().nullable().optional(),
+  job_title: z.string().nullable().optional(),
+  contact_role: z.string().nullable().optional(),
+});
+
+app.post("/:id/contacts", async (c) => {
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const existing = await db.prepare("SELECT id FROM solutions WHERE id = ? LIMIT 1").bind(solutionId).first();
+  if (!existing) throw new HTTPException(404, { message: "Solution not found" });
+
+  const parsed = contactSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid contact data" });
+
+  const { dynamics_contact_id, name, email, phone, job_title, contact_role } = parsed.data;
+  const id = crypto.randomUUID();
+
+  await db
+    .prepare(
+      `INSERT INTO solution_contacts (id, solution_id, dynamics_contact_id, name, email, phone, job_title, contact_role)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(id, solutionId, dynamics_contact_id ?? null, name, email || null, phone ?? null, job_title ?? null, contact_role ?? null)
+    .run();
+
+  const contact = await db.prepare("SELECT * FROM solution_contacts WHERE id = ? LIMIT 1").bind(id).first();
+  return c.json(contact, 201);
+});
+
+app.delete("/:id/contacts/:contactId", async (c) => {
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+  const contactId = c.req.param("contactId");
+
+  const contact = await db
+    .prepare("SELECT id FROM solution_contacts WHERE id = ? AND solution_id = ? LIMIT 1")
+    .bind(contactId, solutionId)
+    .first();
+  if (!contact) throw new HTTPException(404, { message: "Contact not found" });
+
+  await db.prepare("DELETE FROM solution_contacts WHERE id = ?").bind(contactId).run();
+  return c.json({ success: true });
+});
+
 // ── Handoff: Create Project ───────────────────────────────────────────────────
 
 app.post("/:id/create-project", async (c) => {
@@ -258,6 +319,23 @@ app.post("/:id/create-project", async (c) => {
     .prepare("UPDATE solutions SET linked_project_id = ?, status = 'won', updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .bind(projectId, solutionId)
     .run();
+
+  // Copy solution contacts to project contacts
+  const solContacts = await db
+    .prepare("SELECT * FROM solution_contacts WHERE solution_id = ?")
+    .bind(solutionId)
+    .all<{ id: string; dynamics_contact_id: string | null; name: string; email: string | null; phone: string | null; job_title: string | null; contact_role: string | null }>();
+
+  for (const sc of solContacts.results ?? []) {
+    const pcId = crypto.randomUUID();
+    await db
+      .prepare(
+        `INSERT INTO project_contacts (id, project_id, dynamics_contact_id, name, email, phone, job_title, contact_role)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .bind(pcId, projectId, sc.dynamics_contact_id, sc.name, sc.email, sc.phone, sc.job_title, sc.contact_role)
+      .run();
+  }
 
   const project = await db.prepare("SELECT * FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
   return c.json(project, 201);

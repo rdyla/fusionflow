@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type ProjectContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
 
@@ -449,8 +449,7 @@ export default function SolutionDetailPage() {
 
   // Contacts
   const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
-  const [projectContacts, setProjectContacts] = useState<ProjectContact[]>([]);
-  const [contactsLoading] = useState(false);
+  const [solutionContacts, setSolutionContacts] = useState<SolutionContact[]>([]);
   const [savingContact, setSavingContact] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactModalTab, setContactModalTab] = useState<"crm" | "manual">("crm");
@@ -496,13 +495,11 @@ export default function SolutionDetailPage() {
     setGapItems(ga.gaps);
     setRiskItems(ga.risks);
 
-    // Load CRM contacts and project contacts in parallel if we have the data
+    // Load CRM contacts and solution contacts in parallel
     if (s.dynamics_account_id) {
       api.getDynamicsContacts(s.dynamics_account_id).then(setCrmContacts).catch(() => {});
     }
-    if (s.linked_project_id) {
-      api.projectContacts(s.linked_project_id).then(setProjectContacts).catch(() => {});
-    }
+    api.solutionContacts(id).then(setSolutionContacts).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -731,7 +728,7 @@ export default function SolutionDetailPage() {
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
-              {canEdit && solution.linked_project_id && (
+              {canEdit && (
                 <button
                   className="ms-btn-secondary"
                   onClick={() => {
@@ -749,15 +746,11 @@ export default function SolutionDetailPage() {
               )}
             </div>
 
-            {!solution.linked_project_id ? (
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>
-                Create the implementation project on the Handoff tab to start tagging customer contacts.
-              </div>
-            ) : projectContacts.length === 0 ? (
+            {solutionContacts.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>No customer contacts added yet.</div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
-                {projectContacts.map((c) => (
+                {solutionContacts.map((c) => (
                   <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
                     <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#00c8e0" }}>
                       {c.name.charAt(0).toUpperCase()}
@@ -775,14 +768,14 @@ export default function SolutionDetailPage() {
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
                       </div>
                     </div>
-                    {canEdit && solution.linked_project_id && (
+                    {canEdit && (
                       <button
                         className="ms-btn-ghost"
                         style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
                         onClick={async () => {
-                          if (!solution.linked_project_id) return;
-                          await api.removeProjectContact(solution.linked_project_id, c.id);
-                          setProjectContacts((prev) => prev.filter((x) => x.id !== c.id));
+                          if (!id) return;
+                          await api.removeSolutionContact(id, c.id);
+                          setSolutionContacts((prev) => prev.filter((x) => x.id !== c.id));
                         }}
                       >
                         Remove
@@ -797,7 +790,7 @@ export default function SolutionDetailPage() {
       )}
 
       {/* ── Contact Modal ── */}
-      {showContactModal && solution.linked_project_id && (
+      {showContactModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowContactModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 580, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
@@ -833,7 +826,7 @@ export default function SolutionDetailPage() {
             <div style={{ padding: "16px 24px", overflowY: "auto", flex: 1 }}>
               {contactModalTab === "crm" && (
                 <div style={{ display: "grid", gap: 6 }}>
-                  {crmContacts.filter((c) => !projectContacts.some((p) => p.dynamics_contact_id === c.contactid)).map((c) => {
+                  {crmContacts.filter((c) => !solutionContacts.some((s) => s.dynamics_contact_id === c.contactid)).map((c) => {
                     const fullName = [c.firstname, c.lastname].filter(Boolean).join(" ");
                     return (
                       <div key={c.contactid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6 }}>
@@ -843,11 +836,11 @@ export default function SolutionDetailPage() {
                         </div>
                         <button className="ms-btn-secondary" style={{ fontSize: 12, flexShrink: 0 }} disabled={savingContact || !contactRole} title={!contactRole ? "Select a role first" : ""}
                           onClick={async () => {
-                            if (!solution.linked_project_id) return;
+                            if (!id) return;
                             setSavingContact(true);
                             try {
-                              const added = await api.addProjectContact(solution.linked_project_id, { dynamics_contact_id: c.contactid, name: fullName || "Unknown", email: c.emailaddress1, phone: c.telephone1, job_title: c.jobtitle, contact_role: contactRole || null });
-                              setProjectContacts((prev) => [...prev, added]);
+                              const added = await api.addSolutionContact(id, { dynamics_contact_id: c.contactid, name: fullName || "Unknown", email: c.emailaddress1, phone: c.telephone1, job_title: c.jobtitle, contact_role: contactRole || null });
+                              setSolutionContacts((prev) => [...prev, added]);
                               setContactRole("");
                             } catch { showToast("Failed to add contact", "error"); }
                             finally { setSavingContact(false); }
@@ -875,11 +868,11 @@ export default function SolutionDetailPage() {
               <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
                 <button className="ms-btn-primary" disabled={savingContact || !manualContact.name.trim() || !contactRole}
                   onClick={async () => {
-                    if (!solution.linked_project_id) return;
+                    if (!id) return;
                     setSavingContact(true);
                     try {
-                      const added = await api.addProjectContact(solution.linked_project_id, { name: manualContact.name.trim(), email: manualContact.email || null, phone: manualContact.phone || null, job_title: manualContact.job_title || null, contact_role: contactRole || null });
-                      setProjectContacts((prev) => [...prev, added]);
+                      const added = await api.addSolutionContact(id, { name: manualContact.name.trim(), email: manualContact.email || null, phone: manualContact.phone || null, job_title: manualContact.job_title || null, contact_role: contactRole || null });
+                      setSolutionContacts((prev) => [...prev, added]);
                       setManualContact({ name: "", email: "", phone: "", job_title: "" });
                       setContactRole("");
                     } catch { showToast("Failed to add contact", "error"); }
