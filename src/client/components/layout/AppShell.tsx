@@ -48,7 +48,7 @@ export default function AppShell() {
 
       {/* Sidebar */}
       <aside style={{
-        width: 220,
+        width: 240,
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
@@ -56,9 +56,9 @@ export default function AppShell() {
         borderRight: "1px solid rgba(255,255,255,0.07)",
       }}>
         {/* Logo */}
-        <div style={{ height: 56, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
-          <Link to="/" style={{ textDecoration: "none", display: "block", overflow: "hidden", height: 44, width: 196 }}>
-            <img src={logoUrl} alt="FusionFlow360" style={{ width: 196, height: "auto", display: "block" }} />
+        <div style={{ height: 62, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <Link to="/" style={{ textDecoration: "none", display: "block", overflow: "hidden", height: 53, width: 200 }}>
+            <img src={logoUrl} alt="FusionFlow360" style={{ width: 200, height: "auto", display: "block" }} />
           </Link>
         </div>
 

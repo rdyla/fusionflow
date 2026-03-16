@@ -142,15 +142,15 @@ export default function ModuleSelectPage() {
       {/* Hero */}
       <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "72px 48px 48px" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
-          <div style={{ overflow: "hidden", height: 90, width: 440 }}>
-            <img src={logoUrl} alt="FusionFlow360" style={{ width: 440, height: "auto", display: "block" }} />
+          <div style={{ overflow: "hidden", height: 108, width: 528 }}>
+            <img src={logoUrl} alt="FusionFlow360" style={{ width: 528, height: "auto", display: "block" }} />
           </div>
         </div>
-        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(36px, 5vw, 58px)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 18 }}>
+        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(29px, 4vw, 46px)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 18 }}>
           Where Every Engagement<br />
           <span style={{ color: "#00c8e0" }}>Finds Its Flow</span>
         </h1>
-        <p style={{ fontSize: 16, color: "rgba(240,246,255,0.5)", maxWidth: 500, margin: "0 auto 16px", lineHeight: 1.65, fontWeight: 300 }}>
+        <p style={{ fontSize: 13, color: "rgba(240,246,255,0.5)", maxWidth: 500, margin: "0 auto 16px", lineHeight: 1.65, fontWeight: 300 }}>
           From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
         </p>
         <div style={{ width: 48, height: 2, background: "linear-gradient(90deg, transparent, #00c8e0, transparent)", margin: "32px auto 0", borderRadius: 2 }} />
