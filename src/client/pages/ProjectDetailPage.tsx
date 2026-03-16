@@ -113,8 +113,6 @@ export default function ProjectDetailPage() {
   const [savingNote, setSavingNote] = useState(false);
   const [noteMessage, setNoteMessage] = useState<string | null>(null);
 
-  const [addingTaskPhaseId, setAddingTaskPhaseId] = useState<string | null>(null);
-  const [newTaskFields, setNewTaskFields] = useState({ title: "", due_date: "", priority: "", assignee_user_id: "" });
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [savingTask, setSavingTask] = useState(false);
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
