@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
-import { taskAssigned, taskBlocked } from "../lib/emailTemplates";
+import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -179,8 +179,20 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     }
   }
 
-  // Notify PM if task just became blocked
+  // Notify PM of general task update (skip if PM made the change, skip if it's a blocked transition — handled separately below)
   const justBlocked = updates.status === "blocked" && existing.status !== "blocked";
+  if (!justBlocked && project?.pm_user_id && project.pm_user_id !== auth.user.id && updated) {
+    const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
+    if (pm) {
+      c.executionCtx.waitUntil(sendEmail(c.env, {
+        to: pm.email,
+        subject: `Task updated on ${project.name}: ${updated.title}`,
+        html: pmTaskUpdate({ pmName: pm.name ?? pm.email, taskTitle: updated.title, projectName: project.name, updatedByName: auth.user.name ?? auth.user.email, status: updated.status, appUrl, projectId }),
+      }));
+    }
+  }
+
+  // Notify PM if task just became blocked
   if (justBlocked && project?.pm_user_id) {
     const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
     let assigneeName: string | null = null;

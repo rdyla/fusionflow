@@ -76,6 +76,13 @@ export default function AppShell() {
         {/* Nav */}
         <nav style={{ flex: 1, paddingTop: 10, overflowY: "auto" }}>
           <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "8px 20px 4px" }}>
+            Platform
+          </div>
+          <SideLink to="/journey">Customer Journey</SideLink>
+
+          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
             Solutioning
           </div>
           <SideLink to="/solutions">Solutions</SideLink>

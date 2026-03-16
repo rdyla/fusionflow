@@ -3,6 +3,8 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject } from "../services/accessService";
+import { sendEmail } from "../services/emailService";
+import { pmNoteAdded } from "../lib/emailTemplates";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -79,6 +81,20 @@ app.post("/:id/notes", async (c) => {
     )
     .bind(noteId)
     .first();
+
+  // Notify PM of new note (skip if PM wrote it)
+  const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
+  if (project?.pm_user_id && project.pm_user_id !== auth.user.id) {
+    const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
+    if (pm) {
+      const appUrl = c.env.APP_URL ?? "";
+      c.executionCtx.waitUntil(sendEmail(c.env, {
+        to: pm.email,
+        subject: `New note on ${project.name}`,
+        html: pmNoteAdded({ pmName: pm.name ?? pm.email, authorName: auth.user.name ?? auth.user.email, projectName: project.name, noteBody: body, visibility, appUrl, projectId }),
+      }));
+    }
+  }
 
   return c.json(created, 201);
 });

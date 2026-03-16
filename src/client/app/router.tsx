@@ -10,6 +10,7 @@ import AdminProjectsPage from "../pages/AdminProjectsPage";
 import AdminSolutionsPage from "../pages/AdminSolutionsPage";
 import SolutionsPage from "../pages/SolutionsPage";
 import SolutionDetailPage from "../pages/SolutionDetailPage";
+import CustomerJourneyPage from "../pages/CustomerJourneyPage";
 
 export default function Router() {
   return (
@@ -29,6 +30,7 @@ export default function Router() {
           <Route path="/admin/access" element={<AdminAccessPage />} />
           <Route path="/admin/projects" element={<AdminProjectsPage />} />
           <Route path="/admin/solutions" element={<AdminSolutionsPage />} />
+          <Route path="/journey" element={<CustomerJourneyPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
