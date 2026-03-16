@@ -30,6 +30,26 @@ const PHASE_COLORS = [
   "#00b7c3", "#e74856", "#ca5010", "#038387",
 ];
 
+const VENDOR_COLORS: Record<string, string> = {
+  Zoom:        "#0078d4",
+  RingCentral: "#ff8c00",
+  Unknown:     "#94a3b8",
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  ucaas:   "UCaaS",
+  ccaas:   "CCaaS",
+  zoom_ra: "Zoom Rev. Accel.",
+  zoom_va: "Zoom Virtual Agent",
+  rc_ace:  "RC ACE",
+  rc_air:  "RC AIR",
+  Unknown: "Unknown",
+};
+const TYPE_COLORS = [
+  "#0891b2", "#8764b8", "#059669", "#ff8c00",
+  "#e74856", "#038387", "#94a3b8",
+];
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function healthLabel(h: string | null) {
@@ -55,12 +75,27 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-function DonutChart({ data }: { data: { phase_name: string; count: number }[] }) {
+function DonutChart({
+  data,
+  colorMap,
+  fallbackColors,
+  centerLabel = "projects",
+}: {
+  data: { label: string; count: number }[];
+  colorMap?: Record<string, string>;
+  fallbackColors?: string[];
+  centerLabel?: string;
+}) {
+  const palette = fallbackColors ?? PHASE_COLORS;
   const total = data.reduce((s, d) => s + d.count, 0);
-  if (total === 0) return null;
+  if (total === 0) return <div style={{ fontSize: 13, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>No data yet.</div>;
 
-  const cx = 80, cy = 80, R = 68, r = 44;
+  const cx = 72, cy = 72, R = 62, r = 40;
   let cumAngle = -Math.PI / 2;
+
+  function colorFor(label: string, idx: number) {
+    return colorMap?.[label] ?? palette[idx % palette.length];
+  }
 
   function slice(count: number, color: string, idx: number) {
     const angle = (count / total) * 2 * Math.PI;
@@ -77,25 +112,25 @@ function DonutChart({ data }: { data: { phase_name: string; count: number }[] })
         key={idx}
         d={`M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${r} ${r} 0 ${large} 0 ${ix2} ${iy2} Z`}
         fill={color}
-        stroke="#fff"
+        stroke="#0d1b2e"
         strokeWidth={2}
       />
     );
   }
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 28 }}>
-      <svg width={160} height={160} viewBox="0 0 160 160" style={{ flexShrink: 0 }}>
-        {data.map((d, i) => slice(d.count, PHASE_COLORS[i % PHASE_COLORS.length], i))}
-        <text x={cx} y={cy - 6} textAnchor="middle" fill="#f0f6ff" fontSize={22} fontWeight={700}>{total}</text>
-        <text x={cx} y={cy + 12} textAnchor="middle" fill="rgba(240,246,255,0.5)" fontSize={10}>projects</text>
+    <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+      <svg width={144} height={144} viewBox="0 0 144 144" style={{ flexShrink: 0 }}>
+        {data.map((d, i) => slice(d.count, colorFor(d.label, i), i))}
+        <text x={cx} y={cy - 5} textAnchor="middle" fill="#f0f6ff" fontSize={20} fontWeight={700}>{total}</text>
+        <text x={cx} y={cy + 11} textAnchor="middle" fill="rgba(240,246,255,0.45)" fontSize={9}>{centerLabel}</text>
       </svg>
-      <div style={{ flex: 1 }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
         {data.map((d, i) => (
-          <div key={d.phase_name} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7 }}>
-            <span style={{ width: 10, height: 10, borderRadius: 2, flexShrink: 0, background: PHASE_COLORS[i % PHASE_COLORS.length] }} />
-            <span style={{ fontSize: 13, color: "rgba(240,246,255,0.85)", flex: 1 }}>{d.phase_name}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#f0f6ff" }}>{d.count}</span>
+          <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: colorFor(d.label, i) }} />
+            <span style={{ fontSize: 12, color: "rgba(240,246,255,0.8)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#f0f6ff", flexShrink: 0 }}>{d.count}</span>
           </div>
         ))}
       </div>
@@ -125,7 +160,19 @@ export default function DashboardPage() {
     return <div style={{ padding: 40, color: "rgba(240,246,255,0.5)" }}>Loading...</div>;
   }
 
-  const { user, summary, projects, openTasks, openRisks, phaseDistribution } = data;
+  const { user, summary, projects, openTasks, openRisks, phaseDistribution, vendorDistribution, typeDistribution } = data;
+
+  // Normalize vendor labels (DB stores "Zoom" / "RingCentral" from the VENDOR_LABELS map)
+  const vendorData = vendorDistribution.map((d) => ({
+    label: d.label === "zoom" ? "Zoom" : d.label === "ringcentral" ? "RingCentral" : d.label,
+    count: d.count,
+  }));
+
+  // Map raw solution_type keys to display labels
+  const typeData = typeDistribution.map((d) => ({
+    label: TYPE_LABELS[d.label] ?? d.label,
+    count: d.count,
+  }));
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
@@ -143,13 +190,33 @@ export default function DashboardPage() {
         <MetricCard title="Open Risks" value={summary.openRisks} accent={summary.openRisks > 0 ? "#d13438" : undefined} />
       </div>
 
-      {/* Phase distribution */}
-      {phaseDistribution.length > 0 && (
-        <div className="ms-section-card" style={{ marginBottom: 20 }}>
-          <div className="ms-section-title">Projects by Stage</div>
-          <DonutChart data={phaseDistribution} />
+      {/* Distribution charts */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+        <div className="ms-section-card">
+          <div className="ms-section-title">By Stage</div>
+          <DonutChart
+            data={phaseDistribution.map((d) => ({ label: d.phase_name, count: d.count }))}
+            fallbackColors={PHASE_COLORS}
+            centerLabel="projects"
+          />
         </div>
-      )}
+        <div className="ms-section-card">
+          <div className="ms-section-title">By Vendor</div>
+          <DonutChart
+            data={vendorData}
+            colorMap={VENDOR_COLORS}
+            centerLabel="projects"
+          />
+        </div>
+        <div className="ms-section-card">
+          <div className="ms-section-title">By Solution Type</div>
+          <DonutChart
+            data={typeData}
+            fallbackColors={TYPE_COLORS}
+            centerLabel="projects"
+          />
+        </div>
+      </div>
 
       {/* Projects table */}
       <div className="ms-card" style={{ marginBottom: 20, overflow: "hidden" }}>

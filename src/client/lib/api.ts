@@ -109,6 +109,8 @@ export type DashboardSummaryResponse = {
   openTasks: DashboardTask[];
   openRisks: DashboardRisk[];
   phaseDistribution: { phase_name: string; count: number }[];
+  vendorDistribution: { label: string; count: number }[];
+  typeDistribution: { label: string; count: number }[];
 };
 
 export type Project = {

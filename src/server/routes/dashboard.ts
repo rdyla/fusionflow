@@ -130,6 +130,28 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings)
     .all<{ phase_name: string; count: number }>();
 
+  const vendorDistribution = await db
+    .prepare(
+      `SELECT COALESCE(vendor, 'Unknown') AS label, COUNT(*) AS count
+       FROM projects
+       WHERE id IN (${projectSubquery})
+       GROUP BY vendor
+       ORDER BY count DESC`
+    )
+    .bind(...filterBindings)
+    .all<{ label: string; count: number }>();
+
+  const typeDistribution = await db
+    .prepare(
+      `SELECT COALESCE(solution_type, 'Unknown') AS label, COUNT(*) AS count
+       FROM projects
+       WHERE id IN (${projectSubquery})
+       GROUP BY solution_type
+       ORDER BY count DESC`
+    )
+    .bind(...filterBindings)
+    .all<{ label: string; count: number }>();
+
   return c.json({
     user: auth.user,
     summary: {
@@ -142,6 +164,8 @@ app.get("/summary", async (c) => {
     openTasks: openTasks.results ?? [],
     openRisks: openRisks.results ?? [],
     phaseDistribution: phaseDistribution.results ?? [],
+    vendorDistribution: vendorDistribution.results ?? [],
+    typeDistribution: typeDistribution.results ?? [],
   });
 });
 
