@@ -185,7 +185,19 @@ function settled<T>(result: PromiseSettledResult<T>): T | null {
 
 // ── Utilization snapshot ──────────────────────────────────────────────────────
 
-type ZoomReportUsersResponse = { total_records: number };
+type ZoomActiveUser = {
+  id?: string;
+  display_name?: string;
+  email?: string;
+  meetings?: number;
+  participants?: number;
+  meeting_minutes?: number;
+};
+
+type ZoomReportUsersResponse = {
+  total_records: number;
+  users?: ZoomActiveUser[];
+};
 
 type ZoomDailyReportResponse = {
   dates?: Array<{ date: string; new_meeting: number; participants: number; meeting_minutes: number }>;
@@ -194,7 +206,7 @@ type ZoomDailyReportResponse = {
 type ZoomPhoneCallLogsResponse = {
   total_records?: number;
   // owner = the internal Zoom user on this call, regardless of direction
-  call_logs?: Array<{ duration?: number; owner?: { id?: string } }>;
+  call_logs?: Array<{ duration?: number; owner?: { id?: string; name?: string } }>;
 };
 
 export type ZoomUtilizationData = {
@@ -232,7 +244,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   const callDefs: CallDef[] = [
     { name: "plans",       path: "/accounts/me/plans" },
     { name: "users",       path: "/users?page_size=1" },
-    { name: "active30",    path: `/report/users?type=active&from=${from30}&to=${to}&page_size=1` },
+    { name: "active30",    path: `/report/users?type=active&from=${from30}&to=${to}&page_size=300` },
     { name: "active90",    path: `/report/users?type=active&from=${from90}&to=${to}&page_size=1` },
     { name: "daily_curr",  path: `/report/daily?year=${currYear}&month=${currMonth}` },
     ...(needsPrevMonth ? [{ name: "daily_prev", path: `/report/daily?year=${prevYear}&month=${prevMonth}` }] : []),
@@ -265,9 +277,20 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
 
   const licenses_assigned = getResult<{ total_records: number }>("users")?.total_records ?? null;
 
-  // Active users
-  const active_users_30d = getResult<ZoomReportUsersResponse>("active30")?.total_records ?? null;
+  // Active users — active30 fetches full user list (page_size=300) for top-user ranking
+  const active30Data = getResult<ZoomReportUsersResponse>("active30");
+  const active_users_30d = active30Data?.total_records ?? null;
   const active_users_90d = getResult<ZoomReportUsersResponse>("active90")?.total_records ?? null;
+
+  const top_meeting_users = [...(active30Data?.users ?? [])]
+    .sort((a, b) => (b.meetings ?? 0) - (a.meetings ?? 0))
+    .slice(0, 10)
+    .map((u) => ({
+      name: u.display_name ?? u.email ?? u.id ?? "Unknown",
+      email: u.email ?? null,
+      meetings: u.meetings ?? 0,
+      meeting_minutes: u.meeting_minutes ?? 0,
+    }));
 
   // Rolling 30-day meetings — merge prev + curr month, filter to window
   // Use `participants` (total participant-sessions) rather than `new_meeting`
@@ -290,6 +313,25 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     ? Math.round(logs.reduce((sum, l) => sum + (l.duration ?? 0), 0) / 60)
     : null;
 
+  // Top phone callers — aggregate call_logs by owner
+  const callerMap = new Map<string, { name: string; calls: number; minutes: number }>();
+  for (const log of logs ?? []) {
+    const id = log.owner?.id;
+    if (!id) continue;
+    const existing = callerMap.get(id);
+    const mins = (log.duration ?? 0) / 60;
+    if (existing) {
+      existing.calls += 1;
+      existing.minutes += mins;
+    } else {
+      callerMap.set(id, { name: log.owner?.name ?? id, calls: 1, minutes: mins });
+    }
+  }
+  const top_phone_callers = [...callerMap.values()]
+    .sort((a, b) => b.calls - a.calls)
+    .slice(0, 10)
+    .map((c) => ({ name: c.name, calls: c.calls, minutes: Math.round(c.minutes) }));
+
   return {
     licenses_purchased,
     licenses_assigned,
@@ -300,7 +342,9 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
       plans,
       api_calls,
       meeting_minutes_30d,
+      top_meeting_users,
       phone: { users_total: phoneUsersTotal, total_calls_30d: phoneTotalCalls30d, active_users_30d: phoneActiveUsers30d, call_minutes_30d: phoneCallMinutes30d },
+      top_phone_callers,
     },
   };
 }

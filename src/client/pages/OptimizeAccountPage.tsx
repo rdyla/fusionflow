@@ -709,6 +709,114 @@ export default function OptimizeAccountPage() {
             );
           })()}
 
+          {/* Adoption dashboard — top users + key rates */}
+          {utilization.length > 0 && (() => {
+            type MeetingUser = { name: string; email: string | null; meetings: number; meeting_minutes: number };
+            type PhoneCaller  = { name: string; calls: number; minutes: number };
+            type RawData = {
+              top_meeting_users?: MeetingUser[];
+              top_phone_callers?: PhoneCaller[];
+              meeting_minutes_30d?: number | null;
+            };
+            const latest = utilization[0];
+            let raw: RawData = {};
+            try { raw = JSON.parse(latest.raw_data ?? "{}") as RawData; } catch { /* ignore */ }
+            const meetingUsers = raw.top_meeting_users ?? [];
+            const phoneCallers = raw.top_phone_callers ?? [];
+            if (meetingUsers.length === 0 && phoneCallers.length === 0) return null;
+
+            // Derived adoption rates
+            const adoptionRate = (latest.active_users_30d != null && latest.licenses_assigned != null && latest.licenses_assigned > 0)
+              ? Math.round((latest.active_users_30d / latest.licenses_assigned) * 100)
+              : null;
+            const inactiveUsers = (latest.licenses_assigned != null && latest.active_users_30d != null)
+              ? latest.licenses_assigned - latest.active_users_30d
+              : null;
+            const avgMtgMins = (latest.active_users_30d != null && latest.active_users_30d > 0 && raw.meeting_minutes_30d != null)
+              ? Math.round(raw.meeting_minutes_30d / latest.active_users_30d)
+              : null;
+
+            return (
+              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+                {/* Adoption rate summary */}
+                <div className="ms-card" style={{ padding: "16px 20px", borderLeft: "3px solid #8764b8" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 12 }}>
+                    Adoption Rates — last sync ({latest.snapshot_date})
+                  </div>
+                  <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+                    {[
+                      { label: "Adoption Rate",           value: adoptionRate != null ? `${adoptionRate}%` : null, color: adoptionRate != null ? (adoptionRate >= 80 ? "#22c55e" : adoptionRate >= 60 ? "#f59e0b" : "#d13438") : undefined },
+                      { label: "Inactive Licensed Users",  value: inactiveUsers, color: inactiveUsers != null && inactiveUsers > 0 ? "#f59e0b" : "#22c55e" },
+                      { label: "Avg Mtg Min / Active User", value: avgMtgMins != null ? `${avgMtgMins} min` : null, color: undefined },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? (color ?? "rgba(240,246,255,0.9)") : "rgba(240,246,255,0.25)" }}>
+                          {value ?? "—"}
+                        </div>
+                        <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Top meeting users + top phone callers side by side */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                  {meetingUsers.length > 0 && (
+                    <div className="ms-card" style={{ padding: "16px 20px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
+                        Top Meeting Users (30d)
+                      </div>
+                      <table className="ms-table" style={{ fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: "55%" }}>User</th>
+                            <th>Meetings</th>
+                            <th>Minutes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {meetingUsers.map((u, i) => (
+                            <tr key={i}>
+                              <td style={{ color: "rgba(240,246,255,0.8)", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={u.email ?? u.name}>{u.name}</td>
+                              <td style={{ color: "#60a5fa" }}>{u.meetings.toLocaleString()}</td>
+                              <td style={{ color: "rgba(240,246,255,0.5)" }}>{u.meeting_minutes.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {phoneCallers.length > 0 && (
+                    <div className="ms-card" style={{ padding: "16px 20px" }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
+                        Top Phone Callers (30d)
+                      </div>
+                      <table className="ms-table" style={{ fontSize: 12 }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: "55%" }}>User</th>
+                            <th>Calls</th>
+                            <th>Minutes</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {phoneCallers.map((c, i) => (
+                            <tr key={i}>
+                              <td style={{ color: "rgba(240,246,255,0.8)", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.name}>{c.name}</td>
+                              <td style={{ color: "#60a5fa" }}>{c.calls.toLocaleString()}</td>
+                              <td style={{ color: "rgba(240,246,255,0.5)" }}>{c.minutes.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {/* API call diagnostics from most recent snapshot */}
           {utilization.length > 0 && (() => {
             const latest = utilization[0];
