@@ -21,7 +21,7 @@ app.get("/summary", async (c) => {
     projectFilter = `WHERE id IN (SELECT project_id FROM project_access WHERE user_id = ?)`;
     filterBindings = [auth.user.id];
   }
-  // pf_sa and admin: no filter — portfolio-wide visibility
+  // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
 
   const projectSubquery = projectFilter
     ? `SELECT id FROM projects ${projectFilter}`

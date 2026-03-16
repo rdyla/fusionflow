@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type User, IMPERSONATE_KEY } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
-const ROLES = ["admin", "pm", "pf_ae", "pf_sa", "partner_ae"] as const;
+const ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "partner_ae"] as const;
 type Role = (typeof ROLES)[number];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -11,6 +11,7 @@ const ROLE_LABELS: Record<Role, string> = {
   pm: "Project Manager",
   pf_ae: "PF Account Executive",
   pf_sa: "Solution Architect",
+  pf_csm: "Customer Success Manager",
   partner_ae: "Partner AE",
 };
 
@@ -19,6 +20,7 @@ const ROLE_COLOR: Record<Role, string> = {
   pm: "#0891b2",
   pf_ae: "#8764b8",
   pf_sa: "#0b9aad",
+  pf_csm: "#7c3aed",
   partner_ae: "#107c10",
 };
 
