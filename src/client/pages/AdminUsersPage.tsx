@@ -44,7 +44,7 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState<Partial<User & { role: Role }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openMenu, setOpenMenu] = useState<{ id: string; top: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -52,12 +52,18 @@ export default function AdminUsersPage() {
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpenMenuId(null);
+        setOpenMenu(null);
       }
     }
-    if (openMenuId) document.addEventListener("mousedown", handleClickOutside);
+    if (openMenu) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [openMenuId]);
+  }, [openMenu]);
+
+  function toggleMenu(e: React.MouseEvent<HTMLButtonElement>, userId: string) {
+    if (openMenu?.id === userId) { setOpenMenu(null); return; }
+    const rect = e.currentTarget.getBoundingClientRect();
+    setOpenMenu({ id: userId, top: rect.bottom + 4, right: window.innerWidth - rect.right });
+  }
 
   useEffect(() => { loadUsers(); }, []);
 
@@ -201,40 +207,38 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td>
-                    <div style={{ position: "relative", display: "inline-block" }} ref={openMenuId === user.id ? menuRef : null}>
-                      <button
-                        onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
-                        style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "rgba(240,246,255,0.5)", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(240,246,255,0.9)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(240,246,255,0.5)"; }}
-                      >
-                        ⋮
-                      </button>
-                      {openMenuId === user.id && (
-                        <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.45)" }}>
-                          <MenuItem onClick={() => { openEdit(user); setOpenMenuId(null); }}>Edit</MenuItem>
-                          <MenuItem
-                            onClick={() => { toggleActive(user); setOpenMenuId(null); }}
-                            color={user.is_active ? "#d13438" : "#107c10"}
-                          >
-                            {user.is_active ? "Deactivate" : "Activate"}
+                    <button
+                      onClick={(e) => toggleMenu(e, user.id)}
+                      style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "rgba(240,246,255,0.5)", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(240,246,255,0.9)"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(240,246,255,0.5)"; }}
+                    >
+                      ⋮
+                    </button>
+                    {openMenu?.id === user.id && (
+                      <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.45)" }}>
+                        <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
+                        <MenuItem
+                          onClick={() => { toggleActive(user); setOpenMenu(null); }}
+                          color={user.is_active ? "#d13438" : "#107c10"}
+                        >
+                          {user.is_active ? "Deactivate" : "Activate"}
+                        </MenuItem>
+                        {user.role !== "admin" && user.is_active && (
+                          <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
+                            View As
                           </MenuItem>
-                          {user.role !== "admin" && user.is_active && (
-                            <MenuItem onClick={() => { handleViewAs(user); setOpenMenuId(null); }} color="#ff8c00">
-                              View As
+                        )}
+                        {user.role !== "admin" && (
+                          <>
+                            <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />
+                            <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
+                              Delete
                             </MenuItem>
-                          )}
-                          {user.role !== "admin" && (
-                            <>
-                              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />
-                              <MenuItem onClick={() => { setDeletingUser(user); setOpenMenuId(null); }} color="#d13438">
-                                Delete
-                              </MenuItem>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))
