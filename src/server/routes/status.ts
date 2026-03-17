@@ -190,8 +190,8 @@ async function fetchRCStatus(): Promise<VendorStatus> {
 
 // ── KV caching wrapper ────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS = 90_000;
-const KV_TTL_S = 120;
+const CACHE_TTL_MS = 300_000;
+const KV_TTL_S = 360;
 
 async function getCached(
   kv: KVNamespace,

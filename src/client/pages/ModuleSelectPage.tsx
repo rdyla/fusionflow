@@ -126,7 +126,7 @@ export default function ModuleSelectPage() {
       api.systemStatus().then(setSysStatus).catch(() => {});
     }
     fetchStatus();
-    const id = setInterval(fetchStatus, 90_000);
+    const id = setInterval(fetchStatus, 300_000);
     return () => clearInterval(id);
   }, []);
 
