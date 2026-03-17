@@ -153,20 +153,20 @@ export default function AppShell() {
       </aside>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f3f1f1", position: "relative" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#e8e6e4", position: "relative" }}>
 
         {/* Top bar */}
         <header style={{
           position: "relative",
           zIndex: 10,
           height: 56,
-          background: "#ffffff",
+          background: "#f3f1f1",
           display: "flex",
           alignItems: "center",
           paddingLeft: 28,
           paddingRight: 20,
           flexShrink: 0,
-          borderBottom: "1px solid #e2e8f0",
+          borderBottom: "1px solid #ccc9c7",
           justifyContent: "space-between",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -204,7 +204,7 @@ export default function AppShell() {
         )}
 
         {/* Content */}
-        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px", background: "#f3f1f1" }}>
+        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px", background: "#e8e6e4" }}>
           <Outlet />
         </main>
       </div>

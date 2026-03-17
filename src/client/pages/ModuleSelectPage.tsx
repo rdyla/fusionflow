@@ -151,10 +151,10 @@ export default function ModuleSelectPage() {
   const abbr = user ? initials(user.name, user.email) : "…";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f3f1f1", color: "#1e293b", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#e8e6e4", color: "#1e293b", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
 
       {/* Header */}
-      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(0,0,0,0.06)", backdropFilter: "blur(12px)", background: "#ffffff" }}>
+      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid #ccc9c7", backdropFilter: "blur(12px)", background: "#f3f1f1" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <SystemStatusBadge status={sysStatus} />
           <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #63c1ea, #17c662)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em" }}>
@@ -197,7 +197,7 @@ export default function ModuleSelectPage() {
                 onMouseLeave={() => setHovered(null)}
                 style={{
                   position: "relative",
-                  background: "#ffffff",
+                  background: "#f3f1f1",
                   border: `1px solid ${isHovered ? mod.accent : "rgba(0,0,0,0.07)"}`,
                   borderRadius: 20,
                   padding: "36px 28px 32px",

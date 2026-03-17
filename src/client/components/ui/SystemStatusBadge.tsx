@@ -120,7 +120,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
         <div style={{
           position: "absolute", top: "calc(100% + 8px)", right: 0,
           width: 280, zIndex: 200,
-          background: "#ffffff",
+          background: "#f3f1f1",
           border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: 8,
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
