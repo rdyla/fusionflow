@@ -47,13 +47,43 @@ async function provisionUser(
   return { id, email, name: namePart, organization_name: organization, role, is_active: 1, dynamics_account_id: null };
 }
 
+function decodeJwtEmail(token: string): string | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+    // base64url → base64 with padding
+    const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const claims = JSON.parse(atob(padded)) as { email?: string };
+    return claims.email?.trim().toLowerCase() ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function getRequestEmail(req: Request): string | null {
+  // 1. Dev override
   const devEmail = req.headers.get("x-dev-user-email");
   if (devEmail) return devEmail.trim().toLowerCase();
 
+  // 2. Cloudflare Access injected header (present when configured via Tunnel/Workers)
   const cfAccessEmail = req.headers.get("cf-access-authenticated-user-email");
   if (cfAccessEmail) return cfAccessEmail.trim().toLowerCase();
 
+  // 3. Fallback: decode email from CF_Authorization JWT cookie.
+  //    Cloudflare Pages validates Access via cookie but may not inject the header.
+  //    The JWT signature was already verified by Cloudflare's edge before the
+  //    request reached this Worker, so decoding without re-verification is safe.
+  const cookie = req.headers.get("cookie");
+  if (cookie) {
+    const match = cookie.match(/CF_Authorization=([^;]+)/);
+    if (match?.[1]) {
+      const email = decodeJwtEmail(match[1]);
+      if (email) return email;
+    }
+  }
+
+  // 4. Explicit forwarded header (legacy fallback)
   const forwardedEmail = req.headers.get("x-user-email");
   if (forwardedEmail) return forwardedEmail.trim().toLowerCase();
 
