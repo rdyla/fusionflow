@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type User, IMPERSONATE_KEY } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
@@ -44,8 +44,20 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState<Partial<User & { role: Role }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpenMenuId(null);
+      }
+    }
+    if (openMenuId) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openMenuId]);
 
   useEffect(() => { loadUsers(); }, []);
 
@@ -189,33 +201,39 @@ export default function AdminUsersPage() {
                     </span>
                   </td>
                   <td>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button className="ms-btn-ghost" onClick={() => openEdit(user)}>Edit</button>
+                    <div style={{ position: "relative", display: "inline-block" }} ref={openMenuId === user.id ? menuRef : null}>
                       <button
-                        className="ms-btn-ghost"
-                        onClick={() => toggleActive(user)}
-                        style={{ color: user.is_active ? "#d13438" : "#107c10", borderColor: user.is_active ? "rgba(209,52,56,0.35)" : "rgba(16,124,16,0.35)" }}
+                        onClick={() => setOpenMenuId(openMenuId === user.id ? null : user.id)}
+                        style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "rgba(240,246,255,0.5)", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(240,246,255,0.9)"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(240,246,255,0.5)"; }}
                       >
-                        {user.is_active ? "Deactivate" : "Activate"}
+                        ⋮
                       </button>
-                      {user.role !== "admin" && user.is_active ? (
-                        <button
-                          className="ms-btn-ghost"
-                          onClick={() => handleViewAs(user)}
-                          style={{ color: "#ff8c00", borderColor: "rgba(255,140,0,0.35)" }}
-                        >
-                          View As
-                        </button>
-                      ) : null}
-                      {user.role !== "admin" ? (
-                        <button
-                          className="ms-btn-ghost"
-                          onClick={() => setDeletingUser(user)}
-                          style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
-                        >
-                          Delete
-                        </button>
-                      ) : null}
+                      {openMenuId === user.id && (
+                        <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.45)" }}>
+                          <MenuItem onClick={() => { openEdit(user); setOpenMenuId(null); }}>Edit</MenuItem>
+                          <MenuItem
+                            onClick={() => { toggleActive(user); setOpenMenuId(null); }}
+                            color={user.is_active ? "#d13438" : "#107c10"}
+                          >
+                            {user.is_active ? "Deactivate" : "Activate"}
+                          </MenuItem>
+                          {user.role !== "admin" && user.is_active && (
+                            <MenuItem onClick={() => { handleViewAs(user); setOpenMenuId(null); }} color="#ff8c00">
+                              View As
+                            </MenuItem>
+                          )}
+                          {user.role !== "admin" && (
+                            <>
+                              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />
+                              <MenuItem onClick={() => { setDeletingUser(user); setOpenMenuId(null); }} color="#d13438">
+                                Delete
+                              </MenuItem>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -315,5 +333,22 @@ export default function AdminUsersPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function MenuItem({ onClick, color, children }: { onClick: () => void; color?: string; children: React.ReactNode }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: "block", width: "100%", textAlign: "left", background: hovered ? "rgba(255,255,255,0.06)" : "none",
+        border: "none", padding: "8px 14px", fontSize: 13, color: color ?? "rgba(240,246,255,0.8)", cursor: "pointer",
+      }}
+    >
+      {children}
+    </button>
   );
 }
