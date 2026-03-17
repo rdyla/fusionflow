@@ -232,6 +232,7 @@ export type SupportCase = {
   caseType: string | null;
   accountId: string | null;
   accountName: string | null;
+  ownerName: string | null;
   createdOn: string;
   modifiedOn: string;
 };
@@ -259,6 +260,7 @@ type RawCase = {
   createdon: string;
   modifiedon: string;
   _customerid_value: string | null;
+  _ownerid_value: string | null;
   [key: string]: unknown;
 };
 
@@ -297,6 +299,7 @@ function mapCase(raw: RawCase): SupportCase {
     caseType: raw.casetypecode != null ? (CASETYPE_LABELS[raw.casetypecode] ?? null) : null,
     accountId: raw._customerid_value,
     accountName: (raw["_customerid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
+    ownerName: (raw["_ownerid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
     createdOn: raw.createdon,
     modifiedOn: raw.modifiedon,
   };
@@ -373,7 +376,7 @@ async function dynamicsPatch(env: Env, path: string, body: unknown): Promise<voi
 
 export async function getCases(env: Env, accountId?: string): Promise<SupportCase[]> {
   if (!isConfigured(env)) return [];
-  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value";
+  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value,_ownerid_value";
   const filter = accountId ? `&$filter=_customerid_value eq ${accountId}` : "";
   const path = `/incidents?$select=${select}${filter}&$top=100&$orderby=modifiedon desc`;
   const data = await dynamicsGetAnnotated<{ value: RawCase[] }>(env, path);
@@ -382,7 +385,7 @@ export async function getCases(env: Env, accountId?: string): Promise<SupportCas
 
 export async function getCase(env: Env, caseId: string): Promise<SupportCase | null> {
   if (!isConfigured(env)) return null;
-  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value";
+  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value,_ownerid_value";
   try {
     const raw = await dynamicsGetAnnotated<RawCase>(env, `/incidents(${caseId})?$select=${select}`);
     return mapCase(raw);

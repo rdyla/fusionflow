@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { api, type CaseNote, type SupportCase } from "../lib/api";
+import { api, type CaseNote, type SupportCase, type User } from "../lib/api";
 
 const PRIORITY_COLORS: Record<number, string> = { 1: "#ef4444", 2: "#d97706", 3: "#6b7280" };
 const STATE_COLORS: Record<number, string> = { 0: "#00c8e0", 1: "#059669", 2: "#6b7280" };
@@ -46,6 +46,7 @@ export default function SupportCasePage() {
   const { caseId } = useParams<{ caseId: string }>();
   const navigate = useNavigate();
 
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [incident, setIncident] = useState<SupportCase | null>(null);
   const [notes, setNotes] = useState<CaseNote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,6 +62,10 @@ export default function SupportCasePage() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.me().then(r => setCurrentUser(r.user)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!caseId) return;
@@ -168,38 +173,41 @@ export default function SupportCasePage() {
             <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 700, margin: "0 0 8px", lineHeight: 1.25 }}>{incident.title}</h1>
             <div style={{ display: "flex", gap: 20, fontSize: 12, color: "rgba(240,246,255,0.45)", flexWrap: "wrap" }}>
               {incident.accountName && <span>Account: <span style={{ color: "rgba(240,246,255,0.7)" }}>{incident.accountName}</span></span>}
+              {incident.ownerName && <span>Owner: <span style={{ color: "rgba(240,246,255,0.7)" }}>{incident.ownerName}</span></span>}
               <span>Opened: <span style={{ color: "rgba(240,246,255,0.7)" }}>{fmt(incident.createdOn)}</span></span>
               <span>Updated: <span style={{ color: "rgba(240,246,255,0.7)" }}>{fmt(incident.modifiedOn)}</span></span>
             </div>
           </div>
 
-          {/* Status update */}
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-            <select
-              className="ms-input"
-              value={selectedStatus}
-              onChange={e => setSelectedStatus(e.target.value)}
-              style={{ width: 200 }}
-            >
-              <optgroup label="Active">
-                {ACTIVE_STATUSES.map(s => <option key={`${s.statecode}:${s.statuscode}`} value={`${s.statecode}:${s.statuscode}`}>{s.label}</option>)}
-              </optgroup>
-              <optgroup label="Resolved">
-                {RESOLVED_STATUSES.map(s => <option key={`${s.statecode}:${s.statuscode}`} value={`${s.statecode}:${s.statuscode}`}>{s.label}</option>)}
-              </optgroup>
-              <optgroup label="Cancelled">
-                {CANCELLED_STATUSES.map(s => <option key={`${s.statecode}:${s.statuscode}`} value={`${s.statecode}:${s.statuscode}`}>{s.label}</option>)}
-              </optgroup>
-            </select>
-            <button
-              className="ms-btn-primary"
-              onClick={handleStatusUpdate}
-              disabled={!statusChanged || updatingStatus}
-              style={{ opacity: statusChanged ? 1 : 0.4 }}
-            >
-              {updatingStatus ? "Saving…" : "Update"}
-            </button>
-          </div>
+          {/* Status update — internal staff only */}
+          {currentUser?.role !== "client" && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <select
+                className="ms-input"
+                value={selectedStatus}
+                onChange={e => setSelectedStatus(e.target.value)}
+                style={{ width: 200 }}
+              >
+                <optgroup label="Active">
+                  {ACTIVE_STATUSES.map(s => <option key={`${s.statecode}:${s.statuscode}`} value={`${s.statecode}:${s.statuscode}`}>{s.label}</option>)}
+                </optgroup>
+                <optgroup label="Resolved">
+                  {RESOLVED_STATUSES.map(s => <option key={`${s.statecode}:${s.statuscode}`} value={`${s.statecode}:${s.statuscode}`}>{s.label}</option>)}
+                </optgroup>
+                <optgroup label="Cancelled">
+                  {CANCELLED_STATUSES.map(s => <option key={`${s.statecode}:${s.statuscode}`} value={`${s.statecode}:${s.statuscode}`}>{s.label}</option>)}
+                </optgroup>
+              </select>
+              <button
+                className="ms-btn-primary"
+                onClick={handleStatusUpdate}
+                disabled={!statusChanged || updatingStatus}
+                style={{ opacity: statusChanged ? 1 : 0.4 }}
+              >
+                {updatingStatus ? "Saving…" : "Update"}
+              </button>
+            </div>
+          )}
         </div>
 
         {incident.description && (
@@ -234,6 +242,9 @@ export default function SupportCasePage() {
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.85)" }}>{note.subject ?? (note.isAttachment ? "Attachment" : "Note")}</span>
                       <span style={{ fontSize: 11, color: "rgba(240,246,255,0.3)", marginLeft: 10 }}>{fmt(note.createdOn)}</span>
+                      {note.createdBy && (
+                        <span style={{ fontSize: 11, color: "rgba(240,246,255,0.25)", marginLeft: 8 }}>· {note.createdBy}</span>
+                      )}
                     </div>
                   </div>
 

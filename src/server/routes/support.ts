@@ -130,17 +130,9 @@ app.post("/cases/:caseId/notes", async (c) => {
     throw new HTTPException(400, { message: "Note text is required" });
   }
 
-  // Attribute note to the current FusionFlow360 user
-  let authorLabel = "FusionFlow360";
-  try {
-    const userId = c.var.auth?.user?.id;
-    if (userId) {
-      const user = await c.env.DB.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1")
-        .bind(userId)
-        .first<{ name: string | null; email: string }>();
-      if (user) authorLabel = user.name ?? user.email;
-    }
-  } catch { /* non-fatal */ }
+  // Attribute note to the logged-in user — works for both DB users and CRM-derived clients
+  const authUser = c.var.auth?.user;
+  const authorLabel = authUser?.name ?? authUser?.email ?? "FusionFlow360";
 
   try {
     const note = await addCaseNote(c.env, caseId, {
@@ -163,17 +155,9 @@ app.post("/cases/:caseId/attachments", async (c) => {
 
   if (!file) throw new HTTPException(400, { message: "No file provided" });
 
-  // Attribute to current user
-  let authorLabel = "FusionFlow360";
-  try {
-    const userId = c.var.auth?.user?.id;
-    if (userId) {
-      const user = await c.env.DB.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1")
-        .bind(userId)
-        .first<{ name: string | null; email: string }>();
-      if (user) authorLabel = user.name ?? user.email;
-    }
-  } catch { /* non-fatal */ }
+  // Attribute to the logged-in user
+  const authUser = c.var.auth?.user;
+  const authorLabel = authUser?.name ?? authUser?.email ?? "FusionFlow360";
 
   // Encode file to base64
   const buffer = await file.arrayBuffer();

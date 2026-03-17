@@ -472,6 +472,7 @@ export type SupportCase = {
   caseType: string | null;
   accountId: string | null;
   accountName: string | null;
+  ownerName: string | null;
   createdOn: string;
   modifiedOn: string;
 };
