@@ -107,7 +107,7 @@ app.post("/cases/:caseId/notes", async (c) => {
   // Attribute note to the current FusionFlow360 user
   let authorLabel = "FusionFlow360";
   try {
-    const userId = c.var.userId;
+    const userId = c.var.auth?.user?.id;
     if (userId) {
       const user = await c.env.DB.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1")
         .bind(userId)
@@ -140,7 +140,7 @@ app.post("/cases/:caseId/attachments", async (c) => {
   // Attribute to current user
   let authorLabel = "FusionFlow360";
   try {
-    const userId = c.var.userId;
+    const userId = c.var.auth?.user?.id;
     if (userId) {
       const user = await c.env.DB.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1")
         .bind(userId)
