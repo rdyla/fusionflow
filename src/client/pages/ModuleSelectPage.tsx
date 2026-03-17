@@ -92,6 +92,22 @@ const MODULES: Module[] = [
       </svg>
     ),
   },
+  {
+    num: "05",
+    tag: "Support",
+    title: "Support",
+    subtitle: "Cases & Assistance",
+    desc: "Submit support cases, track open tickets, and stay informed on resolution status — powered by Dynamics CRM.",
+    features: ["Submit & track support cases", "Case status & history", "Priority & severity routing", "Dynamics CRM integration"],
+    accent: "#d97706",
+    glow: "rgba(217,119,6,0.25)",
+    route: "/support",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    ),
+  },
 ];
 
 export default function ModuleSelectPage() {
@@ -169,7 +185,7 @@ export default function ModuleSelectPage() {
         <p style={{ textAlign: "center", fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(240,246,255,0.4)", marginBottom: 36 }}>
           Choose your module
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 20, maxWidth: 1280, margin: "0 auto" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 20, maxWidth: 1440, margin: "0 auto" }}>
           {MODULES.map((mod, i) => {
             const isHovered = hovered === i;
             const isActive = mod.route !== null;

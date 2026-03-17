@@ -215,3 +215,265 @@ export async function getPacketFusionEngineers(env: Env): Promise<DynamicsUser[]
   const data = await dynamicsGet<{ value: DynamicsUser[] }>(env, path);
   return data.value ?? [];
 }
+
+// ── Support / Cases ──────────────────────────────────────────────────────────
+
+export type SupportCase = {
+  id: string;
+  ticketNumber: string | null;
+  title: string;
+  description: string | null;
+  statecode: number;   // 0=Active, 1=Resolved, 2=Cancelled
+  statuscode: number;
+  status: string;      // human-readable status
+  prioritycode: number; // 1=High, 2=Normal, 3=Low
+  priority: string;
+  casetypecode: number | null; // 1=Question, 2=Problem, 3=Request
+  caseType: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  createdOn: string;
+  modifiedOn: string;
+};
+
+export type CaseNote = {
+  id: string;
+  subject: string | null;
+  text: string | null;
+  isAttachment: boolean;
+  filename: string | null;
+  mimetype: string | null;
+  createdOn: string;
+  createdBy: string | null;
+};
+
+type RawCase = {
+  incidentid: string;
+  title: string;
+  description: string | null;
+  ticketnumber: string | null;
+  statecode: number;
+  statuscode: number;
+  prioritycode: number;
+  casetypecode: number | null;
+  createdon: string;
+  modifiedon: string;
+  _customerid_value: string | null;
+  [key: string]: unknown;
+};
+
+type RawAnnotation = {
+  annotationid: string;
+  subject: string | null;
+  notetext: string | null;
+  filename: string | null;
+  mimetype: string | null;
+  isdocument: boolean;
+  createdon: string;
+  _createdby_value: string | null;
+  [key: string]: unknown;
+};
+
+const STATUS_LABELS: Record<number, string> = {
+  1: "In Progress", 2: "On Hold", 3: "Waiting for Details", 4: "Researching",
+  5: "Problem Solved", 1000: "Information Provided", 2000: "Cancelled", 2001: "Merged",
+};
+const STATE_LABELS: Record<number, string> = { 0: "Active", 1: "Resolved", 2: "Cancelled" };
+const PRIORITY_LABELS: Record<number, string> = { 1: "High", 2: "Normal", 3: "Low" };
+const CASETYPE_LABELS: Record<number, string> = { 1: "Question", 2: "Problem", 3: "Request" };
+
+function mapCase(raw: RawCase): SupportCase {
+  return {
+    id: raw.incidentid,
+    ticketNumber: raw.ticketnumber,
+    title: raw.title,
+    description: raw.description,
+    statecode: raw.statecode,
+    statuscode: raw.statuscode,
+    status: STATUS_LABELS[raw.statuscode] ?? STATE_LABELS[raw.statecode] ?? "Unknown",
+    prioritycode: raw.prioritycode,
+    priority: PRIORITY_LABELS[raw.prioritycode] ?? "Normal",
+    casetypecode: raw.casetypecode,
+    caseType: raw.casetypecode != null ? (CASETYPE_LABELS[raw.casetypecode] ?? null) : null,
+    accountId: raw._customerid_value,
+    accountName: (raw["_customerid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
+    createdOn: raw.createdon,
+    modifiedOn: raw.modifiedon,
+  };
+}
+
+function mapAnnotation(raw: RawAnnotation): CaseNote {
+  return {
+    id: raw.annotationid,
+    subject: raw.subject,
+    text: raw.notetext,
+    isAttachment: raw.isdocument,
+    filename: raw.filename,
+    mimetype: raw.mimetype,
+    createdOn: raw.createdon,
+    createdBy: (raw["_createdby_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
+  };
+}
+
+async function dynamicsGetAnnotated<T>(env: Env, path: string): Promise<T> {
+  const token = await getToken(env);
+  const res = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      "Prefer": `odata.include-annotations="OData.Community.Display.V1.FormattedValue"`,
+    },
+  });
+  if (!res.ok) throw new Error(`Dynamics API error: ${res.status} ${path}`);
+  return res.json() as Promise<T>;
+}
+
+async function dynamicsPost<T>(env: Env, path: string, body: unknown, options?: { prefer?: string }): Promise<T> {
+  const token = await getToken(env);
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+  };
+  if (options?.prefer) headers["Prefer"] = options.prefer;
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Dynamics POST error: ${res.status} ${path} - ${text}`);
+  }
+  if (res.status === 204) return {} as T;
+  return res.json() as Promise<T>;
+}
+
+async function dynamicsPatch(env: Env, path: string, body: unknown): Promise<void> {
+  const token = await getToken(env);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Dynamics PATCH error: ${res.status} ${path} - ${text}`);
+  }
+}
+
+export async function getCases(env: Env, accountId?: string): Promise<SupportCase[]> {
+  if (!isConfigured(env)) return [];
+  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value";
+  const filter = accountId ? `&$filter=_customerid_value eq ${accountId}` : "";
+  const path = `/incidents?$select=${select}${filter}&$top=100&$orderby=modifiedon desc`;
+  const data = await dynamicsGetAnnotated<{ value: RawCase[] }>(env, path);
+  return (data.value ?? []).map(mapCase);
+}
+
+export async function getCase(env: Env, caseId: string): Promise<SupportCase | null> {
+  if (!isConfigured(env)) return null;
+  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value";
+  try {
+    const raw = await dynamicsGetAnnotated<RawCase>(env, `/incidents(${caseId})?$select=${select}`);
+    return mapCase(raw);
+  } catch {
+    return null;
+  }
+}
+
+export async function createCase(env: Env, payload: {
+  title: string;
+  description?: string;
+  prioritycode?: number;
+  casetypecode?: number;
+  accountId?: string;
+}): Promise<SupportCase> {
+  const body: Record<string, unknown> = {
+    title: payload.title,
+    description: payload.description ?? "",
+    prioritycode: payload.prioritycode ?? 2,
+    casetypecode: payload.casetypecode ?? 2,
+  };
+  if (payload.accountId) {
+    body["customerid_account@odata.bind"] = `/accounts(${payload.accountId})`;
+  }
+  const raw = await dynamicsPost<RawCase>(env, "/incidents", body, { prefer: "return=representation" });
+  return mapCase(raw);
+}
+
+export async function updateCase(env: Env, caseId: string, payload: {
+  title?: string;
+  description?: string;
+  statecode?: number;
+  statuscode?: number;
+  prioritycode?: number;
+}): Promise<void> {
+  // Note: transitioning to statecode=1 (Resolved) may require the CloseIncident action
+  // in some D365 configurations. If PATCH fails for Resolved status, use the
+  // POST /CloseIncident action instead.
+  await dynamicsPatch(env, `/incidents(${caseId})`, payload);
+}
+
+export async function getCaseNotes(env: Env, caseId: string): Promise<CaseNote[]> {
+  if (!isConfigured(env)) return [];
+  const select = "annotationid,subject,notetext,filename,mimetype,isdocument,createdon,_createdby_value";
+  const filter = `_objectid_value eq ${caseId}`;
+  const path = `/annotations?$select=${select}&$filter=${filter}&$orderby=createdon asc`;
+  const data = await dynamicsGetAnnotated<{ value: RawAnnotation[] }>(env, path);
+  return (data.value ?? []).map(mapAnnotation);
+}
+
+export async function addCaseNote(env: Env, caseId: string, payload: {
+  subject: string;
+  notetext: string;
+}): Promise<CaseNote> {
+  const body = {
+    subject: payload.subject,
+    notetext: payload.notetext,
+    "objectid_incident@odata.bind": `/incidents(${caseId})`,
+  };
+  const raw = await dynamicsPost<RawAnnotation>(env, "/annotations", body, { prefer: "return=representation" });
+  return mapAnnotation(raw);
+}
+
+export async function addCaseAttachment(env: Env, caseId: string, payload: {
+  filename: string;
+  mimetype: string;
+  documentbody: string; // base64
+  subject: string;
+  notetext?: string;
+}): Promise<CaseNote> {
+  const body = {
+    subject: payload.subject,
+    notetext: payload.notetext ?? "",
+    filename: payload.filename,
+    documentbody: payload.documentbody,
+    mimetype: payload.mimetype,
+    isdocument: true,
+    "objectid_incident@odata.bind": `/incidents(${caseId})`,
+  };
+  const raw = await dynamicsPost<RawAnnotation>(env, "/annotations", body, { prefer: "return=representation" });
+  return mapAnnotation(raw);
+}
+
+export async function getAnnotationBody(env: Env, annotationId: string): Promise<{ documentbody: string; filename: string; mimetype: string } | null> {
+  if (!isConfigured(env)) return null;
+  try {
+    return await dynamicsGet<{ documentbody: string; filename: string; mimetype: string }>(
+      env,
+      `/annotations(${annotationId})?$select=documentbody,filename,mimetype`
+    );
+  } catch {
+    return null;
+  }
+}
