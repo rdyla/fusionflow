@@ -74,7 +74,6 @@ const EMPTY_FORM = {
   solution_type: "",
   kickoff_date: "",
   target_go_live_date: "",
-  pm_user_id: "",
   dynamics_account_id: "",
 };
 
@@ -188,7 +187,6 @@ export default function ProjectsPage() {
         solution_type: form.solution_type.trim() || undefined,
         kickoff_date: form.kickoff_date || undefined,
         target_go_live_date: form.target_go_live_date || undefined,
-        pm_user_id: form.pm_user_id || null,
         dynamics_account_id: form.dynamics_account_id || null,
       });
       showToast("Project created.", "success");
@@ -411,18 +409,6 @@ export default function ProjectsPage() {
                   <span>Target Go-Live</span>
                   <input type="date" className="ms-input" value={form.target_go_live_date} onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })} />
                 </label>
-                <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
-                  <span>Project Manager</span>
-                  <select className="ms-input" value={form.pm_user_id} onChange={(e) => setForm({ ...form, pm_user_id: e.target.value })}>
-                    <option value="">— Unassigned —</option>
-                    {users.filter((u) => (u.role === "pm" || u.role === "admin") && u.is_active).map((u) => (
-                      <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
-                    ))}
-                  </select>
-                </label>
-                <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>
-                  Additional team members (AEs, SAs, CSMs, Engineers) can be assigned from the project detail page.
-                </div>
               </div>
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>

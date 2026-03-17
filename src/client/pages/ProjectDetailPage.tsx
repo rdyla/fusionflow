@@ -615,7 +615,7 @@ export default function ProjectDetailPage() {
               {/* Additional staff */}
               {projectStaff.map((s) => {
                 const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const roleLabel: Record<string, string> = { ae: "Account Executive", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer", pm: "Project Manager" };
+                const roleLabel: Record<string, string> = { ae: "Account Executive", partner_ae: "Partner AE", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer", pm: "Project Manager" };
                 const photo = staffPhotoMap[s.email] ?? s.avatar_url;
                 return (
                   <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
@@ -1262,6 +1262,7 @@ export default function ProjectDetailPage() {
                 <select className="ms-input" value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
                   <option value="">— Select role —</option>
                   <option value="ae">Account Executive</option>
+                  <option value="partner_ae">Partner AE</option>
                   <option value="sa">Solution Architect</option>
                   <option value="csm">Client Success Manager</option>
                   <option value="engineer">Implementation Engineer</option>
@@ -1272,7 +1273,7 @@ export default function ProjectDetailPage() {
                 <span>Team Member</span>
                 <select className="ms-input" value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
                   <option value="">— Select team member —</option>
-                  {users.filter((u) => u.role !== "partner_ae").map((u) => (
+                  {users.map((u) => (
                     <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
                   ))}
                 </select>
