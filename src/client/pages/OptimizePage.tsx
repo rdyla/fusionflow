@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type OptimizeAccount, type OptimizeEligible, type User } from "../lib/api";
+import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -17,6 +17,7 @@ const METHOD_COLOR: Record<string, { color: string; bg: string; border: string }
 
 const EMPTY_DIRECT = {
   customer_name: "",
+  dynamics_account_id: "",
   vendor: "",
   solution_type: "",
   actual_go_live_date: "",
@@ -36,6 +37,11 @@ export default function OptimizePage() {
   const [directForm, setDirectForm] = useState(EMPTY_DIRECT);
   const [directSaving, setDirectSaving] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
+  const [crmQuery, setCrmQuery] = useState("");
+  const [crmResults, setCrmResults] = useState<DynamicsAccount[] | null>(null);
+  const [crmSearching, setCrmSearching] = useState(false);
+  const [selectedCrm, setSelectedCrm] = useState<DynamicsAccount | null>(null);
+  const [crmMode, setCrmMode] = useState<"search" | "manual">("search");
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -57,6 +63,40 @@ export default function OptimizePage() {
     }
   }
 
+  function resetDirectModal() {
+    setShowDirectModal(false);
+    setDirectForm(EMPTY_DIRECT);
+    setCrmQuery("");
+    setCrmResults(null);
+    setSelectedCrm(null);
+    setCrmMode("search");
+  }
+
+  async function handleCrmSearch() {
+    if (!crmQuery.trim()) return;
+    setCrmSearching(true);
+    try {
+      const results = await api.optimizeCrmSearch(crmQuery.trim());
+      setCrmResults(results);
+    } catch {
+      setCrmResults([]);
+    } finally {
+      setCrmSearching(false);
+    }
+  }
+
+  function selectCrmAccount(account: DynamicsAccount) {
+    setSelectedCrm(account);
+    setDirectForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.accountid }));
+    setCrmResults(null);
+    setCrmQuery("");
+  }
+
+  function clearCrmSelection() {
+    setSelectedCrm(null);
+    setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "" }));
+  }
+
   async function handleDirectEnroll(e: React.FormEvent) {
     e.preventDefault();
     if (!directForm.customer_name.trim()) return;
@@ -73,8 +113,7 @@ export default function OptimizePage() {
         notes: directForm.notes.trim() || null,
       });
       setAccounts((prev) => [created, ...prev]);
-      setShowDirectModal(false);
-      setDirectForm(EMPTY_DIRECT);
+      resetDirectModal();
       showToast("Optimize account created.", "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create account", "error");
@@ -195,19 +234,104 @@ export default function OptimizePage() {
 
       {/* Direct Enroll Modal */}
       {showDirectModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowDirectModal(false); setDirectForm(EMPTY_DIRECT); } }}>
-          <div className="ms-modal" style={{ maxWidth: 540 }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) resetDirectModal(); }}>
+          <div className="ms-modal" style={{ maxWidth: 560 }}>
             <h2>New Optimize Account</h2>
             <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: "6px 0 16px" }}>
               Enroll a customer directly into Optimize without an existing implementation project.
             </p>
             <form onSubmit={handleDirectEnroll} style={{ display: "grid", gap: 14 }}>
-              <label className="ms-label">
-                <span>Customer Name *</span>
-                <input autoFocus required className="ms-input" value={directForm.customer_name}
-                  onChange={(e) => setDirectForm({ ...directForm, customer_name: e.target.value })}
-                  placeholder="Acme Corp" />
-              </label>
+
+              {/* CRM search / selected / manual */}
+              <div className="ms-label">
+                <span>Customer *</span>
+
+                {/* CRM search mode — no account selected yet */}
+                {crmMode === "search" && !selectedCrm && (
+                  <>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        autoFocus
+                        className="ms-input"
+                        value={crmQuery}
+                        onChange={(e) => setCrmQuery(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleCrmSearch(); } }}
+                        placeholder="Search CRM by account name…"
+                        style={{ flex: 1 }}
+                      />
+                      <button type="button" className="ms-btn-secondary" onClick={handleCrmSearch} disabled={crmSearching || !crmQuery.trim()} style={{ whiteSpace: "nowrap" }}>
+                        {crmSearching ? "Searching…" : "Search"}
+                      </button>
+                    </div>
+
+                    {/* Results list */}
+                    {crmResults !== null && (
+                      <div style={{ marginTop: 4, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, overflow: "hidden", background: "#0d1b2e" }}>
+                        {crmResults.length === 0 ? (
+                          <div style={{ padding: "10px 14px", fontSize: 13, color: "rgba(240,246,255,0.4)" }}>No accounts found in CRM.</div>
+                        ) : (
+                          crmResults.map((a) => (
+                            <button
+                              type="button"
+                              key={a.accountid}
+                              onClick={() => selectCrmAccount(a)}
+                              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", color: "rgba(240,246,255,0.85)" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,200,224,0.06)"; }}
+                              onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+                            >
+                              <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>
+                              {(a.address1_city || a.address1_stateorprovince) && (
+                                <div style={{ fontSize: 11, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                                  {[a.address1_city, a.address1_stateorprovince].filter(Boolean).join(", ")}
+                                </div>
+                              )}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    <button type="button" onClick={() => { setCrmMode("manual"); setCrmResults(null); }} style={{ marginTop: 6, fontSize: 12, color: "rgba(240,246,255,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                      Can't find it? Enter manually →
+                    </button>
+                  </>
+                )}
+
+                {/* CRM account selected */}
+                {crmMode === "search" && selectedCrm && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(0,200,224,0.06)", border: "1px solid rgba(0,200,224,0.2)", borderRadius: 6 }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: "rgba(240,246,255,0.9)" }}>{selectedCrm.name}</div>
+                      {(selectedCrm.address1_city || selectedCrm.address1_stateorprovince) && (
+                        <div style={{ fontSize: 11, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                          {[selectedCrm.address1_city, selectedCrm.address1_stateorprovince].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" onClick={clearCrmSelection} style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>
+                      Change
+                    </button>
+                  </div>
+                )}
+
+                {/* Manual mode */}
+                {crmMode === "manual" && (
+                  <>
+                    <input
+                      autoFocus
+                      required
+                      className="ms-input"
+                      value={directForm.customer_name}
+                      onChange={(e) => setDirectForm({ ...directForm, customer_name: e.target.value })}
+                      placeholder="Acme Corp"
+                    />
+                    <button type="button" onClick={() => { setCrmMode("search"); setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "" })); }} style={{ marginTop: 6, fontSize: 12, color: "rgba(240,246,255,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                      ← Search CRM instead
+                    </button>
+                  </>
+                )}
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <label className="ms-label">
                   <span>Vendor</span>
@@ -237,14 +361,14 @@ export default function OptimizePage() {
                   <span>Solution Architect</span>
                   <select className="ms-input" value={directForm.sa_user_id} onChange={(e) => setDirectForm({ ...directForm, sa_user_id: e.target.value })}>
                     <option value="">— None —</option>
-                    {users.filter((u) => u.role === "pf_sa").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
                   </select>
                 </label>
                 <label className="ms-label">
                   <span>Customer Success Manager</span>
                   <select className="ms-input" value={directForm.csm_user_id} onChange={(e) => setDirectForm({ ...directForm, csm_user_id: e.target.value })}>
                     <option value="">— None —</option>
-                    {users.filter((u) => u.role === "pf_csm").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
                   </select>
                 </label>
               </div>
@@ -252,13 +376,13 @@ export default function OptimizePage() {
                 <span>Notes</span>
                 <textarea className="ms-input" rows={3} value={directForm.notes}
                   onChange={(e) => setDirectForm({ ...directForm, notes: e.target.value })}
-                  placeholder="Optional context about this account..." style={{ resize: "vertical" }} />
+                  placeholder="Optional context about this account…" style={{ resize: "vertical" }} />
               </label>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={directSaving || !directForm.customer_name.trim()}>
-                  {directSaving ? "Creating..." : "Create Account"}
+                  {directSaving ? "Creating…" : "Create Account"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowDirectModal(false); setDirectForm(EMPTY_DIRECT); }}>
+                <button type="button" className="ms-btn-secondary" onClick={resetDirectModal}>
                   Cancel
                 </button>
               </div>

@@ -387,6 +387,15 @@ export type OptimizeAccount = {
   last_assessment_score: number | null;
 };
 
+export type DynamicsAccount = {
+  accountid: string;
+  name: string;
+  emailaddress1: string | null;
+  telephone1: string | null;
+  address1_city: string | null;
+  address1_stateorprovince: string | null;
+};
+
 export type OptimizeEligible = {
   id: string;
   name: string;
@@ -921,6 +930,8 @@ export const api = {
     request<{ success: boolean }>(`/solutions/${solutionId}/staff/${staffId}`, { method: "DELETE" }),
 
   // ── Optimize ─────────────────────────────────────────────────────────────
+  optimizeCrmSearch: (q: string) =>
+    request<DynamicsAccount[]>(`/optimize/crm/accounts?q=${encodeURIComponent(q)}`),
   optimizeAccounts: () => request<OptimizeAccount[]>("/optimize/accounts"),
   optimizeEligible: () => request<OptimizeEligible[]>("/optimize/eligible"),
   optimizeAccount: (projectId: string) => request<OptimizeAccount>(`/optimize/accounts/${projectId}`),

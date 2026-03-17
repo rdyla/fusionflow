@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
+import { searchAccounts } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -81,6 +82,15 @@ app.get("/accounts/:projectId", async (c) => {
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });
   return c.json(row);
+});
+
+// ── CRM account search ─────────────────────────────────────────────────────────
+
+app.get("/crm/accounts", async (c) => {
+  assertOptimizeAccess(c.get("auth").role);
+  const q = c.req.query("q") ?? "";
+  const results = await searchAccounts(c.env, q);
+  return c.json(results);
 });
 
 // ── Direct enrollment (no prior project/solution) ──────────────────────────────
