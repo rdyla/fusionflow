@@ -8,6 +8,7 @@ export interface AppUser {
   role: AppRole;
   is_active: number;
   dynamics_account_id: string | null;
+  can_open_cases?: boolean; // only set for CRM-derived client sessions
 }
 
 export interface AuthContext {

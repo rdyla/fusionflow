@@ -38,6 +38,7 @@ export type User = {
   is_active: number;
   avatar_url?: string | null;
   dynamics_account_id?: string | null;
+  can_open_cases?: boolean;
 };
 
 export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "zoom_va" | "rc_ace" | "rc_air";

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type SupportCase, type DynamicsAccount } from "../lib/api";
+import { api, type SupportCase, type DynamicsAccount, type User } from "../lib/api";
 
 const PRIORITY_COLORS: Record<number, string> = { 1: "#ef4444", 2: "#d97706", 3: "#6b7280" };
 const STATE_COLORS: Record<number, string> = { 0: "#00c8e0", 1: "#059669", 2: "#6b7280" };
@@ -21,6 +21,7 @@ function fmt(iso: string) {
 
 export default function SupportPage() {
   const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("");
@@ -34,6 +35,10 @@ export default function SupportPage() {
   const acctTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.me().then(r => setCurrentUser(r.user)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -103,7 +108,9 @@ export default function SupportPage() {
           <h1 className="ms-page-title">Support Cases</h1>
           <p className="ms-page-subtitle">Manage and track support requests via Dynamics CRM</p>
         </div>
-        <button className="ms-btn-primary" onClick={() => setShowNew(true)}>+ New Case</button>
+        {(currentUser?.role !== "client" || currentUser.can_open_cases) && (
+          <button className="ms-btn-primary" onClick={() => setShowNew(true)}>+ New Case</button>
+        )}
       </div>
 
       {/* Filters */}
@@ -194,8 +201,8 @@ export default function SupportPage() {
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-              {/* Account */}
-              <div style={{ position: "relative" }}>
+              {/* Account — hidden for client users (auto-scoped server-side) */}
+              {currentUser?.role !== "client" && <div style={{ position: "relative" }}>
                 <label className="ms-label">Account</label>
                 <input
                   className="ms-input"
@@ -218,7 +225,7 @@ export default function SupportPage() {
                     ))}
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* Title */}
               <div>

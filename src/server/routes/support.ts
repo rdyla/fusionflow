@@ -43,6 +43,12 @@ app.get("/cases", async (c) => {
 
 // POST /api/support/cases
 app.post("/cases", async (c) => {
+  const user = c.var.auth?.user;
+
+  if (user?.role === "client" && !user.can_open_cases) {
+    throw new HTTPException(403, { message: "Your account is not permitted to open cases" });
+  }
+
   const body = await c.req.json<{
     title: string;
     description?: string;
@@ -55,8 +61,13 @@ app.post("/cases", async (c) => {
     throw new HTTPException(400, { message: "Title is required" });
   }
 
+  // Client users are always scoped to their own CRM account
+  const accountId = user?.role === "client"
+    ? (user.dynamics_account_id ?? undefined)
+    : (body.accountId || undefined);
+
   try {
-    const created = await createCase(c.env, body);
+    const created = await createCase(c.env, { ...body, accountId });
     return c.json(created, 201);
   } catch (err) {
     console.error("Support case create error:", err);

@@ -1,6 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppRole, AppUser, Bindings, Variables } from "../types";
+import { getPortalContact } from "../services/dynamicsService";
 
 type AppMiddleware = MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -77,6 +78,24 @@ export const authMiddleware: AppMiddleware = async (c, next) => {
     } else if (PARTNER_DOMAINS[domain]) {
       user = await provisionUser(c.env.DB, email, PARTNER_DOMAINS[domain], "partner_ae");
     } else {
+      // Fall back to CRM portal contact lookup for customer logins.
+      // vtx_portaluser = true on the contact grants access; no DB row is created.
+      const contact = await getPortalContact(c.env, email);
+      if (contact) {
+        const clientUser: AppUser = {
+          id: contact.contactid,
+          email: contact.email,
+          name: contact.name || null,
+          organization_name: contact.accountName,
+          role: "client",
+          is_active: 1,
+          dynamics_account_id: contact.accountId,
+          can_open_cases: contact.canOpenCases,
+        };
+        c.set("auth", { user: clientUser, role: "client", organization: contact.accountName });
+        await next();
+        return;
+      }
       throw new HTTPException(403, {
         message: "Forbidden: user is not provisioned in FusionFlow360",
       });

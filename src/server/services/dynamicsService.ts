@@ -466,6 +466,74 @@ export async function addCaseAttachment(env: Env, caseId: string, payload: {
   return mapAnnotation(raw);
 }
 
+// ── Portal Contact Auth ───────────────────────────────────────────────────────
+
+export type PortalContact = {
+  contactid: string;
+  email: string;
+  name: string;
+  accountId: string | null;
+  accountName: string | null;
+  canOpenCases: boolean;
+};
+
+type RawPortalContact = {
+  contactid: string;
+  firstname: string | null;
+  lastname: string | null;
+  emailaddress1: string | null;
+  vtx_portaluser: boolean | null;
+  amc_allowcaseopening: boolean | null;
+  _parentcustomerid_value: string | null;
+  [key: string]: unknown;
+};
+
+type PortalContactCache = { found: true; contact: PortalContact } | { found: false };
+
+export async function getPortalContact(env: Env, email: string): Promise<PortalContact | null> {
+  if (!isConfigured(env)) return null;
+
+  const cacheKey = `portal_contact:${email.toLowerCase()}`;
+
+  // Check KV cache first — avoids hitting CRM on every request
+  const cached = await env.KV.get<PortalContactCache>(cacheKey, "json");
+  if (cached !== null) {
+    return cached.found ? cached.contact : null;
+  }
+
+  const escaped = email.toLowerCase().replace(/'/g, "''");
+  const select = "contactid,firstname,lastname,emailaddress1,vtx_portaluser,amc_allowcaseopening,_parentcustomerid_value";
+  const filter = `emailaddress1 eq '${escaped}' and vtx_portaluser eq true`;
+  const path = `/contacts?$select=${select}&$filter=${filter}&$top=1`;
+
+  try {
+    const data = await dynamicsGetAnnotated<{ value: RawPortalContact[] }>(env, path);
+    const raw = data.value?.[0];
+
+    if (!raw) {
+      // Cache negative result briefly to avoid hammering CRM for unknown emails
+      await env.KV.put(cacheKey, JSON.stringify({ found: false }), { expirationTtl: 60 });
+      return null;
+    }
+
+    const contact: PortalContact = {
+      contactid: raw.contactid,
+      email: raw.emailaddress1 ?? email,
+      name: [raw.firstname, raw.lastname].filter(Boolean).join(" "),
+      accountId: raw._parentcustomerid_value,
+      accountName: (raw["_parentcustomerid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
+      canOpenCases: raw.amc_allowcaseopening === true,
+    };
+
+    // Cache positive result for 5 minutes
+    await env.KV.put(cacheKey, JSON.stringify({ found: true, contact }), { expirationTtl: 300 });
+    return contact;
+  } catch {
+    // CRM unavailable — don't cache, allow retry on next request
+    return null;
+  }
+}
+
 export async function getAnnotationBody(env: Env, annotationId: string): Promise<{ documentbody: string; filename: string; mimetype: string } | null> {
   if (!isConfigured(env)) return null;
   try {
