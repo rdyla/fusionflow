@@ -69,11 +69,11 @@ export default function AppShell() {
         flexShrink: 0,
         display: "flex",
         flexDirection: "column",
-        background: "#091525",
-        borderRight: "1px solid rgba(255,255,255,0.07)",
+        background: "#03395f",
+        borderRight: "1px solid rgba(255,255,255,0.1)",
       }}>
         {/* Logo */}
-        <div style={{ height: 62, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+        <div style={{ height: 62, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
           <Link to="/" style={{ textDecoration: "none", display: "block", overflow: "hidden", height: 53, width: 200 }}>
             <img src={logoUrl} alt="FusionFlow360" style={{ width: 200, height: "auto", display: "block" }} />
           </Link>
@@ -83,49 +83,49 @@ export default function AppShell() {
         <nav style={{ flex: 1, paddingTop: 10, overflowY: "auto" }}>
           {!isClient && (
             <>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "8px 20px 4px" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "8px 20px 4px" }}>
                 Solutioning
               </div>
               <SideLink to="/solutions">Solutions</SideLink>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
 
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "6px 20px 4px" }}>
                 Implementation
               </div>
               <SideLink to="/dashboard" end>Dashboard</SideLink>
               <SideLink to="/projects">Projects</SideLink>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
 
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "6px 20px 4px" }}>
                 Optimize
               </div>
               <SideLink to="/optimize">Accounts</SideLink>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
             </>
           )}
 
           {isClient && (
             <>
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "8px 20px 4px" }}>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "8px 20px 4px" }}>
                 Projects
               </div>
               <SideLink to="/projects">My Projects</SideLink>
-              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
             </>
           )}
 
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: isClient ? "6px 20px 4px" : "6px 20px 4px" }}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: isClient ? "6px 20px 4px" : "6px 20px 4px" }}>
             Support
           </div>
           <SideLink to="/support" end>Cases</SideLink>
 
           {isAdmin && (
             <>
-              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
-              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "6px 20px 4px" }}>
                 Admin
               </div>
               <SideLink to="/admin/projects">Projects</SideLink>
@@ -138,7 +138,7 @@ export default function AppShell() {
 
         {/* Bottom user chip + sign out */}
         {currentUser && (
-          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
             <UserChip user={currentUser} />
             <a
               href="/cdn-cgi/access/logout"
@@ -153,30 +153,30 @@ export default function AppShell() {
       </aside>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#0d1b2e", position: "relative" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#021a2e", position: "relative" }}>
 
         {/* Subtle grid background */}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
-          backgroundImage: "linear-gradient(rgba(0,200,224,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,224,0.025) 1px, transparent 1px)",
+          backgroundImage: "linear-gradient(rgba(99,193,234,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(99,193,234,0.03) 1px, transparent 1px)",
           backgroundSize: "60px 60px" }} />
 
         {/* Radial glow */}
         <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
-          background: "radial-gradient(ellipse 70% 50% at 80% 10%, rgba(8,145,178,0.06) 0%, transparent 70%)" }} />
+          background: "radial-gradient(ellipse 70% 50% at 80% 10%, rgba(3,57,95,0.18) 0%, transparent 70%)" }} />
 
         {/* Top bar */}
         <header style={{
           position: "relative",
           zIndex: 10,
           height: 56,
-          background: "rgba(9,21,37,0.85)",
+          background: "rgba(2,20,35,0.9)",
           backdropFilter: "blur(12px)",
           display: "flex",
           alignItems: "center",
           paddingLeft: 28,
           paddingRight: 20,
           flexShrink: 0,
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid rgba(255,255,255,0.12)",
           justifyContent: "space-between",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -184,7 +184,7 @@ export default function AppShell() {
               Module
             </span>
             <span style={{ color: "rgba(255,255,255,0.15)" }}>›</span>
-            <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: "#00c8e0", letterSpacing: "0.02em" }}>
+            <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: "#63c1ea", letterSpacing: "0.02em" }}>
               Onboarding &amp; Implementation
             </span>
           </div>
@@ -232,7 +232,7 @@ function UserChip({ user }: { user: User }) {
         width: 34,
         height: 34,
         borderRadius: "50%",
-        background: "linear-gradient(135deg, #00c8e0, #0891b2)",
+        background: "linear-gradient(135deg, #63c1ea, #17c662)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

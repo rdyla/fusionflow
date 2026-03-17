@@ -10,7 +10,7 @@
 
   body {
     font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
-    background: #0d1b2e;
+    background: #021a2e;
     color: #f0f6ff;
     -webkit-font-smoothing: antialiased;
   }
@@ -63,7 +63,7 @@
     font-family: 'Syne', sans-serif;
     font-size: 11px;
     font-weight: 700;
-    color: #00c8e0;
+    color: #63c1ea;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0 0 14px;
@@ -82,8 +82,8 @@
     transition: border-color 0.2s, box-shadow 0.2s;
   }
   .ms-metric-card:hover {
-    border-color: rgba(0,200,224,0.3);
-    box-shadow: 0 0 24px rgba(0,200,224,0.08);
+    border-color: rgba(99,193,234,0.3);
+    box-shadow: 0 0 24px rgba(99,193,234,0.08);
   }
   .ms-metric-label {
     font-size: 10px;
@@ -96,7 +96,7 @@
   .ms-metric-value {
     font-size: 32px;
     font-weight: 700;
-    color: #00c8e0;
+    color: #63c1ea;
     line-height: 1;
   }
 
@@ -146,9 +146,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #0891b2;
+    background: #17c662;
     color: #fff;
-    border: 1px solid #0891b2;
+    border: 1px solid #17c662;
     border-radius: 6px;
     padding: 7px 16px;
     font-size: 13px;
@@ -159,9 +159,9 @@
     letter-spacing: 0.01em;
   }
   .ms-btn-primary:hover:not(:disabled) {
-    background: #0e7490;
-    border-color: #0e7490;
-    box-shadow: 0 0 16px rgba(8,145,178,0.35);
+    background: #14aa55;
+    border-color: #14aa55;
+    box-shadow: 0 0 16px rgba(23,198,98,0.35);
   }
   .ms-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -212,8 +212,8 @@
     align-items: center;
     gap: 4px;
     background: transparent;
-    color: #00c8e0;
-    border: 1px solid rgba(0,200,224,0.25);
+    color: #63c1ea;
+    border: 1px solid rgba(99,193,234,0.25);
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 12px;
@@ -223,8 +223,8 @@
     white-space: nowrap;
   }
   .ms-btn-ghost:hover:not(:disabled) {
-    background: rgba(0,200,224,0.1);
-    border-color: rgba(0,200,224,0.45);
+    background: rgba(99,193,234,0.1);
+    border-color: rgba(99,193,234,0.45);
   }
 
   /* ── Form controls ──────────────────────────────────────────── */
@@ -254,11 +254,11 @@
     transition: border-color 0.15s, box-shadow 0.15s;
   }
   .ms-input:focus {
-    border-color: #00c8e0;
-    box-shadow: 0 0 0 2px rgba(0,200,224,0.2);
+    border-color: #63c1ea;
+    box-shadow: 0 0 0 2px rgba(99,193,234,0.2);
   }
   .ms-input::placeholder { color: rgba(240,246,255,0.25); }
-  .ms-input option { background: #1c3050; color: #f0f6ff; }
+  .ms-input option { background: #032843; color: #f0f6ff; }
 
   /* ── Table ──────────────────────────────────────────────────── */
 
@@ -325,8 +325,8 @@
   }
   .ms-tab-btn:hover { color: rgba(240,246,255,0.8); }
   .ms-tab-btn.active {
-    color: #00c8e0;
-    border-bottom-color: #00c8e0;
+    color: #63c1ea;
+    border-bottom-color: #63c1ea;
     font-weight: 600;
   }
 
@@ -343,10 +343,10 @@
     z-index: 1000;
   }
   .ms-modal {
-    background: #142236;
+    background: #042030;
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 16px;
-    box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,200,224,0.1);
+    box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,193,234,0.1);
     padding: 28px;
     width: 100%;
     max-width: 560px;
@@ -371,19 +371,19 @@
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
-    color: rgba(255,255,255,0.5);
+    color: rgba(255,255,255,0.6);
     border-left: 2px solid transparent;
     transition: all 0.15s;
     letter-spacing: 0.01em;
   }
   .ms-nav-link:hover {
-    color: rgba(255,255,255,0.85);
-    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.9);
+    background: rgba(255,255,255,0.08);
   }
   .ms-nav-link.active {
-    color: #00c8e0;
-    background: rgba(0,200,224,0.08);
-    border-left-color: #00c8e0;
+    color: #fff;
+    background: rgba(99,193,234,0.18);
+    border-left-color: #63c1ea;
   }
 
   /* ── Toast ──────────────────────────────────────────────────── */
