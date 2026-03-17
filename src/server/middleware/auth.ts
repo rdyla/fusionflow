@@ -44,7 +44,7 @@ async function provisionUser(
     .bind(id, email, namePart, organization, role)
     .run();
 
-  return { id, email, name: namePart, organization_name: organization, role, is_active: 1 };
+  return { id, email, name: namePart, organization_name: organization, role, is_active: 1, dynamics_account_id: null };
 }
 
 function getRequestEmail(req: Request): string | null {
