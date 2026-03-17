@@ -126,7 +126,7 @@ export default function AdminAccessPage() {
                         className="ms-badge"
                         style={
                           entry.access_level === "collaborator"
-                            ? { background: "rgba(0,200,224,0.12)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.3)" }
+                            ? { background: "rgba(99,193,234,0.12)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.3)" }
                             : { background: "rgba(255,255,255,0.06)", color: "rgba(240,246,255,0.5)", border: "1px solid rgba(255,255,255,0.1)" }
                         }
                       >

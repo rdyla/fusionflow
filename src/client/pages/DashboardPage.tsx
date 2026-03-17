@@ -112,7 +112,7 @@ function DonutChart({
         key={idx}
         d={`M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${ix1} ${iy1} A ${r} ${r} 0 ${large} 0 ${ix2} ${iy2} Z`}
         fill={color}
-        stroke="#0d1b2e"
+        stroke="#021a2e"
         strokeWidth={2}
       />
     );
@@ -231,7 +231,7 @@ export default function DashboardPage() {
           <span style={{ fontWeight: 700, fontSize: 14, color: "rgba(240,246,255,0.9)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Projects
           </span>
-          <Link to="/projects" style={{ fontSize: 13, color: "#00c8e0", textDecoration: "none", fontWeight: 600 }}>
+          <Link to="/projects" style={{ fontSize: 13, color: "#63c1ea", textDecoration: "none", fontWeight: 600 }}>
             View all →
           </Link>
         </div>
@@ -256,7 +256,7 @@ export default function DashboardPage() {
                 <td>
                   <Link
                     to={`/projects/${p.id}`}
-                    style={{ color: "#00c8e0", textDecoration: "none", fontWeight: 600 }}
+                    style={{ color: "#63c1ea", textDecoration: "none", fontWeight: 600 }}
                   >
                     {p.name}
                   </Link>
@@ -307,7 +307,7 @@ export default function DashboardPage() {
                       {t.title}
                     </Link>
                     <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)", display: "flex", gap: 6 }}>
-                      <Link to={`/projects/${t.project_id}`} style={{ color: "#00c8e0", textDecoration: "none" }}>
+                      <Link to={`/projects/${t.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
                         {t.project_name}
                       </Link>
                       {t.due_date && <span>· Due {formatDate(t.due_date)}</span>}
@@ -342,7 +342,7 @@ export default function DashboardPage() {
                       {r.title}
                     </div>
                     <div style={{ fontSize: 12 }}>
-                      <Link to={`/projects/${r.project_id}`} style={{ color: "#00c8e0", textDecoration: "none" }}>
+                      <Link to={`/projects/${r.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
                         {r.project_name}
                       </Link>
                     </div>

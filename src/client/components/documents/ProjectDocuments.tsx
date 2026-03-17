@@ -36,12 +36,12 @@ function formatBytes(bytes: number | null) {
 
 // Category badge colors — dark-theme tints
 const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
-  "LOA":        { bg: "rgba(0,200,224,0.12)", color: "#00c8e0" },
+  "LOA":        { bg: "rgba(99,193,234,0.12)", color: "#63c1ea" },
   "Cut Sheet":  { bg: "rgba(135,100,184,0.15)", color: "#b39ddb" },
   "CSR":        { bg: "rgba(5,150,105,0.15)", color: "#34d399" },
   "Contract":   { bg: "rgba(245,158,11,0.15)", color: "#fbbf24" },
   "Design Doc": { bg: "rgba(245,158,11,0.15)", color: "#fbbf24" },
-  "Test Plan":  { bg: "rgba(0,200,224,0.12)", color: "#00c8e0" },
+  "Test Plan":  { bg: "rgba(99,193,234,0.12)", color: "#63c1ea" },
   "Other":      { bg: "rgba(255,255,255,0.06)", color: "rgba(240,246,255,0.5)" },
 };
 
@@ -128,19 +128,19 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
           <div
             onClick={() => fileInputRef.current?.click()}
             style={{
-              border: `2px dashed ${selectedFile ? "#00c8e0" : "rgba(255,255,255,0.2)"}`,
+              border: `2px dashed ${selectedFile ? "#63c1ea" : "rgba(255,255,255,0.2)"}`,
               borderRadius: 4,
               padding: "20px 16px",
               textAlign: "center",
               cursor: "pointer",
-              background: selectedFile ? "rgba(0,200,224,0.08)" : "rgba(255,255,255,0.03)",
+              background: selectedFile ? "rgba(99,193,234,0.08)" : "rgba(255,255,255,0.03)",
               transition: "all 0.15s",
             }}
           >
             <div style={{ fontSize: 28, marginBottom: 6 }}>📁</div>
             {selectedFile ? (
               <>
-                <div style={{ color: "#00c8e0", fontWeight: 600 }}>{selectedFile.name}</div>
+                <div style={{ color: "#63c1ea", fontWeight: 600 }}>{selectedFile.name}</div>
                 <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>{formatBytes(selectedFile.size)}</div>
               </>
             ) : (

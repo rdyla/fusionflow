@@ -266,7 +266,7 @@ export default function OptimizePage() {
 
                     {/* Results list */}
                     {crmResults !== null && (
-                      <div style={{ marginTop: 4, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, overflow: "hidden", background: "#0d1b2e" }}>
+                      <div style={{ marginTop: 4, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, overflow: "hidden", background: "#021a2e" }}>
                         {crmResults.length === 0 ? (
                           <div style={{ padding: "10px 14px", fontSize: 13, color: "rgba(240,246,255,0.4)" }}>No accounts found in CRM.</div>
                         ) : (
@@ -276,7 +276,7 @@ export default function OptimizePage() {
                               key={a.accountid}
                               onClick={() => selectCrmAccount(a)}
                               style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", color: "rgba(240,246,255,0.85)" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(0,200,224,0.06)"; }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.06)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
                             >
                               <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>
@@ -299,7 +299,7 @@ export default function OptimizePage() {
 
                 {/* CRM account selected */}
                 {crmMode === "search" && selectedCrm && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(0,200,224,0.06)", border: "1px solid rgba(0,200,224,0.2)", borderRadius: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(99,193,234,0.06)", border: "1px solid rgba(99,193,234,0.2)", borderRadius: 6 }}>
                     <div>
                       <div style={{ fontWeight: 600, fontSize: 13, color: "rgba(240,246,255,0.9)" }}>{selectedCrm.name}</div>
                       {(selectedCrm.address1_city || selectedCrm.address1_stateorprovince) && (
@@ -401,7 +401,7 @@ export default function OptimizePage() {
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {eligible.map((p) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "rgba(0,200,224,0.04)", border: "1px solid rgba(0,200,224,0.12)", borderRadius: 8 }}>
+                <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "rgba(99,193,234,0.04)", border: "1px solid rgba(99,193,234,0.12)", borderRadius: 8 }}>
                   <div>
                     <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{p.name}</div>
                     {p.customer_name && <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)" }}>{p.customer_name}</div>}

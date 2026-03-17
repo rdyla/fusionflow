@@ -107,9 +107,9 @@ function PlanBadge({ item }: { item: PlanItem }) {
       {item.seats != null && (
         <span style={{
           fontSize: 12,
-          color: "#00c8e0",
-          background: "rgba(0,200,224,0.12)",
-          border: "1px solid rgba(0,200,224,0.25)",
+          color: "#63c1ea",
+          background: "rgba(99,193,234,0.12)",
+          border: "1px solid rgba(99,193,234,0.25)",
           borderRadius: 3,
           padding: "2px 8px",
           whiteSpace: "nowrap",

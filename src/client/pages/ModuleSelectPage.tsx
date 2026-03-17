@@ -50,8 +50,8 @@ const MODULES: Module[] = [
     subtitle: "Onboarding & Setup",
     desc: "Structured onboarding workflows that get clients live fast — with full visibility into every milestone and handoff.",
     features: ["Onboarding project templates", "Milestone & task tracking", "Client portal provisioning", "Porting & number management"],
-    accent: "#0891b2",
-    glow: "rgba(8,145,178,0.25)",
+    accent: "#17c662",
+    glow: "rgba(99,193,234,0.25)",
     route: "/dashboard",
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
@@ -151,22 +151,22 @@ export default function ModuleSelectPage() {
   const abbr = user ? initials(user.name, user.email) : "…";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0d1b2e", color: "#f0f6ff", fontFamily: "'DM Sans', sans-serif", overflowX: "hidden", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#021a2e", color: "#f0f6ff", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
 
       {/* Background glows */}
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        background: "radial-gradient(ellipse 60% 50% at 15% 20%, rgba(0,200,224,0.07) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 85% 75%, rgba(37,99,235,0.06) 0%, transparent 70%), radial-gradient(ellipse 40% 35% at 70% 15%, rgba(124,58,237,0.05) 0%, transparent 65%)" }} />
+        background: "radial-gradient(ellipse 60% 50% at 15% 20%, rgba(99,193,234,0.07) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 85% 75%, rgba(37,99,235,0.06) 0%, transparent 70%), radial-gradient(ellipse 40% 35% at 70% 15%, rgba(124,58,237,0.05) 0%, transparent 65%)" }} />
 
       {/* Grid */}
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        backgroundImage: "linear-gradient(rgba(0,200,224,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(0,200,224,0.035) 1px, transparent 1px)",
+        backgroundImage: "linear-gradient(rgba(99,193,234,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(99,193,234,0.035) 1px, transparent 1px)",
         backgroundSize: "60px 60px" }} />
 
       {/* Header */}
-      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)", background: "rgba(13,27,46,0.8)" }}>
+      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)", background: "rgba(2,26,46,0.8)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <SystemStatusBadge status={sysStatus} />
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #00c8e0, #2563eb)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em" }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #63c1ea, #17c662)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em" }}>
             {abbr}
           </div>
         </div>
@@ -179,14 +179,14 @@ export default function ModuleSelectPage() {
             <img src={logoUrl} alt="FusionFlow360" style={{ width: 528, height: "auto", display: "block" }} />
           </div>
         </div>
-        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(29px, 4vw, 46px)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 18 }}>
+        <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: "clamp(29px, 4vw, 46px)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 18 }}>
           Where Every Engagement<br />
-          <span style={{ color: "#00c8e0" }}>Finds Its Flow</span>
+          <span style={{ color: "#63c1ea" }}>Finds Its Flow</span>
         </h1>
         <p style={{ fontSize: 13, color: "rgba(240,246,255,0.5)", maxWidth: 500, margin: "0 auto 16px", lineHeight: 1.65, fontWeight: 300 }}>
           From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
         </p>
-        <div style={{ width: 48, height: 2, background: "linear-gradient(90deg, transparent, #00c8e0, transparent)", margin: "32px auto 0", borderRadius: 2 }} />
+        <div style={{ width: 48, height: 2, background: "linear-gradient(90deg, transparent, #63c1ea, transparent)", margin: "32px auto 0", borderRadius: 2 }} />
       </section>
 
       {/* Modules */}
@@ -228,7 +228,7 @@ export default function ModuleSelectPage() {
                       Soon
                     </span>
                   )}
-                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(240,246,255,0.35)" }}>
+                  <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "rgba(240,246,255,0.35)" }}>
                     {mod.num}
                   </span>
                 </div>
@@ -244,9 +244,9 @@ export default function ModuleSelectPage() {
                 </div>
 
                 {/* Title */}
-                <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>
+                <div style={{ fontFamily: "'Jost', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>
                   {mod.title}
-                  <span style={{ display: "block", color: "rgba(240,246,255,0.5)", fontWeight: 400, fontSize: 15, fontFamily: "'DM Sans', sans-serif", marginTop: 3 }}>{mod.subtitle}</span>
+                  <span style={{ display: "block", color: "rgba(240,246,255,0.5)", fontWeight: 400, fontSize: 15, fontFamily: "'Jost', sans-serif", marginTop: 3 }}>{mod.subtitle}</span>
                 </div>
 
                 {/* Desc */}
@@ -266,7 +266,7 @@ export default function ModuleSelectPage() {
 
                 {/* CTA */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                  <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 600, color: isActive ? mod.accent : "rgba(240,246,255,0.3)", letterSpacing: "0.02em", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, color: isActive ? mod.accent : "rgba(240,246,255,0.3)", letterSpacing: "0.02em", display: "flex", alignItems: "center", gap: 6 }}>
                     {isActive ? "Enter Module" : "Coming Soon"}
                     {isActive && (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: 14, height: 14 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -287,10 +287,10 @@ export default function ModuleSelectPage() {
       {/* Bottom strip */}
       <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 40, padding: "28px 48px 40px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
         {[
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#00c8e0" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, label: "SOC 2 Compliant" },
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#00c8e0" strokeWidth="2" style={{ width: 16, height: 16 }}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, label: "Multi-region Available" },
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#00c8e0" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, label: "Role-based Access" },
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#00c8e0" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1 19.79 19.79 0 0 1 1.59 4.5 2 2 0 0 1 3.56 2.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.9-.9a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 17z"/></svg>, label: "24/7 Support" },
+          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, label: "SOC 2 Compliant" },
+          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, label: "Multi-region Available" },
+          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, label: "Role-based Access" },
+          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1 19.79 19.79 0 0 1 1.59 4.5 2 2 0 0 1 3.56 2.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.9-.9a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 17z"/></svg>, label: "24/7 Support" },
         ].map((item, i, arr) => (
           <div key={item.label} style={{ display: "flex", alignItems: "center" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "rgba(240,246,255,0.45)" }}>
@@ -304,7 +304,7 @@ export default function ModuleSelectPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(13,27,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(0,200,224,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: "#00c8e0", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(2,26,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(99,193,234,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Jost', sans-serif", fontSize: 14, fontWeight: 600, color: "#63c1ea", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
           ↗ {toast}
         </div>
       )}

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { api, type CaseNote, type SupportCase, type User } from "../lib/api";
 
 const PRIORITY_COLORS: Record<number, string> = { 1: "#ef4444", 2: "#d97706", 3: "#6b7280" };
-const STATE_COLORS: Record<number, string> = { 0: "#00c8e0", 1: "#059669", 2: "#6b7280" };
+const STATE_COLORS: Record<number, string> = { 0: "#63c1ea", 1: "#059669", 2: "#6b7280" };
 
 // Active sub-statuses
 const ACTIVE_STATUSES = [
@@ -160,7 +160,7 @@ export default function SupportCasePage() {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
               {incident.ticketNumber && (
-                <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: "#d97706", letterSpacing: "0.04em" }}>
+                <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700, color: "#d97706", letterSpacing: "0.04em" }}>
                   {incident.ticketNumber}
                 </span>
               )}
@@ -170,7 +170,7 @@ export default function SupportCasePage() {
                 <Badge color="rgba(240,246,255,0.3)">{incident.caseType}</Badge>
               )}
             </div>
-            <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: 20, fontWeight: 700, margin: "0 0 8px", lineHeight: 1.25 }}>{incident.title}</h1>
+            <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: 20, fontWeight: 700, margin: "0 0 8px", lineHeight: 1.25 }}>{incident.title}</h1>
             <div style={{ display: "flex", gap: 20, fontSize: 12, color: "rgba(240,246,255,0.45)", flexWrap: "wrap" }}>
               {incident.accountName && <span>Account: <span style={{ color: "rgba(240,246,255,0.7)" }}>{incident.accountName}</span></span>}
               {incident.ownerName && <span>Owner: <span style={{ color: "rgba(240,246,255,0.7)" }}>{incident.ownerName}</span></span>}
@@ -222,7 +222,7 @@ export default function SupportCasePage() {
 
         {/* Notes thread */}
         <div className="ms-section-card">
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 20, color: "#f0f6ff" }}>
+          <div style={{ fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 20, color: "#f0f6ff" }}>
             Notes &amp; Activity
           </div>
 
@@ -233,7 +233,7 @@ export default function SupportCasePage() {
               {notes.map((note, i) => (
                 <div key={note.id} style={{ paddingBottom: 16, marginBottom: i < notes.length - 1 ? 16 : 0, borderBottom: i < notes.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: note.isAttachment ? "rgba(217,119,6,0.2)" : "rgba(0,200,224,0.15)", border: `1px solid ${note.isAttachment ? "rgba(217,119,6,0.4)" : "rgba(0,200,224,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center", color: note.isAttachment ? "#d97706" : "#00c8e0", flexShrink: 0 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: note.isAttachment ? "rgba(217,119,6,0.2)" : "rgba(99,193,234,0.15)", border: `1px solid ${note.isAttachment ? "rgba(217,119,6,0.4)" : "rgba(99,193,234,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center", color: note.isAttachment ? "#d97706" : "#63c1ea", flexShrink: 0 }}>
                       {note.isAttachment
                         ? <FileIcon />
                         : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" style={{ width: 13, height: 13 }}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
@@ -289,7 +289,7 @@ export default function SupportCasePage() {
 
         {/* Attachments panel */}
         <div className="ms-section-card">
-          <div style={{ fontFamily: "'Syne', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 16, color: "#f0f6ff" }}>
+          <div style={{ fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 16, color: "#f0f6ff" }}>
             Attach a File
           </div>
           <input
@@ -346,7 +346,7 @@ export default function SupportCasePage() {
       </div>
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(13,27,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: "#d97706", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(2,26,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Jost', sans-serif", fontSize: 14, fontWeight: 600, color: "#d97706", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
           {toast}
         </div>
       )}

@@ -9,7 +9,7 @@
   }
 
   body {
-    font-family: 'DM Sans', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Jost', 'Segoe UI', system-ui, sans-serif;
     background: #021a2e;
     color: #f0f6ff;
     -webkit-font-smoothing: antialiased;
@@ -31,7 +31,7 @@
     margin-bottom: 24px;
   }
   .ms-page-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Jost', sans-serif;
     font-size: 22px;
     font-weight: 800;
     color: #f0f6ff;
@@ -60,7 +60,7 @@
     padding: 20px 24px;
   }
   .ms-section-title {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Jost', sans-serif;
     font-size: 11px;
     font-weight: 700;
     color: #63c1ea;
@@ -354,7 +354,7 @@
     overflow-y: auto;
   }
   .ms-modal h2 {
-    font-family: 'Syne', sans-serif;
+    font-family: 'Jost', sans-serif;
     margin: 0 0 20px;
     font-size: 18px;
     font-weight: 700;

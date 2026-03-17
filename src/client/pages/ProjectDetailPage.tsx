@@ -512,7 +512,7 @@ export default function ProjectDetailPage() {
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       {/* Breadcrumb */}
       <div style={{ marginBottom: 16 }}>
-        <Link to="/projects" style={{ color: "#00c8e0", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
+        <Link to="/projects" style={{ color: "#63c1ea", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
           ← Projects
         </Link>
       </div>
@@ -603,11 +603,11 @@ export default function ProjectDetailPage() {
                 const abbr = pm.name ? pm.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : pm.email.slice(0, 2).toUpperCase();
                 return (
                   <div key="pm" style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>Project Manager</div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{pm.name ?? pm.email}</div>
-                      <a href={`mailto:${pm.email}`} style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none" }}>{pm.email}</a>
+                      <a href={`mailto:${pm.email}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{pm.email}</a>
                     </div>
                   </div>
                 );
@@ -621,12 +621,12 @@ export default function ProjectDetailPage() {
                   <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
                     {photo
                       ? <img src={photo} alt={s.name ?? s.email} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                      : <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
                     }
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
                       <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{s.name ?? s.email}</div>
-                      <a href={`mailto:${s.email}`} style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none" }}>{s.email}</a>
+                      <a href={`mailto:${s.email}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{s.email}</a>
                     </div>
                     {canEdit && (
                       <button onClick={() => handleRemoveStaff(s.id)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
@@ -716,14 +716,14 @@ export default function ProjectDetailPage() {
               <div style={{ display: "grid", gap: 8 }}>
                 {contacts.map((c) => (
                   <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#00c8e0" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</span>
                         {c.contact_role && (
-                          <span className="ms-badge" style={{ background: "rgba(0,200,224,0.1)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.2)", fontSize: 11 }}>
+                          <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
                             {c.contact_role}
                           </span>
                         )}
@@ -757,7 +757,7 @@ export default function ProjectDetailPage() {
                 ([label, value]) => (
                   <div key={label as string} className="ms-info-item" style={{ textAlign: "center" }}>
                     <div className="ms-info-label">{label}</div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#00c8e0", lineHeight: 1.2 }}>{value}</div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: "#63c1ea", lineHeight: 1.2 }}>{value}</div>
                   </div>
                 )
               )}
@@ -1144,7 +1144,7 @@ export default function ProjectDetailPage() {
                   return (
                     <div key={c.id} style={{ marginBottom: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "#00c8e0" }}>{authorLabel}</span>
+                        <span style={{ fontSize: 11, fontWeight: 600, color: "#63c1ea" }}>{authorLabel}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{ fontSize: 11, color: "rgba(240,246,255,0.3)" }}>{ago}</span>
                           {canDeleteComment && (
@@ -1204,7 +1204,7 @@ export default function ProjectDetailPage() {
                     <a
                       href={api.downloadDocumentUrl(project!.id, doc.id)}
                       download
-                      style={{ fontSize: 12, color: "#00c8e0", textDecoration: "none", flexShrink: 0 }}
+                      style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", flexShrink: 0 }}
                       title="Download"
                     >↓</a>
                     {canEdit && (
@@ -1326,8 +1326,8 @@ export default function ProjectDetailPage() {
                     style={{
                       flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer",
                       background: "none", border: "none",
-                      borderBottom: `2px solid ${contactModalTab === t ? "#00c8e0" : "transparent"}`,
-                      color: contactModalTab === t ? "#00c8e0" : "rgba(240,246,255,0.35)",
+                      borderBottom: `2px solid ${contactModalTab === t ? "#63c1ea" : "transparent"}`,
+                      color: contactModalTab === t ? "#63c1ea" : "rgba(240,246,255,0.35)",
                       marginBottom: -1,
                     }}
                   >

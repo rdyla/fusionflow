@@ -21,7 +21,7 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
   assessment: "#0891b2",
   requirements: "#8764b8",
   scope: "#ff8c00",
-  handoff: "#00c8e0",
+  handoff: "#63c1ea",
   won: "#107c10",
   lost: "#d13438",
 };
@@ -621,7 +621,7 @@ export default function SolutionDetailPage() {
           <h1 style={{ fontSize: 22, fontWeight: 700, color: "#f0f6ff", margin: 0 }}>{solution.customer_name}</h1>
           <div style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", marginTop: 4 }}>{solution.name}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-            <span className="ms-badge" style={{ background: "rgba(8,145,178,0.12)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.25)" }}>
+            <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
               {TYPE_LABELS[solution.solution_type]}
             </span>
             <span className="ms-badge" style={{ background: `${STATUS_COLOR[solution.status]}18`, color: STATUS_COLOR[solution.status], border: `1px solid ${STATUS_COLOR[solution.status]}40` }}>
@@ -680,8 +680,8 @@ export default function SolutionDetailPage() {
             key={t.key}
             onClick={() => setTab(t.key)}
             style={{
-              padding: "10px 18px", background: "none", border: "none", borderBottom: `2px solid ${tab === t.key ? "#00c8e0" : "transparent"}`,
-              color: tab === t.key ? "#00c8e0" : "rgba(240,246,255,0.45)", fontWeight: 600, fontSize: 13, cursor: "pointer", marginBottom: -1,
+              padding: "10px 18px", background: "none", border: "none", borderBottom: `2px solid ${tab === t.key ? "#63c1ea" : "transparent"}`,
+              color: tab === t.key ? "#63c1ea" : "rgba(240,246,255,0.45)", fontWeight: 600, fontSize: 13, cursor: "pointer", marginBottom: -1,
             }}
           >
             {t.label}
@@ -722,7 +722,7 @@ export default function SolutionDetailPage() {
               {solution.dynamics_account_id && (
                 <label className="ms-label">
                   <span>CRM Account</span>
-                  <div style={{ fontSize: 13, color: "#00c8e0", padding: "8px 0" }}>✓ Linked to Dynamics CRM</div>
+                  <div style={{ fontSize: 13, color: "#63c1ea", padding: "8px 0" }}>✓ Linked to Dynamics CRM</div>
                 </label>
               )}
             </div>
@@ -748,7 +748,7 @@ export default function SolutionDetailPage() {
                     <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
                       {photo
                         ? <img src={photo} alt={s.name ?? s.email} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                        : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(0,200,224,0.2))", border: "1px solid rgba(0,200,224,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#00c8e0" }}>{abbr}</div>
+                        : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
                       }
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
@@ -824,14 +824,14 @@ export default function SolutionDetailPage() {
               <div style={{ display: "grid", gap: 8 }}>
                 {solutionContacts.map((c) => (
                   <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#00c8e0" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</span>
                         {c.contact_role && (
-                          <span className="ms-badge" style={{ background: "rgba(0,200,224,0.1)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.2)", fontSize: 11 }}>
+                          <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
                             {c.contact_role}
                           </span>
                         )}
@@ -928,7 +928,7 @@ export default function SolutionDetailPage() {
             {solution.dynamics_account_id && (
               <div style={{ display: "flex", gap: 0, padding: "12px 24px 0", flexShrink: 0 }}>
                 {(["crm", "manual"] as const).map((t) => (
-                  <button key={t} onClick={() => setContactModalTab(t)} style={{ flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", background: "none", border: "none", borderBottom: `2px solid ${contactModalTab === t ? "#00c8e0" : "transparent"}`, color: contactModalTab === t ? "#00c8e0" : "rgba(240,246,255,0.35)", marginBottom: -1 }}>
+                  <button key={t} onClick={() => setContactModalTab(t)} style={{ flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", background: "none", border: "none", borderBottom: `2px solid ${contactModalTab === t ? "#63c1ea" : "transparent"}`, color: contactModalTab === t ? "#63c1ea" : "rgba(240,246,255,0.35)", marginBottom: -1 }}>
                     {t === "crm" ? "From CRM" : "Enter Manually"}
                   </button>
                 ))}
@@ -1059,7 +1059,7 @@ export default function SolutionDetailPage() {
                           type="checkbox"
                           checked={assessment[field.key] === "true"}
                           onChange={(e) => canEdit && setAssessment((a) => ({ ...a, [field.key]: e.target.checked ? "true" : "false" }))}
-                          style={{ width: 15, height: 15, accentColor: "#00c8e0" }}
+                          style={{ width: 15, height: 15, accentColor: "#63c1ea" }}
                           disabled={!canEdit}
                         />
                         <span style={{ fontSize: 13, color: "rgba(240,246,255,0.75)" }}>{field.label}</span>
@@ -1365,15 +1365,15 @@ export default function SolutionDetailPage() {
             ) : (
               <div style={{ display: "grid", gap: 6 }}>
                 {solutionContacts.map((c) => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "rgba(0,200,224,0.05)", border: "1px solid rgba(0,200,224,0.12)", borderRadius: 6 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(0,200,224,0.12)", border: "1px solid rgba(0,200,224,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#00c8e0" }}>
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "rgba(99,193,234,0.05)", border: "1px solid rgba(99,193,234,0.12)", borderRadius: 6 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</span>
                         {c.contact_role && (
-                          <span className="ms-badge" style={{ background: "rgba(0,200,224,0.1)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.2)", fontSize: 11 }}>{c.contact_role}</span>
+                          <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>{c.contact_role}</span>
                         )}
                       </div>
                       <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
@@ -1388,8 +1388,8 @@ export default function SolutionDetailPage() {
 
           {/* Create Project */}
           {(currentRole === "admin" || currentRole === "pm") && (
-            <div className="ms-card" style={{ border: solution.linked_project_id ? "1px solid rgba(16,124,16,0.35)" : "1px solid rgba(0,200,224,0.25)", background: solution.linked_project_id ? "rgba(16,124,16,0.06)" : "rgba(0,200,224,0.04)" }}>
-              <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: solution.linked_project_id ? "#107c10" : "#00c8e0", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            <div className="ms-card" style={{ border: solution.linked_project_id ? "1px solid rgba(16,124,16,0.35)" : "1px solid rgba(99,193,234,0.25)", background: solution.linked_project_id ? "rgba(16,124,16,0.06)" : "rgba(99,193,234,0.04)" }}>
+              <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: solution.linked_project_id ? "#107c10" : "#63c1ea", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 {solution.linked_project_id ? "✓ Project Created" : "Create Project"}
               </h3>
               {solution.linked_project_id ? (
@@ -1413,7 +1413,7 @@ export default function SolutionDetailPage() {
                     className="ms-btn-primary"
                     disabled={creatingProject}
                     onClick={handleCreateProject}
-                    style={{ background: "#00c8e0", borderColor: "#00c8e0", color: "#091525" }}
+                    style={{ background: "#63c1ea", borderColor: "#63c1ea", color: "#021a2e" }}
                   >
                     {creatingProject ? "Creating Project…" : "Create Implementation Project →"}
                   </button>

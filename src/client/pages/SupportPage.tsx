@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type SupportCase, type DynamicsAccount, type User } from "../lib/api";
 
 const PRIORITY_COLORS: Record<number, string> = { 1: "#ef4444", 2: "#d97706", 3: "#6b7280" };
-const STATE_COLORS: Record<number, string> = { 0: "#00c8e0", 1: "#059669", 2: "#6b7280" };
+const STATE_COLORS: Record<number, string> = { 0: "#63c1ea", 1: "#059669", 2: "#6b7280" };
 
 function statusBadgeStyle(statecode: number) {
   const color = STATE_COLORS[statecode] ?? "#6b7280";
@@ -173,7 +173,7 @@ export default function SupportPage() {
                   onClick={() => navigate(`/support/${c.id}`)}
                   style={{ cursor: "pointer" }}
                 >
-                  <td style={{ fontFamily: "'Syne', sans-serif", fontSize: 12, fontWeight: 600, color: "#d97706", whiteSpace: "nowrap" }}>
+                  <td style={{ fontFamily: "'Jost', sans-serif", fontSize: 12, fontWeight: 600, color: "#d97706", whiteSpace: "nowrap" }}>
                     {c.ticketNumber ?? "—"}
                   </td>
                   <td style={{ maxWidth: 260 }}>
@@ -196,7 +196,7 @@ export default function SupportPage() {
         <div className="ms-modal-overlay" onClick={() => setShowNew(false)}>
           <div className="ms-modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
-              <h2 style={{ fontFamily: "'Syne', sans-serif", fontSize: 18, fontWeight: 700, margin: 0 }}>New Support Case</h2>
+              <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: 18, fontWeight: 700, margin: 0 }}>New Support Case</h2>
               <button onClick={() => setShowNew(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.4)", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
             </div>
 
@@ -277,7 +277,7 @@ export default function SupportPage() {
       )}
 
       {toast && (
-        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(13,27,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Syne', sans-serif", fontSize: 14, fontWeight: 600, color: "#d97706", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(2,26,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(217,119,6,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Jost', sans-serif", fontSize: 14, fontWeight: 600, color: "#d97706", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
           {toast}
         </div>
       )}

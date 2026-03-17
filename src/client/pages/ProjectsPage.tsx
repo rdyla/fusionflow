@@ -244,7 +244,7 @@ export default function ProjectsPage() {
                   <td>
                     <Link
                       to={`/projects/${project.id}`}
-                      style={{ color: "#00c8e0", textDecoration: "none", fontWeight: 600 }}
+                      style={{ color: "#63c1ea", textDecoration: "none", fontWeight: 600 }}
                     >
                       {project.name}
                     </Link>

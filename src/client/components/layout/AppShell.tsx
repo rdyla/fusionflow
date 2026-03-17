@@ -184,7 +184,7 @@ export default function AppShell() {
               Module
             </span>
             <span style={{ color: "rgba(255,255,255,0.15)" }}>›</span>
-            <span style={{ fontFamily: "'Syne', sans-serif", fontSize: 13, fontWeight: 700, color: "#63c1ea", letterSpacing: "0.02em" }}>
+            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700, color: "#63c1ea", letterSpacing: "0.02em" }}>
               Onboarding &amp; Implementation
             </span>
           </div>
@@ -236,7 +236,7 @@ function UserChip({ user }: { user: User }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        fontFamily: "'Syne', sans-serif",
+        fontFamily: "'Jost', sans-serif",
         fontSize: 12,
         fontWeight: 700,
         color: "#fff",

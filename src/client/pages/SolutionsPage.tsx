@@ -29,7 +29,7 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
   assessment: "#0891b2",
   requirements: "#8764b8",
   scope: "#ff8c00",
-  handoff: "#00c8e0",
+  handoff: "#63c1ea",
   won: "#107c10",
   lost: "#d13438",
 };
@@ -219,7 +219,7 @@ export default function SolutionsPage() {
                     <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>{s.name}</div>
                   </td>
                   <td>
-                    <span className="ms-badge" style={{ background: "rgba(8,145,178,0.12)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.25)" }}>
+                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
                       {SOLUTION_TYPE_LABELS[s.solution_type]}
                     </span>
                   </td>
@@ -289,7 +289,7 @@ export default function SolutionsPage() {
                   )}
                 </div>
                 {form.dynamics_account_id && (
-                  <div style={{ fontSize: 11, color: "#00c8e0", marginTop: 4 }}>✓ Linked to CRM</div>
+                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
                 )}
               </label>
 
@@ -349,9 +349,9 @@ export default function SolutionsPage() {
                         onClick={() => setForm((f) => ({ ...f, partner_ae_mode: mode }))}
                         style={{
                           flex: 1, padding: "5px 0", fontSize: 12, borderRadius: 4,
-                          border: `1px solid ${form.partner_ae_mode === mode ? "#00c8e0" : "rgba(255,255,255,0.12)"}`,
-                          background: form.partner_ae_mode === mode ? "rgba(0,200,224,0.1)" : "transparent",
-                          color: form.partner_ae_mode === mode ? "#00c8e0" : "rgba(240,246,255,0.4)",
+                          border: `1px solid ${form.partner_ae_mode === mode ? "#63c1ea" : "rgba(255,255,255,0.12)"}`,
+                          background: form.partner_ae_mode === mode ? "rgba(99,193,234,0.1)" : "transparent",
+                          color: form.partner_ae_mode === mode ? "#63c1ea" : "rgba(240,246,255,0.4)",
                           cursor: "pointer",
                         }}
                       >

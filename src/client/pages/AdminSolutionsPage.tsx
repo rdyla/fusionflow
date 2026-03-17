@@ -9,7 +9,7 @@ const STATUS_LABELS: Record<string, string> = {
 };
 const STATUS_COLOR: Record<string, string> = {
   draft: "#94a3b8", assessment: "#0891b2", requirements: "#8764b8",
-  scope: "#ff8c00", handoff: "#00c8e0", won: "#107c10", lost: "#d13438",
+  scope: "#ff8c00", handoff: "#63c1ea", won: "#107c10", lost: "#d13438",
 };
 
 export default function AdminSolutionsPage() {

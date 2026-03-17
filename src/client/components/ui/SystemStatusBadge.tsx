@@ -81,7 +81,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
   if (!status) {
     return (
       <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 40, fontSize: 12, color: "rgba(240,246,255,0.4)" }}>
-        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#00c8e0", boxShadow: "0 0 6px #00c8e0", display: "inline-block" }} />
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#63c1ea", boxShadow: "0 0 6px #63c1ea", display: "inline-block" }} />
         Live
       </div>
     );
@@ -120,7 +120,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
         <div style={{
           position: "absolute", top: "calc(100% + 8px)", right: 0,
           width: 280, zIndex: 200,
-          background: "#0d1b2e",
+          background: "#021a2e",
           border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: 8,
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",

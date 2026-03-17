@@ -269,8 +269,8 @@ export default function OptimizeAccountPage() {
             style={{
               background: "none",
               border: "none",
-              borderBottom: tab === t ? "2px solid #00c8e0" : "2px solid transparent",
-              color: tab === t ? "#00c8e0" : "rgba(240,246,255,0.45)",
+              borderBottom: tab === t ? "2px solid #63c1ea" : "2px solid transparent",
+              color: tab === t ? "#63c1ea" : "rgba(240,246,255,0.45)",
               fontWeight: tab === t ? 700 : 400,
               fontSize: 13,
               padding: "10px 18px",
@@ -303,7 +303,7 @@ export default function OptimizeAccountPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                     <div>
                       <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6 }}>
-                        <span className="ms-badge" style={{ background: "rgba(0,200,224,0.1)", color: "#00c8e0", border: "1px solid rgba(0,200,224,0.25)", textTransform: "capitalize" }}>
+                        <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.25)", textTransform: "capitalize" }}>
                           {a.assessment_type}
                         </span>
                         <span style={{ fontSize: 12, color: "rgba(240,246,255,0.4)" }}>{a.conducted_date}</span>
