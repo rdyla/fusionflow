@@ -126,10 +126,18 @@ export default function AppShell() {
           )}
         </nav>
 
-        {/* Bottom user chip */}
+        {/* Bottom user chip + sign out */}
         {currentUser && (
           <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
             <UserChip user={currentUser} />
+            <a
+              href="/cdn-cgi/access/logout"
+              style={{ display: "block", marginTop: 10, fontSize: 11, color: "rgba(240,246,255,0.3)", textDecoration: "none", textAlign: "center", letterSpacing: "0.04em" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "rgba(240,246,255,0.6)")}
+              onMouseLeave={e => (e.currentTarget.style.color = "rgba(240,246,255,0.3)")}
+            >
+              Sign out
+            </a>
           </div>
         )}
       </aside>
