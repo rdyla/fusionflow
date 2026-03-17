@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase, type User } from "../lib/api";
+import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
@@ -80,7 +80,6 @@ const EMPTY_FORM = {
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectPhases, setProjectPhases] = useState<Record<string, Phase[]>>({});
-  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -103,8 +102,8 @@ export default function ProjectsPage() {
   const [oppsLoading, setOppsLoading] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.projects(), api.users()])
-      .then(([p, u]) => { setProjects(p); setUsers(u); })
+    Promise.all([api.projects()])
+      .then(([p]) => { setProjects(p); })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, []);
