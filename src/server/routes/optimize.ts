@@ -83,6 +83,71 @@ app.get("/accounts/:projectId", async (c) => {
   return c.json(row);
 });
 
+// ── Direct enrollment (no prior project/solution) ──────────────────────────────
+
+const directEnrollSchema = z.object({
+  customer_name: z.string().min(1).max(500),
+  vendor: z.string().max(100).nullable().optional(),
+  solution_type: z.string().max(100).nullable().optional(),
+  actual_go_live_date: z.string().nullable().optional(),
+  sa_user_id: z.string().nullable().optional(),
+  csm_user_id: z.string().nullable().optional(),
+  next_review_date: z.string().nullable().optional(),
+  notes: z.string().nullable().optional(),
+  dynamics_account_id: z.string().nullable().optional(),
+});
+
+app.post("/accounts/direct", async (c) => {
+  assertOptimizeEdit(c.get("auth").role);
+  const db = c.env.DB;
+  const auth = c.get("auth");
+
+  const parsed = directEnrollSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const d = parsed.data;
+
+  // Create a minimal project shell
+  const projectId = crypto.randomUUID();
+  await db.prepare(`
+    INSERT INTO projects (id, name, customer_name, vendor, solution_type, actual_go_live_date,
+      status, health, dynamics_account_id, archived)
+    VALUES (?, ?, ?, ?, ?, ?, 'not_started', 'on_track', ?, 0)
+  `).bind(
+    projectId, d.customer_name, d.customer_name,
+    d.vendor ?? null, d.solution_type ?? null,
+    d.actual_go_live_date ?? null, d.dynamics_account_id ?? null
+  ).run();
+
+  // Create the optimize account
+  const accountId = crypto.randomUUID();
+  await db.prepare(`
+    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method,
+      sa_user_id, csm_user_id, next_review_date, notes)
+    VALUES (?, ?, ?, 'direct', ?, ?, ?, ?)
+  `).bind(
+    accountId, projectId, auth.user.id,
+    d.sa_user_id ?? null, d.csm_user_id ?? null,
+    d.next_review_date ?? null, d.notes ?? null
+  ).run();
+
+  // Return in list-query shape
+  const created = await db.prepare(`
+    SELECT
+      oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
+      oa.optimize_status, oa.next_review_date, oa.sa_user_id, oa.csm_user_id,
+      p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
+      p.actual_go_live_date, p.pm_user_id,
+      sa.name AS sa_name, csm.name AS csm_name,
+      NULL AS last_assessment_date, NULL AS last_assessment_score
+    FROM optimize_accounts oa
+    JOIN projects p ON p.id = oa.project_id
+    LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
+    LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    WHERE oa.id = ? LIMIT 1
+  `).bind(accountId).first();
+  return c.json(created, 201);
+});
+
 // ── Graduate a project ─────────────────────────────────────────────────────────
 
 const graduateSchema = z.object({

@@ -375,7 +375,7 @@ export type OptimizeAccount = {
   project_name: string;
   customer_name: string | null;
   graduated_at: string;
-  graduation_method: "auto" | "manual";
+  graduation_method: "auto" | "manual" | "direct";
   optimize_status: "active" | "paused" | "churned";
   sa_user_id: string | null;
   sa_name: string | null;
@@ -926,6 +926,21 @@ export const api = {
   optimizeAccount: (projectId: string) => request<OptimizeAccount>(`/optimize/accounts/${projectId}`),
   optimizeGraduate: (projectId: string) =>
     request<OptimizeAccount>(`/optimize/accounts/${projectId}/graduate`, { method: "POST" }),
+  optimizeDirectEnroll: (payload: {
+    customer_name: string;
+    vendor?: string | null;
+    solution_type?: string | null;
+    actual_go_live_date?: string | null;
+    sa_user_id?: string | null;
+    csm_user_id?: string | null;
+    next_review_date?: string | null;
+    notes?: string | null;
+    dynamics_account_id?: string | null;
+  }) =>
+    request<OptimizeAccount>("/optimize/accounts/direct", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   optimizeUpdateAccount: (projectId: string, payload: {
     sa_user_id?: string | null;
     csm_user_id?: string | null;

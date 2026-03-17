@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type OptimizeAccount, type OptimizeEligible } from "../lib/api";
+import { api, type OptimizeAccount, type OptimizeEligible, type User } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -9,17 +9,39 @@ const STATUS_COLOR: Record<string, string> = {
   churned: "#d13438",
 };
 
+const METHOD_COLOR: Record<string, { color: string; bg: string; border: string }> = {
+  auto:   { color: "#0b9aad", bg: "rgba(11,154,173,0.1)",   border: "rgba(11,154,173,0.3)"   },
+  manual: { color: "#8764b8", bg: "rgba(135,100,184,0.1)", border: "rgba(135,100,184,0.3)" },
+  direct: { color: "#059669", bg: "rgba(5,150,105,0.1)",   border: "rgba(5,150,105,0.3)"   },
+};
+
+const EMPTY_DIRECT = {
+  customer_name: "",
+  vendor: "",
+  solution_type: "",
+  actual_go_live_date: "",
+  sa_user_id: "",
+  csm_user_id: "",
+  next_review_date: "",
+  notes: "",
+};
+
 export default function OptimizePage() {
   const [accounts, setAccounts] = useState<OptimizeAccount[]>([]);
   const [eligible, setEligible] = useState<OptimizeEligible[]>([]);
   const [loading, setLoading] = useState(true);
   const [graduating, setGraduating] = useState<string | null>(null);
   const [showGraduateModal, setShowGraduateModal] = useState(false);
+  const [showDirectModal, setShowDirectModal] = useState(false);
+  const [directForm, setDirectForm] = useState(EMPTY_DIRECT);
+  const [directSaving, setDirectSaving] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     load();
+    api.users().then(setUsers).catch(() => {});
   }, []);
 
   async function load() {
@@ -32,6 +54,32 @@ export default function OptimizePage() {
       showToast("Failed to load Optimize accounts", "error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleDirectEnroll(e: React.FormEvent) {
+    e.preventDefault();
+    if (!directForm.customer_name.trim()) return;
+    setDirectSaving(true);
+    try {
+      const created = await api.optimizeDirectEnroll({
+        customer_name: directForm.customer_name.trim(),
+        vendor: directForm.vendor.trim() || null,
+        solution_type: directForm.solution_type.trim() || null,
+        actual_go_live_date: directForm.actual_go_live_date || null,
+        sa_user_id: directForm.sa_user_id || null,
+        csm_user_id: directForm.csm_user_id || null,
+        next_review_date: directForm.next_review_date || null,
+        notes: directForm.notes.trim() || null,
+      });
+      setAccounts((prev) => [created, ...prev]);
+      setShowDirectModal(false);
+      setDirectForm(EMPTY_DIRECT);
+      showToast("Optimize account created.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create account", "error");
+    } finally {
+      setDirectSaving(false);
     }
   }
 
@@ -60,11 +108,16 @@ export default function OptimizePage() {
             Post-implementation accounts — assessments, utilization &amp; roadmap
           </p>
         </div>
-        {eligible.length > 0 && (
-          <button className="ms-btn-primary" onClick={() => setShowGraduateModal(true)}>
-            Graduate Project ({eligible.length})
+        <div style={{ display: "flex", gap: 10 }}>
+          {eligible.length > 0 && (
+            <button className="ms-btn-secondary" onClick={() => setShowGraduateModal(true)}>
+              Graduate Project ({eligible.length})
+            </button>
+          )}
+          <button className="ms-btn-primary" onClick={() => setShowDirectModal(true)}>
+            + New Account
           </button>
-        )}
+        </div>
       </div>
 
       {accounts.length === 0 ? (
@@ -104,9 +157,11 @@ export default function OptimizePage() {
                   </td>
                   <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 12 }}>
                     {a.graduated_at ? a.graduated_at.slice(0, 10) : "—"}
-                    <span style={{ marginLeft: 6, fontSize: 10, color: a.graduation_method === "auto" ? "#0b9aad" : "#8764b8", background: a.graduation_method === "auto" ? "rgba(11,154,173,0.1)" : "rgba(135,100,184,0.1)", padding: "1px 5px", borderRadius: 4, border: `1px solid ${a.graduation_method === "auto" ? "rgba(11,154,173,0.3)" : "rgba(135,100,184,0.3)"}` }}>
-                      {a.graduation_method}
-                    </span>
+                    {(() => { const m = METHOD_COLOR[a.graduation_method] ?? METHOD_COLOR.manual; return (
+                      <span style={{ marginLeft: 6, fontSize: 10, color: m.color, background: m.bg, padding: "1px 5px", borderRadius: 4, border: `1px solid ${m.border}` }}>
+                        {a.graduation_method}
+                      </span>
+                    ); })()}
                   </td>
                   <td>
                     <span className="ms-badge" style={{ background: (STATUS_COLOR[a.optimize_status] ?? "#94a3b8") + "1a", color: STATUS_COLOR[a.optimize_status] ?? "#94a3b8", border: `1px solid ${(STATUS_COLOR[a.optimize_status] ?? "#94a3b8")}40` }}>
@@ -135,6 +190,80 @@ export default function OptimizePage() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Direct Enroll Modal */}
+      {showDirectModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowDirectModal(false); setDirectForm(EMPTY_DIRECT); } }}>
+          <div className="ms-modal" style={{ maxWidth: 540 }}>
+            <h2>New Optimize Account</h2>
+            <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: "6px 0 16px" }}>
+              Enroll a customer directly into Optimize without an existing implementation project.
+            </p>
+            <form onSubmit={handleDirectEnroll} style={{ display: "grid", gap: 14 }}>
+              <label className="ms-label">
+                <span>Customer Name *</span>
+                <input autoFocus required className="ms-input" value={directForm.customer_name}
+                  onChange={(e) => setDirectForm({ ...directForm, customer_name: e.target.value })}
+                  placeholder="Acme Corp" />
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                <label className="ms-label">
+                  <span>Vendor</span>
+                  <select className="ms-input" value={directForm.vendor} onChange={(e) => setDirectForm({ ...directForm, vendor: e.target.value })}>
+                    <option value="">— Select —</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="ringcentral">RingCentral</option>
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Solution Type</span>
+                  <input className="ms-input" value={directForm.solution_type}
+                    onChange={(e) => setDirectForm({ ...directForm, solution_type: e.target.value })}
+                    placeholder="e.g. UCaaS, CCaaS" />
+                </label>
+                <label className="ms-label">
+                  <span>Go-Live Date</span>
+                  <input type="date" className="ms-input" value={directForm.actual_go_live_date}
+                    onChange={(e) => setDirectForm({ ...directForm, actual_go_live_date: e.target.value })} />
+                </label>
+                <label className="ms-label">
+                  <span>Next Review Date</span>
+                  <input type="date" className="ms-input" value={directForm.next_review_date}
+                    onChange={(e) => setDirectForm({ ...directForm, next_review_date: e.target.value })} />
+                </label>
+                <label className="ms-label">
+                  <span>Solution Architect</span>
+                  <select className="ms-input" value={directForm.sa_user_id} onChange={(e) => setDirectForm({ ...directForm, sa_user_id: e.target.value })}>
+                    <option value="">— None —</option>
+                    {users.filter((u) => u.role === "pf_sa").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                  </select>
+                </label>
+                <label className="ms-label">
+                  <span>Customer Success Manager</span>
+                  <select className="ms-input" value={directForm.csm_user_id} onChange={(e) => setDirectForm({ ...directForm, csm_user_id: e.target.value })}>
+                    <option value="">— None —</option>
+                    {users.filter((u) => u.role === "pf_csm").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                  </select>
+                </label>
+              </div>
+              <label className="ms-label">
+                <span>Notes</span>
+                <textarea className="ms-input" rows={3} value={directForm.notes}
+                  onChange={(e) => setDirectForm({ ...directForm, notes: e.target.value })}
+                  placeholder="Optional context about this account..." style={{ resize: "vertical" }} />
+              </label>
+              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                <button type="submit" className="ms-btn-primary" disabled={directSaving || !directForm.customer_name.trim()}>
+                  {directSaving ? "Creating..." : "Create Account"}
+                </button>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowDirectModal(false); setDirectForm(EMPTY_DIRECT); }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
