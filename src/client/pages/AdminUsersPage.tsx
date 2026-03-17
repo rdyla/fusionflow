@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type User, IMPERSONATE_KEY } from "../lib/api";
+import { api, type DynamicsAccount, type User, IMPERSONATE_KEY } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
-const ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae"] as const;
+const ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"] as const;
 type Role = (typeof ROLES)[number];
 
 const ROLE_LABELS: Record<Role, string> = {
@@ -14,6 +14,7 @@ const ROLE_LABELS: Record<Role, string> = {
   pf_csm: "Customer Success Manager",
   pf_engineer: "Implementation Engineer",
   partner_ae: "Partner AE",
+  client: "Client",
 };
 
 const ROLE_COLOR: Record<Role, string> = {
@@ -24,9 +25,76 @@ const ROLE_COLOR: Record<Role, string> = {
   pf_csm: "#7c3aed",
   pf_engineer: "#059669",
   partner_ae: "#107c10",
+  client: "#d97706",
 };
 
-const EMPTY_CREATE_FORM = { email: "", name: "", organization_name: "", role: "pm" as Role };
+const EMPTY_CREATE_FORM = {
+  email: "", name: "", organization_name: "", role: "pm" as Role,
+  dynamics_account_id: "", dynamics_account_name: "",
+};
+
+function AccountSearch({
+  value,
+  name,
+  onChange,
+}: {
+  value: string;
+  name: string;
+  onChange: (id: string, name: string) => void;
+}) {
+  const [search, setSearch] = useState(name);
+  const [results, setResults] = useState<DynamicsAccount[]>([]);
+  const [searching, setSearching] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sync display name when cleared externally
+  useEffect(() => { if (!value) setSearch(""); }, [value]);
+
+  function handleInput(q: string) {
+    setSearch(q);
+    onChange("", "");
+    if (timer.current) clearTimeout(timer.current);
+    if (q.length < 2) { setResults([]); return; }
+    timer.current = setTimeout(async () => {
+      setSearching(true);
+      try { setResults(await api.searchDynamicsAccounts(q)); }
+      catch { setResults([]); }
+      finally { setSearching(false); }
+    }, 300);
+  }
+
+  function select(a: DynamicsAccount) {
+    setSearch(a.name);
+    setResults([]);
+    onChange(a.accountid, a.name);
+  }
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        className="ms-input"
+        placeholder="Search Dynamics account…"
+        value={search}
+        onChange={e => handleInput(e.target.value)}
+        style={{ width: "100%" }}
+      />
+      {searching && <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "rgba(240,246,255,0.3)" }}>…</span>}
+      {value && <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: "#d97706" }}>✓</span>}
+      {results.length > 0 && !value && (
+        <div style={{ position: "absolute", zIndex: 60, top: "100%", left: 0, right: 0, background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, marginTop: 4, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+          {results.map(a => (
+            <div key={a.accountid} onClick={() => select(a)}
+              style={{ padding: "9px 14px", cursor: "pointer", fontSize: 13, color: "#f0f6ff", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+              onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+              onMouseLeave={e => (e.currentTarget.style.background = "")}>
+              {a.name}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -34,7 +102,7 @@ export default function AdminUsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
-  const [editForm, setEditForm] = useState<Partial<User & { role: Role }>>({});
+  const [editForm, setEditForm] = useState<Partial<User & { role: Role; dynamics_account_name: string }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const { showToast } = useToast();
@@ -69,6 +137,7 @@ export default function AdminUsersPage() {
         name: createForm.name.trim() || undefined,
         organization_name: createForm.organization_name.trim() || undefined,
         role: createForm.role,
+        dynamics_account_id: createForm.dynamics_account_id || undefined,
       });
       setUsers((prev) => [...prev, created].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
       setShowCreateModal(false);
@@ -83,7 +152,14 @@ export default function AdminUsersPage() {
 
   function openEdit(user: User) {
     setEditingUser(user);
-    setEditForm({ name: user.name ?? "", email: user.email, organization_name: user.organization_name ?? "", role: user.role as Role });
+    setEditForm({
+      name: user.name ?? "",
+      email: user.email,
+      organization_name: user.organization_name ?? "",
+      role: user.role as Role,
+      dynamics_account_id: user.dynamics_account_id ?? "",
+      dynamics_account_name: "",
+    });
   }
 
   async function handleEdit(e: React.FormEvent) {
@@ -96,6 +172,7 @@ export default function AdminUsersPage() {
         email: typeof editForm.email === "string" ? editForm.email.trim() || undefined : undefined,
         organization_name: typeof editForm.organization_name === "string" ? editForm.organization_name.trim() || undefined : undefined,
         role: editForm.role,
+        dynamics_account_id: editForm.dynamics_account_id || null,
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setEditingUser(null);
@@ -234,11 +311,24 @@ export default function AdminUsersPage() {
                 </label>
                 <label className="ms-label">
                   <span>Role *</span>
-                  <select className="ms-input" value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as Role })}>
+                  <select className="ms-input" value={createForm.role} onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as Role, dynamics_account_id: "", dynamics_account_name: "" })}>
                     {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </label>
               </div>
+              {createForm.role === "client" && (
+                <label className="ms-label">
+                  <span>Dynamics CRM Account</span>
+                  <AccountSearch
+                    value={createForm.dynamics_account_id}
+                    name={createForm.dynamics_account_name}
+                    onChange={(id, name) => setCreateForm(f => ({ ...f, dynamics_account_id: id, dynamics_account_name: name }))}
+                  />
+                  {createForm.dynamics_account_id && (
+                    <span style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", marginTop: 4 }}>ID: {createForm.dynamics_account_id}</span>
+                  )}
+                </label>
+              )}
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving || !createForm.email.trim()}>
                   {saving ? "Creating..." : "Create User"}
@@ -289,11 +379,29 @@ export default function AdminUsersPage() {
                 </label>
                 <label className="ms-label">
                   <span>Role *</span>
-                  <select className="ms-input" value={editForm.role ?? "pm"} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role })}>
+                  <select className="ms-input" value={editForm.role ?? "pm"} onChange={(e) => setEditForm({ ...editForm, role: e.target.value as Role, dynamics_account_id: "", dynamics_account_name: "" })}>
                     {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </label>
               </div>
+              {editForm.role === "client" && (
+                <label className="ms-label">
+                  <span>Dynamics CRM Account</span>
+                  <AccountSearch
+                    value={editForm.dynamics_account_id ?? ""}
+                    name={editForm.dynamics_account_name ?? ""}
+                    onChange={(id, name) => setEditForm(f => ({ ...f, dynamics_account_id: id, dynamics_account_name: name }))}
+                  />
+                  {editForm.dynamics_account_id && (
+                    <span style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", marginTop: 4 }}>ID: {editForm.dynamics_account_id}</span>
+                  )}
+                  {editingUser.dynamics_account_id && !editForm.dynamics_account_id && (
+                    <span style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", marginTop: 4 }}>
+                      Current: {editingUser.dynamics_account_id} — search above to change
+                    </span>
+                  )}
+                </label>
+              )}
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
                 <button type="button" className="ms-btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>

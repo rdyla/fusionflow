@@ -37,6 +37,7 @@ export type User = {
   role: string;
   is_active: number;
   avatar_url?: string | null;
+  dynamics_account_id?: string | null;
 };
 
 export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "zoom_va" | "rc_ace" | "rc_air";
@@ -784,7 +785,8 @@ export const api = {
     email: string;
     name?: string;
     organization_name?: string;
-    role: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae";
+    role: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
+    dynamics_account_id?: string;
   }) =>
     request<User>("/admin/users", {
       method: "POST",
@@ -797,8 +799,9 @@ export const api = {
       email?: string;
       name?: string;
       organization_name?: string;
-      role?: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae";
+      role?: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
       is_active?: number;
+      dynamics_account_id?: string | null;
     }
   ) =>
     request<User>(`/admin/users/${id}`, {

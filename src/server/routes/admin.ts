@@ -29,7 +29,8 @@ const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(500).optional(),
   organization_name: z.string().max(500).optional(),
-  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae"]),
+  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]),
+  dynamics_account_id: z.string().optional(),
 });
 
 app.post("/users", async (c) => {
@@ -41,7 +42,7 @@ app.post("/users", async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { email, name, organization_name, role } = parsed.data;
+  const { email, name, organization_name, role, dynamics_account_id } = parsed.data;
 
   const existing = await db
     .prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1")
@@ -55,10 +56,10 @@ app.post("/users", async (c) => {
   const id = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO users (id, email, name, organization_name, role, is_active)
-       VALUES (?, ?, ?, ?, ?, 1)`
+      `INSERT INTO users (id, email, name, organization_name, role, is_active, dynamics_account_id)
+       VALUES (?, ?, ?, ?, ?, 1, ?)`
     )
-    .bind(id, email.toLowerCase(), name ?? null, organization_name ?? null, role)
+    .bind(id, email.toLowerCase(), name ?? null, organization_name ?? null, role, dynamics_account_id ?? null)
     .run();
 
   const created = await db.prepare("SELECT * FROM users WHERE id = ? LIMIT 1").bind(id).first<{ id: string; email: string; name: string | null; role: string }>();
@@ -81,8 +82,9 @@ const updateUserSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   email: z.string().email().optional(),
   organization_name: z.string().max(500).optional(),
-  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae"]).optional(),
+  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]).optional(),
   is_active: z.number().int().min(0).max(1).optional(),
+  dynamics_account_id: z.string().nullable().optional(),
 });
 
 app.patch("/users/:id", async (c) => {

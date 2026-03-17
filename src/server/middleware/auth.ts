@@ -8,7 +8,7 @@ async function findUserByEmail(db: D1Database, email: string): Promise<AppUser |
   const result = await db
     .prepare(
       `
-      SELECT id, email, name, organization_name, role, is_active
+      SELECT id, email, name, organization_name, role, is_active, dynamics_account_id
       FROM users
       WHERE lower(email) = lower(?)
       LIMIT 1

@@ -16,6 +16,21 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // GET /api/support/cases?accountId=xxx
 app.get("/cases", async (c) => {
+  const user = c.var.auth?.user;
+
+  // Client users are always scoped to their own linked CRM account
+  if (user?.role === "client") {
+    if (!user.dynamics_account_id) return c.json([]);
+    try {
+      const cases = await getCases(c.env, user.dynamics_account_id);
+      return c.json(cases);
+    } catch (err) {
+      console.error("Support cases fetch error:", err);
+      return c.json([]);
+    }
+  }
+
+  // Internal staff: optional ?accountId= filter
   const accountId = c.req.query("accountId");
   try {
     const cases = await getCases(c.env, accountId);

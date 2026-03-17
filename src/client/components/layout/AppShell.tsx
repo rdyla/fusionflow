@@ -12,6 +12,7 @@ const ROLE_LABELS: Record<string, string> = {
   pf_csm:      "Customer Success Manager",
   pf_engineer: "Implementation Engineer",
   partner_ae:  "Partner AE",
+  client:      "Client",
 };
 
 function initials(name: string | null, email: string): string {
@@ -25,6 +26,7 @@ function initials(name: string | null, email: string): string {
 
 export default function AppShell() {
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isClient, setIsClient] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [sysStatus, setSysStatus] = useState<SystemStatusResponse | null>(null);
@@ -38,6 +40,7 @@ export default function AppShell() {
       .then((res) => {
         setCurrentUser(res.user);
         setIsAdmin(res.role === "admin" && !imp);
+        setIsClient(res.role === "client");
       })
       .catch(() => {});
   }, []);
@@ -78,29 +81,33 @@ export default function AppShell() {
 
         {/* Nav */}
         <nav style={{ flex: 1, paddingTop: 10, overflowY: "auto" }}>
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "8px 20px 4px" }}>
-            Solutioning
-          </div>
-          <SideLink to="/solutions">Solutions</SideLink>
+          {!isClient && (
+            <>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "8px 20px 4px" }}>
+                Solutioning
+              </div>
+              <SideLink to="/solutions">Solutions</SideLink>
 
-          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
 
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
-            Implementation
-          </div>
-          <SideLink to="/dashboard" end>Dashboard</SideLink>
-          <SideLink to="/projects">Projects</SideLink>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+                Implementation
+              </div>
+              <SideLink to="/dashboard" end>Dashboard</SideLink>
+              <SideLink to="/projects">Projects</SideLink>
 
-          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
 
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
-            Optimize
-          </div>
-          <SideLink to="/optimize">Accounts</SideLink>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+                Optimize
+              </div>
+              <SideLink to="/optimize">Accounts</SideLink>
 
-          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+            </>
+          )}
 
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "6px 20px 4px" }}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: isClient ? "8px 20px 4px" : "6px 20px 4px" }}>
             Support
           </div>
           <SideLink to="/support" end>Cases</SideLink>

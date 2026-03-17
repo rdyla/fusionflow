@@ -1,4 +1,4 @@
-export type AppRole = "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae";
+export type AppRole = "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
 
 export interface AppUser {
   id: string;
@@ -7,6 +7,7 @@ export interface AppUser {
   organization_name: string | null;
   role: AppRole;
   is_active: number;
+  dynamics_account_id: string | null;
 }
 
 export interface AuthContext {
