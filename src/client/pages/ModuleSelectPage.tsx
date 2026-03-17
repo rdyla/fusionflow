@@ -130,6 +130,15 @@ export default function ModuleSelectPage() {
     return () => clearInterval(id);
   }, []);
 
+  const isClient = user?.role === "client";
+
+  // Clients only see the modules relevant to them
+  const visibleModules = isClient
+    ? MODULES.filter((m) => m.route === "/support" || m.route === "/dashboard").map((m) =>
+        m.route === "/dashboard" ? { ...m, route: "/projects" } : m
+      )
+    : MODULES;
+
   function handleCardClick(mod: Module) {
     if (mod.route) {
       navigate(mod.route);
@@ -185,8 +194,8 @@ export default function ModuleSelectPage() {
         <p style={{ textAlign: "center", fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "rgba(240,246,255,0.4)", marginBottom: 36 }}>
           Choose your module
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 20, maxWidth: 1440, margin: "0 auto" }}>
-          {MODULES.map((mod, i) => {
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleModules.length}, minmax(0, 340px))`, gap: 20, maxWidth: 1440, margin: "0 auto", justifyContent: "center" }}>
+          {visibleModules.map((mod, i) => {
             const isHovered = hovered === i;
             const isActive = mod.route !== null;
             return (

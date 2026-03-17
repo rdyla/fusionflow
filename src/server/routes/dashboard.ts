@@ -20,6 +20,12 @@ app.get("/summary", async (c) => {
   } else if (auth.role === "partner_ae") {
     projectFilter = `WHERE id IN (SELECT project_id FROM project_access WHERE user_id = ?)`;
     filterBindings = [auth.user.id];
+  } else if (auth.role === "client") {
+    if (!auth.user.dynamics_account_id) {
+      return c.json({ user: auth.user, summary: { activeProjects: 0, atRiskProjects: 0, openTasks: 0, openRisks: 0 }, projects: [], openTasks: [], openRisks: [], phaseDistribution: [], vendorDistribution: [], typeDistribution: [] });
+    }
+    projectFilter = "WHERE dynamics_account_id = ?";
+    filterBindings = [auth.user.dynamics_account_id];
   }
   // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
 

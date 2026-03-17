@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api, type DashboardSummaryResponse } from "../lib/api";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
@@ -151,10 +151,17 @@ function MetricCard({ title, value, accent }: { title: string; value: number; ac
 
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummaryResponse | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    api.dashboardSummary().then(setData);
-  }, []);
+    api.dashboardSummary().then((d) => {
+      if (d.user.role === "client") {
+        navigate("/projects", { replace: true });
+        return;
+      }
+      setData(d);
+    });
+  }, [navigate]);
 
   if (!data) {
     return <div style={{ padding: 40, color: "rgba(240,246,255,0.5)" }}>Loading...</div>;
