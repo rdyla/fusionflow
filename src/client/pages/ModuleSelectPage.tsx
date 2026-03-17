@@ -153,14 +153,9 @@ export default function ModuleSelectPage() {
   return (
     <div style={{ minHeight: "100vh", background: "#021a2e", color: "#f0f6ff", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
 
-      {/* Background glows */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        background: "radial-gradient(ellipse 60% 50% at 15% 20%, rgba(99,193,234,0.07) 0%, transparent 70%), radial-gradient(ellipse 50% 40% at 85% 75%, rgba(37,99,235,0.06) 0%, transparent 70%), radial-gradient(ellipse 40% 35% at 70% 15%, rgba(124,58,237,0.05) 0%, transparent 65%)" }} />
-
-      {/* Grid */}
-      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0,
-        backgroundImage: "linear-gradient(rgba(99,193,234,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(99,193,234,0.035) 1px, transparent 1px)",
-        backgroundSize: "60px 60px" }} />
+      {/* Brand-blue top wash */}
+      <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 400, pointerEvents: "none", zIndex: 0,
+        background: "linear-gradient(180deg, rgba(3,57,95,0.5) 0%, transparent 100%)" }} />
 
       {/* Header */}
       <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid rgba(255,255,255,0.07)", backdropFilter: "blur(12px)", background: "rgba(2,26,46,0.8)" }}>

@@ -155,14 +155,9 @@ export default function AppShell() {
       {/* Main area */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#021a2e", position: "relative" }}>
 
-        {/* Subtle grid background */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
-          backgroundImage: "linear-gradient(rgba(99,193,234,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(99,193,234,0.03) 1px, transparent 1px)",
-          backgroundSize: "60px 60px" }} />
-
-        {/* Radial glow */}
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0,
-          background: "radial-gradient(ellipse 70% 50% at 80% 10%, rgba(3,57,95,0.18) 0%, transparent 70%)" }} />
+        {/* Subtle brand-blue wash at the top, fades out — echoes PF dark sections */}
+        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 320, pointerEvents: "none", zIndex: 0,
+          background: "linear-gradient(180deg, rgba(3,57,95,0.35) 0%, transparent 100%)" }} />
 
         {/* Top bar */}
         <header style={{
