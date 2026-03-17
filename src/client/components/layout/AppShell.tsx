@@ -107,7 +107,17 @@ export default function AppShell() {
             </>
           )}
 
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: isClient ? "8px 20px 4px" : "6px 20px 4px" }}>
+          {isClient && (
+            <>
+              <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: "8px 20px 4px" }}>
+                Projects
+              </div>
+              <SideLink to="/projects">My Projects</SideLink>
+              <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "10px 16px" }} />
+            </>
+          )}
+
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.25)", padding: isClient ? "6px 20px 4px" : "6px 20px 4px" }}>
             Support
           </div>
           <SideLink to="/support" end>Cases</SideLink>

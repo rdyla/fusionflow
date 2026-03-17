@@ -10,6 +10,14 @@ export async function canViewProject(
   if (user.role === "pf_csm") return true;       // CSMs have portfolio-wide visibility
   if (user.role === "pf_engineer") return true;  // Engineers have portfolio-wide visibility
 
+  if (user.role === "client" && user.dynamics_account_id) {
+    const owned = await db
+      .prepare("SELECT id FROM projects WHERE id = ? AND dynamics_account_id = ? LIMIT 1")
+      .bind(projectId, user.dynamics_account_id)
+      .first();
+    return !!owned;
+  }
+
   if (user.role === "pm") {
     const owned = await db
       .prepare(

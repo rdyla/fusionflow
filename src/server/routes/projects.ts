@@ -34,6 +34,10 @@ app.get("/", async (c) => {
       )
     `;
     bindings = [auth.user.id];
+  } else if (auth.role === "client") {
+    if (!auth.user.dynamics_account_id) return c.json([]);
+    sql += " AND dynamics_account_id = ?";
+    bindings = [auth.user.dynamics_account_id];
   }
   // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
 
