@@ -136,14 +136,14 @@ export default function OptimizePage() {
     }
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading...</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading...</div>;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <div className="ms-page-header">
         <div>
           <h1 className="ms-page-title">Optimize</h1>
-          <p style={{ color: "rgba(240,246,255,0.4)", fontSize: 13, margin: "4px 0 0" }}>
+          <p style={{ color: "#94a3b8", fontSize: 13, margin: "4px 0 0" }}>
             Post-implementation accounts — assessments, utilization &amp; roadmap
           </p>
         </div>
@@ -160,9 +160,9 @@ export default function OptimizePage() {
       </div>
 
       {accounts.length === 0 ? (
-        <div className="ms-card" style={{ textAlign: "center", padding: "48px 24px", color: "rgba(240,246,255,0.4)" }}>
+        <div className="ms-card" style={{ textAlign: "center", padding: "48px 24px", color: "#94a3b8" }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🎯</div>
-          <div style={{ fontSize: 15, fontWeight: 600, color: "rgba(240,246,255,0.7)", marginBottom: 8 }}>No Optimize accounts yet</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#475569", marginBottom: 8 }}>No Optimize accounts yet</div>
           <div style={{ fontSize: 13 }}>
             Projects automatically graduate here when all implementation phases are complete.
             {eligible.length > 0 && (
@@ -189,12 +189,12 @@ export default function OptimizePage() {
               {accounts.map((a) => (
                 <tr key={a.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/optimize/${a.project_id}`)}>
                   <td>
-                    <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{a.project_name}</div>
+                    <div style={{ fontWeight: 600, color: "#1e293b" }}>{a.project_name}</div>
                     {a.customer_name && (
-                      <div style={{ fontSize: 11, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>{a.customer_name}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{a.customer_name}</div>
                     )}
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 12 }}>
+                  <td style={{ color: "#64748b", fontSize: 12 }}>
                     {a.graduated_at ? a.graduated_at.slice(0, 10) : "—"}
                     {(() => { const m = METHOD_COLOR[a.graduation_method] ?? METHOD_COLOR.manual; return (
                       <span style={{ marginLeft: 6, fontSize: 10, color: m.color, background: m.bg, padding: "1px 5px", borderRadius: 4, border: `1px solid ${m.border}` }}>
@@ -207,13 +207,13 @@ export default function OptimizePage() {
                       {a.optimize_status}
                     </span>
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.6)", fontSize: 13 }}>{a.sa_name ?? "—"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.6)", fontSize: 13 }}>{a.csm_name ?? "—"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 12 }}>{a.next_review_date ?? "—"}</td>
+                  <td style={{ color: "#475569", fontSize: 13 }}>{a.sa_name ?? "—"}</td>
+                  <td style={{ color: "#475569", fontSize: 13 }}>{a.csm_name ?? "—"}</td>
+                  <td style={{ color: "#64748b", fontSize: 12 }}>{a.next_review_date ?? "—"}</td>
                   <td>
                     {a.last_assessment_score != null ? (
                       <span style={{ fontWeight: 700, fontSize: 16, color: a.last_assessment_score >= 7 ? "#22c55e" : a.last_assessment_score >= 4 ? "#f59e0b" : "#d13438" }}>
-                        {a.last_assessment_score}<span style={{ fontSize: 11, fontWeight: 400, color: "rgba(240,246,255,0.35)" }}>/10</span>
+                        {a.last_assessment_score}<span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8" }}>/10</span>
                       </span>
                     ) : "—"}
                   </td>
@@ -237,7 +237,7 @@ export default function OptimizePage() {
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) resetDirectModal(); }}>
           <div className="ms-modal" style={{ maxWidth: 560 }}>
             <h2>New Optimize Account</h2>
-            <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: "6px 0 16px" }}>
+            <p style={{ color: "#64748b", fontSize: 13, margin: "6px 0 16px" }}>
               Enroll a customer directly into Optimize without an existing implementation project.
             </p>
             <form onSubmit={handleDirectEnroll} style={{ display: "grid", gap: 14 }}>
@@ -268,20 +268,20 @@ export default function OptimizePage() {
                     {crmResults !== null && (
                       <div style={{ marginTop: 4, border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, overflow: "hidden", background: "#021a2e" }}>
                         {crmResults.length === 0 ? (
-                          <div style={{ padding: "10px 14px", fontSize: 13, color: "rgba(240,246,255,0.4)" }}>No accounts found in CRM.</div>
+                          <div style={{ padding: "10px 14px", fontSize: 13, color: "#94a3b8" }}>No accounts found in CRM.</div>
                         ) : (
                           crmResults.map((a) => (
                             <button
                               type="button"
                               key={a.accountid}
                               onClick={() => selectCrmAccount(a)}
-                              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", color: "rgba(240,246,255,0.85)" }}
+                              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", borderBottom: "1px solid #f1f5f9", cursor: "pointer", color: "#334155" }}
                               onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.06)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
                             >
                               <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>
                               {(a.address1_city || a.address1_stateorprovince) && (
-                                <div style={{ fontSize: 11, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
                                   {[a.address1_city, a.address1_stateorprovince].filter(Boolean).join(", ")}
                                 </div>
                               )}
@@ -291,7 +291,7 @@ export default function OptimizePage() {
                       </div>
                     )}
 
-                    <button type="button" onClick={() => { setCrmMode("manual"); setCrmResults(null); }} style={{ marginTop: 6, fontSize: 12, color: "rgba(240,246,255,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                    <button type="button" onClick={() => { setCrmMode("manual"); setCrmResults(null); }} style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
                       Can't find it? Enter manually →
                     </button>
                   </>
@@ -301,14 +301,14 @@ export default function OptimizePage() {
                 {crmMode === "search" && selectedCrm && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(99,193,234,0.06)", border: "1px solid rgba(99,193,234,0.2)", borderRadius: 6 }}>
                     <div>
-                      <div style={{ fontWeight: 600, fontSize: 13, color: "rgba(240,246,255,0.9)" }}>{selectedCrm.name}</div>
+                      <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>{selectedCrm.name}</div>
                       {(selectedCrm.address1_city || selectedCrm.address1_stateorprovince) && (
-                        <div style={{ fontSize: 11, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
                           {[selectedCrm.address1_city, selectedCrm.address1_stateorprovince].filter(Boolean).join(", ")}
                         </div>
                       )}
                     </div>
-                    <button type="button" onClick={clearCrmSelection} style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>
+                    <button type="button" onClick={clearCrmSelection} style={{ fontSize: 12, color: "#94a3b8", background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>
                       Change
                     </button>
                   </div>
@@ -325,7 +325,7 @@ export default function OptimizePage() {
                       onChange={(e) => setDirectForm({ ...directForm, customer_name: e.target.value })}
                       placeholder="Acme Corp"
                     />
-                    <button type="button" onClick={() => { setCrmMode("search"); setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "" })); }} style={{ marginTop: 6, fontSize: 12, color: "rgba(240,246,255,0.35)", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
+                    <button type="button" onClick={() => { setCrmMode("search"); setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "" })); }} style={{ marginTop: 6, fontSize: 12, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: 0, textAlign: "left" }}>
                       ← Search CRM instead
                     </button>
                   </>
@@ -396,15 +396,15 @@ export default function OptimizePage() {
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGraduateModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 520 }}>
             <h2>Graduate to Optimize</h2>
-            <p style={{ color: "rgba(240,246,255,0.6)", fontSize: 13, margin: "8px 0 16px" }}>
+            <p style={{ color: "#475569", fontSize: 13, margin: "8px 0 16px" }}>
               These projects have all implementation phases completed and are eligible for the Optimize lifecycle.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {eligible.map((p) => (
                 <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", background: "rgba(99,193,234,0.04)", border: "1px solid rgba(99,193,234,0.12)", borderRadius: 8 }}>
                   <div>
-                    <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{p.name}</div>
-                    {p.customer_name && <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)" }}>{p.customer_name}</div>}
+                    <div style={{ fontWeight: 600, color: "#1e293b" }}>{p.name}</div>
+                    {p.customer_name && <div style={{ fontSize: 12, color: "#94a3b8" }}>{p.customer_name}</div>}
                   </div>
                   <button
                     className="ms-btn-primary"

@@ -126,7 +126,7 @@ export default function SupportPage() {
             style={{ width: 220, paddingRight: 28 }}
           />
           {accountFilter && (
-            <button onClick={() => setAccountFilter(null)} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "rgba(240,246,255,0.4)", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
+            <button onClick={() => setAccountFilter(null)} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 14, lineHeight: 1 }}>×</button>
           )}
         </div>
 
@@ -142,7 +142,7 @@ export default function SupportPage() {
           <option value="2">Cancelled</option>
         </select>
 
-        <span style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginLeft: "auto" }}>
+        <span style={{ fontSize: 12, color: "#94a3b8", marginLeft: "auto" }}>
           {filtered.length} case{filtered.length !== 1 ? "s" : ""}
         </span>
       </div>
@@ -150,9 +150,9 @@ export default function SupportPage() {
       {/* Table */}
       <div className="ms-section-card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
-          <div style={{ padding: 48, textAlign: "center", color: "rgba(240,246,255,0.4)", fontSize: 13 }}>Loading cases…</div>
+          <div style={{ padding: 48, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Loading cases…</div>
         ) : filtered.length === 0 ? (
-          <div style={{ padding: 48, textAlign: "center", color: "rgba(240,246,255,0.4)", fontSize: 13 }}>No cases found</div>
+          <div style={{ padding: 48, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>No cases found</div>
         ) : (
           <table className="ms-table" style={{ width: "100%" }}>
             <thead>
@@ -177,13 +177,13 @@ export default function SupportPage() {
                     {c.ticketNumber ?? "—"}
                   </td>
                   <td style={{ maxWidth: 260 }}>
-                    <span style={{ fontWeight: 600, color: "#f0f6ff", fontSize: 13 }}>{c.title}</span>
+                    <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 13 }}>{c.title}</span>
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.6)", fontSize: 12 }}>{c.accountName ?? "—"}</td>
+                  <td style={{ color: "#475569", fontSize: 12 }}>{c.accountName ?? "—"}</td>
                   <td><span style={statusBadgeStyle(c.statecode)}>{c.status}</span></td>
                   <td><span style={priorityBadgeStyle(c.prioritycode)}>{c.priority}</span></td>
-                  <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 12 }}>{c.caseType ?? "—"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.4)", fontSize: 12, whiteSpace: "nowrap" }}>{fmt(c.modifiedOn)}</td>
+                  <td style={{ color: "#64748b", fontSize: 12 }}>{c.caseType ?? "—"}</td>
+                  <td style={{ color: "#94a3b8", fontSize: 12, whiteSpace: "nowrap" }}>{fmt(c.modifiedOn)}</td>
                 </tr>
               ))}
             </tbody>
@@ -197,7 +197,7 @@ export default function SupportPage() {
           <div className="ms-modal" style={{ width: 560 }} onClick={e => e.stopPropagation()}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
               <h2 style={{ fontFamily: "'Jost', sans-serif", fontSize: 18, fontWeight: 700, margin: 0 }}>New Support Case</h2>
-              <button onClick={() => setShowNew(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.4)", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
+              <button onClick={() => setShowNew(false)} style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 20, lineHeight: 1 }}>×</button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -212,13 +212,13 @@ export default function SupportPage() {
                   style={{ width: "100%" }}
                 />
                 {acctSearching && (
-                  <div style={{ position: "absolute", right: 12, top: 38, color: "rgba(240,246,255,0.4)", fontSize: 12 }}>…</div>
+                  <div style={{ position: "absolute", right: 12, top: 38, color: "#94a3b8", fontSize: 12 }}>…</div>
                 )}
                 {acctResults.length > 0 && !form.accountId && (
-                  <div style={{ position: "absolute", zIndex: 50, top: "100%", left: 0, right: 0, background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, marginTop: 4, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
+                  <div style={{ position: "absolute", zIndex: 50, top: "100%", left: 0, right: 0, background: "#142236", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, marginTop: 4, overflow: "hidden", boxShadow: "0 8px 32px rgba(0,0,0,0.4)" }}>
                     {acctResults.map(a => (
-                      <div key={a.accountid} onClick={() => selectAcct(a)} style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#f0f6ff", borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-                        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.06)")}
+                      <div key={a.accountid} onClick={() => selectAcct(a)} style={{ padding: "10px 14px", cursor: "pointer", fontSize: 13, color: "#1e293b", borderBottom: "1px solid #f1f5f9" }}
+                        onMouseEnter={e => (e.currentTarget.style.background = "#f1f5f9")}
                         onMouseLeave={e => (e.currentTarget.style.background = "")}>
                         {a.name}
                       </div>
@@ -266,7 +266,7 @@ export default function SupportPage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(0,0,0,0.07)" }}>
               <button className="ms-btn-secondary" onClick={() => setShowNew(false)}>Cancel</button>
               <button className="ms-btn-primary" onClick={handleSubmit} disabled={submitting}>
                 {submitting ? "Creating…" : "Create Case"}

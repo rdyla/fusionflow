@@ -36,7 +36,7 @@ export default function AdminSolutionsPage() {
     }
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading solutions...</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading solutions...</div>;
 
   const active = solutions.filter((s) => s.status !== "won" && s.status !== "lost");
   const closed = solutions.filter((s) => s.status === "won" || s.status === "lost");
@@ -45,7 +45,7 @@ export default function AdminSolutionsPage() {
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <div className="ms-page-header">
         <h1 className="ms-page-title">Solutions</h1>
-        <span style={{ fontSize: 12, color: "rgba(240,246,255,0.4)" }}>
+        <span style={{ fontSize: 12, color: "#94a3b8" }}>
           {active.length} active · {closed.length} closed
         </span>
       </div>
@@ -54,7 +54,7 @@ export default function AdminSolutionsPage() {
 
       {closed.length > 0 && (
         <>
-          <div style={{ margin: "28px 0 12px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(240,246,255,0.3)" }}>
+          <div style={{ margin: "28px 0 12px", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#94a3b8" }}>
             Won / Lost
           </div>
           <SolutionTable solutions={closed} onDelete={handleDelete} onNavigate={(id) => navigate(`/solutions/${id}`)} dimmed />
@@ -89,7 +89,7 @@ function SolutionTable({
         <tbody>
           {solutions.length === 0 ? (
             <tr>
-              <td colSpan={7} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "28px 16px" }}>
+              <td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
                 No solutions.
               </td>
             </tr>
@@ -97,18 +97,18 @@ function SolutionTable({
             solutions.map((s) => (
               <tr key={s.id}>
                 <td>
-                  <div style={{ fontWeight: 500, color: "rgba(240,246,255,0.9)" }}>{s.customer_name}</div>
-                  <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", marginTop: 2 }}>{s.name}</div>
+                  <div style={{ fontWeight: 500, color: "#1e293b" }}>{s.customer_name}</div>
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.name}</div>
                 </td>
-                <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>{s.solution_type.toUpperCase()}</td>
+                <td style={{ color: "#64748b", fontSize: 13 }}>{s.solution_type.toUpperCase()}</td>
                 <td>
                   <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status]}1a`, color: STATUS_COLOR[s.status], border: `1px solid ${STATUS_COLOR[s.status]}40` }}>
                     {STATUS_LABELS[s.status] ?? s.status}
                   </span>
                 </td>
-                <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>{s.pf_ae_name ?? "—"}</td>
-                <td style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>{s.partner_ae_display_name ?? s.partner_ae_name ?? "—"}</td>
-                <td style={{ color: "rgba(240,246,255,0.4)", fontSize: 12 }}>{s.updated_at?.slice(0, 10) ?? "—"}</td>
+                <td style={{ color: "#64748b", fontSize: 13 }}>{s.pf_ae_name ?? "—"}</td>
+                <td style={{ color: "#64748b", fontSize: 13 }}>{s.partner_ae_display_name ?? s.partner_ae_name ?? "—"}</td>
+                <td style={{ color: "#94a3b8", fontSize: 12 }}>{s.updated_at?.slice(0, 10) ?? "—"}</td>
                 <td>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button className="ms-btn-ghost" onClick={() => onNavigate(s.id)}>

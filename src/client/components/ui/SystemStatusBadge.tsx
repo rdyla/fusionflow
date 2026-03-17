@@ -39,7 +39,7 @@ function VendorPanel({ name, vendor }: { name: string; vendor: VendorStatus }) {
   return (
     <div style={{ padding: "10px 14px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "rgba(240,246,255,0.5)" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>
           {name}
         </span>
         <span style={{ fontSize: 10, fontWeight: 600, color: dotColor }}>
@@ -47,13 +47,13 @@ function VendorPanel({ name, vendor }: { name: string; vendor: VendorStatus }) {
         </span>
       </div>
       {vendor.components.length === 0 ? (
-        <div style={{ fontSize: 11, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>No data</div>
+        <div style={{ fontSize: 11, color: "#94a3b8", fontStyle: "italic" }}>No data</div>
       ) : (
         vendor.components.map((c) => (
           <div key={c.label} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "3px 0" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ width: 5, height: 5, borderRadius: "50%", background: STATUS_DOT[c.status] ?? "#94a3b8", flexShrink: 0, display: "inline-block" }} />
-              <span style={{ fontSize: 12, color: "rgba(240,246,255,0.7)" }}>{c.label}</span>
+              <span style={{ fontSize: 12, color: "#475569" }}>{c.label}</span>
             </div>
             <span style={{ fontSize: 11, color: STATUS_DOT[c.status] ?? "#94a3b8" }}>
               {COMPONENT_STATUS_LABEL[c.status] ?? c.status}
@@ -80,7 +80,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
 
   if (!status) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 40, fontSize: 12, color: "rgba(240,246,255,0.4)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 40, fontSize: 12, color: "#94a3b8" }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#63c1ea", boxShadow: "0 0 6px #63c1ea", display: "inline-block" }} />
         Live
       </div>
@@ -99,10 +99,10 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
         style={{
           display: "flex", alignItems: "center", gap: 7,
           padding: "5px 12px",
-          background: open ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.04)",
-          border: `1px solid ${isOk ? "rgba(255,255,255,0.08)" : `${dotColor}40`}`,
+          background: open ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.02)",
+          border: `1px solid ${isOk ? "rgba(0,0,0,0.07)" : `${dotColor}40`}`,
           borderRadius: 40, fontSize: 12,
-          color: isOk ? "rgba(240,246,255,0.4)" : dotColor,
+          color: isOk ? "#94a3b8" : dotColor,
           cursor: "pointer", outline: "none",
         }}
       >
@@ -120,7 +120,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
         <div style={{
           position: "absolute", top: "calc(100% + 8px)", right: 0,
           width: 280, zIndex: 200,
-          background: "#021a2e",
+          background: "#ffffff",
           border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: 8,
           boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
@@ -130,12 +130,12 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
             <VendorPanel name="Zoom" vendor={status.zoom} />
           )}
           {status.vendors.includes("zoom") && status.vendors.includes("ringcentral") && status.zoom && status.ringcentral && (
-            <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+            <div style={{ height: 1, background: "#f1f5f9" }} />
           )}
           {status.vendors.includes("ringcentral") && status.ringcentral && (
             <VendorPanel name="RingCentral" vendor={status.ringcentral} />
           )}
-          <div style={{ padding: "6px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: 10, color: "rgba(240,246,255,0.25)", textAlign: "right" }}>
+          <div style={{ padding: "6px 14px", borderTop: "1px solid #f1f5f9", fontSize: 10, color: "#cbd5e1", textAlign: "right" }}>
             Updated {Math.round((Date.now() - Math.max(status.zoom?.fetched_at ?? 0, status.ringcentral?.fetched_at ?? 0)) / 1000)}s ago
           </div>
         </div>

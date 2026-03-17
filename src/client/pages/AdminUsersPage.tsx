@@ -160,7 +160,7 @@ export default function AdminUsersPage() {
     }
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading users...</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading users...</div>;
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
@@ -183,13 +183,13 @@ export default function AdminUsersPage() {
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "28px 16px" }}>No users yet.</td></tr>
+              <tr><td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users yet.</td></tr>
             ) : (
               users.map((user) => (
                 <tr key={user.id}>
                   <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
                   <td>{user.email}</td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{user.organization_name ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>
                   <td>
                     <span
                       className="ms-badge"
@@ -209,14 +209,14 @@ export default function AdminUsersPage() {
                   <td>
                     <button
                       onClick={(e) => toggleMenu(e, user.id)}
-                      style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "rgba(240,246,255,0.5)", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "rgba(240,246,255,0.9)"; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "rgba(240,246,255,0.5)"; }}
+                      style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
                     >
                       ⋮
                     </button>
                     {openMenu?.id === user.id && (
-                      <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.45)" }}>
+                      <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#142236", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.45)" }}>
                         <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
                         <MenuItem
                           onClick={() => { toggleActive(user); setOpenMenu(null); }}
@@ -231,7 +231,7 @@ export default function AdminUsersPage() {
                         )}
                         {user.role !== "admin" && (
                           <>
-                            <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "4px 0" }} />
+                            <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
                             <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
                               Delete
                             </MenuItem>
@@ -291,8 +291,8 @@ export default function AdminUsersPage() {
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setDeletingUser(null); }}>
           <div className="ms-modal" style={{ maxWidth: 420 }}>
             <h2 style={{ color: "#d13438" }}>Delete User</h2>
-            <p style={{ color: "rgba(240,246,255,0.7)", margin: "12px 0 20px" }}>
-              Permanently delete <strong style={{ color: "#f0f6ff" }}>{deletingUser.name ?? deletingUser.email}</strong>? This removes them from all project access and cannot be undone.
+            <p style={{ color: "#475569", margin: "12px 0 20px" }}>
+              Permanently delete <strong style={{ color: "#1e293b" }}>{deletingUser.name ?? deletingUser.email}</strong>? This removes them from all project access and cannot be undone.
             </p>
             <div style={{ display: "flex", gap: 10 }}>
               <button className="ms-btn-primary" style={{ background: "#d13438", borderColor: "#d13438" }} onClick={handleDelete}>Delete</button>
@@ -348,8 +348,8 @@ function MenuItem({ onClick, color, children }: { onClick: () => void; color?: s
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        display: "block", width: "100%", textAlign: "left", background: hovered ? "rgba(255,255,255,0.06)" : "none",
-        border: "none", padding: "8px 14px", fontSize: 13, color: color ?? "rgba(240,246,255,0.8)", cursor: "pointer",
+        display: "block", width: "100%", textAlign: "left", background: hovered ? "#f1f5f9" : "none",
+        border: "none", padding: "8px 14px", fontSize: 13, color: color ?? "#334155", cursor: "pointer",
       }}
     >
       {children}

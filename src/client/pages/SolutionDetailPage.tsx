@@ -592,7 +592,7 @@ export default function SolutionDetailPage() {
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae";
   const partnerAes = users.filter((u) => u.role === "partner_ae");
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading…</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
 
   const statusIdx = STATUS_FLOW.indexOf(solution.status);
@@ -611,15 +611,15 @@ export default function SolutionDetailPage() {
   return (
     <div style={{ maxWidth: 960, margin: "0 auto" }}>
       {/* Back */}
-      <Link to="/solutions" style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 20 }}>
+      <Link to="/solutions" style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 20 }}>
         ← Solutions
       </Link>
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#f0f6ff", margin: 0 }}>{solution.customer_name}</h1>
-          <div style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", marginTop: 4 }}>{solution.name}</div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.customer_name}</h1>
+          <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>{solution.name}</div>
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
               {TYPE_LABELS[solution.solution_type]}
@@ -652,7 +652,7 @@ export default function SolutionDetailPage() {
       </div>
 
       {/* Status progress bar */}
-      <div style={{ display: "flex", gap: 0, marginBottom: 28, background: "rgba(255,255,255,0.04)", borderRadius: 6, overflow: "hidden", border: "1px solid rgba(255,255,255,0.08)" }}>
+      <div style={{ display: "flex", gap: 0, marginBottom: 28, background: "rgba(0,0,0,0.02)", borderRadius: 6, overflow: "hidden", border: "1px solid rgba(0,0,0,0.07)" }}>
         {STATUS_FLOW.map((s, i) => {
           const isCurrent = solution.status === s;
           const isPast = statusIdx > i;
@@ -661,9 +661,9 @@ export default function SolutionDetailPage() {
               key={s}
               style={{
                 flex: 1, padding: "8px 4px", textAlign: "center", fontSize: 11, fontWeight: 600,
-                color: isCurrent ? "#fff" : isPast ? "rgba(240,246,255,0.6)" : "rgba(240,246,255,0.25)",
+                color: isCurrent ? "#fff" : isPast ? "#475569" : "#cbd5e1",
                 background: isCurrent ? STATUS_COLOR[s] : isPast ? `${STATUS_COLOR[s]}30` : "transparent",
-                borderRight: i < STATUS_FLOW.length - 1 ? "1px solid rgba(255,255,255,0.07)" : "none",
+                borderRight: i < STATUS_FLOW.length - 1 ? "1px solid rgba(0,0,0,0.06)" : "none",
                 letterSpacing: "0.04em", textTransform: "uppercase",
               }}
             >
@@ -674,14 +674,14 @@ export default function SolutionDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(255,255,255,0.08)", marginBottom: 28 }}>
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid rgba(0,0,0,0.07)", marginBottom: 28 }}>
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
             style={{
               padding: "10px 18px", background: "none", border: "none", borderBottom: `2px solid ${tab === t.key ? "#63c1ea" : "transparent"}`,
-              color: tab === t.key ? "#63c1ea" : "rgba(240,246,255,0.45)", fontWeight: 600, fontSize: 13, cursor: "pointer", marginBottom: -1,
+              color: tab === t.key ? "#63c1ea" : "#64748b", fontWeight: 600, fontSize: 13, cursor: "pointer", marginBottom: -1,
             }}
           >
             {t.label}
@@ -693,14 +693,14 @@ export default function SolutionDetailPage() {
       {tab === "overview" && (
         <div style={{ display: "grid", gap: 24 }}>
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Solution Details</h3>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Solution Details</h3>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
               <label className="ms-label">
                 <span>Solution Name</span>
                 {canEdit ? (
                   <input className="ms-input" value={overview.name} onChange={(e) => setOverview((o) => ({ ...o, name: e.target.value }))} />
                 ) : (
-                  <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{solution.name}</div>
+                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.name}</div>
                 )}
               </label>
               <label className="ms-label">
@@ -708,16 +708,16 @@ export default function SolutionDetailPage() {
                 {canEdit ? (
                   <input className="ms-input" value={overview.customer_name} onChange={(e) => setOverview((o) => ({ ...o, customer_name: e.target.value }))} />
                 ) : (
-                  <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{solution.customer_name}</div>
+                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.customer_name}</div>
                 )}
               </label>
               <label className="ms-label">
                 <span>Vendor</span>
-                <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{solution.vendor === "zoom" ? "Zoom" : "RingCentral"}</div>
+                <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.vendor === "zoom" ? "Zoom" : "RingCentral"}</div>
               </label>
               <label className="ms-label">
                 <span>Solution Type</span>
-                <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type]}</div>
+                <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type]}</div>
               </label>
               {solution.dynamics_account_id && (
                 <label className="ms-label">
@@ -735,7 +735,7 @@ export default function SolutionDetailPage() {
           </div>
 
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>PF Team</h3>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>PF Team</h3>
 
             {/* Staff list */}
             {solutionStaff.length > 0 && (
@@ -745,14 +745,14 @@ export default function SolutionDetailPage() {
                   const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager", pf_engineer: "Implementation Engineer", pm: "Project Manager" };
                   const photo = solutionStaffPhotoMap[s.email] ?? s.avatar_url;
                   return (
-                    <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "rgba(255,255,255,0.03)", borderRadius: 8, border: "1px solid rgba(255,255,255,0.07)", position: "relative" }}>
+                    <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)", position: "relative" }}>
                       {photo
                         ? <img src={photo} alt={s.name ?? s.email} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                         : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
                       }
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.35)", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{s.name ?? s.email}</div>
+                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name ?? s.email}</div>
                       </div>
                       {canEdit && (
                         <button onClick={() => handleRemoveSolutionStaff(s.id)} style={{ position: "absolute", top: 6, right: 6, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
@@ -763,11 +763,11 @@ export default function SolutionDetailPage() {
               </div>
             )}
             {solutionStaff.length === 0 && (
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", marginBottom: 16 }}>No PF staff assigned yet.</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginBottom: 16 }}>No PF staff assigned yet.</div>
             )}
 
             {canEdit && (
-              <div style={{ paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.06)", marginBottom: 16 }}>
+              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9", marginBottom: 16 }}>
                 <button className="ms-btn-secondary" onClick={() => { setShowSolutionStaffModal(true); setAddSolutionStaffUser(""); setAddSolutionStaffRole(""); }}>
                   + Add Staff Member
                 </button>
@@ -775,7 +775,7 @@ export default function SolutionDetailPage() {
             )}
 
             {/* Partner AE - unchanged */}
-            <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 14 }}>
+            <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
               <label className="ms-label">
                 <span>Partner AE</span>
                 {canEdit ? (
@@ -784,7 +784,7 @@ export default function SolutionDetailPage() {
                     {partnerAes.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>)}
                   </select>
                 ) : (
-                  <div style={{ fontSize: 14, color: "rgba(240,246,255,0.85)", padding: "8px 0" }}>{solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"}</div>
+                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"}</div>
                 )}
               </label>
               {canEdit && (
@@ -799,7 +799,7 @@ export default function SolutionDetailPage() {
           {/* ── Customer Contacts ── */}
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
+              <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
               {canEdit && (
                 <button
                   className="ms-btn-secondary"
@@ -819,24 +819,24 @@ export default function SolutionDetailPage() {
             </div>
 
             {solutionContacts.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>No customer contacts added yet.</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No customer contacts added yet.</div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
                 {solutionContacts.map((c) => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "rgba(255,255,255,0.03)", borderRadius: 6, border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
                     <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
                       {c.name.charAt(0).toUpperCase()}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
                         {c.contact_role && (
                           <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
                             {c.contact_role}
                           </span>
                         )}
                       </div>
-                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 3 }}>
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
                       </div>
                     </div>
@@ -865,9 +865,9 @@ export default function SolutionDetailPage() {
       {showSolutionStaffModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowSolutionStaffModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Add PF Team Member</h2>
-              <button onClick={() => setShowSolutionStaffModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Add PF Team Member</h2>
+              <button onClick={() => setShowSolutionStaffModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
             </div>
             <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
               <label className="ms-label">
@@ -891,7 +891,7 @@ export default function SolutionDetailPage() {
                 </select>
               </label>
             </div>
-            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
               <button className="ms-btn-primary" disabled={!addSolutionStaffUser || !addSolutionStaffRole || addingSolutionStaff} onClick={handleAddSolutionStaff}>
                 {addingSolutionStaff ? "Adding…" : "Add Team Member"}
               </button>
@@ -905,9 +905,9 @@ export default function SolutionDetailPage() {
       {showContactModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowContactModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 580, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>Add Customer Contact</h2>
-              <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Add Customer Contact</h2>
+              <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
             </div>
 
             <div style={{ padding: "16px 24px 0", flexShrink: 0 }}>
@@ -928,7 +928,7 @@ export default function SolutionDetailPage() {
             {solution.dynamics_account_id && (
               <div style={{ display: "flex", gap: 0, padding: "12px 24px 0", flexShrink: 0 }}>
                 {(["crm", "manual"] as const).map((t) => (
-                  <button key={t} onClick={() => setContactModalTab(t)} style={{ flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", background: "none", border: "none", borderBottom: `2px solid ${contactModalTab === t ? "#63c1ea" : "transparent"}`, color: contactModalTab === t ? "#63c1ea" : "rgba(240,246,255,0.35)", marginBottom: -1 }}>
+                  <button key={t} onClick={() => setContactModalTab(t)} style={{ flex: 1, padding: "8px 0", fontSize: 13, fontWeight: 600, cursor: "pointer", background: "none", border: "none", borderBottom: `2px solid ${contactModalTab === t ? "#63c1ea" : "transparent"}`, color: contactModalTab === t ? "#63c1ea" : "#94a3b8", marginBottom: -1 }}>
                     {t === "crm" ? "From CRM" : "Enter Manually"}
                   </button>
                 ))}
@@ -941,10 +941,10 @@ export default function SolutionDetailPage() {
                   {crmContacts.filter((c) => !solutionContacts.some((s) => s.dynamics_contact_id === c.contactid)).map((c) => {
                     const fullName = [c.firstname, c.lastname].filter(Boolean).join(" ");
                     return (
-                      <div key={c.contactid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 6 }}>
+                      <div key={c.contactid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", background: "#f8fafc", border: "1px solid rgba(0,0,0,0.06)", borderRadius: 6 }}>
                         <div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.85)" }}>{fullName || "—"}</div>
-                          <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>{[c.jobtitle, c.emailaddress1, c.telephone1].filter(Boolean).join(" · ")}</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{fullName || "—"}</div>
+                          <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{[c.jobtitle, c.emailaddress1, c.telephone1].filter(Boolean).join(" · ")}</div>
                         </div>
                         <button className="ms-btn-secondary" style={{ fontSize: 12, flexShrink: 0 }} disabled={savingContact || !contactRole} title={!contactRole ? "Select a role first" : ""}
                           onClick={async () => {
@@ -977,7 +977,7 @@ export default function SolutionDetailPage() {
             </div>
 
             {(!solution.dynamics_account_id || contactModalTab === "manual") && (
-              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
+              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
                 <button className="ms-btn-primary" disabled={savingContact || !manualContact.name.trim() || !contactRole}
                   onClick={async () => {
                     if (!id) return;
@@ -1007,7 +1007,7 @@ export default function SolutionDetailPage() {
             const otherFields = section.fields.filter((f) => f.type !== "checkbox");
             return (
               <div key={section.title} className="ms-card">
-                <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                   {section.title}
                 </h3>
 
@@ -1062,7 +1062,7 @@ export default function SolutionDetailPage() {
                           style={{ width: 15, height: 15, accentColor: "#63c1ea" }}
                           disabled={!canEdit}
                         />
-                        <span style={{ fontSize: 13, color: "rgba(240,246,255,0.75)" }}>{field.label}</span>
+                        <span style={{ fontSize: 13, color: "#475569" }}>{field.label}</span>
                       </label>
                     ))}
                   </div>
@@ -1090,8 +1090,8 @@ export default function SolutionDetailPage() {
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, gap: 12 }}>
               <div>
-                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Statement of Requirements</h3>
-                <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: 0 }}>
+                <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Statement of Requirements</h3>
+                <p style={{ fontSize: 13, color: "#94a3b8", margin: 0 }}>
                   Document the customer's specific technical and business requirements for this solution.
                 </p>
               </div>
@@ -1129,8 +1129,8 @@ export default function SolutionDetailPage() {
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Identified Gaps</h3>
-                <p style={{ margin: "4px 0 0", fontSize: 12, color: "rgba(240,246,255,0.35)" }}>Differences between current state and what the solution must deliver</p>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Identified Gaps</h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>Differences between current state and what the solution must deliver</p>
               </div>
               {canEdit && (
                 <button className="ms-btn-primary" onClick={() => { setEditingGap(null); setGapForm(BLANK_GAP); setShowGapModal(true); }}>+ Add Gap</button>
@@ -1138,7 +1138,7 @@ export default function SolutionDetailPage() {
             </div>
 
             {gapItems.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", padding: "12px 0" }}>No gaps identified yet.</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", padding: "12px 0" }}>No gaps identified yet.</div>
             ) : (
               <div className="ms-card" style={{ overflow: "hidden", padding: 0 }}>
                 <table className="ms-table">
@@ -1160,12 +1160,12 @@ export default function SolutionDetailPage() {
                             {g.category}
                           </span>
                         </td>
-                        <td style={{ color: "rgba(240,246,255,0.85)", fontWeight: 500 }}>
+                        <td style={{ color: "#334155", fontWeight: 500 }}>
                           {g.description}
-                          {g.notes && <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", marginTop: 2 }}>{g.notes}</div>}
+                          {g.notes && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{g.notes}</div>}
                         </td>
-                        <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{g.current_state || "—"}</td>
-                        <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{g.required_state || "—"}</td>
+                        <td style={{ fontSize: 12, color: "#64748b" }}>{g.current_state || "—"}</td>
+                        <td style={{ fontSize: 12, color: "#64748b" }}>{g.required_state || "—"}</td>
                         <td>
                           <span className="ms-badge" style={{
                             background: g.priority === "high" ? "#d1343818" : g.priority === "medium" ? "#f59e0b18" : "#22c55e18",
@@ -1199,8 +1199,8 @@ export default function SolutionDetailPage() {
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Risk Register</h3>
-                <p style={{ margin: "4px 0 0", fontSize: 12, color: "rgba(240,246,255,0.35)" }}>Factors that could impact the success or timeline of this solution</p>
+                <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Risk Register</h3>
+                <p style={{ margin: "4px 0 0", fontSize: 12, color: "#94a3b8" }}>Factors that could impact the success or timeline of this solution</p>
               </div>
               {canEdit && (
                 <button className="ms-btn-primary" onClick={() => { setEditingRisk(null); setRiskForm(BLANK_RISK); setShowRiskModal(true); }}>+ Add Risk</button>
@@ -1208,7 +1208,7 @@ export default function SolutionDetailPage() {
             </div>
 
             {riskItems.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic", padding: "12px 0" }}>No risks identified yet.</div>
+              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", padding: "12px 0" }}>No risks identified yet.</div>
             ) : (
               <div className="ms-card" style={{ overflow: "hidden", padding: 0 }}>
                 <table className="ms-table">
@@ -1228,16 +1228,16 @@ export default function SolutionDetailPage() {
                       const score = riskScore(r.probability, r.impact);
                       return (
                         <tr key={r.id}>
-                          <td><span className="ms-badge" style={{ background: "rgba(255,255,255,0.05)", color: "rgba(240,246,255,0.6)", border: "1px solid rgba(255,255,255,0.1)", whiteSpace: "nowrap" }}>{r.category}</span></td>
-                          <td style={{ color: "rgba(240,246,255,0.85)", fontWeight: 500 }}>{r.description}</td>
-                          <td style={{ fontSize: 12, color: "rgba(240,246,255,0.6)", textTransform: "capitalize" }}>{r.probability}</td>
-                          <td style={{ fontSize: 12, color: "rgba(240,246,255,0.6)", textTransform: "capitalize" }}>{r.impact}</td>
+                          <td><span className="ms-badge" style={{ background: "#ffffff", color: "#475569", border: "1px solid rgba(255,255,255,0.1)", whiteSpace: "nowrap" }}>{r.category}</span></td>
+                          <td style={{ color: "#334155", fontWeight: 500 }}>{r.description}</td>
+                          <td style={{ fontSize: 12, color: "#475569", textTransform: "capitalize" }}>{r.probability}</td>
+                          <td style={{ fontSize: 12, color: "#475569", textTransform: "capitalize" }}>{r.impact}</td>
                           <td>
                             <span className="ms-badge" style={{ background: score.color + "18", color: score.color, border: `1px solid ${score.color}40`, whiteSpace: "nowrap" }}>
                               {score.label}
                             </span>
                           </td>
-                          <td style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{r.mitigation || "—"}</td>
+                          <td style={{ fontSize: 12, color: "#64748b" }}>{r.mitigation || "—"}</td>
                           {canEdit && (
                             <td>
                               <div style={{ display: "flex", gap: 6 }}>
@@ -1270,7 +1270,7 @@ export default function SolutionDetailPage() {
                 return (
                   <div key={p} style={{ padding: "8px 16px", background: color + "0f", border: `1px solid ${color}30`, borderRadius: 6, fontSize: 12 }}>
                     <span style={{ color, fontWeight: 700, textTransform: "capitalize" }}>{p}</span>
-                    <span style={{ color: "rgba(240,246,255,0.5)", marginLeft: 8 }}>{gCount} gap{gCount !== 1 ? "s" : ""} · {rCount} risk{rCount !== 1 ? "s" : ""}</span>
+                    <span style={{ color: "#64748b", marginLeft: 8 }}>{gCount} gap{gCount !== 1 ? "s" : ""} · {rCount} risk{rCount !== 1 ? "s" : ""}</span>
                   </div>
                 );
               })}
@@ -1283,8 +1283,8 @@ export default function SolutionDetailPage() {
       {tab === "scope" && (
         <div style={{ display: "grid", gap: 20 }}>
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Scope of Work</h3>
-            <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: "0 0 16px" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Scope of Work</h3>
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
               Define what is included (and excluded) in this engagement. This document will accompany the project handoff.
             </p>
             <textarea
@@ -1310,7 +1310,7 @@ export default function SolutionDetailPage() {
         <div style={{ display: "grid", gap: 20 }}>
           {/* Summary */}
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Solution Summary</h3>
+            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Solution Summary</h3>
             <table style={{ borderCollapse: "collapse", width: "100%" }}>
               <tbody>
                 {[
@@ -1322,8 +1322,8 @@ export default function SolutionDetailPage() {
                   ["Status", STATUS_LABELS[solution.status]],
                 ].map(([label, value]) => (
                   <tr key={label}>
-                    <td style={{ padding: "7px 16px 7px 0", fontSize: 13, color: "rgba(240,246,255,0.4)", width: 180, whiteSpace: "nowrap" }}>{label}</td>
-                    <td style={{ padding: "7px 0", fontSize: 13, color: "rgba(240,246,255,0.85)" }}>{value}</td>
+                    <td style={{ padding: "7px 16px 7px 0", fontSize: 13, color: "#94a3b8", width: 180, whiteSpace: "nowrap" }}>{label}</td>
+                    <td style={{ padding: "7px 0", fontSize: 13, color: "#334155" }}>{value}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1332,8 +1332,8 @@ export default function SolutionDetailPage() {
 
           {/* Handoff notes */}
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Handoff Notes</h3>
-            <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: "0 0 16px" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Handoff Notes</h3>
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
               Any additional context, special instructions, or important notes for the project team.
             </p>
             <textarea
@@ -1354,12 +1354,12 @@ export default function SolutionDetailPage() {
 
           {/* Customer Contacts summary */}
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
-            <p style={{ fontSize: 13, color: "rgba(240,246,255,0.4)", margin: "0 0 14px" }}>
+            <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
+            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 14px" }}>
               Contacts tagged on this solution will be copied to the implementation project automatically.
             </p>
             {solutionContacts.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.3)", fontStyle: "italic" }}>
+              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
                 No contacts added yet — use the Overview tab to add customer contacts.
               </div>
             ) : (
@@ -1371,12 +1371,12 @@ export default function SolutionDetailPage() {
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{c.name}</span>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
                         {c.contact_role && (
                           <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>{c.contact_role}</span>
                         )}
                       </div>
-                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>
+                      <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
                       </div>
                     </div>
@@ -1428,9 +1428,9 @@ export default function SolutionDetailPage() {
       {showGapModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGapModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 580 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>{editingGap ? "Edit Gap" : "Add Gap"}</h2>
-              <button onClick={() => setShowGapModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer" }}>×</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>{editingGap ? "Edit Gap" : "Add Gap"}</h2>
+              <button onClick={() => setShowGapModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer" }}>×</button>
             </div>
             <div style={{ padding: 24, display: "grid", gap: 14 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
@@ -1466,7 +1466,7 @@ export default function SolutionDetailPage() {
                 <textarea className="ms-input" rows={2} value={gapForm.notes} onChange={(e) => setGapForm({ ...gapForm, notes: e.target.value })} placeholder="How will this be addressed?" style={{ resize: "vertical" }} />
               </label>
             </div>
-            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)" }}>
               <button
                 className="ms-btn-primary"
                 disabled={savingGapRisk || !gapForm.description.trim()}
@@ -1491,9 +1491,9 @@ export default function SolutionDetailPage() {
       {showRiskModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 560 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#f0f6ff" }}>{editingRisk ? "Edit Risk" : "Add Risk"}</h2>
-              <button onClick={() => setShowRiskModal(false)} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.5)", fontSize: 22, cursor: "pointer" }}>×</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>{editingRisk ? "Edit Risk" : "Add Risk"}</h2>
+              <button onClick={() => setShowRiskModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer" }}>×</button>
             </div>
             <div style={{ padding: 24, display: "grid", gap: 14 }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
@@ -1517,7 +1517,7 @@ export default function SolutionDetailPage() {
                 </label>
               </div>
               {(riskForm.probability || riskForm.impact) && (
-                <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>
+                <div style={{ fontSize: 12, color: "#64748b" }}>
                   Risk Score: {" "}
                   <span style={{ fontWeight: 700, color: riskScore(riskForm.probability, riskForm.impact).color }}>
                     {riskScore(riskForm.probability, riskForm.impact).label}
@@ -1533,7 +1533,7 @@ export default function SolutionDetailPage() {
                 <textarea className="ms-input" rows={3} value={riskForm.mitigation} onChange={(e) => setRiskForm({ ...riskForm, mitigation: e.target.value })} placeholder="How will this risk be managed or reduced?" style={{ resize: "vertical" }} />
               </label>
             </div>
-            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)" }}>
               <button
                 className="ms-btn-primary"
                 disabled={savingGapRisk || !riskForm.description.trim()}

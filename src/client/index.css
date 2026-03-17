@@ -10,8 +10,8 @@
 
   body {
     font-family: 'Jost', 'Segoe UI', system-ui, sans-serif;
-    background: #021a2e;
-    color: #f0f6ff;
+    background: #f3f1f1;
+    color: #1e293b;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -34,13 +34,13 @@
     font-family: 'Jost', sans-serif;
     font-size: 22px;
     font-weight: 800;
-    color: #f0f6ff;
+    color: #03395f;
     letter-spacing: -0.02em;
     margin: 0;
   }
   .ms-page-subtitle {
     font-size: 13px;
-    color: rgba(240,246,255,0.45);
+    color: #64748b;
     margin: 4px 0 0;
     font-weight: 300;
   }
@@ -48,14 +48,14 @@
   /* ── Cards ──────────────────────────────────────────────────── */
 
   .ms-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
   }
 
   .ms-section-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 20px 24px;
   }
@@ -63,32 +63,32 @@
     font-family: 'Jost', sans-serif;
     font-size: 11px;
     font-weight: 700;
-    color: #63c1ea;
+    color: #03395f;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin: 0 0 14px;
     padding-bottom: 12px;
-    border-bottom: 1px solid rgba(255,255,255,0.07);
+    border-bottom: 1px solid #e2e8f0;
   }
 
   /* ── Metric cards ───────────────────────────────────────────── */
 
   .ms-metric-card {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 12px;
     padding: 20px 24px;
     flex: 1;
     transition: border-color 0.2s, box-shadow 0.2s;
   }
   .ms-metric-card:hover {
-    border-color: rgba(99,193,234,0.3);
-    box-shadow: 0 0 24px rgba(99,193,234,0.08);
+    border-color: rgba(3,57,95,0.3);
+    box-shadow: 0 4px 24px rgba(3,57,95,0.08);
   }
   .ms-metric-label {
     font-size: 10px;
     font-weight: 700;
-    color: rgba(240,246,255,0.4);
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     margin-bottom: 10px;
@@ -96,7 +96,7 @@
   .ms-metric-value {
     font-size: 32px;
     font-weight: 700;
-    color: #63c1ea;
+    color: #03395f;
     line-height: 1;
   }
 
@@ -104,14 +104,14 @@
 
   .ms-info-item {
     padding: 12px 16px;
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
   }
   .ms-info-label {
     font-size: 10px;
     font-weight: 700;
-    color: rgba(240,246,255,0.4);
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     margin-bottom: 5px;
@@ -119,14 +119,14 @@
   .ms-info-value {
     font-size: 14px;
     font-weight: 500;
-    color: #f0f6ff;
+    color: #1e293b;
   }
 
   /* ── Row items (tasks / risks / milestones) ─────────────────── */
 
   .ms-row-item {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.07);
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
     border-radius: 8px;
     padding: 12px 16px;
     display: flex;
@@ -136,8 +136,8 @@
     transition: background 0.15s, border-color 0.15s;
   }
   .ms-row-item:hover {
-    background: rgba(255,255,255,0.06);
-    border-color: rgba(255,255,255,0.12);
+    background: #f1f5f9;
+    border-color: #cbd5e1;
   }
 
   /* ── Buttons ────────────────────────────────────────────────── */
@@ -161,7 +161,7 @@
   .ms-btn-primary:hover:not(:disabled) {
     background: #14aa55;
     border-color: #14aa55;
-    box-shadow: 0 0 16px rgba(23,198,98,0.35);
+    box-shadow: 0 0 16px rgba(23,198,98,0.3);
   }
   .ms-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -169,9 +169,9 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: transparent;
-    color: rgba(240,246,255,0.75);
-    border: 1px solid rgba(255,255,255,0.18);
+    background: #ffffff;
+    color: #475569;
+    border: 1px solid #cbd5e1;
     border-radius: 6px;
     padding: 7px 16px;
     font-size: 13px;
@@ -181,9 +181,9 @@
     white-space: nowrap;
   }
   .ms-btn-secondary:hover:not(:disabled) {
-    background: rgba(255,255,255,0.07);
-    border-color: rgba(255,255,255,0.28);
-    color: #f0f6ff;
+    background: #f1f5f9;
+    border-color: #94a3b8;
+    color: #1e293b;
   }
   .ms-btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -191,9 +191,9 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(239,68,68,0.15);
-    color: #fca5a5;
-    border: 1px solid rgba(239,68,68,0.35);
+    background: rgba(239,68,68,0.08);
+    color: #dc2626;
+    border: 1px solid rgba(239,68,68,0.25);
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 12px;
@@ -203,8 +203,8 @@
     white-space: nowrap;
   }
   .ms-btn-danger:hover:not(:disabled) {
-    background: rgba(239,68,68,0.28);
-    border-color: rgba(239,68,68,0.6);
+    background: rgba(239,68,68,0.15);
+    border-color: rgba(239,68,68,0.4);
   }
 
   .ms-btn-ghost {
@@ -212,8 +212,8 @@
     align-items: center;
     gap: 4px;
     background: transparent;
-    color: #63c1ea;
-    border: 1px solid rgba(99,193,234,0.25);
+    color: #03395f;
+    border: 1px solid rgba(3,57,95,0.25);
     border-radius: 6px;
     padding: 4px 10px;
     font-size: 12px;
@@ -223,8 +223,8 @@
     white-space: nowrap;
   }
   .ms-btn-ghost:hover:not(:disabled) {
-    background: rgba(99,193,234,0.1);
-    border-color: rgba(99,193,234,0.45);
+    background: rgba(3,57,95,0.06);
+    border-color: rgba(3,57,95,0.4);
   }
 
   /* ── Form controls ──────────────────────────────────────────── */
@@ -236,16 +236,16 @@
   .ms-label > span {
     font-size: 11px;
     font-weight: 600;
-    color: rgba(240,246,255,0.5);
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.06em;
   }
 
   .ms-input {
     width: 100%;
-    background: rgba(255,255,255,0.05);
-    color: #f0f6ff;
-    border: 1px solid rgba(255,255,255,0.12);
+    background: #ffffff;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
     border-radius: 6px;
     padding: 8px 12px;
     font-size: 14px;
@@ -257,8 +257,8 @@
     border-color: #63c1ea;
     box-shadow: 0 0 0 2px rgba(99,193,234,0.2);
   }
-  .ms-input::placeholder { color: rgba(240,246,255,0.25); }
-  .ms-input option { background: #032843; color: #f0f6ff; }
+  .ms-input::placeholder { color: #94a3b8; }
+  .ms-input option { background: #ffffff; color: #1e293b; }
 
   /* ── Table ──────────────────────────────────────────────────── */
 
@@ -272,19 +272,19 @@
     padding: 10px 16px;
     font-size: 10px;
     font-weight: 700;
-    color: rgba(240,246,255,0.4);
+    color: #64748b;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    background: rgba(255,255,255,0.03);
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
   }
   .ms-table td {
     padding: 12px 16px;
-    color: rgba(240,246,255,0.85);
-    border-bottom: 1px solid rgba(255,255,255,0.05);
+    color: #334155;
+    border-bottom: 1px solid #f1f5f9;
     font-size: 14px;
   }
-  .ms-table tbody tr:hover { background: rgba(255,255,255,0.04); }
+  .ms-table tbody tr:hover { background: #f8fafc; }
   .ms-table tbody tr:last-child td { border-bottom: none; }
 
   /* ── Badges ─────────────────────────────────────────────────── */
@@ -304,7 +304,7 @@
 
   .ms-tabs {
     display: flex;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid #e2e8f0;
     margin-bottom: 20px;
     gap: 0;
     flex-wrap: wrap;
@@ -313,7 +313,7 @@
     padding: 10px 16px;
     font-size: 13px;
     font-weight: 500;
-    color: rgba(240,246,255,0.45);
+    color: #64748b;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
@@ -323,10 +323,10 @@
     white-space: nowrap;
     letter-spacing: 0.01em;
   }
-  .ms-tab-btn:hover { color: rgba(240,246,255,0.8); }
+  .ms-tab-btn:hover { color: #334155; }
   .ms-tab-btn.active {
-    color: #63c1ea;
-    border-bottom-color: #63c1ea;
+    color: #03395f;
+    border-bottom-color: #03395f;
     font-weight: 600;
   }
 
@@ -335,7 +335,7 @@
   .ms-modal-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0,0,0,0.4);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -343,10 +343,10 @@
     z-index: 1000;
   }
   .ms-modal {
-    background: #042030;
-    border: 1px solid rgba(255,255,255,0.1);
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
     border-radius: 16px;
-    box-shadow: 0 32px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(99,193,234,0.1);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.15);
     padding: 28px;
     width: 100%;
     max-width: 560px;
@@ -358,7 +358,7 @@
     margin: 0 0 20px;
     font-size: 18px;
     font-weight: 700;
-    color: #f0f6ff;
+    color: #03395f;
     letter-spacing: -0.01em;
   }
 
@@ -394,7 +394,7 @@
     color: #f0f6ff;
     font-weight: 600;
     font-size: 13px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     backdrop-filter: blur(12px);
   }
 }

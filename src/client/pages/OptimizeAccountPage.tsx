@@ -216,7 +216,7 @@ export default function OptimizeAccountPage() {
     }
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading...</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading...</div>;
   if (!account) return <div style={{ color: "#d13438", padding: 32 }}>Account not found.</div>;
 
   return (
@@ -225,7 +225,7 @@ export default function OptimizeAccountPage() {
       <div style={{ marginBottom: 24 }}>
         <button
           onClick={() => navigate("/optimize")}
-          style={{ background: "none", border: "none", color: "rgba(240,246,255,0.4)", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 12 }}
+          style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 12 }}
         >
           ← Optimize
         </button>
@@ -233,7 +233,7 @@ export default function OptimizeAccountPage() {
           <div>
             <h1 className="ms-page-title">{account.project_name}</h1>
             {account.customer_name && (
-              <div style={{ color: "rgba(240,246,255,0.45)", fontSize: 13, marginTop: 2 }}>{account.customer_name}</div>
+              <div style={{ color: "#64748b", fontSize: 13, marginTop: 2 }}>{account.customer_name}</div>
             )}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -253,15 +253,15 @@ export default function OptimizeAccountPage() {
             { label: "Last Score", value: account.last_assessment_score != null ? `${account.last_assessment_score}/10` : "—" },
           ].map(({ label, value }) => (
             <div key={label}>
-              <div style={{ fontSize: 10, color: "rgba(240,246,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 13, color: "rgba(240,246,255,0.8)", fontWeight: 500 }}>{value}</div>
+              <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{label}</div>
+              <div style={{ fontSize: 13, color: "#334155", fontWeight: 500 }}>{value}</div>
             </div>
           ))}
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: "flex", gap: 2, marginBottom: 24, borderBottom: "1px solid rgba(255,255,255,0.07)", paddingBottom: 0 }}>
+      <div style={{ display: "flex", gap: 2, marginBottom: 24, borderBottom: "1px solid rgba(0,0,0,0.06)", paddingBottom: 0 }}>
         {(["assessments", "tech-stack", "roadmap", "utilization"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -270,7 +270,7 @@ export default function OptimizeAccountPage() {
               background: "none",
               border: "none",
               borderBottom: tab === t ? "2px solid #63c1ea" : "2px solid transparent",
-              color: tab === t ? "#63c1ea" : "rgba(240,246,255,0.45)",
+              color: tab === t ? "#63c1ea" : "#64748b",
               fontWeight: tab === t ? 700 : 400,
               fontSize: 13,
               padding: "10px 18px",
@@ -293,7 +293,7 @@ export default function OptimizeAccountPage() {
           </div>
 
           {assessments.length === 0 ? (
-            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "rgba(240,246,255,0.4)" }}>
+            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
               No assessments yet. Record your first impact or adoption review.
             </div>
           ) : (
@@ -306,9 +306,9 @@ export default function OptimizeAccountPage() {
                         <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.25)", textTransform: "capitalize" }}>
                           {a.assessment_type}
                         </span>
-                        <span style={{ fontSize: 12, color: "rgba(240,246,255,0.4)" }}>{a.conducted_date}</span>
+                        <span style={{ fontSize: 12, color: "#94a3b8" }}>{a.conducted_date}</span>
                         {a.conducted_by_name && (
-                          <span style={{ fontSize: 12, color: "rgba(240,246,255,0.35)" }}>by {a.conducted_by_name}</span>
+                          <span style={{ fontSize: 12, color: "#94a3b8" }}>by {a.conducted_by_name}</span>
                         )}
                       </div>
                       <div style={{ display: "flex", gap: 20 }}>
@@ -316,9 +316,9 @@ export default function OptimizeAccountPage() {
                         {a.adoption_score != null && <ScoreChip label="Adoption" score={a.adoption_score} />}
                         {a.satisfaction_score != null && <ScoreChip label="Satisfaction" score={a.satisfaction_score} />}
                       </div>
-                      {a.notes && <p style={{ fontSize: 13, color: "rgba(240,246,255,0.6)", margin: "10px 0 0", lineHeight: 1.5 }}>{a.notes}</p>}
+                      {a.notes && <p style={{ fontSize: 13, color: "#475569", margin: "10px 0 0", lineHeight: 1.5 }}>{a.notes}</p>}
                       {a.action_items && (
-                        <p style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", margin: "8px 0 0", fontStyle: "italic" }}>Action items: {a.action_items}</p>
+                        <p style={{ fontSize: 12, color: "#94a3b8", margin: "8px 0 0", fontStyle: "italic" }}>Action items: {a.action_items}</p>
                       )}
                     </div>
                     <button
@@ -393,14 +393,14 @@ export default function OptimizeAccountPage() {
       {tab === "tech-stack" && (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div style={{ fontSize: 13, color: "rgba(240,246,255,0.4)" }}>
+            <div style={{ fontSize: 13, color: "#94a3b8" }}>
               Gartner TIME framework — rate each technology area for strategic direction.
             </div>
             <button className="ms-btn-primary" onClick={() => setShowTechForm(true)}>+ Add Area</button>
           </div>
 
           {techStack.length === 0 ? (
-            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "rgba(240,246,255,0.4)" }}>
+            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
               No tech stack areas mapped yet. Add the customer's current technology areas.
             </div>
           ) : (
@@ -420,8 +420,8 @@ export default function OptimizeAccountPage() {
                   {techStack.map((t) => (
                     <tr key={t.id}>
                       <td style={{ fontWeight: 600 }}>{t.tech_area_label ?? TECH_AREA_LABELS[t.tech_area] ?? t.tech_area}</td>
-                      <td style={{ color: "rgba(240,246,255,0.6)" }}>{t.current_vendor ?? "—"}</td>
-                      <td style={{ color: "rgba(240,246,255,0.6)" }}>{t.current_solution ?? "—"}</td>
+                      <td style={{ color: "#475569" }}>{t.current_vendor ?? "—"}</td>
+                      <td style={{ color: "#475569" }}>{t.current_solution ?? "—"}</td>
                       <td>
                         {t.time_rating ? (
                           <span className="ms-badge" style={{ background: (TIME_COLORS[t.time_rating] ?? "#94a3b8") + "1a", color: TIME_COLORS[t.time_rating] ?? "#94a3b8", border: `1px solid ${(TIME_COLORS[t.time_rating] ?? "#94a3b8")}40`, textTransform: "capitalize" }}>
@@ -429,7 +429,7 @@ export default function OptimizeAccountPage() {
                           </span>
                         ) : "—"}
                       </td>
-                      <td style={{ color: "rgba(240,246,255,0.45)", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
+                      <td style={{ color: "#64748b", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
                       <td>
                         <button className="ms-btn-ghost" onClick={() => handleDeleteTech(t.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}>Delete</button>
                       </td>
@@ -502,7 +502,7 @@ export default function OptimizeAccountPage() {
           </div>
 
           {roadmap.length === 0 ? (
-            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "rgba(240,246,255,0.4)" }}>
+            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
               No roadmap items yet. Add enhancements, new projects, or optimization opportunities.
             </div>
           ) : (
@@ -512,7 +512,7 @@ export default function OptimizeAccountPage() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", fontSize: 14 }}>{r.title}</span>
+                        <span style={{ fontWeight: 600, color: "#1e293b", fontSize: 14 }}>{r.title}</span>
                         <span className="ms-badge" style={{ background: (PRIORITY_COLORS[r.priority] ?? "#94a3b8") + "1a", color: PRIORITY_COLORS[r.priority] ?? "#94a3b8", border: `1px solid ${(PRIORITY_COLORS[r.priority] ?? "#94a3b8")}40`, textTransform: "capitalize" }}>
                           {r.priority}
                         </span>
@@ -524,10 +524,10 @@ export default function OptimizeAccountPage() {
                             {r.time_rating}
                           </span>
                         )}
-                        <span style={{ fontSize: 11, color: "rgba(240,246,255,0.3)", textTransform: "capitalize" }}>{r.category.replace("_", " ")}</span>
+                        <span style={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize" }}>{r.category.replace("_", " ")}</span>
                       </div>
                       {r.description && <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: 0, lineHeight: 1.5 }}>{r.description}</p>}
-                      {r.target_date && <div style={{ fontSize: 11, color: "rgba(240,246,255,0.3)", marginTop: 6 }}>Target: {r.target_date}</div>}
+                      {r.target_date && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>Target: {r.target_date}</div>}
                     </div>
                     <button className="ms-btn-ghost" onClick={() => handleDeleteRoadmap(r.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)", flexShrink: 0 }}>Delete</button>
                   </div>
@@ -609,15 +609,15 @@ export default function OptimizeAccountPage() {
         <div>
           <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${zoomConfigured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.8)", marginBottom: 4 }}>Zoom Utilization</div>
+              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>Zoom Utilization</div>
               {zoomConfigured ? (
-                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0 }}>
+                <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
                   {utilization.length > 0
-                    ? <>Last synced: <strong style={{ color: "rgba(240,246,255,0.7)" }}>{utilization[0].snapshot_date}</strong></>
+                    ? <>Last synced: <strong style={{ color: "#475569" }}>{utilization[0].snapshot_date}</strong></>
                     : "Credentials connected — click Sync Now to pull the first snapshot."}
                 </p>
               ) : (
-                <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, margin: 0 }}>
+                <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
                   No Zoom credentials found for this project. Add them on the project's Zoom tab to enable utilization tracking.
                 </p>
               )}
@@ -630,7 +630,7 @@ export default function OptimizeAccountPage() {
           </div>
 
           {utilization.length === 0 && (
-            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "rgba(240,246,255,0.4)" }}>
+            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
               No utilization data yet.{zoomConfigured ? " Click 'Sync Now' to capture the first snapshot." : ""}
             </div>
           )}
@@ -644,7 +644,7 @@ export default function OptimizeAccountPage() {
             if (!phone || (phone.users_total == null && phone.active_users_30d == null && phone.call_minutes_30d == null)) return null;
             return (
               <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: "3px solid #2563eb" }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 12 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 12 }}>
                   Zoom Phone
                 </div>
                 <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
@@ -655,10 +655,10 @@ export default function OptimizeAccountPage() {
                     { label: "Call Minutes (30d)",  value: phone.call_minutes_30d != null ? phone.call_minutes_30d.toLocaleString() : null },
                   ].map(({ label, value }) => (
                     <div key={label} style={{ textAlign: "center" }}>
-                      <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? "rgba(240,246,255,0.9)" : "rgba(240,246,255,0.25)" }}>
+                      <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? "#1e293b" : "#cbd5e1" }}>
                         {value ?? "—"}
                       </div>
-                      <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
                     </div>
                   ))}
                 </div>
@@ -697,7 +697,7 @@ export default function OptimizeAccountPage() {
               <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
                 {/* Adoption rate summary */}
                 <div className="ms-card" style={{ padding: "16px 20px", borderLeft: "3px solid #8764b8" }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 12 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 12 }}>
                     Adoption Rates
                   </div>
                   <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
@@ -707,10 +707,10 @@ export default function OptimizeAccountPage() {
                       { label: "Avg Mtg Min / Active User", value: avgMtgMins != null ? `${avgMtgMins} min` : null, color: undefined },
                     ].map(({ label, value, color }) => (
                       <div key={label} style={{ textAlign: "center" }}>
-                        <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? (color ?? "rgba(240,246,255,0.9)") : "rgba(240,246,255,0.25)" }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? (color ?? "#1e293b") : "#cbd5e1" }}>
                           {value ?? "—"}
                         </div>
-                        <div style={{ fontSize: 11, color: "rgba(240,246,255,0.35)", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
                       </div>
                     ))}
                   </div>
@@ -720,7 +720,7 @@ export default function OptimizeAccountPage() {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {meetingUsers.length > 0 && (
                     <div className="ms-card" style={{ padding: "16px 20px" }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 10 }}>
                         Top Meeting Users (30d)
                       </div>
                       <table className="ms-table" style={{ fontSize: 12 }}>
@@ -734,9 +734,9 @@ export default function OptimizeAccountPage() {
                         <tbody>
                           {meetingUsers.map((u, i) => (
                             <tr key={i}>
-                              <td style={{ color: "rgba(240,246,255,0.8)", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={u.email ?? u.name}>{u.name}</td>
+                              <td style={{ color: "#334155", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={u.email ?? u.name}>{u.name}</td>
                               <td style={{ color: "#60a5fa" }}>{u.meetings.toLocaleString()}</td>
-                              <td style={{ color: "rgba(240,246,255,0.5)" }}>{u.meeting_minutes.toLocaleString()}</td>
+                              <td style={{ color: "#64748b" }}>{u.meeting_minutes.toLocaleString()}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -746,7 +746,7 @@ export default function OptimizeAccountPage() {
 
                   {phoneCallers.length > 0 && (
                     <div className="ms-card" style={{ padding: "16px 20px" }}>
-                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 10 }}>
                         Top Phone Callers (30d)
                       </div>
                       <table className="ms-table" style={{ fontSize: 12 }}>
@@ -760,9 +760,9 @@ export default function OptimizeAccountPage() {
                         <tbody>
                           {phoneCallers.map((c, i) => (
                             <tr key={i}>
-                              <td style={{ color: "rgba(240,246,255,0.8)", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.name}>{c.name}</td>
+                              <td style={{ color: "#334155", maxWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={c.name}>{c.name}</td>
                               <td style={{ color: "#60a5fa" }}>{c.calls.toLocaleString()}</td>
-                              <td style={{ color: "rgba(240,246,255,0.5)" }}>{c.minutes.toLocaleString()}</td>
+                              <td style={{ color: "#64748b" }}>{c.minutes.toLocaleString()}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -783,14 +783,14 @@ export default function OptimizeAccountPage() {
             const hasFailed = apiCalls.some((c) => !c.ok);
             return (
               <div className="ms-card" style={{ marginTop: 12, padding: "16px 20px", borderLeft: `3px solid ${hasFailed ? "#f59e0b" : "#22c55e"}` }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "rgba(240,246,255,0.4)", marginBottom: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 10 }}>
                   API Call Diagnostics
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {apiCalls.map((c) => (
                     <div key={c.name} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13 }}>
                       <span style={{ fontSize: 11, fontWeight: 700, color: c.ok ? "#22c55e" : "#f59e0b", flexShrink: 0, minWidth: 36 }}>{c.ok ? "✓ OK" : "✗ ERR"}</span>
-                      <code style={{ color: "rgba(240,246,255,0.7)", fontSize: 12, background: "rgba(255,255,255,0.04)", padding: "1px 6px", borderRadius: 4, flexShrink: 0 }}>{c.path}</code>
+                      <code style={{ color: "#475569", fontSize: 12, background: "rgba(0,0,0,0.02)", padding: "1px 6px", borderRadius: 4, flexShrink: 0 }}>{c.path}</code>
                       {c.error && <span style={{ color: "#fbbf24", fontSize: 12, wordBreak: "break-word" }}>{c.error}</span>}
                     </div>
                   ))}
@@ -809,7 +809,7 @@ function ScoreChip({ label, score }: { label: string; score: number }) {
   return (
     <div style={{ textAlign: "center" }}>
       <div style={{ fontSize: 22, fontWeight: 700, color }}>{score}</div>
-      <div style={{ fontSize: 10, color: "rgba(240,246,255,0.35)", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
+      <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
     </div>
   );
 }

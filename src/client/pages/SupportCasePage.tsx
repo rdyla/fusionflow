@@ -134,11 +134,11 @@ export default function SupportCasePage() {
   }
 
   if (loading) {
-    return <div style={{ padding: 48, textAlign: "center", color: "rgba(240,246,255,0.4)", fontSize: 13 }}>Loading…</div>;
+    return <div style={{ padding: 48, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Loading…</div>;
   }
 
   if (!incident) {
-    return <div style={{ padding: 48, textAlign: "center", color: "rgba(240,246,255,0.4)", fontSize: 13 }}>Case not found.</div>;
+    return <div style={{ padding: 48, textAlign: "center", color: "#94a3b8", fontSize: 13 }}>Case not found.</div>;
   }
 
   const stateColor = STATE_COLORS[incident.statecode] ?? "#6b7280";
@@ -149,7 +149,7 @@ export default function SupportCasePage() {
   return (
     <div>
       {/* Back */}
-      <button onClick={() => navigate("/support")} style={{ background: "none", border: "none", color: "rgba(240,246,255,0.45)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginBottom: 20, padding: 0 }}>
+      <button onClick={() => navigate("/support")} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6, marginBottom: 20, padding: 0 }}>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 14, height: 14 }}><path d="M19 12H5M12 5l-7 7 7 7" /></svg>
         Back to Cases
       </button>
@@ -167,15 +167,15 @@ export default function SupportCasePage() {
               <Badge color={stateColor}>{incident.status}</Badge>
               <Badge color={priorityColor}>{incident.priority} Priority</Badge>
               {incident.caseType && (
-                <Badge color="rgba(240,246,255,0.3)">{incident.caseType}</Badge>
+                <Badge color="#94a3b8">{incident.caseType}</Badge>
               )}
             </div>
             <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: 20, fontWeight: 700, margin: "0 0 8px", lineHeight: 1.25 }}>{incident.title}</h1>
-            <div style={{ display: "flex", gap: 20, fontSize: 12, color: "rgba(240,246,255,0.45)", flexWrap: "wrap" }}>
-              {incident.accountName && <span>Account: <span style={{ color: "rgba(240,246,255,0.7)" }}>{incident.accountName}</span></span>}
-              {incident.ownerName && <span>Owner: <span style={{ color: "rgba(240,246,255,0.7)" }}>{incident.ownerName}</span></span>}
-              <span>Opened: <span style={{ color: "rgba(240,246,255,0.7)" }}>{fmt(incident.createdOn)}</span></span>
-              <span>Updated: <span style={{ color: "rgba(240,246,255,0.7)" }}>{fmt(incident.modifiedOn)}</span></span>
+            <div style={{ display: "flex", gap: 20, fontSize: 12, color: "#64748b", flexWrap: "wrap" }}>
+              {incident.accountName && <span>Account: <span style={{ color: "#475569" }}>{incident.accountName}</span></span>}
+              {incident.ownerName && <span>Owner: <span style={{ color: "#475569" }}>{incident.ownerName}</span></span>}
+              <span>Opened: <span style={{ color: "#475569" }}>{fmt(incident.createdOn)}</span></span>
+              <span>Updated: <span style={{ color: "#475569" }}>{fmt(incident.modifiedOn)}</span></span>
             </div>
           </div>
 
@@ -211,9 +211,9 @@ export default function SupportCasePage() {
         </div>
 
         {incident.description && (
-          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "rgba(240,246,255,0.3)", marginBottom: 8 }}>Description</div>
-            <p style={{ fontSize: 13, color: "rgba(240,246,255,0.7)", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{incident.description}</p>
+          <div style={{ marginTop: 20, paddingTop: 20, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#94a3b8", marginBottom: 8 }}>Description</div>
+            <p style={{ fontSize: 13, color: "#475569", lineHeight: 1.7, margin: 0, whiteSpace: "pre-wrap" }}>{incident.description}</p>
           </div>
         )}
       </div>
@@ -222,16 +222,16 @@ export default function SupportCasePage() {
 
         {/* Notes thread */}
         <div className="ms-section-card">
-          <div style={{ fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 20, color: "#f0f6ff" }}>
+          <div style={{ fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 20, color: "#1e293b" }}>
             Notes &amp; Activity
           </div>
 
           {notes.length === 0 ? (
-            <div style={{ padding: "24px 0", textAlign: "center", color: "rgba(240,246,255,0.3)", fontSize: 13 }}>No notes yet</div>
+            <div style={{ padding: "24px 0", textAlign: "center", color: "#94a3b8", fontSize: 13 }}>No notes yet</div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
               {notes.map((note, i) => (
-                <div key={note.id} style={{ paddingBottom: 16, marginBottom: i < notes.length - 1 ? 16 : 0, borderBottom: i < notes.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none" }}>
+                <div key={note.id} style={{ paddingBottom: 16, marginBottom: i < notes.length - 1 ? 16 : 0, borderBottom: i < notes.length - 1 ? "1px solid #f1f5f9" : "none" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <div style={{ width: 28, height: 28, borderRadius: "50%", background: note.isAttachment ? "rgba(217,119,6,0.2)" : "rgba(99,193,234,0.15)", border: `1px solid ${note.isAttachment ? "rgba(217,119,6,0.4)" : "rgba(99,193,234,0.3)"}`, display: "flex", alignItems: "center", justifyContent: "center", color: note.isAttachment ? "#d97706" : "#63c1ea", flexShrink: 0 }}>
                       {note.isAttachment
@@ -240,10 +240,10 @@ export default function SupportCasePage() {
                       }
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.85)" }}>{note.subject ?? (note.isAttachment ? "Attachment" : "Note")}</span>
-                      <span style={{ fontSize: 11, color: "rgba(240,246,255,0.3)", marginLeft: 10 }}>{fmt(note.createdOn)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{note.subject ?? (note.isAttachment ? "Attachment" : "Note")}</span>
+                      <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 10 }}>{fmt(note.createdOn)}</span>
                       {note.createdBy && (
-                        <span style={{ fontSize: 11, color: "rgba(240,246,255,0.25)", marginLeft: 8 }}>· {note.createdBy}</span>
+                        <span style={{ fontSize: 11, color: "#cbd5e1", marginLeft: 8 }}>· {note.createdBy}</span>
                       )}
                     </div>
                   </div>
@@ -259,7 +259,7 @@ export default function SupportCasePage() {
                         <FileIcon />
                         {note.filename}
                       </a>
-                      {note.text && <span style={{ fontSize: 12, color: "rgba(240,246,255,0.5)" }}>{note.text}</span>}
+                      {note.text && <span style={{ fontSize: 12, color: "#64748b" }}>{note.text}</span>}
                     </div>
                   ) : note.text ? (
                     <p style={{ margin: "0 0 0 36px", fontSize: 13, color: "rgba(240,246,255,0.65)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{note.text}</p>
@@ -270,7 +270,7 @@ export default function SupportCasePage() {
           )}
 
           {/* Add note */}
-          <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+          <div style={{ marginTop: 24, paddingTop: 20, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
             <label className="ms-label">Add a Note</label>
             <textarea
               className="ms-input"
@@ -289,7 +289,7 @@ export default function SupportCasePage() {
 
         {/* Attachments panel */}
         <div className="ms-section-card">
-          <div style={{ fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 16, color: "#f0f6ff" }}>
+          <div style={{ fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 14, marginBottom: 16, color: "#1e293b" }}>
             Attach a File
           </div>
           <input
@@ -307,7 +307,7 @@ export default function SupportCasePage() {
             <svg viewBox="0 0 24 24" fill="none" stroke="#d97706" strokeWidth="1.5" style={{ width: 28, height: 28, margin: "0 auto 8px", display: "block", opacity: 0.6 }}>
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" />
             </svg>
-            <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)", lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
               {attachFile ? <span style={{ color: "#d97706", fontWeight: 600 }}>{attachFile.name}</span> : "Click to choose a file"}
             </div>
           </div>
@@ -323,17 +323,17 @@ export default function SupportCasePage() {
 
           {/* Recent attachments list */}
           {notes.filter(n => n.isAttachment).length > 0 && (
-            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(255,255,255,0.07)" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "rgba(240,246,255,0.3)", marginBottom: 10 }}>Attachments</div>
+            <div style={{ marginTop: 20, paddingTop: 16, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#94a3b8", marginBottom: 10 }}>Attachments</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 {notes.filter(n => n.isAttachment).map(n => (
                   <a key={n.id}
                     href={api.caseAttachmentDownloadUrl(incident.id, n.id)}
                     target="_blank"
                     rel="noreferrer"
-                    style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "rgba(240,246,255,0.7)", textDecoration: "none", padding: "6px 8px", borderRadius: 6, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}
-                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.07)")}
-                    onMouseLeave={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
+                    style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#475569", textDecoration: "none", padding: "6px 8px", borderRadius: 6, background: "#f8fafc", border: "1px solid #f1f5f9" }}
+                    onMouseEnter={e => (e.currentTarget.style.background = "rgba(0,0,0,0.06)")}
+                    onMouseLeave={e => (e.currentTarget.style.background = "#f8fafc")}
                   >
                     <span style={{ color: "#d97706", flexShrink: 0 }}><FileIcon /></span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{n.filename}</span>

@@ -206,7 +206,7 @@ export default function ProjectsPage() {
     setOpportunities([]);
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading projects...</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading projects...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
 
   return (
@@ -234,7 +234,7 @@ export default function ProjectsPage() {
           <tbody>
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "28px 16px" }}>
+                <td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -249,8 +249,8 @@ export default function ProjectsPage() {
                       {project.name}
                     </Link>
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{project.customer_name ?? "—"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{project.vendor ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{project.customer_name ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{project.vendor ?? "—"}</td>
                   <td>
                     {project.status ? (
                       <Badge
@@ -267,7 +267,7 @@ export default function ProjectsPage() {
                       </span>
                     ) : "—"}
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{project.target_go_live_date ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{project.target_go_live_date ?? "—"}</td>
                   <td><PhaseFlowIndicator phases={projectPhases[project.id]} /></td>
                 </tr>
               ))
@@ -314,7 +314,7 @@ export default function ProjectsPage() {
                       autoComplete="off"
                     />
                     {dynLoading && (
-                      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "rgba(240,246,255,0.5)" }}>
+                      <span style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "#64748b" }}>
                         Searching…
                       </span>
                     )}
@@ -322,7 +322,7 @@ export default function ProjectsPage() {
                       <button
                         type="button"
                         onClick={clearAccount}
-                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "rgba(240,246,255,0.5)", fontSize: 16, lineHeight: 1 }}
+                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "#64748b", fontSize: 16, lineHeight: 1 }}
                         title="Clear selection"
                       >×</button>
                     )}
@@ -331,7 +331,7 @@ export default function ProjectsPage() {
                 {dynOpen && dynResults.length > 0 && (
                   <div style={{
                     position: "absolute", zIndex: 100, left: 0, right: 0,
-                    background: "#142236", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 4,
+                    background: "#142236", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 4,
                     boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto",
                   }}>
                     {dynResults.map((acct) => (
@@ -342,15 +342,15 @@ export default function ProjectsPage() {
                         style={{
                           display: "block", width: "100%", textAlign: "left",
                           padding: "8px 14px", background: "none", border: "none",
-                          cursor: "pointer", borderBottom: "1px solid rgba(255,255,255,0.06)",
-                          fontSize: 13, color: "rgba(240,246,255,0.9)",
+                          cursor: "pointer", borderBottom: "1px solid #f1f5f9",
+                          fontSize: 13, color: "#1e293b",
                         }}
-                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.08)")}
+                        onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(0,0,0,0.07)")}
                         onMouseLeave={(e) => (e.currentTarget.style.background = "none")}
                       >
                         <div style={{ fontWeight: 600 }}>{acct.name}</div>
                         {(acct.address1_city || acct.address1_stateorprovince) && (
-                          <div style={{ fontSize: 11, color: "rgba(240,246,255,0.5)" }}>
+                          <div style={{ fontSize: 11, color: "#64748b" }}>
                             {[acct.address1_city, acct.address1_stateorprovince].filter(Boolean).join(", ")}
                           </div>
                         )}
@@ -366,7 +366,7 @@ export default function ProjectsPage() {
                   <span>
                     Opportunity
                     {oppsLoading && (
-                      <span style={{ marginLeft: 8, fontSize: 11, color: "rgba(240,246,255,0.5)" }}>Loading…</span>
+                      <span style={{ marginLeft: 8, fontSize: 11, color: "#64748b" }}>Loading…</span>
                     )}
                   </span>
                   <select

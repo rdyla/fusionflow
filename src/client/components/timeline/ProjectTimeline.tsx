@@ -106,7 +106,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                       left: `${pct(m.ms, minMs, totalMs)}%`,
                       fontSize: 11,
                       fontWeight: 600,
-                      color: "rgba(240,246,255,0.45)",
+                      color: "#64748b",
                       whiteSpace: "nowrap",
                       transform: "translateX(-50%)",
                     }}
@@ -135,7 +135,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
               return (
                 <div key={phase.id} style={{ display: "flex", alignItems: "center", marginBottom: 6, minHeight: 28 }}>
                   {/* Label */}
-                  <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "rgba(240,246,255,0.7)", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {phase.name}
                   </div>
 
@@ -277,7 +277,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
               <div key={phase.id} className="ms-row-item">
                 {isEditing ? (
                   <div style={{ flex: 1, display: "grid", gap: 12 }}>
-                    <div style={{ fontWeight: 700, color: "rgba(240,246,255,0.9)", fontSize: 14 }}>{phase.name}</div>
+                    <div style={{ fontWeight: 700, color: "#1e293b", fontSize: 14 }}>{phase.name}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
                       <label className="ms-label">
                         <span>Status</span>
@@ -319,7 +319,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                   <div style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
-                        <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)", fontSize: 14 }}>{phase.name}</div>
+                        <div style={{ fontWeight: 600, color: "#1e293b", fontSize: 14 }}>{phase.name}</div>
                         <span
                           className="ms-badge"
                           style={{ background: color + "1a", color, border: `1px solid ${color}40` }}
@@ -328,7 +328,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                         </span>
                       </div>
 
-                      <div style={{ fontSize: 12, color: "rgba(240,246,255,0.45)", marginBottom: 8 }}>
+                      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
                         Planned: {phase.planned_start ?? "—"} → {phase.planned_end ?? "—"}
                         {(phase.actual_start || phase.actual_end) && (
                           <span style={{ marginLeft: 14, color: "#059669" }}>

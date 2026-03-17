@@ -155,7 +155,7 @@ export default function SolutionsPage() {
     return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 32 }}>Loading...</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading...</div>;
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
@@ -203,7 +203,7 @@ export default function SolutionsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "rgba(240,246,255,0.4)", padding: "28px 16px" }}>
+                <td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: "28px 16px" }}>
                   {solutions.length === 0 ? "No solutions yet — create one to get started." : "No solutions match your filters."}
                 </td>
               </tr>
@@ -215,8 +215,8 @@ export default function SolutionsPage() {
                   onClick={() => navigate(`/solutions/${s.id}`)}
                 >
                   <td>
-                    <div style={{ fontWeight: 600, color: "rgba(240,246,255,0.9)" }}>{s.customer_name}</div>
-                    <div style={{ fontSize: 12, color: "rgba(240,246,255,0.4)", marginTop: 2 }}>{s.name}</div>
+                    <div style={{ fontWeight: 600, color: "#1e293b" }}>{s.customer_name}</div>
+                    <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{s.name}</div>
                   </td>
                   <td>
                     <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
@@ -233,13 +233,13 @@ export default function SolutionsPage() {
                       {STATUS_LABELS[s.status]}
                     </span>
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.7)", fontSize: 13 }}>
-                    {s.pf_ae_name ?? <span style={{ color: "rgba(240,246,255,0.3)" }}>—</span>}
+                  <td style={{ color: "#475569", fontSize: 13 }}>
+                    {s.pf_ae_name ?? <span style={{ color: "#94a3b8" }}>—</span>}
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.7)", fontSize: 13 }}>
-                    {s.partner_ae_display_name ?? s.partner_ae_name ?? <span style={{ color: "rgba(240,246,255,0.3)" }}>—</span>}
+                  <td style={{ color: "#475569", fontSize: 13 }}>
+                    {s.partner_ae_display_name ?? s.partner_ae_name ?? <span style={{ color: "#94a3b8" }}>—</span>}
                   </td>
-                  <td style={{ color: "rgba(240,246,255,0.4)", fontSize: 12 }}>{fmt(s.updated_at)}</td>
+                  <td style={{ color: "#94a3b8", fontSize: 12 }}>{fmt(s.updated_at)}</td>
                 </tr>
               ))
             )}
@@ -271,14 +271,14 @@ export default function SolutionsPage() {
                     required
                   />
                   {(crmSearching || crmResults.length > 0) && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
-                      {crmSearching && <div style={{ padding: "10px 14px", color: "rgba(240,246,255,0.4)", fontSize: 13 }}>Searching…</div>}
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
+                      {crmSearching && <div style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 13 }}>Searching…</div>}
                       {crmResults.map((r) => (
                         <button
                           key={r.id}
                           type="button"
-                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(240,246,255,0.85)", fontSize: 13, cursor: "pointer" }}
-                          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"; }}
+                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "#334155", fontSize: 13, cursor: "pointer" }}
+                          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "#f1f5f9"; }}
                           onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "none"; }}
                           onClick={() => selectCrmAccount(r)}
                         >
@@ -306,9 +306,9 @@ export default function SolutionsPage() {
                         setForm((f) => ({ ...f, vendor: v, solution_type: newTypes[0] }));
                       }}
                       style={{
-                        flex: 1, padding: "9px 0", borderRadius: 4, border: `1px solid ${form.vendor === v ? VENDOR_COLOR[v] : "rgba(255,255,255,0.12)"}`,
+                        flex: 1, padding: "9px 0", borderRadius: 4, border: `1px solid ${form.vendor === v ? VENDOR_COLOR[v] : "rgba(0,0,0,0.1)"}`,
                         background: form.vendor === v ? `${VENDOR_COLOR[v]}18` : "transparent",
-                        color: form.vendor === v ? VENDOR_COLOR[v] : "rgba(240,246,255,0.5)",
+                        color: form.vendor === v ? VENDOR_COLOR[v] : "#64748b",
                         fontWeight: 600, fontSize: 14, cursor: "pointer",
                       }}
                     >
@@ -349,9 +349,9 @@ export default function SolutionsPage() {
                         onClick={() => setForm((f) => ({ ...f, partner_ae_mode: mode }))}
                         style={{
                           flex: 1, padding: "5px 0", fontSize: 12, borderRadius: 4,
-                          border: `1px solid ${form.partner_ae_mode === mode ? "#63c1ea" : "rgba(255,255,255,0.12)"}`,
+                          border: `1px solid ${form.partner_ae_mode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
                           background: form.partner_ae_mode === mode ? "rgba(99,193,234,0.1)" : "transparent",
-                          color: form.partner_ae_mode === mode ? "#63c1ea" : "rgba(240,246,255,0.4)",
+                          color: form.partner_ae_mode === mode ? "#63c1ea" : "#94a3b8",
                           cursor: "pointer",
                         }}
                       >
@@ -372,7 +372,7 @@ export default function SolutionsPage() {
 
               {/* New Partner AE fields */}
               {form.partner_ae_mode === "new" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, background: "rgba(255,255,255,0.03)", borderRadius: 6, padding: "12px 14px", border: "1px solid rgba(255,255,255,0.08)" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, background: "#f8fafc", borderRadius: 6, padding: "12px 14px", border: "1px solid rgba(0,0,0,0.07)" }}>
                   <label className="ms-label">
                     <span>Name</span>
                     <input className="ms-input" placeholder="Full name" value={form.partner_ae_name} onChange={(e) => setForm((f) => ({ ...f, partner_ae_name: e.target.value }))} />

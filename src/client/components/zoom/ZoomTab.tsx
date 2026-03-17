@@ -95,13 +95,13 @@ function PlanBadge({ item }: { item: PlanItem }) {
       display: "flex",
       alignItems: "center",
       justifyContent: "space-between",
-      background: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.08)",
+      background: "rgba(0,0,0,0.02)",
+      border: "1px solid rgba(0,0,0,0.07)",
       borderRadius: 4,
       padding: "8px 12px",
       gap: 16,
     }}>
-      <span style={{ fontSize: 13, color: "rgba(240,246,255,0.9)", fontWeight: 500 }}>
+      <span style={{ fontSize: 13, color: "#1e293b", fontWeight: 500 }}>
         {formatTypeCode(item.type)}
       </span>
       {item.seats != null && (
@@ -126,7 +126,7 @@ function SubscriptionList({ plans }: { plans: Record<string, unknown> }) {
   const sections = parsePlans(plans);
 
   if (sections.length === 0) {
-    return <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>No subscription data available.</div>;
+    return <div style={{ color: "#64748b", fontSize: 13 }}>No subscription data available.</div>;
   }
 
   return (
@@ -138,7 +138,7 @@ function SubscriptionList({ plans }: { plans: Record<string, unknown> }) {
             fontWeight: 600,
             textTransform: "uppercase",
             letterSpacing: "0.06em",
-            color: "rgba(240,246,255,0.5)",
+            color: "#64748b",
             marginBottom: 6,
           }}>
             {section.label}
@@ -186,20 +186,20 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
   return (
     <div className="ms-section-card">
       <div className="ms-section-title" style={{ marginBottom: 4 }}>Connect Zoom Tenant</div>
-      <p style={{ color: "rgba(240,246,255,0.5)", fontSize: 13, marginBottom: 20, marginTop: 0 }}>
+      <p style={{ color: "#64748b", fontSize: 13, marginBottom: 20, marginTop: 0 }}>
         Create a Server-to-Server OAuth app in the customer's Zoom account, then paste the credentials below.
       </p>
       <div style={{
-        background: "rgba(255,255,255,0.04)", borderRadius: 6, padding: "14px 16px",
-        marginBottom: 20, fontSize: 12, color: "rgba(240,246,255,0.5)", lineHeight: 1.7,
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "rgba(0,0,0,0.02)", borderRadius: 6, padding: "14px 16px",
+        marginBottom: 20, fontSize: 12, color: "#64748b", lineHeight: 1.7,
+        border: "1px solid rgba(0,0,0,0.07)",
       }}>
-        <strong style={{ color: "rgba(240,246,255,0.9)" }}>Setup steps (in the customer's Zoom admin portal):</strong>
+        <strong style={{ color: "#1e293b" }}>Setup steps (in the customer's Zoom admin portal):</strong>
         <ol style={{ margin: "8px 0 0 0", paddingLeft: 18 }}>
-          <li>Sign in using the <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#f0f6ff" }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
+          <li>Sign in using the <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
           <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
           <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
-          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#f0f6ff" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#f0f6ff" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#f0f6ff" }}>phone:read:admin</code></li>
+          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code></li>
           <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
         </ol>
       </div>
@@ -250,10 +250,10 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div>
-          <div style={{ fontSize: 18, fontWeight: 700, color: "rgba(240,246,255,0.9)" }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: "#1e293b" }}>
             {status.account?.account_name ?? "Zoom Tenant"}
           </div>
-          <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)", marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
             {ACCOUNT_TYPE_LABEL[status.account?.account_type ?? 0] ?? `Type ${status.account?.account_type}`} Account
             {status.total_users != null && <> &nbsp;·&nbsp; {status.total_users} users</>}
             &nbsp;·&nbsp; ID: {status.account?.id}
@@ -262,7 +262,7 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
         <div>
           {confirmDisconnect ? (
             <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <span style={{ fontSize: 13, color: "rgba(240,246,255,0.5)" }}>Remove credentials?</span>
+              <span style={{ fontSize: 13, color: "#64748b" }}>Remove credentials?</span>
               <button className="ms-btn-danger" onClick={handleDisconnect} disabled={disconnecting}
                 style={{ fontSize: 12, padding: "4px 12px" }}>
                 {disconnecting ? "Removing…" : "Yes, disconnect"}
@@ -303,7 +303,7 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
           <div style={{ padding: "14px 18px 10px", fontWeight: 600, fontSize: 13 }}>
             Registered Devices
             {(status.devices_total ?? 0) > status.devices.length && (
-              <span style={{ fontWeight: 400, color: "rgba(240,246,255,0.5)", marginLeft: 8, fontSize: 12 }}>
+              <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 8, fontSize: 12 }}>
                 (showing {status.devices.length} of {status.devices_total})
               </span>
             )}
@@ -323,11 +323,11 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
               {status.devices.map((device: ZoomDevice) => (
                 <tr key={device.id}>
                   <td style={{ fontWeight: 500 }}>{device.display_name || "—"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{device.model || "—"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.5)", fontFamily: "monospace", fontSize: 12 }}>{device.mac_address || "—"}</td>
+                  <td style={{ color: "#64748b" }}>{device.model || "—"}</td>
+                  <td style={{ color: "#64748b", fontFamily: "monospace", fontSize: 12 }}>{device.mac_address || "—"}</td>
                   <td><DeviceStatusDot status={device.status} /></td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{device.assignee?.name ?? "Unassigned"}</td>
-                  <td style={{ color: "rgba(240,246,255,0.5)" }}>{device.assignee?.extension_number ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{device.assignee?.name ?? "Unassigned"}</td>
+                  <td style={{ color: "#64748b" }}>{device.assignee?.extension_number ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -365,7 +365,7 @@ export default function ZoomTab({ projectId }: { projectId: string }) {
     setZoomStatus({ configured: false });
   }
 
-  if (loading) return <div style={{ color: "rgba(240,246,255,0.5)", padding: 16 }}>Loading Zoom tenant data…</div>;
+  if (loading) return <div style={{ color: "#64748b", padding: 16 }}>Loading Zoom tenant data…</div>;
   if (error) return (
     <div className="ms-section-card">
       <div style={{ color: "#d13438", marginBottom: 12 }}>Error: {error}</div>
@@ -386,7 +386,7 @@ export default function ZoomTab({ projectId }: { projectId: string }) {
         }}>
           {zoomStatus.error}
         </div>
-        <p style={{ fontSize: 13, color: "rgba(240,246,255,0.5)", margin: "0 0 14px" }}>
+        <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 14px" }}>
           Check that the S2S OAuth app is activated and has the required scopes.
         </p>
         <div style={{ display: "flex", gap: 10 }}>

@@ -88,7 +88,7 @@ function DonutChart({
 }) {
   const palette = fallbackColors ?? PHASE_COLORS;
   const total = data.reduce((s, d) => s + d.count, 0);
-  if (total === 0) return <div style={{ fontSize: 13, color: "rgba(240,246,255,0.35)", fontStyle: "italic" }}>No data yet.</div>;
+  if (total === 0) return <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No data yet.</div>;
 
   const cx = 72, cy = 72, R = 62, r = 40;
   let cumAngle = -Math.PI / 2;
@@ -122,15 +122,15 @@ function DonutChart({
     <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
       <svg width={144} height={144} viewBox="0 0 144 144" style={{ flexShrink: 0 }}>
         {data.map((d, i) => slice(d.count, colorFor(d.label, i), i))}
-        <text x={cx} y={cy - 5} textAnchor="middle" fill="#f0f6ff" fontSize={20} fontWeight={700}>{total}</text>
-        <text x={cx} y={cy + 11} textAnchor="middle" fill="rgba(240,246,255,0.45)" fontSize={9}>{centerLabel}</text>
+        <text x={cx} y={cy - 5} textAnchor="middle" fill="#1e293b" fontSize={20} fontWeight={700}>{total}</text>
+        <text x={cx} y={cy + 11} textAnchor="middle" fill="#64748b" fontSize={9}>{centerLabel}</text>
       </svg>
       <div style={{ flex: 1, minWidth: 0 }}>
         {data.map((d, i) => (
           <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
             <span style={{ width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: colorFor(d.label, i) }} />
-            <span style={{ fontSize: 12, color: "rgba(240,246,255,0.8)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#f0f6ff", flexShrink: 0 }}>{d.count}</span>
+            <span style={{ fontSize: 12, color: "#334155", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", flexShrink: 0 }}>{d.count}</span>
           </div>
         ))}
       </div>
@@ -164,7 +164,7 @@ export default function DashboardPage() {
   }, [navigate]);
 
   if (!data) {
-    return <div style={{ padding: 40, color: "rgba(240,246,255,0.5)" }}>Loading...</div>;
+    return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
   }
 
   const { user, summary, projects, openTasks, openRisks, phaseDistribution, vendorDistribution, typeDistribution } = data;
@@ -227,8 +227,8 @@ export default function DashboardPage() {
 
       {/* Projects table */}
       <div className="ms-card" style={{ marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
-          <span style={{ fontWeight: 700, fontSize: 14, color: "rgba(240,246,255,0.9)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Projects
           </span>
           <Link to="/projects" style={{ fontSize: 13, color: "#63c1ea", textDecoration: "none", fontWeight: 600 }}>
@@ -246,7 +246,7 @@ export default function DashboardPage() {
           <tbody>
             {projects.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", color: "rgba(240,246,255,0.5)", padding: "24px 16px" }}>
+                <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -261,8 +261,8 @@ export default function DashboardPage() {
                     {p.name}
                   </Link>
                 </td>
-                <td style={{ color: "rgba(240,246,255,0.6)" }}>{p.customer_name ?? "—"}</td>
-                <td style={{ color: "rgba(240,246,255,0.6)" }}>{p.vendor ?? "—"}</td>
+                <td style={{ color: "#475569" }}>{p.customer_name ?? "—"}</td>
+                <td style={{ color: "#475569" }}>{p.vendor ?? "—"}</td>
                 <td>
                   <Badge
                     label={p.status?.replace("_", " ") ?? "—"}
@@ -272,10 +272,10 @@ export default function DashboardPage() {
                 <td>
                   <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[p.health ?? ""] ?? "#94a3b8", flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: "rgba(240,246,255,0.85)" }}>{healthLabel(p.health)}</span>
+                    <span style={{ fontSize: 13, color: "#334155" }}>{healthLabel(p.health)}</span>
                   </span>
                 </td>
-                <td style={{ color: "rgba(240,246,255,0.6)" }}>{formatDate(p.target_go_live_date)}</td>
+                <td style={{ color: "#475569" }}>{formatDate(p.target_go_live_date)}</td>
               </tr>
             ))}
           </tbody>
@@ -286,27 +286,27 @@ export default function DashboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
         {/* Open Tasks */}
         <div className="ms-card" style={{ overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontWeight: 700, fontSize: 14, color: "rgba(240,246,255,0.9)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Open Tasks
           </div>
           {openTasks.length === 0 ? (
-            <div style={{ padding: "20px", color: "rgba(240,246,255,0.5)", fontSize: 14 }}>No open tasks.</div>
+            <div style={{ padding: "20px", color: "#64748b", fontSize: 14 }}>No open tasks.</div>
           ) : (
             <div>
               {openTasks.map((t) => (
                 <div
                   key={t.id}
-                  style={{ padding: "11px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "flex-start", gap: 10 }}
+                  style={{ padding: "11px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 10 }}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLOR[t.status ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Link
                       to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}
-                      style={{ fontSize: 13, color: "rgba(240,246,255,0.9)", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "none" }}
+                      style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "none" }}
                     >
                       {t.title}
                     </Link>
-                    <div style={{ fontSize: 12, color: "rgba(240,246,255,0.5)", display: "flex", gap: 6 }}>
+                    <div style={{ fontSize: 12, color: "#64748b", display: "flex", gap: 6 }}>
                       <Link to={`/projects/${t.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
                         {t.project_name}
                       </Link>
@@ -324,21 +324,21 @@ export default function DashboardPage() {
 
         {/* Open Risks */}
         <div className="ms-card" style={{ overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.08)", fontWeight: 700, fontSize: 14, color: "rgba(240,246,255,0.9)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Open Risks
           </div>
           {openRisks.length === 0 ? (
-            <div style={{ padding: "20px", color: "rgba(240,246,255,0.5)", fontSize: 14 }}>No open risks.</div>
+            <div style={{ padding: "20px", color: "#64748b", fontSize: 14 }}>No open risks.</div>
           ) : (
             <div>
               {openRisks.map((r) => (
                 <div
                   key={r.id}
-                  style={{ padding: "11px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "flex-start", gap: 10 }}
+                  style={{ padding: "11px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 10 }}
                 >
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: SEVERITY_COLOR[r.severity ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "rgba(240,246,255,0.9)", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {r.title}
                     </div>
                     <div style={{ fontSize: 12 }}>

@@ -73,7 +73,7 @@ export default function AppShell() {
         borderRight: "1px solid rgba(255,255,255,0.1)",
       }}>
         {/* Logo */}
-        <div style={{ height: 62, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+        <div style={{ height: 62, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
           <Link to="/" style={{ textDecoration: "none", display: "block", overflow: "hidden", height: 53, width: 200 }}>
             <img src={logoUrl} alt="FusionFlow360" style={{ width: 200, height: "auto", display: "block" }} />
           </Link>
@@ -88,7 +88,7 @@ export default function AppShell() {
               </div>
               <SideLink to="/solutions">Solutions</SideLink>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />
 
               <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "6px 20px 4px" }}>
                 Implementation
@@ -96,14 +96,14 @@ export default function AppShell() {
               <SideLink to="/dashboard" end>Dashboard</SideLink>
               <SideLink to="/projects">Projects</SideLink>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />
 
               <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "6px 20px 4px" }}>
                 Optimize
               </div>
               <SideLink to="/optimize">Accounts</SideLink>
 
-              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />
             </>
           )}
 
@@ -113,7 +113,7 @@ export default function AppShell() {
                 Projects
               </div>
               <SideLink to="/projects">My Projects</SideLink>
-              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />
             </>
           )}
 
@@ -124,7 +124,7 @@ export default function AppShell() {
 
           {isAdmin && (
             <>
-              <div style={{ height: 1, background: "rgba(255,255,255,0.12)", margin: "10px 16px" }} />
+              <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />
               <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "6px 20px 4px" }}>
                 Admin
               </div>
@@ -138,13 +138,13 @@ export default function AppShell() {
 
         {/* Bottom user chip + sign out */}
         {currentUser && (
-          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.12)", flexShrink: 0 }}>
+          <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
             <UserChip user={currentUser} />
             <a
               href="/cdn-cgi/access/logout"
-              style={{ display: "block", marginTop: 10, fontSize: 11, color: "rgba(240,246,255,0.3)", textDecoration: "none", textAlign: "center", letterSpacing: "0.04em" }}
-              onMouseEnter={e => (e.currentTarget.style.color = "rgba(240,246,255,0.6)")}
-              onMouseLeave={e => (e.currentTarget.style.color = "rgba(240,246,255,0.3)")}
+              style={{ display: "block", marginTop: 10, fontSize: 11, color: "#94a3b8", textDecoration: "none", textAlign: "center", letterSpacing: "0.04em" }}
+              onMouseEnter={e => (e.currentTarget.style.color = "#475569")}
+              onMouseLeave={e => (e.currentTarget.style.color = "#94a3b8")}
             >
               Sign out
             </a>
@@ -153,33 +153,28 @@ export default function AppShell() {
       </aside>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#021a2e", position: "relative" }}>
-
-        {/* Subtle brand-blue wash at the top, fades out — echoes PF dark sections */}
-        <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 320, pointerEvents: "none", zIndex: 0,
-          background: "linear-gradient(180deg, rgba(3,57,95,0.35) 0%, transparent 100%)" }} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f3f1f1", position: "relative" }}>
 
         {/* Top bar */}
         <header style={{
           position: "relative",
           zIndex: 10,
           height: 56,
-          background: "rgba(2,20,35,0.9)",
-          backdropFilter: "blur(12px)",
+          background: "#ffffff",
           display: "flex",
           alignItems: "center",
           paddingLeft: 28,
           paddingRight: 20,
           flexShrink: 0,
-          borderBottom: "1px solid rgba(255,255,255,0.12)",
+          borderBottom: "1px solid #e2e8f0",
           justifyContent: "space-between",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "rgba(240,246,255,0.3)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 12, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase" }}>
               Module
             </span>
-            <span style={{ color: "rgba(255,255,255,0.15)" }}>›</span>
-            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700, color: "#63c1ea", letterSpacing: "0.02em" }}>
+            <span style={{ color: "#cbd5e1" }}>›</span>
+            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700, color: "#03395f", letterSpacing: "0.02em" }}>
               Onboarding &amp; Implementation
             </span>
           </div>
@@ -209,7 +204,7 @@ export default function AppShell() {
         )}
 
         {/* Content */}
-        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px" }}>
+        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px", background: "#f3f1f1" }}>
           <Outlet />
         </main>
       </div>
@@ -241,10 +236,10 @@ function UserChip({ user }: { user: User }) {
         {abbr}
       </div>
       <div style={{ lineHeight: 1.35, minWidth: 0 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "rgba(240,246,255,0.9)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {user.name ?? user.email}
         </div>
-        <div style={{ fontSize: 10, color: "rgba(240,246,255,0.35)", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
+        <div style={{ fontSize: 10, color: "#94a3b8", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
           {user.organization_name ? `${user.organization_name} · ` : ""}{roleLabel}
         </div>
       </div>

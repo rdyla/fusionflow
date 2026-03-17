@@ -42,7 +42,7 @@ const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
   "Contract":   { bg: "rgba(245,158,11,0.15)", color: "#fbbf24" },
   "Design Doc": { bg: "rgba(245,158,11,0.15)", color: "#fbbf24" },
   "Test Plan":  { bg: "rgba(99,193,234,0.12)", color: "#63c1ea" },
-  "Other":      { bg: "rgba(255,255,255,0.06)", color: "rgba(240,246,255,0.5)" },
+  "Other":      { bg: "#f1f5f9", color: "#64748b" },
 };
 
 export default function ProjectDocuments({ projectId, documents, phases, tasks, onDocumentsChange }: Props) {
@@ -133,7 +133,7 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
               padding: "20px 16px",
               textAlign: "center",
               cursor: "pointer",
-              background: selectedFile ? "rgba(99,193,234,0.08)" : "rgba(255,255,255,0.03)",
+              background: selectedFile ? "rgba(99,193,234,0.08)" : "#f8fafc",
               transition: "all 0.15s",
             }}
           >
@@ -141,10 +141,10 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
             {selectedFile ? (
               <>
                 <div style={{ color: "#63c1ea", fontWeight: 600 }}>{selectedFile.name}</div>
-                <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 13 }}>{formatBytes(selectedFile.size)}</div>
+                <div style={{ color: "#64748b", fontSize: 13 }}>{formatBytes(selectedFile.size)}</div>
               </>
             ) : (
-              <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 14 }}>Click to select a file (max 50 MB)</div>
+              <div style={{ color: "#64748b", fontSize: 14 }}>Click to select a file (max 50 MB)</div>
             )}
             <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={handleFileChange} />
           </div>
@@ -193,7 +193,7 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
               const catColors = CATEGORY_COLORS[cat] ?? CATEGORY_COLORS["Other"];
               return (
                 <div key={cat}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "rgba(240,246,255,0.5)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
                     {cat}
                   </div>
                   <div style={{ display: "grid", gap: 6 }}>
@@ -205,10 +205,10 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
                           <div style={{ fontSize: 22, flexShrink: 0 }}>{fileIcon(doc.content_type)}</div>
 
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ color: "rgba(240,246,255,0.9)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div style={{ color: "#1e293b", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                               {doc.name}
                             </div>
-                            <div style={{ color: "rgba(240,246,255,0.5)", fontSize: 12, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                            <div style={{ color: "#64748b", fontSize: 12, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
                               <span>{formatBytes(doc.size_bytes)}</span>
                               {phase && <span>· {phase.name}</span>}
                               {task && <span>· {task.title}</span>}
