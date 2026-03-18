@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import logoUrl from "../assets/fusionflow360-logo2.png";
 import { api, type User, type SystemStatusResponse } from "../lib/api";
 import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
+import { useIsMobile } from "../hooks/useIsMobile";
 
 function initials(name: string | null, email: string): string {
   if (name) {
@@ -131,6 +132,7 @@ export default function ModuleSelectPage() {
   }
 
   const abbr = user ? initials(user.name, user.email) : "…";
+  const isMobile = useIsMobile();
 
   return (
     <div style={{ minHeight: "100vh", background: "#ffffff", color: "#1e293b", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
@@ -146,27 +148,27 @@ export default function ModuleSelectPage() {
       </header>
 
       {/* Hero — PF blue band */}
-      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "56px 48px 52px", background: "#03395f" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
-          <div style={{ overflow: "hidden", height: 100, width: 490 }}>
-            <img src={logoUrl} alt="FusionFlow360" style={{ width: 490, height: "auto", display: "block" }} />
-          </div>
+      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "36px 24px 32px" : "56px 48px 52px", background: "#03395f" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? 20 : 28 }}>
+          <img src={logoUrl} alt="FusionFlow360" style={{ width: isMobile ? "70%" : 490, maxWidth: 490, height: "auto", display: "block" }} />
         </div>
-        <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
+        <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? "26px" : "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
           Where Every Engagement<br />
           <span style={{ color: "#63c1ea" }}>Finds Its Flow</span>
         </h1>
-        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", maxWidth: 500, margin: "0 auto", lineHeight: 1.65, fontWeight: 300 }}>
-          From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
-        </p>
+        {!isMobile && (
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", maxWidth: 500, margin: "0 auto", lineHeight: 1.65, fontWeight: 300 }}>
+            From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
+          </p>
+        )}
       </section>
 
       {/* Modules — white section */}
-      <section style={{ position: "relative", zIndex: 5, padding: "48px 48px 80px", background: "#ffffff" }}>
-        <p style={{ textAlign: "center", fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "#94a3b8", marginBottom: 36 }}>
+      <section style={{ position: "relative", zIndex: 5, padding: isMobile ? "28px 16px 48px" : "48px 48px 80px", background: "#ffffff" }}>
+        <p style={{ textAlign: "center", fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "#94a3b8", marginBottom: 28 }}>
           Choose your module
         </p>
-        <div style={{ display: "grid", gridTemplateColumns: `repeat(${visibleModules.length}, minmax(0, 340px))`, gap: 20, maxWidth: 1440, margin: "0 auto", justifyContent: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : `repeat(${visibleModules.length}, minmax(0, 340px))`, gap: 16, maxWidth: 1440, margin: "0 auto", justifyContent: "center" }}>
           {visibleModules.map((mod, i) => {
             const isHovered = hovered === i;
             const isActive = mod.route !== null;
@@ -180,8 +182,8 @@ export default function ModuleSelectPage() {
                   position: "relative",
                   background: "#ffffff",
                   border: `1px solid ${isHovered && isActive ? mod.accent : "#03395f"}`,
-                  borderRadius: 20,
-                  padding: "36px 28px 32px",
+                  borderRadius: 16,
+                  padding: isMobile ? "24px 20px 20px" : "36px 28px 32px",
                   cursor: isActive ? "pointer" : "default",
                   overflow: "hidden",
                   transition: "transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.3s, box-shadow 0.35s",
@@ -256,8 +258,8 @@ export default function ModuleSelectPage() {
         </div>
       </section>
 
-      {/* Bottom strip */}
-      <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 40, padding: "28px 48px 40px", borderTop: "1px solid #e2e8f0", background: "#ffffff" }}>
+      {/* Bottom strip — desktop only */}
+      {!isMobile && <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 40, padding: "28px 48px 40px", borderTop: "1px solid #e2e8f0", background: "#ffffff" }}>
         {[
           { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, label: "SOC 2 Compliant" },
           { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, label: "Multi-region Available" },
@@ -272,7 +274,7 @@ export default function ModuleSelectPage() {
             {i < arr.length - 1 && <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 20px" }} />}
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Toast */}
       {toast && (

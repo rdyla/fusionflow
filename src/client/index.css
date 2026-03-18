@@ -397,4 +397,82 @@
     box-shadow: 0 8px 32px rgba(0,0,0,0.2);
     backdrop-filter: blur(12px);
   }
+
+  /* ── Table scroll wrapper ────────────────────────────────────── */
+
+  .ms-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* ── Mobile responsive ───────────────────────────────────────── */
+
+@media (max-width: 767px) {
+
+  /* Page headers stack vertically */
+  .ms-page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  /* Section cards: tighter padding, allow table scroll */
+  .ms-section-card {
+    padding: 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Metric cards: allow wrapping in a flex row */
+  .ms-metric-card {
+    min-width: 140px;
+  }
+
+  /* Tables: slightly smaller text */
+  .ms-table th,
+  .ms-table td {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* Tabs: scroll horizontally */
+  .ms-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .ms-tabs::-webkit-scrollbar { display: none; }
+
+  /* Modals: full-width, slide up from bottom */
+  .ms-modal-overlay {
+    align-items: flex-end;
+  }
+  .ms-modal {
+    max-width: 100%;
+    width: 100%;
+    border-radius: 16px 16px 0 0;
+    max-height: 92vh;
+    padding: 20px 16px;
+  }
+
+  /* Row items: tighter */
+  .ms-row-item {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+
+  /* Info items: tighter */
+  .ms-info-item {
+    padding: 10px 12px;
+  }
+
+  /* Buttons: slightly smaller */
+  .ms-btn-primary,
+  .ms-btn-secondary {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
 }
