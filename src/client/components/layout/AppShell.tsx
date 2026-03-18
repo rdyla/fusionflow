@@ -73,8 +73,8 @@ export default function AppShell() {
         borderRight: "1px solid rgba(255,255,255,0.1)",
       }}>
         {/* Logo */}
-        <div style={{ height: 62, display: "flex", alignItems: "center", padding: "0 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
-          <Link to="/" style={{ textDecoration: "none", display: "block", overflow: "hidden", height: 53, width: 200 }}>
+        <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
+          <Link to="/" style={{ textDecoration: "none", display: "block" }}>
             <img src={logoUrl} alt="FusionFlow360" style={{ width: 200, height: "auto", display: "block" }} />
           </Link>
         </div>
