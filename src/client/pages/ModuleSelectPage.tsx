@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logoUrl from "../assets/fusionflow360-logo2-white.png";
+import logoUrl from "../assets/fusionflow360-logo2-whitev2.png";
 import { api, type User, type SystemStatusResponse } from "../lib/api";
 import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -148,8 +148,8 @@ export default function ModuleSelectPage() {
       </header>
 
       {/* Hero — PF blue band */}
-      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "36px 24px 32px" : "56px 48px 52px", background: "#03395f" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? 20 : 28 }}>
+      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "24px 24px 20px" : "32px 48px 28px", background: "#03395f" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? 14 : 18 }}>
           <img src={logoUrl} alt="FusionFlow360" style={{ width: isMobile ? "70%" : 490, maxWidth: 490, height: "auto", display: "block" }} />
         </div>
         <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? "26px" : "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
