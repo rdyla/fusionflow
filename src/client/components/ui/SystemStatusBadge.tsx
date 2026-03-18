@@ -80,7 +80,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
 
   if (!status) {
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 40, fontSize: 12, color: "#94a3b8" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 40, fontSize: 12, color: "rgba(255,255,255,0.6)" }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#63c1ea", boxShadow: "0 0 6px #63c1ea", display: "inline-block" }} />
         Live
       </div>
@@ -99,10 +99,10 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
         style={{
           display: "flex", alignItems: "center", gap: 7,
           padding: "5px 12px",
-          background: open ? "rgba(0,0,0,0.06)" : "rgba(0,0,0,0.02)",
-          border: `1px solid ${isOk ? "rgba(0,0,0,0.07)" : `${dotColor}40`}`,
+          background: open ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.08)",
+          border: `1px solid ${isOk ? "rgba(255,255,255,0.15)" : `${dotColor}60`}`,
           borderRadius: 40, fontSize: 12,
-          color: isOk ? "#94a3b8" : dotColor,
+          color: isOk ? "rgba(255,255,255,0.6)" : dotColor,
           cursor: "pointer", outline: "none",
         }}
       >
@@ -120,10 +120,10 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
         <div style={{
           position: "absolute", top: "calc(100% + 8px)", right: 0,
           width: 280, zIndex: 200,
-          background: "#f3f1f1",
-          border: "1px solid rgba(255,255,255,0.1)",
+          background: "#ffffff",
+          border: "1px solid #dde4ef",
           borderRadius: 8,
-          boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+          boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
           overflow: "hidden",
         }}>
           {status.vendors.includes("zoom") && status.zoom && (

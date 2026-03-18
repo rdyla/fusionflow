@@ -153,28 +153,28 @@ export default function AppShell() {
       </aside>
 
       {/* Main area */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#e8e6e4", position: "relative" }}>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "#f0f4f8", position: "relative" }}>
 
         {/* Top bar */}
         <header style={{
           position: "relative",
           zIndex: 10,
           height: 56,
-          background: "#f3f1f1",
+          background: "#021e34",
           display: "flex",
           alignItems: "center",
           paddingLeft: 28,
           paddingRight: 20,
           flexShrink: 0,
-          borderBottom: "1px solid #ccc9c7",
+          borderBottom: "1px solid rgba(0,0,0,0.2)",
           justifyContent: "space-between",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 12, color: "#94a3b8", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
               Module
             </span>
-            <span style={{ color: "#cbd5e1" }}>›</span>
-            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700, color: "#03395f", letterSpacing: "0.02em" }}>
+            <span style={{ color: "rgba(255,255,255,0.3)" }}>›</span>
+            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.85)", letterSpacing: "0.02em" }}>
               Onboarding &amp; Implementation
             </span>
           </div>
@@ -204,7 +204,7 @@ export default function AppShell() {
         )}
 
         {/* Content */}
-        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px", background: "#e8e6e4" }}>
+        <main style={{ position: "relative", zIndex: 1, flex: 1, overflowY: "auto", padding: "32px 40px", background: "#f0f4f8" }}>
           <Outlet />
         </main>
       </div>

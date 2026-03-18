@@ -151,37 +151,36 @@ export default function ModuleSelectPage() {
   const abbr = user ? initials(user.name, user.email) : "…";
 
   return (
-    <div style={{ minHeight: "100vh", background: "#e8e6e4", color: "#1e293b", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#ffffff", color: "#1e293b", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
 
-      {/* Header */}
-      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 72, borderBottom: "1px solid #ccc9c7", backdropFilter: "blur(12px)", background: "#f3f1f1" }}>
+      {/* Header — dark navy */}
+      <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 64, background: "#021e34" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <SystemStatusBadge status={sysStatus} />
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #63c1ea, #17c662)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em" }}>
+          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #63c1ea, #17c662)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em", color: "#fff" }}>
             {abbr}
           </div>
         </div>
       </header>
 
-      {/* Hero */}
-      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "72px 48px 48px" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: 32 }}>
-          <div style={{ overflow: "hidden", height: 108, width: 528 }}>
-            <img src={logoUrl} alt="FusionFlow360" style={{ width: 528, height: "auto", display: "block" }} />
+      {/* Hero — PF blue band */}
+      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "56px 48px 52px", background: "#03395f" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 28 }}>
+          <div style={{ overflow: "hidden", height: 100, width: 490 }}>
+            <img src={logoUrl} alt="FusionFlow360" style={{ width: 490, height: "auto", display: "block" }} />
           </div>
         </div>
-        <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: "clamp(29px, 4vw, 46px)", fontWeight: 800, lineHeight: 1.08, letterSpacing: "-0.03em", marginBottom: 18 }}>
+        <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
           Where Every Engagement<br />
           <span style={{ color: "#63c1ea" }}>Finds Its Flow</span>
         </h1>
-        <p style={{ fontSize: 13, color: "#64748b", maxWidth: 500, margin: "0 auto 16px", lineHeight: 1.65, fontWeight: 300 }}>
+        <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", maxWidth: 500, margin: "0 auto", lineHeight: 1.65, fontWeight: 300 }}>
           From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
         </p>
-        <div style={{ width: 48, height: 2, background: "linear-gradient(90deg, transparent, #63c1ea, transparent)", margin: "32px auto 0", borderRadius: 2 }} />
       </section>
 
-      {/* Modules */}
-      <section style={{ position: "relative", zIndex: 5, padding: "0 48px 80px" }}>
+      {/* Modules — white section */}
+      <section style={{ position: "relative", zIndex: 5, padding: "48px 48px 80px", background: "#ffffff" }}>
         <p style={{ textAlign: "center", fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", color: "#94a3b8", marginBottom: 36 }}>
           Choose your module
         </p>
@@ -197,15 +196,15 @@ export default function ModuleSelectPage() {
                 onMouseLeave={() => setHovered(null)}
                 style={{
                   position: "relative",
-                  background: "#f3f1f1",
-                  border: `1px solid ${isHovered ? mod.accent : "rgba(0,0,0,0.07)"}`,
+                  background: "#ffffff",
+                  border: `1px solid ${isHovered && isActive ? mod.accent : "#03395f"}`,
                   borderRadius: 20,
                   padding: "36px 28px 32px",
                   cursor: isActive ? "pointer" : "default",
                   overflow: "hidden",
                   transition: "transform 0.35s cubic-bezier(0.22,1,0.36,1), border-color 0.3s, box-shadow 0.35s",
                   transform: isHovered && isActive ? "translateY(-6px)" : "none",
-                  boxShadow: isHovered && isActive ? `0 20px 60px ${mod.glow}, 0 0 0 1px ${mod.accent}` : "none",
+                  boxShadow: isHovered && isActive ? `0 20px 60px ${mod.glow}, 0 0 0 1px ${mod.accent}` : "0 2px 8px rgba(3,57,95,0.06)",
                   opacity: !isActive && isHovered ? 0.85 : 1,
                 }}
               >
@@ -256,7 +255,7 @@ export default function ModuleSelectPage() {
                 </ul>
 
                 {/* CTA */}
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 20, borderTop: "1px solid rgba(0,0,0,0.07)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 20, borderTop: "1px solid #e2e8f0" }}>
                   <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, color: isActive ? mod.accent : "#94a3b8", letterSpacing: "0.02em", display: "flex", alignItems: "center", gap: 6 }}>
                     {isActive ? "Enter Module" : "Coming Soon"}
                     {isActive && (
@@ -276,7 +275,7 @@ export default function ModuleSelectPage() {
       </section>
 
       {/* Bottom strip */}
-      <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 40, padding: "28px 48px 40px", borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+      <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 40, padding: "28px 48px 40px", borderTop: "1px solid #e2e8f0", background: "#ffffff" }}>
         {[
           { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, label: "SOC 2 Compliant" },
           { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, label: "Multi-region Available" },
@@ -288,7 +287,7 @@ export default function ModuleSelectPage() {
               {item.icon}
               {item.label}
             </div>
-            {i < arr.length - 1 && <div style={{ width: 1, height: 24, background: "rgba(0,0,0,0.07)", margin: "0 20px" }} />}
+            {i < arr.length - 1 && <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 20px" }} />}
           </div>
         ))}
       </div>
