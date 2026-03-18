@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logoUrl from "../assets/fusionflow360-logo2-whitev2.png";
+import logoUrl from "../assets/fusionflow360-logo2-whitev3.png";
 import { api, type User, type SystemStatusResponse } from "../lib/api";
 import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
 import { useIsMobile } from "../hooks/useIsMobile";
