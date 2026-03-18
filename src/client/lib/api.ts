@@ -456,37 +456,6 @@ export type UtilizationSnapshot = {
   created_at: string;
 };
 
-// ── Support types ─────────────────────────────────────────────────────────────
-
-export type SupportCase = {
-  id: string;
-  ticketNumber: string | null;
-  title: string;
-  description: string | null;
-  statecode: number;
-  statuscode: number;
-  status: string;
-  prioritycode: number;
-  priority: string;
-  casetypecode: number | null;
-  caseType: string | null;
-  accountId: string | null;
-  accountName: string | null;
-  ownerName: string | null;
-  createdOn: string;
-  modifiedOn: string;
-};
-
-export type CaseNote = {
-  id: string;
-  subject: string | null;
-  text: string | null;
-  isAttachment: boolean;
-  filename: string | null;
-  mimetype: string | null;
-  createdOn: string;
-  createdBy: string | null;
-};
 
 export const api = {
   me: () => request<MeResponse>("/me"),
@@ -1055,56 +1024,4 @@ export const api = {
   optimizeUtilizationSync: (projectId: string) =>
     request<UtilizationSnapshot>(`/optimize/accounts/${projectId}/utilization/sync`, { method: "POST" }),
 
-  // ── Support ───────────────────────────────────────────────────────────────
-  supportCases: (accountId?: string) =>
-    request<SupportCase[]>(`/support/cases${accountId ? `?accountId=${encodeURIComponent(accountId)}` : ""}`),
-
-  supportCase: (caseId: string) =>
-    request<SupportCase>(`/support/cases/${caseId}`),
-
-  createSupportCase: (payload: {
-    title: string;
-    description?: string;
-    prioritycode?: number;
-    casetypecode?: number;
-    accountId?: string;
-  }) =>
-    request<SupportCase>("/support/cases", { method: "POST", body: JSON.stringify(payload) }),
-
-  updateSupportCase: (caseId: string, payload: {
-    title?: string;
-    description?: string;
-    statecode?: number;
-    statuscode?: number;
-    prioritycode?: number;
-  }) =>
-    request<{ success: boolean }>(`/support/cases/${caseId}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
-
-  caseNotes: (caseId: string) =>
-    request<CaseNote[]>(`/support/cases/${caseId}/notes`),
-
-  addCaseNote: (caseId: string, payload: { notetext: string; subject?: string }) =>
-    request<CaseNote>(`/support/cases/${caseId}/notes`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-
-  uploadCaseAttachment: async (caseId: string, file: File, noteText?: string): Promise<CaseNote> => {
-    const form = new FormData();
-    form.append("file", file);
-    if (noteText) form.append("note", noteText);
-    const res = await fetch(`${API_BASE}/support/cases/${caseId}/attachments`, {
-      method: "POST",
-      headers: { ...DEV_HEADERS, ...getImpersonationHeaders() },
-      body: form,
-    });
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-    return res.json();
-  },
-
-  caseAttachmentDownloadUrl: (caseId: string, annotationId: string) =>
-    `${API_BASE}/support/cases/${caseId}/attachments/${annotationId}/download`,
 };

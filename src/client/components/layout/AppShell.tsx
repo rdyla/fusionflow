@@ -117,11 +117,6 @@ export default function AppShell() {
             </>
           )}
 
-          <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: isClient ? "6px 20px 4px" : "6px 20px 4px" }}>
-            Support
-          </div>
-          <SideLink to="/support" end>Cases</SideLink>
-
           {isAdmin && (
             <>
               <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />
