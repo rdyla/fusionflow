@@ -95,6 +95,11 @@ app.route("/api/staff", staffRoutes);
 app.route("/api/optimize", optimizeRoutes);
 app.route("/api/asana", asanaRoutes);
 
+// Catch-all: serve static assets (and SPA index.html fallback) for everything
+// that isn't an /api/* route. Required because run_worker_first=true means
+// the Worker handles all requests before Cloudflare's asset handler.
+app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+
 async function runGoLiveReminders(env: Bindings): Promise<void> {
   const appUrl = env.APP_URL ?? "";
   const today = new Date();
