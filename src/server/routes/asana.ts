@@ -165,12 +165,25 @@ app.get("/project-data/:projectId", async (c) => {
       due_on: string | null;
       created_at: string;
       color: string | null;
-    }>(`/projects/${gid}?opt_fields=gid,name,notes,due_on,created_at,color`, token),
+      custom_field_settings: {
+        custom_field: { gid: string; name: string; type: string };
+      }[];
+    }>(
+      `/projects/${gid}?opt_fields=gid,name,notes,due_on,created_at,color,custom_field_settings,custom_field_settings.custom_field.gid,custom_field_settings.custom_field.name,custom_field_settings.custom_field.type`,
+      token
+    ),
     asanaGet<{ gid: string; name: string }[]>(
       `/projects/${gid}/sections?opt_fields=gid,name`,
       token
     ),
   ]);
+
+  const taskOptFields = [
+    "gid", "name", "completed", "due_on", "start_on",
+    "assignee.name", "notes", "num_subtasks",
+    "custom_fields.gid", "custom_fields.name",
+    "custom_fields.display_value", "custom_fields.type",
+  ].join(",");
 
   const sectionTasks = await Promise.all(
     sections.map(async (section) => {
@@ -180,19 +193,26 @@ app.get("/project-data/:projectId", async (c) => {
           name: string;
           completed: boolean;
           due_on: string | null;
+          start_on: string | null;
           assignee: { gid: string; name: string } | null;
           notes: string | null;
           num_subtasks: number;
+          custom_fields: { gid: string; name: string; display_value: string | null; type: string }[];
         }[]
       >(
-        `/sections/${section.gid}/tasks?opt_fields=gid,name,completed,due_on,assignee.name,notes,num_subtasks&limit=100`,
+        `/sections/${section.gid}/tasks?opt_fields=${taskOptFields}&limit=100`,
         token
       );
       return { section, tasks };
     })
   );
 
-  return c.json({ project: asanaProject, sections: sectionTasks });
+  // Build ordered list of custom field definitions for the project
+  const customFieldDefs = (asanaProject.custom_field_settings ?? []).map(
+    (s) => ({ gid: s.custom_field.gid, name: s.custom_field.name, type: s.custom_field.type })
+  );
+
+  return c.json({ project: asanaProject, sections: sectionTasks, customFieldDefs });
 });
 
 export default app;

@@ -154,14 +154,29 @@ export type AsanaProjectSummary = {
   due_on: string | null;
 };
 
+export type AsanaCustomFieldValue = {
+  gid: string;
+  name: string;
+  display_value: string | null;
+  type: string;
+};
+
+export type AsanaCustomFieldDef = {
+  gid: string;
+  name: string;
+  type: string;
+};
+
 export type AsanaTask = {
   gid: string;
   name: string;
   completed: boolean;
   due_on: string | null;
+  start_on: string | null;
   assignee: { gid: string; name: string } | null;
   notes: string | null;
   num_subtasks: number;
+  custom_fields: AsanaCustomFieldValue[];
 };
 
 export type AsanaSectionWithTasks = {
@@ -179,6 +194,7 @@ export type AsanaProjectData = {
     color: string | null;
   };
   sections: AsanaSectionWithTasks[];
+  customFieldDefs: AsanaCustomFieldDef[];
 };
 
 export type DynamicsAccount = {
