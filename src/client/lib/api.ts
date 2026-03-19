@@ -1068,6 +1068,7 @@ export const api = {
   // ── Asana integration ──────────────────────────────────────────────────────
 
   asanaStatus: () => request<{ connected: boolean }>("/asana/status"),
+  asanaAuthUrl: () => request<{ url: string }>("/asana/auth"),
   asanaWorkspaces: () => request<AsanaWorkspace[]>("/asana/workspaces"),
   asanaSearchProjects: (workspace: string) =>
     request<AsanaProjectSummary[]>(`/asana/search-projects?workspace=${encodeURIComponent(workspace)}`),

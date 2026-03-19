@@ -84,7 +84,10 @@ app.get("/status", async (c) => {
   return c.json({ connected: !!tokenData });
 });
 
-// GET /api/asana/auth — initiate OAuth (admin/pm only)
+// GET /api/asana/auth — return the Asana OAuth URL as JSON.
+// The client navigates there directly (window.location.href) so the browser
+// never sends a text/html navigation request to this Worker endpoint, which
+// avoids Cloudflare's SPA asset handler intercepting it before the Worker runs.
 app.get("/auth", async (c) => {
   const auth = c.get("auth");
   if (auth.role !== "admin" && auth.role !== "pm") {
@@ -101,7 +104,7 @@ app.get("/auth", async (c) => {
     redirect_uri: redirectUri,
     response_type: "code",
   });
-  return c.redirect(`https://app.asana.com/-/oauth_authorize?${params}`);
+  return c.json({ url: `https://app.asana.com/-/oauth_authorize?${params}` });
 });
 
 // GET /api/asana/workspaces — list accessible workspaces

@@ -1055,7 +1055,14 @@ export default function ProjectDetailPage() {
                 </p>
                 <button
                   className="ms-btn-primary"
-                  onClick={() => { window.location.href = "/api/asana/auth"; }}
+                  onClick={async () => {
+                    try {
+                      const { url } = await api.asanaAuthUrl();
+                      window.location.href = url;
+                    } catch {
+                      showToast("Failed to get Asana auth URL. Check that ASANA_CLIENT_ID is configured.", "error");
+                    }
+                  }}
                 >
                   Connect Asana
                 </button>
