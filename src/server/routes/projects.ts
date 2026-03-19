@@ -15,7 +15,8 @@ app.get("/", async (c) => {
   let sql = `
     SELECT id, name, customer_name, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
-           pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
+           pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
+           managed_in_asana, asana_project_id, created_at, updated_at
     FROM projects
     WHERE (archived = 0 OR archived IS NULL)
   `;
