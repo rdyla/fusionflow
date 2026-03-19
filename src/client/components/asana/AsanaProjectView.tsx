@@ -45,7 +45,7 @@ function FieldChip({ name, value }: { name: string; value: string }) {
       padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 500,
       background: "rgba(99,193,234,0.1)", color: "#0891b2",
       border: "1px solid rgba(99,193,234,0.25)",
-      whiteSpace: "nowrap", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis",
+      whiteSpace: "nowrap",
     }}
       title={`${name}: ${value}`}
     >
