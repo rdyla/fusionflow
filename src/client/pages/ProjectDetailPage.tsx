@@ -1053,13 +1053,12 @@ export default function ProjectDetailPage() {
                 <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
                   Asana is not connected. An admin needs to authorize FusionFlow360 to access Asana.
                 </p>
-                <a
-                  href="/api/asana/auth"
+                <button
                   className="ms-btn-primary"
-                  style={{ display: "inline-block", textDecoration: "none", textAlign: "center" }}
+                  onClick={() => { window.location.href = "/api/asana/auth"; }}
                 >
                   Connect Asana
-                </a>
+                </button>
               </div>
             )}
 
