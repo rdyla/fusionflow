@@ -135,9 +135,50 @@ export type Project = {
   csm_name: string | null;
   engineer_name: string | null;
   dynamics_account_id: string | null;
+  asana_project_id: string | null;
+  managed_in_asana: number | null;
   archived: number | null;
   created_at: string;
   updated_at: string;
+};
+
+export type AsanaWorkspace = {
+  gid: string;
+  name: string;
+};
+
+export type AsanaProjectSummary = {
+  gid: string;
+  name: string;
+  notes: string | null;
+  due_on: string | null;
+};
+
+export type AsanaTask = {
+  gid: string;
+  name: string;
+  completed: boolean;
+  due_on: string | null;
+  assignee: { gid: string; name: string } | null;
+  notes: string | null;
+  num_subtasks: number;
+};
+
+export type AsanaSectionWithTasks = {
+  section: { gid: string; name: string };
+  tasks: AsanaTask[];
+};
+
+export type AsanaProjectData = {
+  project: {
+    gid: string;
+    name: string;
+    notes: string | null;
+    due_on: string | null;
+    created_at: string;
+    color: string | null;
+  };
+  sections: AsanaSectionWithTasks[];
 };
 
 export type DynamicsAccount = {
@@ -1023,5 +1064,24 @@ export const api = {
 
   optimizeUtilizationSync: (projectId: string) =>
     request<UtilizationSnapshot>(`/optimize/accounts/${projectId}/utilization/sync`, { method: "POST" }),
+
+  // ── Asana integration ──────────────────────────────────────────────────────
+
+  asanaStatus: () => request<{ connected: boolean }>("/asana/status"),
+  asanaWorkspaces: () => request<AsanaWorkspace[]>("/asana/workspaces"),
+  asanaSearchProjects: (workspace: string) =>
+    request<AsanaProjectSummary[]>(`/asana/search-projects?workspace=${encodeURIComponent(workspace)}`),
+  asanaProjectData: (projectId: string) =>
+    request<AsanaProjectData>(`/asana/project-data/${projectId}`),
+  linkAsanaProject: (projectId: string, asanaProjectGid: string) =>
+    request<Project>(`/projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ asana_project_id: asanaProjectGid, managed_in_asana: 1 }),
+    }),
+  unlinkAsanaProject: (projectId: string) =>
+    request<Project>(`/projects/${projectId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ asana_project_id: null, managed_in_asana: 0 }),
+    }),
 
 };

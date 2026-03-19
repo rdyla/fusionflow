@@ -18,6 +18,7 @@ import solutionRoutes from "./routes/solutions";
 import statusRoutes from "./routes/status";
 import staffRoutes from "./routes/staff";
 import optimizeRoutes from "./routes/optimize";
+import asanaRoutes from "./routes/asana";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
@@ -27,6 +28,52 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 app.use("*", cors());
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+// Asana OAuth callback — must be registered before authMiddleware because
+// Asana's redirect carries the user's browser session (CF cookies) but not
+// the x-dev-user-email header used in local dev. Token exchange is safe
+// without auth since it only stores credentials in KV.
+app.get("/api/asana/callback", async (c) => {
+  const code = c.req.query("code");
+  const appUrl = (c.env.APP_URL ?? "http://localhost:5173").replace(/\/$/, "");
+  const redirectUri = `${(c.env.APP_URL ?? "http://localhost:8787").replace(/\/$/, "")}/api/asana/callback`;
+
+  if (!code) {
+    return c.redirect(`${appUrl}/?asana_error=no_code`);
+  }
+
+  const clientId = c.env.ASANA_CLIENT_ID;
+  const clientSecret = c.env.ASANA_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return c.redirect(`${appUrl}/?asana_error=not_configured`);
+  }
+
+  const tokenRes = await fetch("https://app.asana.com/-/oauth_token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      code,
+    }),
+  });
+
+  if (!tokenRes.ok) {
+    return c.redirect(`${appUrl}/?asana_error=token_exchange_failed`);
+  }
+
+  const data = await tokenRes.json() as { access_token: string; refresh_token: string; expires_in: number };
+  const stored = {
+    access_token: data.access_token,
+    refresh_token: data.refresh_token,
+    expires_at: Date.now() + data.expires_in * 1000 - 60_000,
+  };
+  await c.env.KV.put("asana:token", JSON.stringify(stored));
+
+  return c.redirect(`${appUrl}/?asana_connected=1`);
+});
 
 app.use("/api/*", authMiddleware);
 
@@ -46,6 +93,7 @@ app.route("/api/solutions", solutionRoutes);
 app.route("/api", statusRoutes);
 app.route("/api/staff", staffRoutes);
 app.route("/api/optimize", optimizeRoutes);
+app.route("/api/asana", asanaRoutes);
 
 async function runGoLiveReminders(env: Bindings): Promise<void> {
   const appUrl = env.APP_URL ?? "";

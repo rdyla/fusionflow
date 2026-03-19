@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
+  type AsanaProjectSummary,
+  type AsanaWorkspace,
   type Document,
   type DynamicsContact,
   type Milestone,
@@ -19,9 +21,10 @@ import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
+import AsanaProjectView from "../components/asana/AsanaProjectView";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity" | "zoom";
+type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity" | "zoom" | "asana";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -133,6 +136,15 @@ export default function ProjectDetailPage() {
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
+
+  // Asana link modal
+  const [showAsanaModal, setShowAsanaModal] = useState(false);
+  const [asanaConnected, setAsanaConnected] = useState<boolean | null>(null);
+  const [asanaWorkspaces, setAsanaWorkspaces] = useState<AsanaWorkspace[]>([]);
+  const [asanaSelectedWorkspace, setAsanaSelectedWorkspace] = useState("");
+  const [asanaProjects, setAsanaProjects] = useState<AsanaProjectSummary[]>([]);
+  const [asanaLoadingProjects, setAsanaLoadingProjects] = useState(false);
+  const [asanaLinking, setAsanaLinking] = useState(false);
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
@@ -574,15 +586,19 @@ export default function ProjectDetailPage() {
       {(() => {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
+        const managedInAsana = !!project.managed_in_asana;
+        const visibleTabs: DetailTab[] = managedInAsana
+          ? ["overview", "asana", "documents", "activity", "zoom"]
+          : ["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity", "zoom"];
         return (
           <div className="ms-tabs">
-            {(["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity", "zoom"] as DetailTab[]).map((t) => (
+            {visibleTabs.map((t) => (
               <button
                 key={t}
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "asana" ? "Asana" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -646,6 +662,66 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {canEdit && <div className="ms-section-card">
+            <div className="ms-section-title">Asana Integration</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+              {project.managed_in_asana ? (
+                <>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f06a35", flexShrink: 0 }} />
+                    <span style={{ fontSize: 13, color: "#1e293b", fontWeight: 500 }}>Managed in Asana</span>
+                    {project.asana_project_id && (
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>GID: {project.asana_project_id}</span>
+                    )}
+                  </div>
+                  <button
+                    className="ms-btn-secondary"
+                    style={{ fontSize: 12 }}
+                    onClick={async () => {
+                      try {
+                        const updated = await api.unlinkAsanaProject(project.id);
+                        setProject(updated);
+                        showToast("Asana project unlinked.", "success");
+                      } catch {
+                        showToast("Failed to unlink Asana project", "error");
+                      }
+                    }}
+                  >
+                    Unlink Asana
+                  </button>
+                </>
+              ) : (
+                <>
+                  <span style={{ fontSize: 13, color: "#94a3b8" }}>Not managed in Asana</span>
+                  <button
+                    className="ms-btn-secondary"
+                    style={{ fontSize: 12 }}
+                    onClick={async () => {
+                      setShowAsanaModal(true);
+                      setAsanaProjects([]);
+                      setAsanaSelectedWorkspace("");
+                      const status = await api.asanaStatus().catch(() => ({ connected: false }));
+                      setAsanaConnected(status.connected);
+                      if (status.connected) {
+                        const ws = await api.asanaWorkspaces().catch(() => []);
+                        setAsanaWorkspaces(ws);
+                        if (ws.length === 1) {
+                          setAsanaSelectedWorkspace(ws[0].gid);
+                          setAsanaLoadingProjects(true);
+                          const projects = await api.asanaSearchProjects(ws[0].gid).catch(() => []);
+                          setAsanaProjects(projects);
+                          setAsanaLoadingProjects(false);
+                        }
+                      }
+                    }}
+                  >
+                    Link to Asana Project
+                  </button>
+                </>
+              )}
+            </div>
+          </div>}
 
           {canEdit && <div className="ms-section-card">
             <div className="ms-section-title">Project Controls</div>
@@ -962,6 +1038,119 @@ export default function ProjectDetailPage() {
           ? <RingCentralTab projectId={project.id} />
           : <ZoomTab projectId={project.id} />;
       })()}
+
+      {/* ── Asana ─────────────────────────────────────────────────────────── */}
+      {tab === "asana" && <AsanaProjectView projectId={project.id} />}
+
+      {/* ── Asana Link Modal ──────────────────────────────────────────────── */}
+      {showAsanaModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAsanaModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 520 }}>
+            <h2>Link to Asana Project</h2>
+
+            {asanaConnected === false && (
+              <div style={{ display: "grid", gap: 14 }}>
+                <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
+                  Asana is not connected. An admin needs to authorize FusionFlow360 to access Asana.
+                </p>
+                <a
+                  href="/api/asana/auth"
+                  className="ms-btn-primary"
+                  style={{ display: "inline-block", textDecoration: "none", textAlign: "center" }}
+                >
+                  Connect Asana
+                </a>
+              </div>
+            )}
+
+            {asanaConnected === true && (
+              <div style={{ display: "grid", gap: 16 }}>
+                {asanaWorkspaces.length > 1 && (
+                  <label className="ms-label">
+                    <span>Workspace</span>
+                    <select
+                      className="ms-input"
+                      value={asanaSelectedWorkspace}
+                      onChange={async (e) => {
+                        const ws = e.target.value;
+                        setAsanaSelectedWorkspace(ws);
+                        if (ws) {
+                          setAsanaLoadingProjects(true);
+                          const projects = await api.asanaSearchProjects(ws).catch(() => []);
+                          setAsanaProjects(projects);
+                          setAsanaLoadingProjects(false);
+                        }
+                      }}
+                    >
+                      <option value="">Select workspace</option>
+                      {asanaWorkspaces.map((w) => (
+                        <option key={w.gid} value={w.gid}>{w.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+                {asanaLoadingProjects && (
+                  <div style={{ color: "#94a3b8", fontSize: 13 }}>Loading projects...</div>
+                )}
+
+                {!asanaLoadingProjects && asanaSelectedWorkspace && asanaProjects.length === 0 && (
+                  <div style={{ color: "#94a3b8", fontSize: 13 }}>No projects found in this workspace.</div>
+                )}
+
+                {asanaProjects.length > 0 && (
+                  <div style={{ display: "grid", gap: 6, maxHeight: 320, overflowY: "auto" }}>
+                    {asanaProjects.map((p) => (
+                      <button
+                        key={p.gid}
+                        disabled={asanaLinking}
+                        onClick={async () => {
+                          setAsanaLinking(true);
+                          try {
+                            const updated = await api.linkAsanaProject(project.id, p.gid);
+                            setProject(updated);
+                            setTab("asana");
+                            setShowAsanaModal(false);
+                            showToast(`Linked to "${p.name}" in Asana.`, "success");
+                          } catch {
+                            showToast("Failed to link Asana project", "error");
+                          } finally {
+                            setAsanaLinking(false);
+                          }
+                        }}
+                        style={{
+                          display: "block",
+                          width: "100%",
+                          textAlign: "left",
+                          padding: "10px 14px",
+                          background: "#f8fafc",
+                          border: "1px solid rgba(0,0,0,0.06)",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#1e293b",
+                        }}
+                      >
+                        {p.name}
+                        {p.due_on && <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400, marginLeft: 8 }}>Due {p.due_on}</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {asanaConnected === null && (
+              <div style={{ color: "#94a3b8", fontSize: 13 }}>Checking connection...</div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="ms-btn-secondary" onClick={() => setShowAsanaModal(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Risk Modal ────────────────────────────────────────────────────── */}
       {showRiskModal && (

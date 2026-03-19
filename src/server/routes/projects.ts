@@ -64,7 +64,7 @@ app.get("/:id", async (c) => {
       SELECT id, name, customer_name, vendor, solution_type, status, health,
              kickoff_date, target_go_live_date, actual_go_live_date,
              pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
-             dynamics_account_id, created_at, updated_at
+             dynamics_account_id, asana_project_id, managed_in_asana, created_at, updated_at
       FROM projects
       WHERE id = ?
       LIMIT 1
@@ -157,6 +157,8 @@ const updateProjectSchema = z.object({
   sa_name: z.string().max(500).nullable().optional(),
   csm_name: z.string().max(500).nullable().optional(),
   engineer_name: z.string().max(500).nullable().optional(),
+  asana_project_id: z.string().nullable().optional(),
+  managed_in_asana: z.number().int().min(0).max(1).optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm"), async (c) => {
