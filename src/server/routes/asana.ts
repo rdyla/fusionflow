@@ -134,6 +134,46 @@ app.get("/search-projects", async (c) => {
   return c.json(projects);
 });
 
+// GET /api/asana/section-summary/:projectId — lightweight: section names + task completion counts
+// Used by the projects list Phase Flow column and the project overview.
+app.get("/section-summary/:projectId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("projectId");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const row = await db
+    .prepare("SELECT asana_project_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ asana_project_id: string | null }>();
+
+  if (!row?.asana_project_id) return c.json([]);
+
+  const token = await getValidToken(c.env.KV, c.env.ASANA_CLIENT_ID, c.env.ASANA_CLIENT_SECRET);
+  if (!token) return c.json([]);
+
+  const sections = await asanaGet<{ gid: string; name: string }[]>(
+    `/projects/${row.asana_project_id}/sections?opt_fields=gid,name`,
+    token
+  );
+
+  const summaries = await Promise.all(
+    sections.map(async (section, i) => {
+      const tasks = await asanaGet<{ gid: string; completed: boolean }[]>(
+        `/sections/${section.gid}/tasks?opt_fields=gid,completed&limit=100`,
+        token
+      );
+      const total = tasks.length;
+      const completed = tasks.filter((t) => t.completed).length;
+      return { gid: section.gid, name: section.name, sort_order: i + 1, total, completed };
+    })
+  );
+
+  return c.json(summaries);
+});
+
 // GET /api/asana/project-data/:projectId — proxy Asana data for a linked FF360 project
 app.get("/project-data/:projectId", async (c) => {
   const auth = c.get("auth");

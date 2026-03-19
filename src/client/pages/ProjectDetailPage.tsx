@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   type AsanaProjectSummary,
+  type AsanaSectionSummary,
   type AsanaWorkspace,
   type Document,
   type DynamicsContact,
@@ -137,6 +138,9 @@ export default function ProjectDetailPage() {
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
 
+  // Asana section summaries (loaded for managed_in_asana projects)
+  const [asanaSectionSummaries, setAsanaSectionSummaries] = useState<AsanaSectionSummary[]>([]);
+
   // Asana link modal
   const [showAsanaModal, setShowAsanaModal] = useState(false);
   const [asanaConnected, setAsanaConnected] = useState<boolean | null>(null);
@@ -178,6 +182,9 @@ export default function ProjectDetailPage() {
         setEditStatus(projectData.status ?? "");
         setEditHealth(projectData.health ?? "");
         setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
+        if (projectData.managed_in_asana) {
+          api.asanaSectionSummary(id).then(setAsanaSectionSummaries).catch(() => {});
+        }
         setProjectStaff(staffData);
         if (staffData.length > 0) {
           const emails = staffData.map((s: { email: string }) => s.email);
@@ -825,6 +832,43 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {/* ── Asana Phase Progress ──────────────────────────────────────── */}
+          {project.managed_in_asana && asanaSectionSummaries.length > 0 && (
+            <div className="ms-section-card">
+              <div className="ms-section-title">Phase Progress</div>
+              <div style={{ display: "grid", gap: 10 }}>
+                {asanaSectionSummaries.map((s) => {
+                  const pct = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
+                  const status = s.total === 0 ? "not_started"
+                    : s.completed === s.total ? "completed"
+                    : s.completed > 0 ? "in_progress"
+                    : "not_started";
+                  const statusColor: Record<string, string> = {
+                    completed: "#059669", in_progress: "#0891b2", not_started: "#94a3b8",
+                  };
+                  const color = statusColor[status];
+                  return (
+                    <div key={s.gid}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name}</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>{s.completed}/{s.total} tasks</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color }}>{pct}%</span>
+                        </div>
+                      </div>
+                      <div style={{ height: 6, background: "#e2e8f0", borderRadius: 999, overflow: "hidden" }}>
+                        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 999, transition: "width 0.3s" }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>

@@ -1,6 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase } from "../lib/api";
+import { api, type AsanaSectionSummary, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase } from "../lib/api";
+
+function sectionSummaryToPhases(projectId: string, summaries: AsanaSectionSummary[]): Phase[] {
+  return summaries.map((s) => ({
+    id: s.gid,
+    project_id: projectId,
+    name: s.name,
+    sort_order: s.sort_order,
+    status: s.total === 0 ? "not_started" : s.completed === s.total ? "completed" : s.completed > 0 ? "in_progress" : "not_started",
+    planned_start: null,
+    planned_end: null,
+    actual_start: null,
+    actual_end: null,
+  }));
+}
 import { useToast } from "../components/ui/ToastProvider";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
@@ -110,12 +124,20 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (projects.length === 0) return;
-    Promise.allSettled(projects.map((p) => api.phases(p.id).then((phases) => ({ id: p.id, phases }))))
-      .then((results) => {
-        const map: Record<string, Phase[]> = {};
-        results.forEach((r) => { if (r.status === "fulfilled") map[r.value.id] = r.value.phases; });
-        setProjectPhases(map);
-      });
+    Promise.allSettled(
+      projects.map(async (p) => {
+        if (p.managed_in_asana) {
+          const summaries = await api.asanaSectionSummary(p.id);
+          return { id: p.id, phases: sectionSummaryToPhases(p.id, summaries) };
+        }
+        const phases = await api.phases(p.id);
+        return { id: p.id, phases };
+      })
+    ).then((results) => {
+      const map: Record<string, Phase[]> = {};
+      results.forEach((r) => { if (r.status === "fulfilled") map[r.value.id] = r.value.phases; });
+      setProjectPhases(map);
+    });
   }, [projects]);
 
   // Close dropdown when clicking outside

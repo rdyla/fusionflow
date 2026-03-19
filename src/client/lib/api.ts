@@ -142,6 +142,14 @@ export type Project = {
   updated_at: string;
 };
 
+export type AsanaSectionSummary = {
+  gid: string;
+  name: string;
+  sort_order: number;
+  total: number;
+  completed: number;
+};
+
 export type AsanaWorkspace = {
   gid: string;
   name: string;
@@ -1085,6 +1093,8 @@ export const api = {
 
   asanaStatus: () => request<{ connected: boolean }>("/asana/status"),
   asanaAuthUrl: () => request<{ url: string }>("/asana/auth"),
+  asanaSectionSummary: (projectId: string) =>
+    request<AsanaSectionSummary[]>(`/asana/section-summary/${projectId}`),
   asanaWorkspaces: () => request<AsanaWorkspace[]>("/asana/workspaces"),
   asanaSearchProjects: (workspace: string) =>
     request<AsanaProjectSummary[]>(`/asana/search-projects?workspace=${encodeURIComponent(workspace)}`),
