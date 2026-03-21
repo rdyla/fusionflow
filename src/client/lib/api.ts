@@ -1151,6 +1151,14 @@ export const api = {
   deleteLaborEstimate: (solutionId: string) =>
     request<{ success: boolean }>(`/solutions/${solutionId}/labor-estimate`, { method: "DELETE" }),
 
+  // ── Labor Config (admin) ──────────────────────────────────────────────────────
+  laborConfig: () =>
+    request<{ categories: Record<string, Record<string, number>>; defaults: Record<string, Record<string, number>> }>("/admin/labor-config"),
+  updateLaborConfig: (category: string, base_hours: Record<string, number>) =>
+    request<{ ok: boolean }>("/admin/labor-config", { method: "PUT", body: JSON.stringify({ category, base_hours }) }),
+  resetLaborConfig: (category: string) =>
+    request<{ ok: boolean }>(`/admin/labor-config/${category}`, { method: "DELETE" }),
+
   // ── Needs Assessments ────────────────────────────────────────────────────────
   needsAssessment: (solutionId: string) =>
     request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`),

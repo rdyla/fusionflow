@@ -185,9 +185,10 @@ interface LaborEstimateData {
 function computeEstimate(
   category: string,
   answers: Record<string, unknown>,
-  overrides: Record<string, number>
+  overrides: Record<string, number>,
+  baseHoursOverride?: Record<string, number>
 ): LaborEstimateData {
-  const base = { ...BASE_HOURS[category] } as Record<string, number>;
+  const base = { ...(baseHoursOverride ?? BASE_HOURS[category]) } as Record<string, number>;
   const adjustments: Record<string, number> = {};
   for (const ws of WORKSTREAMS) adjustments[ws] = 0;
 
@@ -432,7 +433,14 @@ app.put("/:id/labor-estimate", async (c) => {
   const answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
 
   const category = solutionTypeToCategory(solution.solution_type);
-  const estimate = computeEstimate(category, answers, overrides);
+
+  // Load base hours config override from DB if present
+  const configRow = await c.env.DB.prepare(
+    "SELECT base_hours FROM labor_config WHERE category = ? LIMIT 1"
+  ).bind(category).first() as { base_hours: string } | null;
+  const baseHoursOverride = configRow ? parseJson<Record<string, number>>(configRow.base_hours, BASE_HOURS[category]) : undefined;
+
+  const estimate = computeEstimate(category, answers, overrides, baseHoursOverride);
 
   const existing = await c.env.DB.prepare(
     "SELECT id FROM labor_estimates WHERE solution_id = ? LIMIT 1"

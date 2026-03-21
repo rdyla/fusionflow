@@ -316,4 +316,77 @@ app.delete("/projects/:projectId/access/:userId", async (c) => {
   return c.json({ success: true });
 });
 
+// ── Labor Config ─────────────────────────────────────────────────────────────
+
+const LABOR_CONFIG_CATEGORIES = ["ucaas", "ccaas", "ci", "virtual_agent"] as const;
+type LaborConfigCategory = typeof LABOR_CONFIG_CATEGORIES[number];
+
+const LABOR_CONFIG_DEFAULT_HOURS: Record<LaborConfigCategory, Record<string, number>> = {
+  ucaas: {
+    discovery_requirements: 8, solution_design: 12, project_management: 10,
+    implementation_configuration: 20, integration: 4, migration_data_porting: 12,
+    testing_uat: 8, training_enablement: 6, documentation_handover: 4, hypercare: 6,
+  },
+  ccaas: {
+    discovery_requirements: 12, solution_design: 18, project_management: 14,
+    implementation_configuration: 32, integration: 8, migration_data_porting: 12,
+    testing_uat: 12, training_enablement: 8, documentation_handover: 6, hypercare: 8,
+  },
+  ci: {
+    discovery_requirements: 10, solution_design: 14, project_management: 10,
+    implementation_configuration: 18, integration: 8, migration_data_porting: 2,
+    testing_uat: 8, training_enablement: 6, documentation_handover: 4, hypercare: 6,
+  },
+  virtual_agent: {
+    discovery_requirements: 12, solution_design: 16, project_management: 12,
+    implementation_configuration: 24, integration: 10, migration_data_porting: 2,
+    testing_uat: 10, training_enablement: 6, documentation_handover: 4, hypercare: 8,
+  },
+};
+
+app.get("/labor-config", async (c) => {
+  const db = c.env.DB;
+  const rows = await db.prepare("SELECT category, base_hours FROM labor_config").all<{ category: string; base_hours: string }>();
+  const dbMap: Record<string, Record<string, number>> = {};
+  for (const row of rows.results ?? []) {
+    try { dbMap[row.category] = JSON.parse(row.base_hours); } catch { /* ignore */ }
+  }
+  const result: Record<string, Record<string, number>> = {};
+  for (const cat of LABOR_CONFIG_CATEGORIES) {
+    result[cat] = dbMap[cat] ?? LABOR_CONFIG_DEFAULT_HOURS[cat];
+  }
+  return c.json({ categories: result, defaults: LABOR_CONFIG_DEFAULT_HOURS });
+});
+
+const laborConfigSchema = z.object({
+  category: z.enum(LABOR_CONFIG_CATEGORIES),
+  base_hours: z.record(z.string(), z.number().min(0).max(9999)),
+});
+
+app.put("/labor-config", async (c) => {
+  const db = c.env.DB;
+  const rawBody = await c.req.json();
+  const parsed = laborConfigSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const { category, base_hours } = parsed.data;
+  await db.prepare(`
+    INSERT INTO labor_config (category, base_hours, updated_at)
+    VALUES (?, ?, datetime('now'))
+    ON CONFLICT(category) DO UPDATE SET base_hours = excluded.base_hours, updated_at = excluded.updated_at
+  `).bind(category, JSON.stringify(base_hours)).run();
+  return c.json({ ok: true });
+});
+
+app.delete("/labor-config/:category", async (c) => {
+  const db = c.env.DB;
+  const category = c.req.param("category");
+  if (!LABOR_CONFIG_CATEGORIES.includes(category as LaborConfigCategory)) {
+    throw new HTTPException(400, { message: "Unknown category" });
+  }
+  await db.prepare("DELETE FROM labor_config WHERE category = ?").bind(category).run();
+  return c.json({ ok: true });
+});
+
 export default app;
