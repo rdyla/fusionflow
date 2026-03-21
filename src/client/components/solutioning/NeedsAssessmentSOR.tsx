@@ -1,6 +1,6 @@
 import { type NeedsAssessment } from "../../lib/api";
 import surveyJson from "../../assets/ci_needs_assessment_unified_v1.json";
-import logoUrl from "../../assets/fusion flow transparent logo.png";
+import logoUrl from "../../assets/packetfusionlogo.png";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -413,13 +413,30 @@ function buildSorHtml(
     }
     .footer img { height: 18px; width: auto; opacity: 0.45; }
 
+    .print-tip {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 24px;
+      font-size: 9.5pt;
+      color: #92400e;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
     @media print {
-      .page { padding: 28px 36px; }
+      .print-tip { display: none !important; }
+      @page { margin: 15mm 18mm; }
     }
   </style>
 </head>
 <body>
 <div class="page">
+  <div class="print-tip">
+    <span style="font-size:14pt">💡</span>
+    <span>In the print dialog, uncheck <strong>"Headers and footers"</strong> (Chrome) or <strong>"Print headers and footers"</strong> (Firefox/Edge) to remove the browser URL and date from the page.</span>
+  </div>
 
   <!-- Cover -->
   <div class="cover">
