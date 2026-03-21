@@ -442,7 +442,7 @@ export default function NeedsAssessmentWizard({ solutionId, customerName, onComp
       </div>
 
       {/* Section card */}
-      <div className="ms-card">
+      <div className="ms-card" style={{ padding: "24px 28px" }}>
         <h3 style={{ margin: "0 0 20px", fontSize: 16, fontWeight: 700, color: "#1e293b" }}>
           {currentSection.title}
         </h3>
