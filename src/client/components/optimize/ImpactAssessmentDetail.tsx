@@ -92,7 +92,7 @@ export default function ImpactAssessmentDetail({ assessment, previousAssessment,
   const nextDrivers = assessment.answers?.next_30_60_day_value_drivers as string[] | undefined;
 
   return (
-    <div style={{ maxWidth: 800, margin: "0 auto" }}>
+    <div>
       {/* Back button */}
       <button
         onClick={onBack}
