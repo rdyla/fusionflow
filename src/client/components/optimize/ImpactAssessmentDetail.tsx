@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ImpactAssessment } from "../../lib/api";
+import surveyDef from "../../assets/client_impact_assessment_unified_v1.json";
 
 interface Props {
   assessment: ImpactAssessment;
@@ -54,31 +55,123 @@ function getHealthBandForScore(score: number): string {
   return "at_risk";
 }
 
-function ScoreBar({ label, score }: { label: string; score: number }) {
+// Build a lookup of fieldId → field definition from the survey JSON
+type FieldDef = {
+  id: string;
+  label: string;
+  type: string;
+  options?: { value: string; label: string }[];
+  scaleMin?: number;
+  scaleMax?: number;
+  minLabel?: string;
+  maxLabel?: string;
+  scored?: boolean;
+};
+
+const ALL_FIELDS: Record<string, FieldDef> = {};
+for (const section of surveyDef.sections) {
+  for (const field of section.fields) {
+    ALL_FIELDS[field.id] = field as FieldDef;
+  }
+}
+
+// Map sectionCategory → field IDs
+const SECTION_FIELD_IDS: Record<string, string[]> = {};
+for (const section of surveyDef.sections) {
+  const cat = (section as { sectionCategory?: string }).sectionCategory;
+  if (cat) {
+    SECTION_FIELD_IDS[cat] = section.fields.map((f) => f.id);
+  }
+}
+
+function formatAnswerValue(field: FieldDef, value: unknown): string | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (field.type === "single_select" && field.options) {
+    return field.options.find((o) => o.value === value)?.label ?? String(value);
+  }
+  if (field.type === "multi_select" && field.options && Array.isArray(value)) {
+    if (value.length === 0) return null;
+    return value.map((v) => field.options!.find((o) => o.value === v)?.label ?? v).join(", ");
+  }
+  if (field.type === "rating") {
+    return `${value}${field.scaleMax ? ` / ${field.scaleMax}` : ""}`;
+  }
+  if (field.type === "textarea" || field.type === "text") {
+    return String(value);
+  }
+  return null;
+}
+
+function ScoreBar({
+  label,
+  score,
+  sectionKey,
+  answers,
+  expanded,
+  onToggle,
+}: {
+  label: string;
+  score: number;
+  sectionKey: string;
+  answers: Record<string, unknown>;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const color = HEALTH_BAND_COLORS[getHealthBandForScore(score)] ?? "#94a3b8";
+  const fieldIds = SECTION_FIELD_IDS[sectionKey] ?? [];
+  const relevantAnswers = fieldIds
+    .map((id) => ({ field: ALL_FIELDS[id], value: answers[id] }))
+    .filter(({ field, value }) => field && formatAnswerValue(field, value) !== null);
+
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+      <button
+        type="button"
+        onClick={onToggle}
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+          background: "none",
+          border: "none",
+          padding: "0 0 4px",
+          cursor: relevantAnswers.length > 0 ? "pointer" : "default",
+          textAlign: "left",
+        }}
+      >
         <span style={{ fontSize: 13, color: "#475569" }}>{label}</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color }}>{score}</span>
-      </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color }}>{score}</span>
+          {relevantAnswers.length > 0 && (
+            <span style={{ fontSize: 11, color: "#94a3b8" }}>{expanded ? "▲" : "▼"}</span>
+          )}
+        </div>
+      </button>
       <div style={{ height: 6, background: "rgba(0,0,0,0.06)", borderRadius: 4, overflow: "hidden" }}>
-        <div
-          style={{
-            height: "100%",
-            width: `${score}%`,
-            background: color,
-            borderRadius: 4,
-            transition: "width 0.4s",
-          }}
-        />
+        <div style={{ height: "100%", width: `${score}%`, background: color, borderRadius: 4, transition: "width 0.4s" }} />
       </div>
+      {expanded && relevantAnswers.length > 0 && (
+        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6, paddingLeft: 12, borderLeft: `2px solid ${color}40` }}>
+          {relevantAnswers.map(({ field, value }) => (
+            <div key={field.id}>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 2 }}>{field.label}</div>
+              <div style={{ fontSize: 13, color: "#334155" }}>{formatAnswerValue(field, value)}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
 export default function ImpactAssessmentDetail({ assessment, previousAssessment, onBack, onDelete }: Props) {
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+
+  function toggleSection(key: string) {
+    setExpandedSection((prev) => (prev === key ? null : key));
+  }
 
   const healthColor = HEALTH_BAND_COLORS[assessment.health_band ?? ""] ?? "#94a3b8";
   const healthLabel = HEALTH_BAND_LABELS[assessment.health_band ?? ""] ?? assessment.health_band ?? "—";
@@ -181,7 +274,15 @@ export default function ImpactAssessmentDetail({ assessment, previousAssessment,
             Section Scores
           </div>
           {Object.entries(assessment.section_scores).map(([key, score]) => (
-            <ScoreBar key={key} label={SECTION_LABELS[key] ?? key} score={score} />
+            <ScoreBar
+              key={key}
+              label={SECTION_LABELS[key] ?? key}
+              score={score}
+              sectionKey={key}
+              answers={assessment.answers as Record<string, unknown>}
+              expanded={expandedSection === key}
+              onToggle={() => toggleSection(key)}
+            />
           ))}
         </div>
       )}
