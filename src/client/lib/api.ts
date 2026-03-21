@@ -523,6 +523,33 @@ export type NeedsAssessment = {
   updated_at: string;
 };
 
+export type LaborEstimate = {
+  id: string;
+  solution_id: string;
+  model_version: string;
+  solution_type_category: string;
+  base_hours: Record<string, number>;
+  driver_adjustments: Array<{
+    driverId: string;
+    field: string;
+    workstreams: string[];
+    hoursAdded: number;
+    reason: string;
+  }>;
+  complexity: { score: number; band: string; multiplier: number };
+  pre_override_hours: Record<string, number>;
+  final_hours: Record<string, number>;
+  overrides: Record<string, number>;
+  total_low: number;
+  total_expected: number;
+  total_high: number;
+  confidence_score: number;
+  confidence_band: string;
+  risk_flags: string[];
+  created_at: string;
+  updated_at: string;
+};
+
 export type UtilizationSnapshot = {
   id: string;
   project_id: string;
@@ -1112,6 +1139,17 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ asana_project_id: null, managed_in_asana: 0 }),
     }),
+
+  // ── Labor Estimates ──────────────────────────────────────────────────────────
+  laborEstimate: (solutionId: string) =>
+    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimate`),
+  upsertLaborEstimate: (solutionId: string, body: { overrides?: Record<string, number> }) =>
+    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimate`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteLaborEstimate: (solutionId: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/labor-estimate`, { method: "DELETE" }),
 
   // ── Needs Assessments ────────────────────────────────────────────────────────
   needsAssessment: (solutionId: string) =>

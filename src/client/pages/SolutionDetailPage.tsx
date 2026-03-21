@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis, type SolutionStaffMember, type NeedsAssessment } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
+import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
@@ -438,7 +439,7 @@ function parseJSON(raw: string | null): Record<string, string> {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "assessment" | "requirements" | "gap_risk" | "scope" | "handoff";
+type Tab = "overview" | "assessment" | "requirements" | "gap_risk" | "scope" | "handoff" | "labor";
 
 export default function SolutionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -484,6 +485,9 @@ export default function SolutionDetailPage() {
   const [needsAssessment, setNeedsAssessment] = useState<NeedsAssessment | null>(null);
   const [naView, setNaView] = useState<"sor" | "wizard">("sor");
 
+  // Labor Estimate
+  const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
+
   // Solution staff
   const [solutionStaff, setSolutionStaff] = useState<SolutionStaffMember[]>([]);
   const [showSolutionStaffModal, setShowSolutionStaffModal] = useState(false);
@@ -517,6 +521,9 @@ export default function SolutionDetailPage() {
     if (["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air", "ucaas"].includes(s.solution_type)) {
       api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
     }
+
+    // Load labor estimate (all solution types)
+    api.laborEstimate(id).then(setLaborEstimate).catch(() => {});
 
     // Load CRM contacts and solution contacts in parallel
     if (s.dynamics_account_id) {
@@ -621,6 +628,7 @@ export default function SolutionDetailPage() {
     { key: "gap_risk",     label: "Gap & Risk"       },
     { key: "scope",        label: "Scope of Work"    },
     { key: "handoff",      label: "Handoff"          },
+    { key: "labor",        label: "Labor Estimate"   },
   ];
 
   return (
@@ -1496,6 +1504,17 @@ export default function SolutionDetailPage() {
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Labor Estimate Tab ── */}
+      {tab === "labor" && (
+        <LaborEstimateView
+          solutionId={solution.id}
+          estimate={laborEstimate}
+          hasAssessment={needsAssessment !== null}
+          canEdit={canEdit}
+          onEstimateChange={setLaborEstimate}
+        />
       )}
 
       {/* ── Gap Modal ── */}

@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS labor_estimates (
+  id TEXT PRIMARY KEY,
+  solution_id TEXT NOT NULL UNIQUE,
+  model_version TEXT NOT NULL DEFAULT 'unified_labor_estimation_model_v1',
+  solution_type_category TEXT NOT NULL,
+  base_hours TEXT NOT NULL DEFAULT '{}',
+  driver_adjustments TEXT NOT NULL DEFAULT '[]',
+  complexity TEXT NOT NULL DEFAULT '{}',
+  pre_override_hours TEXT NOT NULL DEFAULT '{}',
+  final_hours TEXT NOT NULL DEFAULT '{}',
+  overrides TEXT NOT NULL DEFAULT '{}',
+  total_low INTEGER,
+  total_expected INTEGER,
+  total_high INTEGER,
+  confidence_score INTEGER,
+  confidence_band TEXT,
+  risk_flags TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (solution_id) REFERENCES solutions(id) ON DELETE CASCADE
+);
