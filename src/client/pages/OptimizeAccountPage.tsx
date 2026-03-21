@@ -3,12 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   api,
   type OptimizeAccount,
-  type Assessment,
+  type ImpactAssessment,
   type TechStackItem,
   type RoadmapItem,
   type UtilizationSnapshot,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
+import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
 
 type Tab = "assessments" | "tech-stack" | "roadmap" | "utilization";
 
@@ -43,10 +45,9 @@ export default function OptimizeAccountPage() {
   const [loading, setLoading] = useState(true);
 
   // Assessments
-  const [assessments, setAssessments] = useState<Assessment[]>([]);
-  const [showAssessmentForm, setShowAssessmentForm] = useState(false);
-  const [assessmentForm, setAssessmentForm] = useState({ assessment_type: "impact", conducted_date: new Date().toISOString().slice(0, 10), overall_score: "", adoption_score: "", satisfaction_score: "", notes: "", action_items: "", next_review_date: "" });
-  const [savingAssessment, setSavingAssessment] = useState(false);
+  const [assessments, setAssessments] = useState<ImpactAssessment[]>([]);
+  const [assessmentView, setAssessmentView] = useState<"list" | "wizard" | "detail">("list");
+  const [selectedAssessment, setSelectedAssessment] = useState<ImpactAssessment | null>(null);
 
   // Tech Stack
   const [techStack, setTechStack] = useState<TechStackItem[]>([]);
@@ -81,7 +82,7 @@ export default function OptimizeAccountPage() {
         api.zoomConfigured(pid).catch(() => ({ configured: false })),
       ]);
       setAccount(acc);
-      setAssessments(ass);
+      setAssessments(ass as ImpactAssessment[]);
       setTechStack(tech);
       setRoadmap(road);
       setUtilization(util);
@@ -108,41 +109,30 @@ export default function OptimizeAccountPage() {
     }
   }
 
-  async function handleCreateAssessment(e: React.FormEvent) {
-    e.preventDefault();
-    if (!projectId) return;
-    setSavingAssessment(true);
-    try {
-      const created = await api.optimizeCreateAssessment({
-        project_id: projectId,
-        assessment_type: assessmentForm.assessment_type,
-        conducted_date: assessmentForm.conducted_date,
-        overall_score: assessmentForm.overall_score ? parseInt(assessmentForm.overall_score) : null,
-        adoption_score: assessmentForm.adoption_score ? parseInt(assessmentForm.adoption_score) : null,
-        satisfaction_score: assessmentForm.satisfaction_score ? parseInt(assessmentForm.satisfaction_score) : null,
-        notes: assessmentForm.notes || null,
-        action_items: assessmentForm.action_items || null,
-        next_review_date: assessmentForm.next_review_date || null,
-      });
-      setAssessments((prev) => [created, ...prev]);
-      setShowAssessmentForm(false);
-      setAssessmentForm({ assessment_type: "impact", conducted_date: new Date().toISOString().slice(0, 10), overall_score: "", adoption_score: "", satisfaction_score: "", notes: "", action_items: "", next_review_date: "" });
-      showToast("Assessment saved.", "success");
-    } catch {
-      showToast("Failed to save assessment", "error");
-    } finally {
-      setSavingAssessment(false);
-    }
+  function handleAssessmentComplete(a: ImpactAssessment) {
+    setAssessments((prev) => [a, ...prev]);
+    setSelectedAssessment(a);
+    setAssessmentView("detail");
+    showToast("Assessment saved.", "success");
   }
 
   async function handleDeleteAssessment(id: string) {
     try {
       await api.optimizeDeleteAssessment(projectId!, id);
       setAssessments((prev) => prev.filter((a) => a.id !== id));
+      setSelectedAssessment(null);
+      setAssessmentView("list");
       showToast("Assessment deleted.", "success");
     } catch {
       showToast("Failed to delete assessment", "error");
     }
+  }
+
+  function getPreviousAssessment(): ImpactAssessment | undefined {
+    if (!selectedAssessment) return undefined;
+    const idx = assessments.findIndex((a) => a.id === selectedAssessment.id);
+    if (idx === -1 || idx + 1 >= assessments.length) return undefined;
+    return assessments[idx + 1];
   }
 
   async function handleCreateTech(e: React.FormEvent) {
@@ -250,11 +240,11 @@ export default function OptimizeAccountPage() {
             { label: "CSM", value: account.csm_name ?? "—" },
             { label: "Graduated", value: account.graduated_at ? account.graduated_at.slice(0, 10) : "—" },
             { label: "Next Review", value: account.next_review_date ?? "—" },
-            { label: "Last Score", value: account.last_assessment_score != null ? `${account.last_assessment_score}/10` : "—" },
-          ].map(({ label, value }) => (
+            { label: "Last Score", value: account.last_assessment_score != null ? `${account.last_assessment_score}` : "—", scoreColor: account.last_assessment_score != null ? (account.last_assessment_score >= 80 ? "#22c55e" : account.last_assessment_score >= 60 ? "#0b9aad" : account.last_assessment_score >= 40 ? "#f59e0b" : "#d13438") : undefined },
+          ].map(({ label, value, scoreColor }: { label: string; value: string; scoreColor?: string }) => (
             <div key={label}>
               <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 13, color: "#334155", fontWeight: 500 }}>{value}</div>
+              <div style={{ fontSize: 13, color: scoreColor ?? "#334155", fontWeight: 500 }}>{value}</div>
             </div>
           ))}
         </div>
@@ -288,103 +278,97 @@ export default function OptimizeAccountPage() {
       {/* Assessments Tab */}
       {tab === "assessments" && (
         <div>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
-            <button className="ms-btn-primary" onClick={() => setShowAssessmentForm(true)}>+ New Assessment</button>
-          </div>
+          {assessmentView === "list" && (
+            <div>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 16 }}>
+                <button className="ms-btn-primary" onClick={() => setAssessmentView("wizard")}>+ New Assessment</button>
+              </div>
 
-          {assessments.length === 0 ? (
-            <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
-              No assessments yet. Record your first impact or adoption review.
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              {assessments.map((a) => (
-                <div key={a.id} className="ms-card" style={{ padding: "16px 20px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 6 }}>
-                        <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.25)", textTransform: "capitalize" }}>
-                          {a.assessment_type}
-                        </span>
-                        <span style={{ fontSize: 12, color: "#94a3b8" }}>{a.conducted_date}</span>
-                        {a.conducted_by_name && (
-                          <span style={{ fontSize: 12, color: "#94a3b8" }}>by {a.conducted_by_name}</span>
-                        )}
-                      </div>
-                      <div style={{ display: "flex", gap: 20 }}>
-                        {a.overall_score != null && <ScoreChip label="Overall" score={a.overall_score} />}
-                        {a.adoption_score != null && <ScoreChip label="Adoption" score={a.adoption_score} />}
-                        {a.satisfaction_score != null && <ScoreChip label="Satisfaction" score={a.satisfaction_score} />}
-                      </div>
-                      {a.notes && <p style={{ fontSize: 13, color: "#475569", margin: "10px 0 0", lineHeight: 1.5 }}>{a.notes}</p>}
-                      {a.action_items && (
-                        <p style={{ fontSize: 12, color: "#94a3b8", margin: "8px 0 0", fontStyle: "italic" }}>Action items: {a.action_items}</p>
-                      )}
-                    </div>
-                    <button
-                      className="ms-btn-ghost"
-                      onClick={() => handleDeleteAssessment(a.id)}
-                      style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)", flexShrink: 0 }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+              {assessments.length === 0 ? (
+                <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
+                  No assessments yet. Start your first impact assessment to measure deployment value.
                 </div>
-              ))}
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {assessments.map((a) => {
+                    const healthColor = (() => {
+                      const s = a.overall_score;
+                      if (s == null) return "#94a3b8";
+                      if (s >= 80) return "#22c55e";
+                      if (s >= 60) return "#0b9aad";
+                      if (s >= 40) return "#f59e0b";
+                      return "#d13438";
+                    })();
+                    const healthLabel = (() => {
+                      const b = a.health_band;
+                      if (b === "realized_value") return "Realized Value";
+                      if (b === "emerging_value") return "Emerging Value";
+                      if (b === "limited_value") return "Limited Value";
+                      if (b === "at_risk") return "At Risk";
+                      return b ?? "—";
+                    })();
+                    return (
+                      <div
+                        key={a.id}
+                        className="ms-card"
+                        style={{ padding: "14px 18px", cursor: "pointer", borderLeft: `3px solid ${healthColor}`, transition: "box-shadow 0.15s" }}
+                        onClick={() => { setSelectedAssessment(a); setAssessmentView("detail"); }}
+                      >
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                            <span className="ms-badge" style={{ background: `${healthColor}1a`, color: healthColor, border: `1px solid ${healthColor}40`, fontWeight: 600 }}>
+                              {healthLabel}
+                            </span>
+                            <span style={{ fontSize: 13, color: "#334155", fontWeight: 500 }}>{a.conducted_date}</span>
+                            {a.conducted_by_name && (
+                              <span style={{ fontSize: 12, color: "#94a3b8" }}>by {a.conducted_by_name}</span>
+                            )}
+                            {a.solution_types.map((t) => (
+                              <span key={t} className="ms-badge" style={{ background: "rgba(99,193,234,0.08)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
+                                {t === "ucaas" ? "UCaaS" : t === "ccaas" ? "CCaaS" : t === "ci" ? "CI" : t === "virtual_agent" ? "Virtual Agent" : t}
+                              </span>
+                            ))}
+                          </div>
+                          <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+                            {a.overall_score != null && (
+                              <div style={{ textAlign: "center" }}>
+                                <div style={{ fontSize: 20, fontWeight: 800, color: healthColor }}>{a.overall_score}</div>
+                                <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Score</div>
+                              </div>
+                            )}
+                            {a.confidence_score != null && (
+                              <div style={{ textAlign: "center" }}>
+                                <div style={{ fontSize: 20, fontWeight: 800, color: a.confidence_score >= 80 ? "#22c55e" : a.confidence_score >= 60 ? "#f59e0b" : "#d13438" }}>{a.confidence_score}</div>
+                                <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Confidence</div>
+                              </div>
+                            )}
+                            <span style={{ fontSize: 18, color: "#94a3b8" }}>›</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          {showAssessmentForm && (
-            <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAssessmentForm(false); }}>
-              <div className="ms-modal" style={{ maxWidth: 560 }}>
-                <h2>New Assessment</h2>
-                <form onSubmit={handleCreateAssessment} style={{ display: "grid", gap: 14 }}>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-                    <label className="ms-label">
-                      <span>Type</span>
-                      <select className="ms-input" value={assessmentForm.assessment_type} onChange={(e) => setAssessmentForm({ ...assessmentForm, assessment_type: e.target.value })}>
-                        <option value="impact">Impact</option>
-                        <option value="adoption">Adoption</option>
-                        <option value="qbr">QBR</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
-                    <label className="ms-label">
-                      <span>Conducted Date</span>
-                      <input type="date" className="ms-input" value={assessmentForm.conducted_date} onChange={(e) => setAssessmentForm({ ...assessmentForm, conducted_date: e.target.value })} />
-                    </label>
-                    <label className="ms-label">
-                      <span>Overall Score (1–10)</span>
-                      <input type="number" min={1} max={10} className="ms-input" value={assessmentForm.overall_score} onChange={(e) => setAssessmentForm({ ...assessmentForm, overall_score: e.target.value })} placeholder="—" />
-                    </label>
-                    <label className="ms-label">
-                      <span>Adoption Score (1–10)</span>
-                      <input type="number" min={1} max={10} className="ms-input" value={assessmentForm.adoption_score} onChange={(e) => setAssessmentForm({ ...assessmentForm, adoption_score: e.target.value })} placeholder="—" />
-                    </label>
-                    <label className="ms-label">
-                      <span>Satisfaction Score (1–10)</span>
-                      <input type="number" min={1} max={10} className="ms-input" value={assessmentForm.satisfaction_score} onChange={(e) => setAssessmentForm({ ...assessmentForm, satisfaction_score: e.target.value })} placeholder="—" />
-                    </label>
-                    <label className="ms-label">
-                      <span>Next Review Date</span>
-                      <input type="date" className="ms-input" value={assessmentForm.next_review_date} onChange={(e) => setAssessmentForm({ ...assessmentForm, next_review_date: e.target.value })} />
-                    </label>
-                  </div>
-                  <label className="ms-label">
-                    <span>Notes</span>
-                    <textarea className="ms-input" rows={3} value={assessmentForm.notes} onChange={(e) => setAssessmentForm({ ...assessmentForm, notes: e.target.value })} placeholder="Assessment summary..." style={{ resize: "vertical" }} />
-                  </label>
-                  <label className="ms-label">
-                    <span>Action Items</span>
-                    <textarea className="ms-input" rows={2} value={assessmentForm.action_items} onChange={(e) => setAssessmentForm({ ...assessmentForm, action_items: e.target.value })} placeholder="Follow-up tasks..." style={{ resize: "vertical" }} />
-                  </label>
-                  <div style={{ display: "flex", gap: 10 }}>
-                    <button type="submit" className="ms-btn-primary" disabled={savingAssessment}>{savingAssessment ? "Saving..." : "Save Assessment"}</button>
-                    <button type="button" className="ms-btn-secondary" onClick={() => setShowAssessmentForm(false)}>Cancel</button>
-                  </div>
-                </form>
-              </div>
-            </div>
+          {assessmentView === "wizard" && account && (
+            <ImpactAssessmentWizard
+              projectId={projectId!}
+              accountName={account.project_name}
+              onComplete={handleAssessmentComplete}
+              onCancel={() => setAssessmentView("list")}
+            />
+          )}
+
+          {assessmentView === "detail" && selectedAssessment && (
+            <ImpactAssessmentDetail
+              assessment={selectedAssessment}
+              previousAssessment={getPreviousAssessment()}
+              onBack={() => setAssessmentView("list")}
+              onDelete={() => handleDeleteAssessment(selectedAssessment.id)}
+            />
           )}
         </div>
       )}
@@ -804,15 +788,6 @@ export default function OptimizeAccountPage() {
   );
 }
 
-function ScoreChip({ label, score }: { label: string; score: number }) {
-  const color = score >= 7 ? "#22c55e" : score >= 4 ? "#f59e0b" : "#d13438";
-  return (
-    <div style={{ textAlign: "center" }}>
-      <div style={{ fontSize: 22, fontWeight: 700, color }}>{score}</div>
-      <div style={{ fontSize: 10, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>
-    </div>
-  );
-}
 
 const TECH_AREA_LABELS: Record<string, string> = {
   uc: "Unified Communications",

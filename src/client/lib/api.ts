@@ -463,19 +463,22 @@ export type OptimizeEligible = {
   actual_go_live_date: string | null;
 };
 
-export type Assessment = {
+export type ImpactAssessment = {
   id: string;
   project_id: string;
-  assessment_type: "impact" | "adoption" | "qbr" | "other";
+  survey_id: string;
   conducted_date: string;
   conducted_by_user_id: string | null;
   conducted_by_name: string | null;
+  solution_types: string[];
+  answers: Record<string, unknown>;
+  section_scores: Record<string, number> | null;
+  solution_scores: Record<string, number> | null;
   overall_score: number | null;
-  adoption_score: number | null;
-  satisfaction_score: number | null;
-  notes: string | null;
-  action_items: string | null;
-  next_review_date: string | null;
+  confidence_score: number | null;
+  health_band: string | null;
+  recommended_actions: string[] | null;
+  insights: string[] | null;
   created_at: string;
 };
 
@@ -992,34 +995,16 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
-  optimizeAssessments: (projectId: string) => request<Assessment[]>(`/optimize/accounts/${projectId}/assessments`),
+  optimizeAssessments: (projectId: string) => request<ImpactAssessment[]>(`/optimize/accounts/${projectId}/assessments`),
   optimizeCreateAssessment: (payload: {
     project_id: string;
-    assessment_type: string;
     conducted_date: string;
-    overall_score?: number | null;
-    adoption_score?: number | null;
-    satisfaction_score?: number | null;
-    notes?: string | null;
-    action_items?: string | null;
-    next_review_date?: string | null;
+    conducted_by_user_id?: string | null;
+    solution_types: string[];
+    answers: Record<string, unknown>;
   }) =>
-    request<Assessment>(`/optimize/accounts/${payload.project_id}/assessments`, {
+    request<ImpactAssessment>(`/optimize/accounts/${payload.project_id}/assessments`, {
       method: "POST",
-      body: JSON.stringify(payload),
-    }),
-  optimizeUpdateAssessment: (projectId: string, assessmentId: string, payload: Partial<{
-    assessment_type: string;
-    conducted_date: string;
-    overall_score: number | null;
-    adoption_score: number | null;
-    satisfaction_score: number | null;
-    notes: string | null;
-    action_items: string | null;
-    next_review_date: string | null;
-  }>) =>
-    request<Assessment>(`/optimize/accounts/${projectId}/assessments/${assessmentId}`, {
-      method: "PATCH",
       body: JSON.stringify(payload),
     }),
   optimizeDeleteAssessment: (projectId: string, assessmentId: string) =>

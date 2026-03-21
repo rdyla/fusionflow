@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 import { searchAccounts } from "../services/dynamicsService";
+import { scoreAssessment } from "../lib/scoringEngine";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -30,9 +31,9 @@ app.get("/accounts", async (c) => {
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.pm_user_id,
       sa.name AS sa_name, csm.name AS csm_name,
-      (SELECT conducted_date FROM assessments WHERE project_id = oa.project_id
+      (SELECT conducted_date FROM impact_assessments WHERE project_id = oa.project_id
        ORDER BY conducted_date DESC LIMIT 1) AS last_assessment_date,
-      (SELECT overall_score FROM assessments WHERE project_id = oa.project_id
+      (SELECT overall_score FROM impact_assessments WHERE project_id = oa.project_id
        ORDER BY conducted_date DESC LIMIT 1) AS last_assessment_score
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
@@ -227,31 +228,37 @@ app.patch("/accounts/:projectId", async (c) => {
   return c.json(await db.prepare("SELECT * FROM optimize_accounts WHERE project_id = ? LIMIT 1").bind(projectId).first());
 });
 
-// ── Assessments ────────────────────────────────────────────────────────────────
+// ── Impact Assessments ─────────────────────────────────────────────────────────
 
 app.get("/accounts/:projectId/assessments", async (c) => {
   assertOptimizeAccess(c.get("auth").role);
   const projectId = c.req.param("projectId");
   const rows = await c.env.DB.prepare(`
-    SELECT a.*, u.name AS conducted_by_name
-    FROM assessments a
-    LEFT JOIN users u ON u.id = a.conducted_by_user_id
-    WHERE a.project_id = ?
-    ORDER BY a.conducted_date DESC
+    SELECT ia.*, u.name AS conducted_by_name
+    FROM impact_assessments ia
+    LEFT JOIN users u ON u.id = ia.conducted_by_user_id
+    WHERE ia.project_id = ?
+    ORDER BY ia.conducted_date DESC
   `).bind(projectId).all();
-  return c.json(rows.results ?? []);
+
+  const results = (rows.results ?? []).map((r: Record<string, unknown>) => ({
+    ...r,
+    solution_types: tryParseJSON(r.solution_types as string, []),
+    answers: tryParseJSON(r.answers as string, {}),
+    section_scores: tryParseJSON(r.section_scores as string | null, null),
+    solution_scores: tryParseJSON(r.solution_scores as string | null, null),
+    recommended_actions: tryParseJSON(r.recommended_actions as string | null, null),
+    insights: tryParseJSON(r.insights as string | null, null),
+  }));
+
+  return c.json(results);
 });
 
-const assessmentSchema = z.object({
-  assessment_type: z.enum(["impact", "adoption", "qbr", "other"]).default("impact"),
+const impactAssessmentSchema = z.object({
   conducted_date: z.string().min(1),
   conducted_by_user_id: z.string().nullable().optional(),
-  overall_score: z.number().int().min(1).max(10).nullable().optional(),
-  adoption_score: z.number().int().min(1).max(10).nullable().optional(),
-  satisfaction_score: z.number().int().min(1).max(10).nullable().optional(),
-  notes: z.string().nullable().optional(),
-  action_items: z.string().nullable().optional(),
-  next_review_date: z.string().nullable().optional(),
+  solution_types: z.array(z.string()).min(1),
+  answers: z.record(z.unknown()),
 });
 
 app.post("/accounts/:projectId/assessments", async (c) => {
@@ -259,74 +266,67 @@ app.post("/accounts/:projectId/assessments", async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("projectId");
 
-  const parsed = assessmentSchema.safeParse(await c.req.json());
+  const parsed = impactAssessmentSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const d = parsed.data;
+  const result = scoreAssessment(d.answers, d.solution_types);
+
   const id = crypto.randomUUID();
   await db.prepare(`
-    INSERT INTO assessments
-      (id, project_id, assessment_type, conducted_date, conducted_by_user_id,
-       overall_score, adoption_score, satisfaction_score, notes, action_items, next_review_date)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(id, projectId, d.assessment_type, d.conducted_date, d.conducted_by_user_id ?? null,
-    d.overall_score ?? null, d.adoption_score ?? null, d.satisfaction_score ?? null,
-    d.notes ?? null, d.action_items ?? null, d.next_review_date ?? null).run();
+    INSERT INTO impact_assessments
+      (id, project_id, survey_id, conducted_date, conducted_by_user_id,
+       solution_types, answers, section_scores, solution_scores,
+       overall_score, confidence_score, health_band, recommended_actions, insights)
+    VALUES (?, ?, 'client_impact_assessment_unified_v1', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).bind(
+    id, projectId,
+    d.conducted_date, d.conducted_by_user_id ?? null,
+    JSON.stringify(d.solution_types),
+    JSON.stringify(d.answers),
+    JSON.stringify(result.sectionScores),
+    JSON.stringify(result.solutionScores),
+    result.overallScore,
+    result.confidenceScore,
+    result.healthBand,
+    JSON.stringify(result.recommendedActions),
+    JSON.stringify(result.insights),
+  ).run();
 
-  // Update next_review_date on optimize_account if provided
-  if (d.next_review_date) {
-    await db.prepare("UPDATE optimize_accounts SET next_review_date = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?")
-      .bind(d.next_review_date, projectId).run();
-  }
+  const row = await db.prepare(`
+    SELECT ia.*, u.name AS conducted_by_name
+    FROM impact_assessments ia
+    LEFT JOIN users u ON u.id = ia.conducted_by_user_id
+    WHERE ia.id = ? LIMIT 1
+  `).bind(id).first() as Record<string, unknown> | null;
 
-  const created = await db.prepare(`
-    SELECT a.*, u.name AS conducted_by_name FROM assessments a
-    LEFT JOIN users u ON u.id = a.conducted_by_user_id
-    WHERE a.id = ? LIMIT 1
-  `).bind(id).first();
-  return c.json(created, 201);
-});
+  if (!row) throw new HTTPException(500, { message: "Failed to retrieve created assessment" });
 
-const updateAssessmentSchema = assessmentSchema.partial();
-
-app.patch("/accounts/:projectId/assessments/:assessmentId", async (c) => {
-  assertOptimizeEdit(c.get("auth").role);
-  const db = c.env.DB;
-  const { projectId, assessmentId } = c.req.param();
-
-  const existing = await db.prepare("SELECT id FROM assessments WHERE id = ? AND project_id = ? LIMIT 1")
-    .bind(assessmentId, projectId).first();
-  if (!existing) throw new HTTPException(404, { message: "Assessment not found" });
-
-  const parsed = updateAssessmentSchema.safeParse(await c.req.json());
-  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
-
-  const fields: string[] = [], values: unknown[] = [];
-  for (const [k, v] of Object.entries(parsed.data)) {
-    if (v !== undefined) { fields.push(`${k} = ?`); values.push(v); }
-  }
-  if (!fields.length) throw new HTTPException(400, { message: "No fields to update" });
-  fields.push("updated_at = CURRENT_TIMESTAMP");
-
-  await db.prepare(`UPDATE assessments SET ${fields.join(", ")} WHERE id = ?`)
-    .bind(...values, assessmentId).run();
-
-  return c.json(await db.prepare(`
-    SELECT a.*, u.name AS conducted_by_name FROM assessments a
-    LEFT JOIN users u ON u.id = a.conducted_by_user_id
-    WHERE a.id = ? LIMIT 1
-  `).bind(assessmentId).first());
+  return c.json({
+    ...row,
+    solution_types: tryParseJSON(row.solution_types as string, []),
+    answers: tryParseJSON(row.answers as string, {}),
+    section_scores: tryParseJSON(row.section_scores as string | null, null),
+    solution_scores: tryParseJSON(row.solution_scores as string | null, null),
+    recommended_actions: tryParseJSON(row.recommended_actions as string | null, null),
+    insights: tryParseJSON(row.insights as string | null, null),
+  }, 201);
 });
 
 app.delete("/accounts/:projectId/assessments/:assessmentId", async (c) => {
   assertOptimizeEdit(c.get("auth").role);
   const { projectId, assessmentId } = c.req.param();
-  const existing = await c.env.DB.prepare("SELECT id FROM assessments WHERE id = ? AND project_id = ? LIMIT 1")
+  const existing = await c.env.DB.prepare("SELECT id FROM impact_assessments WHERE id = ? AND project_id = ? LIMIT 1")
     .bind(assessmentId, projectId).first();
   if (!existing) throw new HTTPException(404, { message: "Assessment not found" });
-  await c.env.DB.prepare("DELETE FROM assessments WHERE id = ?").bind(assessmentId).run();
+  await c.env.DB.prepare("DELETE FROM impact_assessments WHERE id = ?").bind(assessmentId).run();
   return c.json({ success: true });
 });
+
+function tryParseJSON<T>(val: string | null | undefined, fallback: T): T {
+  if (val === null || val === undefined) return fallback;
+  try { return JSON.parse(val) as T; } catch { return fallback; }
+}
 
 // ── Tech Stack ─────────────────────────────────────────────────────────────────
 
