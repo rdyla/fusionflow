@@ -1015,7 +1015,7 @@ export default function SolutionDetailPage() {
       )}
 
       {/* ── Assessment Tab ── */}
-      {tab === "assessment" && ["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air"].includes(solution.solution_type) && (
+      {tab === "assessment" && ["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air", "ucaas"].includes(solution.solution_type) && (
         <div>
           {(() => {
             const surveyJson =
@@ -1074,7 +1074,7 @@ export default function SolutionDetailPage() {
           })()}
         </div>
       )}
-      {tab === "assessment" && !["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air"].includes(solution.solution_type) && (
+      {tab === "assessment" && !["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air", "ucaas"].includes(solution.solution_type) && (
         <div style={{ display: "grid", gap: 20 }}>
           {ASSESSMENT_SCHEMA[solution.solution_type].map((section) => {
             const checkboxFields = section.fields.filter((f) => f.type === "checkbox");
