@@ -61,6 +61,7 @@ type Props = {
   solutionId: string;
   customerName: string;
   surveyJson: { sections: SectionDef[]; [key: string]: unknown };
+  initialAnswers?: Record<string, unknown>;
   onComplete: (assessment: NeedsAssessment) => void;
   onCancel: () => void;
 };
@@ -343,14 +344,14 @@ function FieldInput({ field, answers, onChange, allSections }: FieldProps) {
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
-export default function NeedsAssessmentWizard({ solutionId, customerName, surveyJson, onComplete, onCancel }: Props) {
+export default function NeedsAssessmentWizard({ solutionId, customerName, surveyJson, initialAnswers, onComplete, onCancel }: Props) {
   const SECTIONS = useMemo(
     () => (surveyJson.sections as SectionDef[]).filter((s) => s.id !== "project_context"),
     [surveyJson]
   );
 
   const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
+  const [answers, setAnswers] = useState<Record<string, unknown>>(initialAnswers ?? {});
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 

@@ -1033,6 +1033,7 @@ export default function SolutionDetailPage() {
                 customerName={solution.customer_name}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
+                initialAnswers={needsAssessment?.answers as Record<string, unknown> | undefined}
                 onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
                 onCancel={() => { if (needsAssessment) setNaView("sor"); }}
               />
