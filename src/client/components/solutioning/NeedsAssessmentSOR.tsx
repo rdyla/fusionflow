@@ -188,6 +188,232 @@ function formatRepeater(val: unknown): string {
     .join("\n");
 }
 
+// ── Print window generator ────────────────────────────────────────────────────
+
+function buildSorHtml(
+  answers: Record<string, unknown>,
+  customerName: string,
+  solutionType: string,
+  score: number,
+  status: string,
+): string {
+  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const readinessInfo = READINESS_CONFIG[status] ?? READINESS_CONFIG.not_ready;
+
+  const sectionHtml = SOR_SECTIONS.map((section) => {
+    const rows = section.fields
+      .map((fieldId) => {
+        const fieldDef = FIELD_MAP[fieldId];
+        const label = fieldDef?.label ?? fieldId;
+        const val = answers[fieldId];
+        const display = fieldDef?.type === "repeater" ? formatRepeater(val) : formatValue(fieldId, val);
+        return { label, display };
+      })
+      .filter(({ display }) => display !== "—");
+
+    if (rows.length === 0) return "";
+
+    const rowsHtml = rows
+      .map(
+        ({ label, display }) => `
+        <tr>
+          <td class="label-cell">${label}</td>
+          <td class="value-cell">${display.replace(/\n/g, "<br/>")}</td>
+        </tr>`,
+      )
+      .join("");
+
+    return `
+      <div class="sor-section">
+        <h3>${section.title}</h3>
+        <table><tbody>${rowsHtml}</tbody></table>
+      </div>`;
+  }).join("");
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${customerName} — Statement of Requirements</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Calibri', 'Segoe UI', Arial, sans-serif;
+      font-size: 11pt;
+      color: #1e293b;
+      background: #fff;
+      padding: 0;
+    }
+    .page { max-width: 820px; margin: 0 auto; padding: 40px 48px; }
+
+    /* Cover header */
+    .cover {
+      border-bottom: 3px solid #03395f;
+      padding-bottom: 28px;
+      margin-bottom: 32px;
+    }
+    .cover-brand {
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #03395f;
+      margin-bottom: 10px;
+    }
+    .cover-title {
+      font-size: 22pt;
+      font-weight: 700;
+      color: #03395f;
+      margin-bottom: 4px;
+    }
+    .cover-subtitle {
+      font-size: 11pt;
+      color: #64748b;
+      margin-bottom: 20px;
+    }
+    .cover-meta {
+      display: flex;
+      gap: 40px;
+      font-size: 10pt;
+      color: #475569;
+    }
+    .cover-meta .meta-item { display: flex; flex-direction: column; gap: 2px; }
+    .cover-meta .meta-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #94a3b8; }
+    .cover-meta .meta-value { font-size: 11pt; font-weight: 600; color: #1e293b; }
+
+    /* Readiness badge */
+    .readiness-bar {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-left: 4px solid ${readinessInfo.color};
+      border-radius: 8px;
+      padding: 14px 18px;
+      margin-bottom: 32px;
+    }
+    .readiness-score {
+      width: 52px; height: 52px; border-radius: 50%;
+      background: ${readinessInfo.color};
+      color: #fff;
+      font-size: 17pt; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .readiness-label { font-size: 14pt; font-weight: 700; color: #1e293b; }
+    .readiness-sub { font-size: 9pt; color: #64748b; margin-top: 2px; }
+
+    /* SOR sections */
+    .sor-section {
+      margin-bottom: 28px;
+      page-break-inside: avoid;
+    }
+    .sor-section h3 {
+      font-size: 9pt;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: #03395f;
+      padding-bottom: 8px;
+      border-bottom: 1px solid #dde4ef;
+      margin-bottom: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; }
+    .label-cell {
+      width: 38%;
+      font-size: 10pt;
+      font-weight: 600;
+      color: #475569;
+      padding: 7px 12px 7px 0;
+      vertical-align: top;
+    }
+    .value-cell {
+      font-size: 10pt;
+      color: #1e293b;
+      padding: 7px 0;
+      vertical-align: top;
+      line-height: 1.5;
+    }
+    tr:nth-child(even) td { background: #f8fafc; padding-left: 8px; padding-right: 8px; border-radius: 4px; }
+
+    /* Footer */
+    .footer {
+      margin-top: 40px;
+      padding-top: 16px;
+      border-top: 1px solid #dde4ef;
+      font-size: 8.5pt;
+      color: #94a3b8;
+      text-align: center;
+    }
+
+    /* Intro text */
+    .intro {
+      font-size: 10.5pt;
+      color: #475569;
+      line-height: 1.6;
+      margin-bottom: 28px;
+      padding: 14px 18px;
+      background: #f0f9ff;
+      border-left: 3px solid #0b9aad;
+      border-radius: 0 6px 6px 0;
+    }
+
+    @media print {
+      body { padding: 0; }
+      .page { padding: 24px 32px; }
+      .readiness-score { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .readiness-bar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="cover">
+      <div class="cover-brand">Packet Fusion, Inc. — Trusted Advisor Program</div>
+      <div class="cover-title">Statement of Requirements</div>
+      <div class="cover-subtitle">Conversational Intelligence — Pre-Design Assessment</div>
+      <div class="cover-meta">
+        <div class="meta-item">
+          <span class="meta-label">Customer</span>
+          <span class="meta-value">${customerName}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Platform</span>
+          <span class="meta-value">${solutionType}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Date</span>
+          <span class="meta-value">${today}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="readiness-bar">
+      <div class="readiness-score">${score}</div>
+      <div>
+        <div class="readiness-label">${readinessInfo.label}</div>
+        <div class="readiness-sub">Overall Readiness Score — based on pre-design assessment</div>
+      </div>
+    </div>
+
+    <div class="intro">
+      ${customerName} has engaged Packet Fusion, Inc. to evaluate and deploy a Conversational Intelligence solution.
+      This document captures the business requirements, technical environment, and success criteria gathered during
+      the pre-design assessment and serves as the agreed Statement of Requirements for ${customerName}'s approval
+      prior to formal quoting.
+    </div>
+
+    ${sectionHtml}
+
+    <div class="footer">
+      This Statement of Requirements was prepared by Packet Fusion, Inc. · ${today} · Generated by FusionFlow360
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -213,30 +439,29 @@ export default function NeedsAssessmentSOR({
   const readinessInfo = READINESS_CONFIG[status] ?? READINESS_CONFIG.not_ready;
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
-  const printStyles = `
-    @media print {
-      .no-print { display: none !important; }
-      body { background: #fff !important; }
-      .ms-card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
-    }
-  `;
+  function openPrintWindow() {
+    const html = buildSorHtml(answers, customerName, solutionType, score, status);
+    const win = window.open("", "_blank", "width=900,height=700");
+    if (!win) return;
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
+  }
 
   return (
     <div>
-      {/* eslint-disable-next-line react/no-danger */}
-      <style dangerouslySetInnerHTML={{ __html: printStyles }} />
-
       {/* Action bar */}
-      <div className="no-print" style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
+      <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
         <button className="ms-btn-secondary" onClick={onBack}>
           ← Edit Assessment
         </button>
         <button
           className="ms-btn-primary"
-          onClick={() => window.print()}
+          onClick={openPrintWindow}
           style={{ background: "#0b9aad" }}
         >
-          Print / Generate SOR
+          Export / Print SOR
         </button>
         <button
           className="ms-btn-secondary"
@@ -250,7 +475,7 @@ export default function NeedsAssessmentSOR({
       {/* Readiness banner */}
       <div
         className="ms-card"
-        style={{ marginBottom: 20, borderLeft: `4px solid ${readinessInfo.color}` }}
+        style={{ marginBottom: 20, padding: "16px 20px", borderLeft: `4px solid ${readinessInfo.color}` }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
           <div
@@ -278,10 +503,10 @@ export default function NeedsAssessmentSOR({
       </div>
 
       {/* SOR header */}
-      <div className="ms-card" style={{ marginBottom: 20 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 16 }}>
+      <div className="ms-card" style={{ marginBottom: 20, padding: "20px 24px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#03395f", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
               Packet Fusion, Inc.
             </div>
             <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: "#1e293b" }}>
@@ -304,14 +529,7 @@ export default function NeedsAssessmentSOR({
             const fieldDef = FIELD_MAP[fieldId];
             const label = fieldDef?.label ?? fieldId;
             const val = answers[fieldId];
-
-            let display: string;
-            if (fieldDef?.type === "repeater") {
-              display = formatRepeater(val);
-            } else {
-              display = formatValue(fieldId, val);
-            }
-
+            const display = fieldDef?.type === "repeater" ? formatRepeater(val) : formatValue(fieldId, val);
             return { label, display };
           })
           .filter(({ display }) => display !== "—");
@@ -319,13 +537,13 @@ export default function NeedsAssessmentSOR({
         if (rows.length === 0) return null;
 
         return (
-          <div key={section.title} className="ms-card" style={{ marginBottom: 16 }}>
+          <div key={section.title} className="ms-card" style={{ marginBottom: 16, padding: "20px 24px" }}>
             <h3
               style={{
-                margin: "0 0 16px",
-                fontSize: 13,
+                margin: "0 0 14px",
+                fontSize: 11,
                 fontWeight: 700,
-                color: "#64748b",
+                color: "#03395f",
                 textTransform: "uppercase",
                 letterSpacing: "0.08em",
                 borderBottom: "1px solid #e2e8f0",
@@ -334,7 +552,7 @@ export default function NeedsAssessmentSOR({
             >
               {section.title}
             </h3>
-            <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ display: "grid", gap: 10 }}>
               {rows.map(({ label, display }) => (
                 <div key={label} style={{ display: "grid", gridTemplateColumns: "220px 1fr", gap: 12, alignItems: "start" }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>{label}</span>
@@ -347,7 +565,7 @@ export default function NeedsAssessmentSOR({
       })}
 
       {/* Footer */}
-      <div className="ms-card" style={{ marginTop: 20, fontSize: 12, color: "#94a3b8", textAlign: "center" }}>
+      <div style={{ marginTop: 20, fontSize: 12, color: "#94a3b8", textAlign: "center", padding: "16px 0" }}>
         This document was generated by FusionFlow · Packet Fusion, Inc. · {today}
       </div>
     </div>
