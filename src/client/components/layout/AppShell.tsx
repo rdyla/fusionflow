@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import logoUrl from "../../assets/fusionflow360-logov4.png";
+import logoUrl from "../../assets/fusion flow transparent logo.png";
 import { api, type User, type SystemStatusResponse, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
