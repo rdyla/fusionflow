@@ -12,8 +12,7 @@
     "crons": ["0 14 * * *"]
   },
   "vars": {
-    "APP_URL": "https://fusionflow360.com",
-    "DEV_EMAIL": "rdyla@packetfusion.com"
+    "APP_URL": "https://fusionflow360.com"
   },
   "compatibility_date": "2025-10-08",
   "compatibility_flags": ["nodejs_compat"],
