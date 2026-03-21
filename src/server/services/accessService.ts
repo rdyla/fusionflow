@@ -6,6 +6,7 @@ export async function canViewProject(
   projectId: string
 ): Promise<boolean> {
   if (user.role === "admin") return true;
+  if (user.role === "executive") return true;    // Executives have read-only portfolio-wide visibility
   if (user.role === "pf_sa") return true;        // SAs have portfolio-wide visibility
   if (user.role === "pf_csm") return true;       // CSMs have portfolio-wide visibility
   if (user.role === "pf_engineer") return true;  // Engineers have portfolio-wide visibility

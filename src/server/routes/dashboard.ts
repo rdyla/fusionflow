@@ -27,7 +27,7 @@ app.get("/summary", async (c) => {
     projectFilter = "WHERE dynamics_account_id = ?";
     filterBindings = [auth.user.dynamics_account_id];
   }
-  // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
+  // pf_sa, pf_csm, admin, and executive: no filter — portfolio-wide visibility
 
   const projectSubquery = projectFilter
     ? `SELECT id FROM projects ${projectFilter}`

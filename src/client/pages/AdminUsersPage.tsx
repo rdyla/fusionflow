@@ -4,14 +4,15 @@ import { api, type User, IMPERSONATE_KEY } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 // All known roles (for badge display)
-const ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"] as const;
+const ROLES = ["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"] as const;
 type Role = (typeof ROLES)[number];
 
 // Roles available in the admin UI — clients are managed via CRM (vtx_portaluser)
-const MANAGEABLE_ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae"] as const;
+const MANAGEABLE_ROLES = ["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae"] as const;
 
 const ROLE_LABELS: Record<Role, string> = {
   admin: "Admin",
+  executive: "Executive",
   pm: "Project Manager",
   pf_ae: "PF Account Executive",
   pf_sa: "Solution Architect",
@@ -23,6 +24,7 @@ const ROLE_LABELS: Record<Role, string> = {
 
 const ROLE_COLOR: Record<Role, string> = {
   admin: "#ff8c00",
+  executive: "#b45309",
   pm: "#0891b2",
   pf_ae: "#8764b8",
   pf_sa: "#0b9aad",

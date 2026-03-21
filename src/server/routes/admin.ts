@@ -29,7 +29,7 @@ const createUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(500).optional(),
   organization_name: z.string().max(500).optional(),
-  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]),
+  role: z.enum(["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]),
   dynamics_account_id: z.string().optional(),
 });
 
@@ -82,7 +82,7 @@ const updateUserSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   email: z.string().email().optional(),
   organization_name: z.string().max(500).optional(),
-  role: z.enum(["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]).optional(),
+  role: z.enum(["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]).optional(),
   is_active: z.number().int().min(0).max(1).optional(),
   dynamics_account_id: z.string().nullable().optional(),
 });

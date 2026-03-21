@@ -26,7 +26,7 @@ const SOLUTION_TYPE_LABELS: Record<string, string> = {
 };
 
 function accessClause(role: string, userId: string): { where: string; bindings: string[] } {
-  if (role === "admin" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
+  if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
   if (role === "pf_ae") return { where: "(s.pf_ae_user_id = ? OR s.created_by = ? OR s.id IN (SELECT solution_id FROM solution_staff WHERE user_id = ? AND staff_role = 'pf_ae'))", bindings: [userId, userId, userId] };
   return { where: "s.partner_ae_user_id = ?", bindings: [userId] };
 }
