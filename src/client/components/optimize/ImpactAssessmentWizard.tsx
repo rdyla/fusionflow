@@ -12,6 +12,23 @@ interface Props {
 type SurveySection = (typeof surveyDef.sections)[number];
 type SurveyField = SurveySection["fields"][number];
 
+// Maps each deployable solution to its solution type category
+const SOLUTION_TO_TYPE: Record<string, string> = {
+  zoom_ucaas: "ucaas",
+  ringcentral_ucaas: "ucaas",
+  zoom_contact_center: "ccaas",
+  ringcx: "ccaas",
+  zoom_revenue_accelerator: "ci",
+  ringcentral_ace: "ci",
+  zoom_virtual_agent: "virtual_agent",
+  ringcentral_air: "virtual_agent",
+};
+
+function deriveSolutionTypes(deployed: string[]): string[] {
+  const types = new Set(deployed.map((s) => SOLUTION_TO_TYPE[s]).filter(Boolean));
+  return Array.from(types);
+}
+
 function getSelectedSolutionTypes(answers: Record<string, unknown>): string[] {
   const val = answers["solution_types"];
   if (Array.isArray(val)) return val as string[];
@@ -55,17 +72,23 @@ export default function ImpactAssessmentWizard({ projectId, accountName, onCompl
 
   function toggleMultiSelect(fieldId: string, value: string) {
     const current = (answers[fieldId] as string[] | undefined) ?? [];
-    if (current.includes(value)) {
-      setAnswer(fieldId, current.filter((v) => v !== value));
-    } else {
-      setAnswer(fieldId, [...current, value]);
+    const next = current.includes(value)
+      ? current.filter((v) => v !== value)
+      : [...current, value];
+    const update: Record<string, unknown> = { [fieldId]: next };
+    // When solutions_deployed changes, auto-derive solution_types
+    if (fieldId === "solutions_deployed") {
+      update["solution_types"] = deriveSolutionTypes(next);
     }
+    setAnswers((prev) => ({ ...prev, ...update }));
+    setValidationError(null);
   }
 
   function validateCurrentStep(): boolean {
     for (const field of currentSection.fields) {
       if (!(field as { required?: boolean }).required) continue;
-      if (field.type === "object") continue;
+      if (field.type === "object") return true;
+      if (field.id === "customer_name" || field.id === "solution_types") continue;
       if (!fieldApplies(field, solutionTypes) && step > 0) continue;
 
       const val = answers[field.id];
@@ -112,6 +135,8 @@ export default function ImpactAssessmentWizard({ projectId, accountName, onCompl
 
   function renderField(field: SurveyField) {
     if (field.type === "object") return null;
+    // customer_name is known from the account; solution_types is auto-derived from solutions_deployed
+    if (field.id === "customer_name" || field.id === "solution_types") return null;
     if (step > 0 && !fieldApplies(field, solutionTypes)) return null;
 
     const typedField = field as SurveyField & {
