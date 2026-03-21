@@ -205,6 +205,63 @@ const VIRTUAL_AGENT_READINESS_DIMENSIONS: ReadinessDimension[] = [
   },
 ];
 
+const UCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
+  {
+    id: "businessClarity",
+    weight: 0.2,
+    inputs: [
+      "business_goals",
+      "current_problems_to_solve",
+      "success_90_days",
+      "success_6_12_months",
+      "kpi_baseline_available",
+    ],
+  },
+  {
+    id: "scopeAndDesignReadiness",
+    weight: 0.25,
+    inputs: [
+      "phase_1_scope_summary",
+      "sites_or_business_units_in_scope",
+      "user_calling_capabilities_required",
+      "call_flow_components_required",
+      "number_inventory_requirements",
+    ],
+  },
+  {
+    id: "technicalReadiness",
+    weight: 0.2,
+    inputs: [
+      "endpoint_types_required",
+      "integrations_required",
+      "network_readiness_known",
+      "sandbox_or_test_environment_required",
+    ],
+  },
+  {
+    id: "migrationReadiness",
+    weight: 0.2,
+    inputs: [
+      "migration_required",
+      "number_porting_required",
+      "migration_scope_summary",
+      "cutover_strategy_preference",
+      "testing_requirements",
+    ],
+  },
+  {
+    id: "operationalReadiness",
+    weight: 0.15,
+    inputs: [
+      "program_owner_function",
+      "admin_model",
+      "training_required_for_roles",
+      "customer_prerequisites_before_design",
+      "signoff_roles",
+    ],
+  },
+];
+
 function isNonEmpty(val: unknown): boolean {
   if (val === null || val === undefined || val === "") return false;
   if (Array.isArray(val)) return val.length > 0;
@@ -245,6 +302,30 @@ function computeCCaaSReadiness(answers: Record<string, unknown>): {
   let totalWeight = 0;
 
   for (const dim of CCAAS_READINESS_DIMENSIONS) {
+    const filled = dim.inputs.filter((key) => isNonEmpty(answers[key])).length;
+    const dimScore = (filled / dim.inputs.length) * 100;
+    weightedSum += dimScore * dim.weight;
+    totalWeight += dim.weight;
+  }
+
+  const score = Math.round(totalWeight > 0 ? weightedSum / totalWeight : 0);
+
+  let status: string;
+  if (score >= 80) status = "ready";
+  else if (score >= 60) status = "conditionally_ready";
+  else status = "not_ready";
+
+  return { score, status };
+}
+
+function computeUCaaSReadiness(answers: Record<string, unknown>): {
+  score: number;
+  status: string;
+} {
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const dim of UCAAS_READINESS_DIMENSIONS) {
     const filled = dim.inputs.filter((key) => isNonEmpty(answers[key])).length;
     const dimScore = (filled / dim.inputs.length) * 100;
     weightedSum += dimScore * dim.weight;
@@ -343,14 +424,19 @@ app.put("/:id/needs-assessment", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { answers } = parsed.data;
+  const isUCaaS = solution.solution_type === "ucaas";
   const isVA = solution.solution_type === "zoom_va" || solution.solution_type === "rc_air";
   const isCCaaS = solution.solution_type === "ccaas";
-  const { score, status } = isVA
+  const { score, status } = isUCaaS
+    ? computeUCaaSReadiness(answers)
+    : isVA
     ? computeVirtualAgentReadiness(answers)
     : isCCaaS
     ? computeCCaaSReadiness(answers)
     : computeCIReadiness(answers);
-  const surveyId = isVA
+  const surveyId = isUCaaS
+    ? "ucaas_needs_assessment_unified_v1"
+    : isVA
     ? "virtual_agent_needs_assessment_unified_v1"
     : isCCaaS
     ? "ccaas_needs_assessment_unified_v1"

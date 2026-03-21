@@ -1,0 +1,648 @@
+{
+  "id": "ucaas_needs_assessment_unified_v1",
+  "name": "UCaaS Needs Assessment",
+  "version": "1.0.0",
+  "description": "Pre-solution needs assessment for UCaaS and cloud telephony solutions used to define business, operational, technical, numbering, device, integration, migration, compliance, and adoption requirements prior to design and quoting.",
+  "appliesTo": ["ucaas"],
+  "estimatedCompletionMinutes": 18,
+  "solutionScope": {
+    "category": "ucaas",
+    "supportedPlatforms": [
+      "zoom_phone",
+      "ringcentral_mvp",
+      "microsoft_teams_phone",
+      "webex_calling",
+      "dialpad",
+      "other_ucaas_platform"
+    ],
+    "optionalModules": [
+      "common_area",
+      "contact_center_interop",
+      "fax",
+      "analog_devices",
+      "call_recording",
+      "compliance_archiving"
+    ]
+  },
+  "sections": [
+    {
+      "id": "project_context",
+      "title": "Project Context",
+      "fields": [
+        { "id": "customer_name", "type": "text", "label": "Customer Name", "required": true },
+        { "id": "assessment_date", "type": "date", "label": "Assessment Date", "required": true },
+        {
+          "id": "platforms_under_consideration",
+          "type": "multi_select",
+          "label": "Platform(s) Under Consideration",
+          "required": true,
+          "options": [
+            { "value": "zoom_phone", "label": "Zoom Phone" },
+            { "value": "ringcentral_mvp", "label": "RingCentral MVP" },
+            { "value": "microsoft_teams_phone", "label": "Microsoft Teams Phone" },
+            { "value": "webex_calling", "label": "Webex Calling" },
+            { "value": "dialpad", "label": "Dialpad" },
+            { "value": "other_ucaas_platform", "label": "Other / TBD" }
+          ]
+        },
+        {
+          "id": "project_stage",
+          "type": "single_select",
+          "label": "Current Project Stage",
+          "required": true,
+          "options": [
+            { "value": "discovery", "label": "Discovery" },
+            { "value": "requirements_definition", "label": "Requirements definition" },
+            { "value": "evaluation", "label": "Evaluation" },
+            { "value": "budgetary_quote", "label": "Budgetary quote" },
+            { "value": "migration_planning", "label": "Migration planning" }
+          ]
+        },
+        {
+          "id": "deployment_type",
+          "type": "single_select",
+          "label": "What type of project is this?",
+          "required": true,
+          "options": [
+            { "value": "new_deployment", "label": "New deployment" },
+            { "value": "migration", "label": "Migration / replacement" },
+            { "value": "expansion", "label": "Expansion of current environment" },
+            { "value": "optimization_redesign", "label": "Optimization / redesign" }
+          ]
+        },
+        {
+          "id": "current_phone_system",
+          "type": "text",
+          "label": "Current phone system / PBX (if applicable)",
+          "required": false,
+          "showIf": {
+            "field": "deployment_type",
+            "operator": "containsAny",
+            "value": ["migration", "expansion", "optimization_redesign"]
+          }
+        },
+        { "id": "why_now", "type": "textarea", "label": "Why is the customer evaluating this now?", "required": false },
+        { "id": "phase_1_scope_summary", "type": "textarea", "label": "Describe phase 1 scope", "required": true },
+        { "id": "future_phase_scope_summary", "type": "textarea", "label": "Describe future-phase scope", "required": false }
+      ]
+    },
+    {
+      "id": "business_objectives",
+      "title": "Business Objectives & Success Metrics",
+      "fields": [
+        {
+          "id": "business_goals",
+          "type": "multi_select",
+          "label": "What are the top business goals for this UCaaS solution?",
+          "required": true,
+          "options": [
+            { "value": "replace_legacy_pbx", "label": "Replace legacy PBX / carrier complexity" },
+            { "value": "reduce_cost", "label": "Reduce telecom / support costs" },
+            { "value": "improve_user_experience", "label": "Improve end-user calling experience" },
+            { "value": "support_hybrid_work", "label": "Support hybrid / remote work" },
+            { "value": "standardize_global_telephony", "label": "Standardize telephony across sites" },
+            { "value": "improve_admin_simplicity", "label": "Improve admin simplicity / manageability" },
+            { "value": "enable_mobility", "label": "Enable mobile / softphone usage" },
+            { "value": "integrate_with_business_apps", "label": "Integrate with business applications" },
+            { "value": "improve_reliability_resiliency", "label": "Improve resiliency / continuity" },
+            { "value": "prepare_for_future_ccaas", "label": "Prepare for future CCaaS / platform convergence" }
+          ]
+        },
+        {
+          "id": "top_3_priorities_ranked",
+          "type": "ranked_select",
+          "label": "Rank the top 3 priorities",
+          "required": false,
+          "optionsSourceField": "business_goals"
+        },
+        { "id": "current_problems_to_solve", "type": "textarea", "label": "What problems is the customer trying to solve today?", "required": true },
+        { "id": "success_90_days", "type": "textarea", "label": "What does success look like 90 days after go-live?", "required": true },
+        { "id": "success_6_12_months", "type": "textarea", "label": "What does success look like after 6–12 months?", "required": true },
+        {
+          "id": "target_kpis",
+          "type": "multi_select",
+          "label": "Which KPIs or outcomes matter most?",
+          "required": false,
+          "options": [
+            { "value": "adoption_rate", "label": "Adoption rate" },
+            { "value": "call_quality", "label": "Call quality" },
+            { "value": "availability_uptime", "label": "Availability / uptime" },
+            { "value": "support_ticket_reduction", "label": "Support ticket reduction" },
+            { "value": "cost_savings", "label": "Cost savings" },
+            { "value": "mobility_usage", "label": "Mobile / softphone usage" },
+            { "value": "admin_efficiency", "label": "Admin efficiency" },
+            { "value": "site_standardization", "label": "Site / number standardization" }
+          ]
+        },
+        {
+          "id": "kpi_baseline_available",
+          "type": "single_select",
+          "label": "Are KPI baselines available today?",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "partial", "label": "Partial" },
+            { "value": "no", "label": "No" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scope_users_sites",
+      "title": "Scope, Users & Sites",
+      "fields": [
+        { "id": "sites_or_business_units_in_scope", "type": "textarea", "label": "Which sites, departments, or business units are in scope?", "required": true },
+        {
+          "id": "user_count_band",
+          "type": "single_select",
+          "label": "Approximate number of named users in scope",
+          "required": true,
+          "options": [
+            { "value": "1_25", "label": "1–25" },
+            { "value": "26_100", "label": "26–100" },
+            { "value": "101_250", "label": "101–250" },
+            { "value": "251_500", "label": "251–500" },
+            { "value": "500_plus", "label": "500+" }
+          ]
+        },
+        {
+          "id": "common_area_or_shared_device_count_band",
+          "type": "single_select",
+          "label": "Approximate number of common area or shared devices",
+          "required": false,
+          "options": [
+            { "value": "0", "label": "0" },
+            { "value": "1_10", "label": "1–10" },
+            { "value": "11_50", "label": "11–50" },
+            { "value": "51_plus", "label": "51+" }
+          ]
+        },
+        {
+          "id": "remote_vs_office_mix",
+          "type": "single_select",
+          "label": "What best describes the user mix?",
+          "required": true,
+          "options": [
+            { "value": "mostly_office", "label": "Mostly office-based" },
+            { "value": "hybrid", "label": "Hybrid" },
+            { "value": "mostly_remote", "label": "Mostly remote" },
+            { "value": "highly_distributed", "label": "Highly distributed / multi-site" }
+          ]
+        },
+        { "id": "geographic_or_country_scope", "type": "textarea", "label": "Describe country / regional scope and any international requirements", "required": false }
+      ]
+    },
+    {
+      "id": "calling_and_user_requirements",
+      "title": "Calling Features & User Experience Requirements",
+      "fields": [
+        {
+          "id": "user_calling_capabilities_required",
+          "type": "multi_select",
+          "label": "Which end-user calling capabilities are required?",
+          "required": true,
+          "options": [
+            { "value": "direct_inward_dial", "label": "Direct inward dialing / DID" },
+            { "value": "extension_dialing", "label": "Extension dialing" },
+            { "value": "voicemail", "label": "Voicemail" },
+            { "value": "visual_voicemail", "label": "Visual voicemail / transcription" },
+            { "value": "call_forwarding", "label": "Call forwarding" },
+            { "value": "delegation", "label": "Executive / assistant delegation" },
+            { "value": "shared_line_appearance", "label": "Shared line appearance / shared lines" },
+            { "value": "call_park", "label": "Call park / pickup" },
+            { "value": "hunt_group_access", "label": "Hunt group / queue participation" },
+            { "value": "mobile_app", "label": "Mobile app calling" },
+            { "value": "softphone_desktop", "label": "Desktop softphone" },
+            { "value": "sms_business_texting", "label": "Business SMS / texting" }
+          ]
+        },
+        { "id": "calling_must_haves", "type": "textarea", "label": "Describe any calling must-haves or non-negotiables", "required": false },
+        {
+          "id": "user_experience_preferences",
+          "type": "multi_select",
+          "label": "What user experience elements matter most?",
+          "required": false,
+          "options": [
+            { "value": "single_app_experience", "label": "Single-app experience" },
+            { "value": "easy_mobile_transition", "label": "Easy mobile transition" },
+            { "value": "simple_directory_search", "label": "Simple directory / contact search" },
+            { "value": "presence_integration", "label": "Presence / collaboration integration" },
+            { "value": "minimal_training_required", "label": "Minimal training required" },
+            { "value": "consistent_multidevice_experience", "label": "Consistent multi-device experience" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "call_flows_and_numbering",
+      "title": "Call Flows, Auto Attendants & Numbering",
+      "fields": [
+        { "id": "current_call_flows_summary", "type": "textarea", "label": "Describe the current call flow environment", "required": true },
+        {
+          "id": "call_flow_components_required",
+          "type": "multi_select",
+          "label": "Which call flow components are required?",
+          "required": true,
+          "options": [
+            { "value": "auto_attendants", "label": "Auto attendants" },
+            { "value": "hunt_groups", "label": "Hunt groups" },
+            { "value": "shared_lines", "label": "Shared lines / line groups" },
+            { "value": "call_queues_basic", "label": "Basic call queues" },
+            { "value": "business_hours_logic", "label": "Business hours / holiday routing" },
+            { "value": "after_hours_routing", "label": "After-hours routing" },
+            { "value": "emergency_calling", "label": "Emergency calling / location awareness" },
+            { "value": "music_or_announcements", "label": "Music / announcements" },
+            { "value": "site_specific_routing", "label": "Site-specific routing" }
+          ]
+        },
+        { "id": "dial_plan_requirements", "type": "textarea", "label": "Describe dial plan, extension, and normalization requirements", "required": false },
+        { "id": "number_inventory_requirements", "type": "textarea", "label": "Describe DID, toll-free, main number, and service number requirements", "required": true },
+        { "id": "business_sms_number_requirements", "type": "textarea", "label": "Describe any business texting / SMS number requirements", "required": false },
+        {
+          "id": "fax_or_analog_required",
+          "type": "single_select",
+          "label": "Are fax or analog devices required?",
+          "required": true,
+          "options": [
+            { "value": "yes_phase_1", "label": "Yes, in phase 1" },
+            { "value": "yes_future_phase", "label": "Yes, future phase" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        {
+          "id": "analog_or_fax_use_cases",
+          "type": "textarea",
+          "label": "Describe analog, fax, paging, door phone, or other specialty use cases",
+          "required": false,
+          "showIf": { "field": "fax_or_analog_required", "operator": "notEquals", "value": "no" }
+        }
+      ]
+    },
+    {
+      "id": "devices_and_endpoints",
+      "title": "Devices & Endpoint Requirements",
+      "fields": [
+        {
+          "id": "endpoint_types_required",
+          "type": "multi_select",
+          "label": "Which endpoint types are required?",
+          "required": true,
+          "options": [
+            { "value": "desktop_softphone", "label": "Desktop softphone" },
+            { "value": "mobile_app", "label": "Mobile app" },
+            { "value": "desk_phones", "label": "Desk phones" },
+            { "value": "conference_phones", "label": "Conference phones" },
+            { "value": "common_area_phones", "label": "Common area phones" },
+            { "value": "ata_or_analog_adapters", "label": "ATA / analog adapters" },
+            { "value": "wireless_handsets", "label": "Wireless handsets" }
+          ]
+        },
+        {
+          "id": "customer_device_strategy",
+          "type": "single_select",
+          "label": "What best describes the device strategy?",
+          "required": true,
+          "options": [
+            { "value": "softphone_first", "label": "Softphone-first" },
+            { "value": "mixed_softphone_and_handsets", "label": "Mixed softphone and handsets" },
+            { "value": "desk_phone_heavy", "label": "Desk phone-heavy" },
+            { "value": "not_yet_defined", "label": "Not yet defined" }
+          ]
+        },
+        {
+          "id": "device_refresh_or_reuse_plan",
+          "type": "single_select",
+          "label": "What is the expected device plan?",
+          "required": true,
+          "options": [
+            { "value": "reuse_existing_where_possible", "label": "Reuse existing where possible" },
+            { "value": "net_new_devices", "label": "Net new devices" },
+            { "value": "mixed_reuse_and_new", "label": "Mixed reuse and new" },
+            { "value": "unknown", "label": "Unknown / TBD" }
+          ]
+        },
+        { "id": "special_endpoint_requirements", "type": "textarea", "label": "Describe any special endpoint requirements or constraints", "required": false }
+      ]
+    },
+    {
+      "id": "integrations",
+      "title": "Integrations & Business Application Requirements",
+      "fields": [
+        {
+          "id": "integrations_required",
+          "type": "multi_select",
+          "label": "Which integrations are required?",
+          "required": true,
+          "options": [
+            { "value": "directory_identity", "label": "Directory / identity" },
+            { "value": "sso", "label": "SSO" },
+            { "value": "crm", "label": "CRM" },
+            { "value": "ticketing", "label": "Ticketing / service desk" },
+            { "value": "calendar", "label": "Calendar / presence" },
+            { "value": "compliance_archiving", "label": "Compliance / archiving" },
+            { "value": "contact_center_interop", "label": "Contact center interop" },
+            { "value": "teams_or_collaboration", "label": "Collaboration platform interop" },
+            { "value": "fax_service", "label": "Fax service" },
+            { "value": "custom_api", "label": "Custom API / middleware" }
+          ]
+        },
+        { "id": "crm_or_lob_use_cases", "type": "textarea", "label": "Describe any CRM or line-of-business integration use cases", "required": false },
+        { "id": "identity_and_provisioning_requirements", "type": "textarea", "label": "Describe identity, SSO, SCIM, or provisioning requirements", "required": false },
+        { "id": "integration_constraints", "type": "textarea", "label": "Describe any integration constraints or dependencies", "required": false },
+        {
+          "id": "sandbox_or_test_environment_required",
+          "type": "single_select",
+          "label": "Is sandbox or test-environment validation required?",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "maybe", "label": "Maybe" },
+            { "value": "no", "label": "No" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "network_reliability_and_compliance",
+      "title": "Network, Reliability, Emergency & Compliance Requirements",
+      "fields": [
+        {
+          "id": "network_readiness_known",
+          "type": "single_select",
+          "label": "Is network readiness / QoS status known?",
+          "required": true,
+          "options": [
+            { "value": "yes_validated", "label": "Yes, validated" },
+            { "value": "partial", "label": "Partially understood" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        { "id": "reliability_or_survivability_requirements", "type": "textarea", "label": "Describe any resiliency, survivability, or business continuity requirements", "required": false },
+        { "id": "emergency_calling_requirements", "type": "textarea", "label": "Describe emergency calling, location, or dispatch requirements", "required": true },
+        {
+          "id": "call_recording_required",
+          "type": "single_select",
+          "label": "Is call recording required for any users or groups?",
+          "required": true,
+          "options": [
+            { "value": "yes_phase_1", "label": "Yes, in phase 1" },
+            { "value": "yes_future_phase", "label": "Yes, future phase" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "recording_or_archiving_requirements", "type": "textarea", "label": "Describe any recording, retention, or archiving requirements", "required": false },
+        {
+          "id": "compliance_requirements",
+          "type": "multi_select",
+          "label": "Which compliance requirements are relevant?",
+          "required": false,
+          "options": [
+            { "value": "pii", "label": "PII" },
+            { "value": "hipaa", "label": "HIPAA" },
+            { "value": "financial_regulatory", "label": "Financial / regulated industry" },
+            { "value": "call_recording_consent", "label": "Call recording consent laws" },
+            { "value": "retention_policy", "label": "Retention policy" },
+            { "value": "none_identified", "label": "None identified" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "migration_porting_and_cutover",
+      "title": "Migration, Porting & Cutover Requirements",
+      "fields": [
+        {
+          "id": "migration_required",
+          "type": "single_select",
+          "label": "Is migration from an existing platform required?",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "partial", "label": "Partial / phased" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        {
+          "id": "number_porting_required",
+          "type": "single_select",
+          "label": "Is number porting required?",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "partial", "label": "Partial" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "migration_scope_summary", "type": "textarea", "label": "Describe what must be migrated", "required": true },
+        { "id": "carrier_or_number_dependencies", "type": "textarea", "label": "Describe carrier, number, or porting dependencies", "required": false },
+        {
+          "id": "cutover_strategy_preference",
+          "type": "single_select",
+          "label": "What cutover approach is preferred?",
+          "required": true,
+          "options": [
+            { "value": "big_bang", "label": "Big-bang cutover" },
+            { "value": "phased_by_site", "label": "Phased by site" },
+            { "value": "phased_by_department", "label": "Phased by department / user group" },
+            { "value": "pilot_then_rollout", "label": "Pilot then broader rollout" },
+            { "value": "not_yet_defined", "label": "Not yet defined" }
+          ]
+        },
+        {
+          "id": "testing_requirements",
+          "type": "multi_select",
+          "label": "Which testing activities are required?",
+          "required": true,
+          "options": [
+            { "value": "number_validation", "label": "Number / dialing validation" },
+            { "value": "device_testing", "label": "Device testing" },
+            { "value": "call_flow_testing", "label": "Call flow testing" },
+            { "value": "integration_testing", "label": "Integration testing" },
+            { "value": "pilot", "label": "Pilot" },
+            { "value": "uat", "label": "UAT" },
+            { "value": "emergency_calling_validation", "label": "Emergency calling validation" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "adoption_training_and_admin",
+      "title": "Adoption, Training & Administration",
+      "fields": [
+        {
+          "id": "program_owner_function",
+          "type": "single_select",
+          "label": "Who will own the UCaaS program internally?",
+          "required": true,
+          "options": [
+            { "value": "it", "label": "IT / telecom" },
+            { "value": "infrastructure", "label": "Infrastructure / workplace tech" },
+            { "value": "operations", "label": "Operations" },
+            { "value": "procurement", "label": "Procurement" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "admin_model",
+          "type": "single_select",
+          "label": "What best describes the expected admin model?",
+          "required": true,
+          "options": [
+            { "value": "centralized", "label": "Centralized admin team" },
+            { "value": "federated", "label": "Federated by region / BU" },
+            { "value": "mixed", "label": "Mixed model" },
+            { "value": "not_yet_defined", "label": "Not yet defined" }
+          ]
+        },
+        {
+          "id": "training_required_for_roles",
+          "type": "multi_select",
+          "label": "What training is needed?",
+          "required": false,
+          "options": [
+            { "value": "end_users", "label": "End users" },
+            { "value": "executive_assistants", "label": "Executive assistants / delegates" },
+            { "value": "site_admins", "label": "Site / telecom admins" },
+            { "value": "helpdesk", "label": "Help desk / support" },
+            { "value": "receptionists_operators", "label": "Receptionists / operators" }
+          ]
+        },
+        { "id": "adoption_risks_or_concerns", "type": "textarea", "label": "Describe any adoption or change-management concerns", "required": false },
+        { "id": "support_model_after_go_live", "type": "textarea", "label": "Describe the support / admin model expected after go-live", "required": false }
+      ]
+    },
+    {
+      "id": "dependencies_and_customer_responsibilities",
+      "title": "Dependencies, Preconditions & Customer Responsibilities",
+      "fields": [
+        {
+          "id": "customer_prerequisites_before_design",
+          "type": "multi_select",
+          "label": "What must the customer provide before design can proceed?",
+          "required": true,
+          "options": [
+            { "value": "current_number_inventory", "label": "Current number inventory" },
+            { "value": "site_and_user_list", "label": "Site / user inventory" },
+            { "value": "current_call_flows", "label": "Current call flows / AA logic" },
+            { "value": "device_inventory", "label": "Device inventory" },
+            { "value": "carrier_billing_or_csr", "label": "Carrier records / CSR / billing" },
+            { "value": "network_readiness_inputs", "label": "Network readiness inputs" },
+            { "value": "emergency_location_requirements", "label": "Emergency location requirements" },
+            { "value": "integration_contacts", "label": "Integration / identity contacts" },
+            { "value": "security_compliance_requirements", "label": "Security / compliance requirements" }
+          ]
+        },
+        {
+          "id": "signoff_roles",
+          "type": "multi_select",
+          "label": "Who must approve the Statement of Requirements before design / quote?",
+          "required": true,
+          "options": [
+            { "value": "it_telecom", "label": "IT / telecom" },
+            { "value": "infrastructure", "label": "Infrastructure / workplace tech" },
+            { "value": "security", "label": "Security / compliance" },
+            { "value": "operations", "label": "Operations" },
+            { "value": "executive_sponsor", "label": "Executive sponsor" },
+            { "value": "procurement", "label": "Procurement" },
+            { "value": "helpdesk_owner", "label": "Help desk / support owner" }
+          ]
+        },
+        { "id": "target_go_live_date", "type": "date", "label": "Target go-live date", "required": false },
+        { "id": "timeline_or_business_deadlines", "type": "textarea", "label": "Describe any timeline drivers or business deadlines", "required": false }
+      ]
+    }
+  ],
+  "statementOfRequirements": {
+    "sections": [
+      {
+        "id": "sor_business_outcomes",
+        "title": "Business Objectives & Success Outcomes",
+        "sourceFields": ["business_goals", "top_3_priorities_ranked", "current_problems_to_solve", "success_90_days", "success_6_12_months", "target_kpis"]
+      },
+      {
+        "id": "sor_scope_users_sites",
+        "title": "Scope, Users & Sites",
+        "sourceFields": ["phase_1_scope_summary", "future_phase_scope_summary", "sites_or_business_units_in_scope", "user_count_band", "common_area_or_shared_device_count_band", "remote_vs_office_mix", "geographic_or_country_scope"]
+      },
+      {
+        "id": "sor_calling_requirements",
+        "title": "Calling & User Experience Requirements",
+        "sourceFields": ["user_calling_capabilities_required", "calling_must_haves", "user_experience_preferences"]
+      },
+      {
+        "id": "sor_call_flows_numbering",
+        "title": "Call Flow, Auto Attendant & Numbering Requirements",
+        "sourceFields": ["current_call_flows_summary", "call_flow_components_required", "dial_plan_requirements", "number_inventory_requirements", "business_sms_number_requirements", "fax_or_analog_required", "analog_or_fax_use_cases"]
+      },
+      {
+        "id": "sor_devices_endpoints",
+        "title": "Devices & Endpoint Requirements",
+        "sourceFields": ["endpoint_types_required", "customer_device_strategy", "device_refresh_or_reuse_plan", "special_endpoint_requirements"]
+      },
+      {
+        "id": "sor_integrations",
+        "title": "Integration Requirements",
+        "sourceFields": ["integrations_required", "crm_or_lob_use_cases", "identity_and_provisioning_requirements", "integration_constraints", "sandbox_or_test_environment_required"]
+      },
+      {
+        "id": "sor_network_compliance",
+        "title": "Network, Emergency, Reliability & Compliance Requirements",
+        "sourceFields": ["network_readiness_known", "reliability_or_survivability_requirements", "emergency_calling_requirements", "call_recording_required", "recording_or_archiving_requirements", "compliance_requirements"]
+      },
+      {
+        "id": "sor_migration_cutover",
+        "title": "Migration, Porting & Cutover Requirements",
+        "sourceFields": ["migration_required", "number_porting_required", "migration_scope_summary", "carrier_or_number_dependencies", "cutover_strategy_preference", "testing_requirements"]
+      },
+      {
+        "id": "sor_adoption_admin",
+        "title": "Adoption, Training & Administration Requirements",
+        "sourceFields": ["program_owner_function", "admin_model", "training_required_for_roles", "adoption_risks_or_concerns", "support_model_after_go_live"]
+      },
+      {
+        "id": "sor_customer_responsibilities",
+        "title": "Dependencies, Preconditions & Customer Responsibilities",
+        "sourceFields": ["customer_prerequisites_before_design", "signoff_roles", "target_go_live_date", "timeline_or_business_deadlines"]
+      }
+    ]
+  },
+  "readinessModel": {
+    "dimensions": [
+      {
+        "id": "businessClarity",
+        "label": "Business Clarity",
+        "weight": 0.2,
+        "inputs": ["business_goals", "current_problems_to_solve", "success_90_days", "success_6_12_months", "kpi_baseline_available"]
+      },
+      {
+        "id": "scopeAndDesignReadiness",
+        "label": "Scope & Design Readiness",
+        "weight": 0.25,
+        "inputs": ["phase_1_scope_summary", "sites_or_business_units_in_scope", "user_calling_capabilities_required", "call_flow_components_required", "number_inventory_requirements"]
+      },
+      {
+        "id": "technicalReadiness",
+        "label": "Technical Readiness",
+        "weight": 0.2,
+        "inputs": ["endpoint_types_required", "integrations_required", "network_readiness_known", "sandbox_or_test_environment_required"]
+      },
+      {
+        "id": "migrationReadiness",
+        "label": "Migration Readiness",
+        "weight": 0.2,
+        "inputs": ["migration_required", "number_porting_required", "migration_scope_summary", "cutover_strategy_preference", "testing_requirements"]
+      },
+      {
+        "id": "operationalReadiness",
+        "label": "Operational Readiness",
+        "weight": 0.15,
+        "inputs": ["program_owner_function", "admin_model", "training_required_for_roles", "customer_prerequisites_before_design", "signoff_roles"]
+      }
+    ],
+    "statusBands": [
+      { "status": "ready", "label": "Ready", "minScore": 80, "color": "#107c10" },
+      { "status": "conditionally_ready", "label": "Conditionally Ready", "minScore": 60, "color": "#ff8c00" },
+      { "status": "not_ready", "label": "Not Ready", "minScore": 0, "color": "#d13438" }
+    ]
+  }
+}
