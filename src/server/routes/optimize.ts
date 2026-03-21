@@ -228,6 +228,18 @@ app.patch("/accounts/:projectId", async (c) => {
   return c.json(await db.prepare("SELECT * FROM optimize_accounts WHERE project_id = ? LIMIT 1").bind(projectId).first());
 });
 
+// ── Delete account (de-graduate) ──────────────────────────────────────────────
+
+app.delete("/accounts/:projectId", async (c) => {
+  assertOptimizeEdit(c.get("auth").role);
+  const db = c.env.DB;
+  const projectId = c.req.param("projectId");
+  const account = await db.prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1").bind(projectId).first();
+  if (!account) throw new HTTPException(404, { message: "Optimize account not found" });
+  await db.prepare("DELETE FROM optimize_accounts WHERE project_id = ?").bind(projectId).run();
+  return c.json({ success: true });
+});
+
 // ── Impact Assessments ─────────────────────────────────────────────────────────
 
 app.get("/accounts/:projectId/assessments", async (c) => {

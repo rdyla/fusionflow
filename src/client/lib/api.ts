@@ -995,6 +995,9 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  optimizeDeleteAccount: (projectId: string) =>
+    request<{ success: boolean }>(`/optimize/accounts/${projectId}`, { method: "DELETE" }),
+
   optimizeAssessments: (projectId: string) => request<ImpactAssessment[]>(`/optimize/accounts/${projectId}/assessments`),
   optimizeCreateAssessment: (payload: {
     project_id: string;
