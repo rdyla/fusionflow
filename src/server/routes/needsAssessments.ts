@@ -7,11 +7,13 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // ── Readiness model ────────────────────────────────────────────────────────────
 
-const READINESS_DIMENSIONS: {
+type ReadinessDimension = {
   id: string;
   weight: number;
   inputs: string[];
-}[] = [
+};
+
+const CI_READINESS_DIMENSIONS: ReadinessDimension[] = [
   {
     id: "businessClarity",
     weight: 0.2,
@@ -67,6 +69,74 @@ const READINESS_DIMENSIONS: {
   },
 ];
 
+const CCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
+  {
+    id: "businessClarity",
+    weight: 0.2,
+    inputs: [
+      "business_goals",
+      "current_problems_to_solve",
+      "success_90_days",
+      "success_6_12_months",
+      "kpi_baseline_available",
+    ],
+  },
+  {
+    id: "operationalDesignReadiness",
+    weight: 0.25,
+    inputs: [
+      "phase_1_scope_summary",
+      "channels_required_phase_1",
+      "queue_and_skill_requirements",
+      "routing_capabilities_required",
+      "agent_desktop_requirements",
+    ],
+  },
+  {
+    id: "integrationReadiness",
+    weight: 0.2,
+    inputs: [
+      "crm_in_use",
+      "crm_integration_required_phase_1",
+      "crm_use_cases_required",
+      "other_integrations_required",
+      "sandbox_testing_required",
+    ],
+  },
+  {
+    id: "workforceQualityReadiness",
+    weight: 0.15,
+    inputs: [
+      "wfm_required",
+      "wfm_capabilities_required",
+      "qm_required",
+      "qm_capabilities_required",
+    ],
+  },
+  {
+    id: "complianceReadiness",
+    weight: 0.1,
+    inputs: [
+      "recording_requirements",
+      "compliance_needs",
+      "retention_requirements",
+      "rbac_required",
+      "security_review_required",
+    ],
+  },
+  {
+    id: "migrationReadiness",
+    weight: 0.1,
+    inputs: [
+      "migration_required",
+      "migration_scope",
+      "testing_requirements",
+      "customer_prerequisites_before_design",
+      "signoff_roles",
+    ],
+  },
+];
+
 function isNonEmpty(val: unknown): boolean {
   if (val === null || val === undefined || val === "") return false;
   if (Array.isArray(val)) return val.length > 0;
@@ -74,14 +144,14 @@ function isNonEmpty(val: unknown): boolean {
   return true;
 }
 
-function computeReadiness(answers: Record<string, unknown>): {
+function computeCIReadiness(answers: Record<string, unknown>): {
   score: number;
   status: string;
 } {
   let weightedSum = 0;
   let totalWeight = 0;
 
-  for (const dim of READINESS_DIMENSIONS) {
+  for (const dim of CI_READINESS_DIMENSIONS) {
     const filled = dim.inputs.filter((key) => isNonEmpty(answers[key])).length;
     const dimScore = (filled / dim.inputs.length) * 100;
     weightedSum += dimScore * dim.weight;
@@ -94,6 +164,30 @@ function computeReadiness(answers: Record<string, unknown>): {
   if (score >= 75) status = "ready";
   else if (score >= 50) status = "mostly_ready";
   else if (score >= 25) status = "needs_work";
+  else status = "not_ready";
+
+  return { score, status };
+}
+
+function computeCCaaSReadiness(answers: Record<string, unknown>): {
+  score: number;
+  status: string;
+} {
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const dim of CCAAS_READINESS_DIMENSIONS) {
+    const filled = dim.inputs.filter((key) => isNonEmpty(answers[key])).length;
+    const dimScore = (filled / dim.inputs.length) * 100;
+    weightedSum += dimScore * dim.weight;
+    totalWeight += dim.weight;
+  }
+
+  const score = Math.round(totalWeight > 0 ? weightedSum / totalWeight : 0);
+
+  let status: string;
+  if (score >= 80) status = "ready";
+  else if (score >= 60) status = "conditionally_ready";
   else status = "not_ready";
 
   return { score, status };
@@ -145,19 +239,21 @@ app.put("/:id/needs-assessment", async (c) => {
 
   const solutionId = c.req.param("id");
 
-  // Verify solution exists
+  // Verify solution exists and get solution_type
   const solution = await c.env.DB.prepare(
-    "SELECT id FROM solutions WHERE id = ? LIMIT 1"
+    "SELECT id, solution_type FROM solutions WHERE id = ? LIMIT 1"
   )
     .bind(solutionId)
-    .first();
+    .first() as { id: string; solution_type: string } | null;
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
 
   const parsed = upsertSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { answers } = parsed.data;
-  const { score, status } = computeReadiness(answers);
+  const isCCaaS = solution.solution_type === "ccaas";
+  const { score, status } = isCCaaS ? computeCCaaSReadiness(answers) : computeCIReadiness(answers);
+  const surveyId = isCCaaS ? "ccaas_needs_assessment_unified_v1" : "ci_needs_assessment_unified_v1";
 
   const existing = await c.env.DB.prepare(
     "SELECT id FROM needs_assessments WHERE solution_id = ? LIMIT 1"
@@ -177,9 +273,9 @@ app.put("/:id/needs-assessment", async (c) => {
     const id = crypto.randomUUID();
     await c.env.DB.prepare(`
       INSERT INTO needs_assessments (id, solution_id, survey_id, answers, readiness_score, readiness_status)
-      VALUES (?, ?, 'ci_needs_assessment_unified_v1', ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
-      .bind(id, solutionId, JSON.stringify(answers), score, status)
+      .bind(id, solutionId, surveyId, JSON.stringify(answers), score, status)
       .run();
   }
 

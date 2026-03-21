@@ -1,5 +1,4 @@
 import { type NeedsAssessment } from "../../lib/api";
-import surveyJson from "../../assets/ci_needs_assessment_unified_v1.json";
 import logoUrl from "../../assets/packetfusionlogo.png";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -11,6 +10,7 @@ type FieldDef = {
   type: string;
   label: string;
   options?: FieldOption[];
+  optionsSourceField?: string;
 };
 
 type SectionDef = {
@@ -18,27 +18,35 @@ type SectionDef = {
   fields: FieldDef[];
 };
 
-// Build a flat map of field id → field definition for label lookups
-const ALL_FIELDS = (surveyJson.sections as SectionDef[]).flatMap((s) => s.fields);
-const FIELD_MAP: Record<string, FieldDef> = {};
-for (const f of ALL_FIELDS) {
-  FIELD_MAP[f.id] = f;
-}
+type SorSectionDef = {
+  id: string;
+  title: string;
+  sourceFields: string[];
+};
+
+type SurveyJson = {
+  sections: SectionDef[];
+  statementOfRequirements: {
+    sections: SorSectionDef[];
+  };
+  [key: string]: unknown;
+};
 
 // ── Readiness colors ──────────────────────────────────────────────────────────
 
 const READINESS_CONFIG: Record<string, { label: string; color: string }> = {
-  ready:        { label: "Ready to Design",    color: "#22c55e" },
-  mostly_ready: { label: "Mostly Ready",        color: "#0b9aad" },
-  needs_work:   { label: "Needs Preparation",   color: "#f59e0b" },
-  not_ready:    { label: "Not Ready",           color: "#d13438" },
+  ready:               { label: "Ready to Design",    color: "#22c55e" },
+  mostly_ready:        { label: "Mostly Ready",        color: "#0b9aad" },
+  needs_work:          { label: "Needs Preparation",   color: "#f59e0b" },
+  not_ready:           { label: "Not Ready",           color: "#d13438" },
+  conditionally_ready: { label: "Conditionally Ready", color: "#f59e0b" },
 };
 
 // ── Value formatter ───────────────────────────────────────────────────────────
 
-function formatValue(fieldId: string, val: unknown): string {
+function formatValue(fieldId: string, val: unknown, fieldMap: Record<string, FieldDef>): string {
   if (val === null || val === undefined || val === "") return "—";
-  const field = FIELD_MAP[fieldId];
+  const field = fieldMap[fieldId];
 
   if (Array.isArray(val)) {
     if (val.length === 0) return "—";
@@ -57,12 +65,8 @@ function formatValue(fieldId: string, val: unknown): string {
     const entries = Object.entries(ranked).sort((a, b) => a[1] - b[1]);
     if (entries.length === 0) return "—";
     const labels: Record<string, string> = {};
-    // Find field's source options via the raw JSON optionsSourceField
-    const rawField = (surveyJson.sections as { fields: Array<{ id: string; optionsSourceField?: string }> }[])
-      .flatMap((s) => s.fields)
-      .find((f) => f.id === fieldId);
-    if (rawField?.optionsSourceField) {
-      const sourceF = FIELD_MAP[rawField.optionsSourceField];
+    if (field?.optionsSourceField) {
+      const sourceF = fieldMap[field.optionsSourceField];
       if (sourceF?.options) {
         for (const o of sourceF.options) labels[o.value] = o.label;
       }
@@ -87,92 +91,9 @@ function formatValue(fieldId: string, val: unknown): string {
   return String(val);
 }
 
-// ── SOR section definition ────────────────────────────────────────────────────
-
-type SorSectionDef = {
-  title: string;
-  fields: string[];
-};
-
-const SOR_SECTIONS: SorSectionDef[] = [
-  {
-    title: "Customer Goals & Success Outcomes",
-    fields: [
-      "business_goals",
-      "top_3_priorities_ranked",
-      "current_problems_to_solve",
-      "success_90_days",
-      "success_6_12_months",
-    ],
-  },
-  {
-    title: "In-Scope Teams & Coverage",
-    fields: ["teams_in_scope", "estimated_user_count", "geographies_in_scope"],
-  },
-  {
-    title: "Required Capabilities",
-    fields: [
-      "core_capabilities_required",
-      "functional_must_haves",
-      "reporting_requirements",
-      "priority_insights",
-    ],
-  },
-  {
-    title: "Sales Playbook & Methodology Requirements",
-    fields: [
-      "current_sales_methodology_status",
-      "current_methodologies",
-      "methodology_elements_to_track",
-    ],
-  },
-  {
-    title: "CRM & Integration Requirements",
-    fields: [
-      "crm_in_use",
-      "crm_integration_required_phase_1",
-      "crm_objects_that_matter",
-      "data_sync_to_crm",
-      "data_sync_from_crm",
-    ],
-  },
-  {
-    title: "Customization Requirements",
-    fields: [
-      "custom_trackers_required",
-      "tracker_types",
-      "custom_scorecards_required",
-      "scorecard_elements",
-    ],
-  },
-  {
-    title: "Security, Compliance & Governance",
-    fields: [
-      "recording_consent_requirements",
-      "regional_recording_restrictions",
-      "retention_requirements",
-      "roles_allowed_to_access",
-      "admin_only_access",
-      "gdpr_or_data_residency",
-    ],
-  },
-  {
-    title: "Customer Responsibilities",
-    fields: [
-      "key_dependencies_before_design",
-      "customer_prerequisites_before_implementation",
-      "approval_criteria_for_sor",
-    ],
-  },
-  {
-    title: "Assumptions & Exclusions",
-    fields: ["phase_1_vs_future_scope"],
-  },
-];
-
 // ── Repeater formatter ────────────────────────────────────────────────────────
 
-function formatRepeater(val: unknown): string {
+function formatRepeater(val: unknown, fieldMap: Record<string, FieldDef>): string {
   if (!Array.isArray(val) || val.length === 0) return "—";
   return val
     .map((row, i) => {
@@ -180,7 +101,7 @@ function formatRepeater(val: unknown): string {
       const parts = Object.entries(row as Record<string, string>)
         .filter(([, v]) => v)
         .map(([k, v]) => {
-          const prop = FIELD_MAP[k];
+          const prop = fieldMap[k];
           const label = prop?.label ?? k;
           return `${label}: ${v}`;
         });
@@ -203,17 +124,19 @@ function buildSorHtml(
   customerName: string,
   solutionType: string,
   logo: string,
+  sorSections: SorSectionDef[],
+  fieldMap: Record<string, FieldDef>,
 ): string {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const logoAbsolute = logo.startsWith("http") ? logo : `${window.location.origin}${logo}`;
 
-  const sectionHtml = SOR_SECTIONS.map((section, idx) => {
-    const rows = section.fields
+  const sectionHtml = sorSections.map((section, idx) => {
+    const rows = section.sourceFields
       .map((fieldId) => {
-        const fieldDef = FIELD_MAP[fieldId];
+        const fieldDef = fieldMap[fieldId];
         const label = fieldDef?.label ?? fieldId;
         const val = answers[fieldId];
-        const display = fieldDef?.type === "repeater" ? formatRepeater(val) : formatValue(fieldId, val);
+        const display = fieldDef?.type === "repeater" ? formatRepeater(val, fieldMap) : formatValue(fieldId, val, fieldMap);
         return { label, display };
       })
       .filter(({ display }) => display !== "—");
@@ -430,7 +353,7 @@ function buildSorHtml(
       <div class="cover-date">${today}</div>
     </div>
     <div class="cover-rule"></div>
-    <div class="cover-type">Conversational Intelligence</div>
+    <div class="cover-type">${esc(solutionType)}</div>
     <div class="cover-title">Statement of<br/>Requirements</div>
     <div class="cover-for">Prepared for</div>
     <div class="cover-customer">${esc(customerName)}</div>
@@ -465,7 +388,7 @@ function buildSorHtml(
   <!-- 1.3 Overview -->
   <div class="prose-section">
     <div class="prose-heading">1.3 &nbsp; Overview</div>
-    <p>${esc(customerName)} is looking for a robust and reliable ${esc(solutionType)} platform that will enhance sales execution, improve coaching effectiveness, and deliver measurable business outcomes through AI-driven conversation intelligence.</p>
+    <p>${esc(customerName)} is looking for a robust and reliable ${esc(solutionType)} solution that will improve customer experience, operational efficiency, and deliver measurable business outcomes.</p>
   </div>
 
   <!-- 1.4 Requirements -->
@@ -510,6 +433,7 @@ type Props = {
   assessment: NeedsAssessment;
   customerName: string;
   solutionType: string;
+  surveyJson: SurveyJson;
   onBack: () => void;
   onDelete: () => void;
 };
@@ -520,9 +444,18 @@ export default function NeedsAssessmentSOR({
   assessment,
   customerName,
   solutionType,
+  surveyJson,
   onBack,
   onDelete,
 }: Props) {
+  // Build field map and SOR sections from surveyJson
+  const allFields = (surveyJson.sections as SectionDef[]).flatMap((s) => s.fields);
+  const fieldMap: Record<string, FieldDef> = {};
+  for (const f of allFields) {
+    fieldMap[f.id] = f;
+  }
+  const sorSections: SorSectionDef[] = surveyJson.statementOfRequirements.sections;
+
   const answers = assessment.answers;
   const status = assessment.readiness_status ?? "not_ready";
   const score = assessment.readiness_score ?? 0;
@@ -530,7 +463,7 @@ export default function NeedsAssessmentSOR({
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   function openPrintWindow() {
-    const html = buildSorHtml(answers, customerName, solutionType, logoUrl);
+    const html = buildSorHtml(answers, customerName, solutionType, logoUrl, sorSections, fieldMap);
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) return;
     win.document.write(html);
@@ -602,7 +535,7 @@ export default function NeedsAssessmentSOR({
             <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 700, color: "#1e293b" }}>
               Statement of Requirements
             </h2>
-            <div style={{ fontSize: 13, color: "#64748b" }}>Conversational Intelligence — Pre-Design Assessment</div>
+            <div style={{ fontSize: 13, color: "#64748b" }}>{solutionType} — Pre-Design Assessment</div>
           </div>
           <div style={{ textAlign: "right", fontSize: 13, color: "#64748b" }}>
             <div><strong>Customer:</strong> {customerName}</div>
@@ -613,13 +546,13 @@ export default function NeedsAssessmentSOR({
       </div>
 
       {/* SOR sections */}
-      {SOR_SECTIONS.map((section) => {
-        const rows = section.fields
+      {sorSections.map((section) => {
+        const rows = section.sourceFields
           .map((fieldId) => {
-            const fieldDef = FIELD_MAP[fieldId];
+            const fieldDef = fieldMap[fieldId];
             const label = fieldDef?.label ?? fieldId;
             const val = answers[fieldId];
-            const display = fieldDef?.type === "repeater" ? formatRepeater(val) : formatValue(fieldId, val);
+            const display = fieldDef?.type === "repeater" ? formatRepeater(val, fieldMap) : formatValue(fieldId, val, fieldMap);
             return { label, display };
           })
           .filter(({ display }) => display !== "—");
@@ -627,7 +560,7 @@ export default function NeedsAssessmentSOR({
         if (rows.length === 0) return null;
 
         return (
-          <div key={section.title} className="ms-card" style={{ marginBottom: 16, padding: "20px 24px" }}>
+          <div key={section.id} className="ms-card" style={{ marginBottom: 16, padding: "20px 24px" }}>
             <h3
               style={{
                 margin: "0 0 14px",

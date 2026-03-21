@@ -5,6 +5,8 @@ import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
+import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
+import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -509,8 +511,8 @@ export default function SolutionDetailPage() {
     setGapItems(ga.gaps);
     setRiskItems(ga.risks);
 
-    // Load CI needs assessment for applicable solution types
-    if (["zoom_ra", "rc_ace"].includes(s.solution_type)) {
+    // Load needs assessment for applicable solution types
+    if (["zoom_ra", "rc_ace", "ccaas"].includes(s.solution_type)) {
       api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
     }
 
@@ -1011,47 +1013,58 @@ export default function SolutionDetailPage() {
       )}
 
       {/* ── Assessment Tab ── */}
-      {tab === "assessment" && ["zoom_ra", "rc_ace"].includes(solution.solution_type) && (
+      {tab === "assessment" && ["zoom_ra", "rc_ace", "ccaas"].includes(solution.solution_type) && (
         <div>
-          {(naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
-            <NeedsAssessmentWizard
-              solutionId={solution.id}
-              customerName={solution.customer_name}
-              onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
-              onCancel={() => { if (needsAssessment) setNaView("sor"); }}
-            />
-          ) : needsAssessment !== null && naView === "sor" ? (
-            <NeedsAssessmentSOR
-              assessment={needsAssessment}
-              customerName={solution.customer_name}
-              solutionType={solution.solution_type === "zoom_ra" ? "Zoom Revenue Accelerator" : "RingCentral ACE"}
-              onBack={() => setNaView("wizard")}
-              onDelete={async () => {
-                try {
-                  await api.deleteNeedsAssessment(solution.id);
-                  setNeedsAssessment(null);
-                  setNaView("sor");
-                } catch {
-                  showToast("Failed to delete assessment", "error");
-                }
-              }}
-            />
-          ) : (
-            <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
-              <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
-                No needs assessment has been completed for this solution yet.
-              </p>
-              <button
-                className="ms-btn-primary"
-                onClick={() => setNaView("wizard")}
-              >
-                Start Needs Assessment
-              </button>
-            </div>
-          )}
+          {(() => {
+            const surveyJson = solution.solution_type === "ccaas" ? ccaasSurveyJson : ciSurveyJson;
+            const solutionTypeLabel =
+              solution.solution_type === "zoom_ra" ? "Zoom Revenue Accelerator" :
+              solution.solution_type === "rc_ace" ? "RingCentral ACE" :
+              "CCaaS";
+            return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
+              <NeedsAssessmentWizard
+                solutionId={solution.id}
+                customerName={solution.customer_name}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                surveyJson={surveyJson as any}
+                onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
+                onCancel={() => { if (needsAssessment) setNaView("sor"); }}
+              />
+            ) : needsAssessment !== null && naView === "sor" ? (
+              <NeedsAssessmentSOR
+                assessment={needsAssessment}
+                customerName={solution.customer_name}
+                solutionType={solutionTypeLabel}
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                surveyJson={surveyJson as any}
+                onBack={() => setNaView("wizard")}
+                onDelete={async () => {
+                  try {
+                    await api.deleteNeedsAssessment(solution.id);
+                    setNeedsAssessment(null);
+                    setNaView("sor");
+                  } catch {
+                    showToast("Failed to delete assessment", "error");
+                  }
+                }}
+              />
+            ) : (
+              <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
+                <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
+                  No needs assessment has been completed for this solution yet.
+                </p>
+                <button
+                  className="ms-btn-primary"
+                  onClick={() => setNaView("wizard")}
+                >
+                  Start Needs Assessment
+                </button>
+              </div>
+            );
+          })()}
         </div>
       )}
-      {tab === "assessment" && !["zoom_ra", "rc_ace"].includes(solution.solution_type) && (
+      {tab === "assessment" && !["zoom_ra", "rc_ace", "ccaas"].includes(solution.solution_type) && (
         <div style={{ display: "grid", gap: 20 }}>
           {ASSESSMENT_SCHEMA[solution.solution_type].map((section) => {
             const checkboxFields = section.fields.filter((f) => f.type === "checkbox");

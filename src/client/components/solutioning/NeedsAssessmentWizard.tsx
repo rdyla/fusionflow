@@ -1,6 +1,5 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api, type NeedsAssessment } from "../../lib/api";
-import surveyJson from "../../assets/ci_needs_assessment_unified_v1.json";
 
 // ── Types from JSON ────────────────────────────────────────────────────────────
 
@@ -34,10 +33,6 @@ type SectionDef = {
   fields: FieldDef[];
 };
 
-const SECTIONS = (surveyJson.sections as SectionDef[]).filter(
-  (s) => s.id !== "project_context"
-);
-
 // ── ShowIf logic ──────────────────────────────────────────────────────────────
 
 function shouldShow(field: FieldDef, answers: Record<string, unknown>): boolean {
@@ -65,6 +60,7 @@ function shouldShow(field: FieldDef, answers: Record<string, unknown>): boolean 
 type Props = {
   solutionId: string;
   customerName: string;
+  surveyJson: { sections: SectionDef[]; [key: string]: unknown };
   onComplete: (assessment: NeedsAssessment) => void;
   onCancel: () => void;
 };
@@ -134,9 +130,10 @@ type FieldProps = {
   field: FieldDef;
   answers: Record<string, unknown>;
   onChange: (id: string, val: unknown) => void;
+  allSections: SectionDef[];
 };
 
-function FieldInput({ field, answers, onChange }: FieldProps) {
+function FieldInput({ field, answers, onChange, allSections }: FieldProps) {
   const val = answers[field.id];
 
   if (field.type === "text" || field.type === "date") {
@@ -236,7 +233,7 @@ function FieldInput({ field, answers, onChange }: FieldProps) {
     const sourceVal = answers[field.optionsSourceField];
     const sourceOptions = Array.isArray(sourceVal) ? (sourceVal as string[]) : [];
     // Get labels from source field options
-    const sourceField = (surveyJson.sections as SectionDef[])
+    const sourceField = (allSections as SectionDef[])
       .flatMap((s) => s.fields)
       .find((f) => f.id === field.optionsSourceField);
     const optionLabels: Record<string, string> = {};
@@ -346,7 +343,12 @@ function FieldInput({ field, answers, onChange }: FieldProps) {
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
-export default function NeedsAssessmentWizard({ solutionId, customerName, onComplete, onCancel }: Props) {
+export default function NeedsAssessmentWizard({ solutionId, customerName, surveyJson, onComplete, onCancel }: Props) {
+  const SECTIONS = useMemo(
+    () => (surveyJson.sections as SectionDef[]).filter((s) => s.id !== "project_context"),
+    [surveyJson]
+  );
+
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [saving, setSaving] = useState(false);
@@ -454,7 +456,7 @@ export default function NeedsAssessmentWizard({ solutionId, customerName, onComp
                 {field.label}
                 {field.required && <span style={{ color: "#d13438", marginLeft: 3 }}>*</span>}
               </span>
-              <FieldInput field={field} answers={answers} onChange={setAnswer} />
+              <FieldInput field={field} answers={answers} onChange={setAnswer} allSections={surveyJson.sections as SectionDef[]} />
             </label>
           ))}
         </div>
