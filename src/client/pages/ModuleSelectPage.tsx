@@ -3,16 +3,8 @@ import { useNavigate } from "react-router-dom";
 import logoUrl from "../assets/fusionflow360-logov4.png";
 import { api, type User, type SystemStatusResponse } from "../lib/api";
 import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
+import { UserChip } from "../components/ui/UserChip";
 import { useIsMobile } from "../hooks/useIsMobile";
-
-function initials(name: string | null, email: string): string {
-  if (name) {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    return parts[0].slice(0, 2).toUpperCase();
-  }
-  return email.slice(0, 2).toUpperCase();
-}
 
 type Module = {
   num: string;
@@ -131,7 +123,6 @@ export default function ModuleSelectPage() {
     }
   }
 
-  const abbr = user ? initials(user.name, user.email) : "…";
   const isMobile = useIsMobile();
 
   return (
@@ -141,9 +132,7 @@ export default function ModuleSelectPage() {
       <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 64, background: "#021e34" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <SystemStatusBadge status={sysStatus} />
-          <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, #63c1ea, #17c662)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Jost', sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.05em", color: "#fff" }}>
-            {abbr}
-          </div>
+          {user && <UserChip user={user} popout="down" />}
         </div>
       </header>
 

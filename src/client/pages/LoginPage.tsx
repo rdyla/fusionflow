@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import logoUrl from "../assets/fusionflow360-logo2-white.png";
+import logoUrl from "../assets/fusion flow transparent logo.png";
 
 type Step = "email" | "code";
 
