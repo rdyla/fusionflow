@@ -7,6 +7,7 @@ import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWiza
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
+import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -512,7 +513,7 @@ export default function SolutionDetailPage() {
     setRiskItems(ga.risks);
 
     // Load needs assessment for applicable solution types
-    if (["zoom_ra", "rc_ace", "ccaas"].includes(s.solution_type)) {
+    if (["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air"].includes(s.solution_type)) {
       api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
     }
 
@@ -1016,10 +1017,15 @@ export default function SolutionDetailPage() {
       {tab === "assessment" && ["zoom_ra", "rc_ace", "ccaas"].includes(solution.solution_type) && (
         <div>
           {(() => {
-            const surveyJson = solution.solution_type === "ccaas" ? ccaasSurveyJson : ciSurveyJson;
+            const surveyJson =
+              solution.solution_type === "ccaas" ? ccaasSurveyJson :
+              (solution.solution_type === "zoom_va" || solution.solution_type === "rc_air") ? virtualAgentSurveyJson :
+              ciSurveyJson;
             const solutionTypeLabel =
               solution.solution_type === "zoom_ra" ? "Zoom Revenue Accelerator" :
               solution.solution_type === "rc_ace" ? "RingCentral ACE" :
+              solution.solution_type === "zoom_va" ? "Zoom Virtual Agent" :
+              solution.solution_type === "rc_air" ? "RingCentral AIR" :
               "CCaaS";
             return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard

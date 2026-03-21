@@ -137,6 +137,74 @@ const CCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
   },
 ];
 
+const VIRTUAL_AGENT_READINESS_DIMENSIONS: ReadinessDimension[] = [
+  {
+    id: "businessClarity",
+    weight: 0.2,
+    inputs: [
+      "business_goals",
+      "current_problems_to_solve",
+      "success_90_days",
+      "success_6_12_months",
+      "kpi_baseline_available",
+    ],
+  },
+  {
+    id: "automationScopeReadiness",
+    weight: 0.25,
+    inputs: [
+      "phase_1_scope_summary",
+      "channels_required_phase_1",
+      "primary_use_cases",
+      "top_use_cases_for_phase_1",
+      "estimated_intent_count",
+      "handoff_to_agent_required",
+    ],
+  },
+  {
+    id: "knowledgeReadiness",
+    weight: 0.2,
+    inputs: [
+      "knowledge_source_exists",
+      "knowledge_sources_available",
+      "content_quality_readiness",
+      "customer_content_owner",
+      "customer_must_provide_content_inputs",
+    ],
+  },
+  {
+    id: "integrationReadiness",
+    weight: 0.15,
+    inputs: [
+      "crm_in_use",
+      "integration_use_cases_required",
+      "systems_of_record_involved",
+      "sandbox_testing_required",
+    ],
+  },
+  {
+    id: "governanceReadiness",
+    weight: 0.1,
+    inputs: [
+      "redaction_or_masking_required",
+      "retention_requirements_defined",
+      "rbac_required",
+      "security_review_required",
+    ],
+  },
+  {
+    id: "operationalReadiness",
+    weight: 0.1,
+    inputs: [
+      "program_owner_function",
+      "named_content_owner_exists",
+      "named_integration_owner_exists",
+      "testing_requirements",
+      "signoff_roles",
+    ],
+  },
+];
+
 function isNonEmpty(val: unknown): boolean {
   if (val === null || val === undefined || val === "") return false;
   if (Array.isArray(val)) return val.length > 0;
@@ -177,6 +245,30 @@ function computeCCaaSReadiness(answers: Record<string, unknown>): {
   let totalWeight = 0;
 
   for (const dim of CCAAS_READINESS_DIMENSIONS) {
+    const filled = dim.inputs.filter((key) => isNonEmpty(answers[key])).length;
+    const dimScore = (filled / dim.inputs.length) * 100;
+    weightedSum += dimScore * dim.weight;
+    totalWeight += dim.weight;
+  }
+
+  const score = Math.round(totalWeight > 0 ? weightedSum / totalWeight : 0);
+
+  let status: string;
+  if (score >= 80) status = "ready";
+  else if (score >= 60) status = "conditionally_ready";
+  else status = "not_ready";
+
+  return { score, status };
+}
+
+function computeVirtualAgentReadiness(answers: Record<string, unknown>): {
+  score: number;
+  status: string;
+} {
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const dim of VIRTUAL_AGENT_READINESS_DIMENSIONS) {
     const filled = dim.inputs.filter((key) => isNonEmpty(answers[key])).length;
     const dimScore = (filled / dim.inputs.length) * 100;
     weightedSum += dimScore * dim.weight;
@@ -251,9 +343,18 @@ app.put("/:id/needs-assessment", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { answers } = parsed.data;
+  const isVA = solution.solution_type === "zoom_va" || solution.solution_type === "rc_air";
   const isCCaaS = solution.solution_type === "ccaas";
-  const { score, status } = isCCaaS ? computeCCaaSReadiness(answers) : computeCIReadiness(answers);
-  const surveyId = isCCaaS ? "ccaas_needs_assessment_unified_v1" : "ci_needs_assessment_unified_v1";
+  const { score, status } = isVA
+    ? computeVirtualAgentReadiness(answers)
+    : isCCaaS
+    ? computeCCaaSReadiness(answers)
+    : computeCIReadiness(answers);
+  const surveyId = isVA
+    ? "virtual_agent_needs_assessment_unified_v1"
+    : isCCaaS
+    ? "ccaas_needs_assessment_unified_v1"
+    : "ci_needs_assessment_unified_v1";
 
   const existing = await c.env.DB.prepare(
     "SELECT id FROM needs_assessments WHERE solution_id = ? LIMIT 1"

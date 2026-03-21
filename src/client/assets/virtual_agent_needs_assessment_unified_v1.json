@@ -1,0 +1,693 @@
+{
+  "id": "virtual_agent_needs_assessment_unified_v1",
+  "name": "Virtual Agent Needs Assessment",
+  "version": "1.0.0",
+  "description": "Pre-solution needs assessment for AI-powered virtual agent and conversational AI solutions used to define business, automation scope, knowledge, integration, governance, and operational requirements prior to design and quoting.",
+  "appliesTo": [
+    "zoom_va",
+    "rc_air"
+  ],
+  "estimatedCompletionMinutes": 20,
+  "solutionScope": {
+    "category": "virtual_agent",
+    "supportedPlatforms": [
+      "zoom_virtual_agent",
+      "ringcentral_air",
+      "other_virtual_agent_platform"
+    ],
+    "optionalModules": [
+      "live_agent_handoff",
+      "crm_integration",
+      "knowledge_base",
+      "analytics_dashboard",
+      "outbound_notifications"
+    ]
+  },
+  "sections": [
+    {
+      "id": "project_context",
+      "title": "Project Context",
+      "fields": [
+        {
+          "id": "customer_name",
+          "type": "text",
+          "label": "Customer / Organization Name",
+          "required": true
+        },
+        {
+          "id": "assessment_date",
+          "type": "date",
+          "label": "Assessment Date",
+          "required": true
+        },
+        {
+          "id": "pf_ae_name",
+          "type": "text",
+          "label": "Packet Fusion AE",
+          "required": false
+        },
+        {
+          "id": "pf_sa_name",
+          "type": "text",
+          "label": "Packet Fusion SA / CSM",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "business_objectives",
+      "title": "Business Objectives",
+      "fields": [
+        {
+          "id": "business_goals",
+          "type": "textarea",
+          "label": "What are the primary business goals driving this virtual agent initiative?",
+          "required": true
+        },
+        {
+          "id": "current_problems_to_solve",
+          "type": "textarea",
+          "label": "What specific problems or pain points is the virtual agent expected to solve?",
+          "required": true
+        },
+        {
+          "id": "success_90_days",
+          "type": "textarea",
+          "label": "What does success look like at 90 days post-launch?",
+          "required": false
+        },
+        {
+          "id": "success_6_12_months",
+          "type": "textarea",
+          "label": "What does success look like at 6–12 months?",
+          "required": false
+        },
+        {
+          "id": "kpi_baseline_available",
+          "type": "single_select",
+          "label": "Are baseline KPIs available (e.g., current call/chat volume, containment rate, CSAT)?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "partial", "label": "Partial" },
+            { "value": "no", "label": "No" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scope_and_channels",
+      "title": "Scope & Channels",
+      "fields": [
+        {
+          "id": "phase_1_scope_summary",
+          "type": "textarea",
+          "label": "Describe the Phase 1 scope for the virtual agent deployment.",
+          "required": true
+        },
+        {
+          "id": "channels_required_phase_1",
+          "type": "multi_select",
+          "label": "Which channels are in scope for Phase 1?",
+          "required": true,
+          "options": [
+            { "value": "web_chat", "label": "Web Chat" },
+            { "value": "sms", "label": "SMS" },
+            { "value": "voice_ivr", "label": "Voice / IVR" },
+            { "value": "mobile_app", "label": "Mobile App" },
+            { "value": "email", "label": "Email" },
+            { "value": "whatsapp", "label": "WhatsApp" },
+            { "value": "other", "label": "Other" }
+          ]
+        },
+        {
+          "id": "estimated_intent_count",
+          "type": "single_select",
+          "label": "Estimated number of distinct intents / topics for Phase 1?",
+          "required": false,
+          "options": [
+            { "value": "1_10", "label": "1–10" },
+            { "value": "11_25", "label": "11–25" },
+            { "value": "26_50", "label": "26–50" },
+            { "value": "51_plus", "label": "51+" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "handoff_to_agent_required",
+          "type": "single_select",
+          "label": "Is live agent handoff required?",
+          "required": true,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "future_phase", "label": "Future Phase" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "use_cases_and_intents",
+      "title": "Use Cases & Intents",
+      "fields": [
+        {
+          "id": "primary_use_cases",
+          "type": "multi_select",
+          "label": "What are the primary use case categories?",
+          "required": true,
+          "options": [
+            { "value": "faq_self_service", "label": "FAQ / Self-Service" },
+            { "value": "account_inquiry", "label": "Account Inquiry" },
+            { "value": "appointment_scheduling", "label": "Appointment Scheduling" },
+            { "value": "order_status_tracking", "label": "Order Status / Tracking" },
+            { "value": "billing_payments", "label": "Billing / Payments" },
+            { "value": "technical_support", "label": "Technical Support" },
+            { "value": "lead_qualification", "label": "Lead Qualification" },
+            { "value": "outbound_notifications", "label": "Outbound Notifications" },
+            { "value": "other", "label": "Other" }
+          ]
+        },
+        {
+          "id": "top_use_cases_for_phase_1",
+          "type": "ranked_select",
+          "label": "Rank your top 3 use case priorities for Phase 1:",
+          "required": false,
+          "optionsSourceField": "primary_use_cases"
+        },
+        {
+          "id": "use_case_details",
+          "type": "textarea",
+          "label": "Describe any additional detail on specific use cases, workflows, or expected conversation flows.",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "conversation_design_and_handoff",
+      "title": "Conversation Design & Handoff",
+      "fields": [
+        {
+          "id": "conversation_design_owner",
+          "type": "single_select",
+          "label": "Who will own conversation design and content authoring?",
+          "required": false,
+          "options": [
+            { "value": "customer_internal", "label": "Customer (Internal)" },
+            { "value": "packet_fusion", "label": "Packet Fusion" },
+            { "value": "joint", "label": "Joint Effort" },
+            { "value": "undecided", "label": "Undecided" }
+          ]
+        },
+        {
+          "id": "handoff_platform",
+          "type": "text",
+          "label": "If live handoff is required, what platform will agents use (e.g., Zoom Contact Center, RingCX)?",
+          "required": false,
+          "showIf": {
+            "field": "handoff_to_agent_required",
+            "operator": "notEquals",
+            "value": "no"
+          }
+        },
+        {
+          "id": "context_transfer_required",
+          "type": "single_select",
+          "label": "Is conversation context (transcript, intent, data) required to transfer with the handoff?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ],
+          "showIf": {
+            "field": "handoff_to_agent_required",
+            "operator": "notEquals",
+            "value": "no"
+          }
+        },
+        {
+          "id": "escalation_triggers",
+          "type": "textarea",
+          "label": "What conditions or phrases should trigger escalation to a live agent?",
+          "required": false,
+          "showIf": {
+            "field": "handoff_to_agent_required",
+            "operator": "notEquals",
+            "value": "no"
+          }
+        }
+      ]
+    },
+    {
+      "id": "knowledge_and_content",
+      "title": "Knowledge & Content",
+      "fields": [
+        {
+          "id": "knowledge_source_exists",
+          "type": "single_select",
+          "label": "Does a documented knowledge base or FAQ source currently exist?",
+          "required": true,
+          "options": [
+            { "value": "yes_structured", "label": "Yes – Structured / Well Maintained" },
+            { "value": "yes_unstructured", "label": "Yes – Unstructured / Needs Cleanup" },
+            { "value": "partial", "label": "Partial" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        {
+          "id": "knowledge_sources_available",
+          "type": "multi_select",
+          "label": "What knowledge sources are available to train the virtual agent?",
+          "required": false,
+          "options": [
+            { "value": "website_faq", "label": "Website / FAQ Pages" },
+            { "value": "internal_kb", "label": "Internal Knowledge Base (e.g., Confluence, SharePoint)" },
+            { "value": "crm_data", "label": "CRM Data" },
+            { "value": "pdf_documents", "label": "PDF Documents / Manuals" },
+            { "value": "chat_transcripts", "label": "Historical Chat / Call Transcripts" },
+            { "value": "ticketing_system", "label": "Ticketing System (e.g., ServiceNow, Zendesk)" },
+            { "value": "none", "label": "None Available" }
+          ]
+        },
+        {
+          "id": "content_quality_readiness",
+          "type": "single_select",
+          "label": "How would you rate the readiness of available content for virtual agent use?",
+          "required": false,
+          "options": [
+            { "value": "ready", "label": "Ready to Use" },
+            { "value": "needs_review", "label": "Needs Review / Cleanup" },
+            { "value": "needs_creation", "label": "Needs to Be Created" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "customer_content_owner",
+          "type": "text",
+          "label": "Who on the customer side will own content review and approval?",
+          "required": false
+        },
+        {
+          "id": "customer_must_provide_content_inputs",
+          "type": "textarea",
+          "label": "List any specific content inputs the customer must provide before design can begin.",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "integrations_and_actions",
+      "title": "Integrations & Actions",
+      "fields": [
+        {
+          "id": "crm_in_use",
+          "type": "single_select",
+          "label": "What CRM system is currently in use?",
+          "required": false,
+          "options": [
+            { "value": "salesforce", "label": "Salesforce" },
+            { "value": "hubspot", "label": "HubSpot" },
+            { "value": "ms_dynamics", "label": "Microsoft Dynamics" },
+            { "value": "zendesk", "label": "Zendesk" },
+            { "value": "servicenow", "label": "ServiceNow" },
+            { "value": "other", "label": "Other" },
+            { "value": "none", "label": "None" }
+          ]
+        },
+        {
+          "id": "integration_use_cases_required",
+          "type": "multi_select",
+          "label": "What integration use cases are required for Phase 1?",
+          "required": false,
+          "options": [
+            { "value": "crm_lookup", "label": "CRM Data Lookup (e.g., account, case)" },
+            { "value": "crm_write", "label": "CRM Data Write (e.g., create case, update record)" },
+            { "value": "kb_search", "label": "Knowledge Base / Document Search" },
+            { "value": "scheduling_api", "label": "Scheduling / Calendar API" },
+            { "value": "payment_system", "label": "Payment / Billing System" },
+            { "value": "order_management", "label": "Order Management System" },
+            { "value": "authentication_sso", "label": "Authentication / SSO" },
+            { "value": "none", "label": "None in Phase 1" }
+          ]
+        },
+        {
+          "id": "systems_of_record_involved",
+          "type": "textarea",
+          "label": "List the specific systems of record the virtual agent will need to read from or write to.",
+          "required": false
+        },
+        {
+          "id": "sandbox_testing_required",
+          "type": "single_select",
+          "label": "Will a sandbox / staging environment be required for integration testing?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "other_integrations_notes",
+          "type": "textarea",
+          "label": "Any additional notes on integration requirements or constraints?",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "analytics_and_optimization",
+      "title": "Analytics & Optimization",
+      "fields": [
+        {
+          "id": "analytics_requirements",
+          "type": "multi_select",
+          "label": "What analytics or reporting capabilities are required?",
+          "required": false,
+          "options": [
+            { "value": "containment_rate", "label": "Containment Rate" },
+            { "value": "intent_coverage", "label": "Intent Coverage / Unrecognized Intents" },
+            { "value": "csat", "label": "Customer Satisfaction (CSAT)" },
+            { "value": "handoff_rate", "label": "Handoff / Escalation Rate" },
+            { "value": "session_volume", "label": "Session Volume & Trends" },
+            { "value": "custom_dashboards", "label": "Custom Dashboards" },
+            { "value": "none", "label": "No Specific Requirements" }
+          ]
+        },
+        {
+          "id": "optimization_cadence",
+          "type": "single_select",
+          "label": "How frequently does the customer expect to review and tune the virtual agent post-launch?",
+          "required": false,
+          "options": [
+            { "value": "weekly", "label": "Weekly" },
+            { "value": "monthly", "label": "Monthly" },
+            { "value": "quarterly", "label": "Quarterly" },
+            { "value": "ad_hoc", "label": "Ad Hoc" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "optimization_owner",
+          "type": "text",
+          "label": "Who will own ongoing optimization and content updates post-launch?",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "security_compliance",
+      "title": "Security & Compliance",
+      "fields": [
+        {
+          "id": "redaction_or_masking_required",
+          "type": "single_select",
+          "label": "Is PII redaction or data masking required in conversation logs?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "retention_requirements_defined",
+          "type": "single_select",
+          "label": "Are data retention requirements defined for conversation transcripts?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "compliance_needs",
+          "type": "multi_select",
+          "label": "Are there specific compliance requirements in scope?",
+          "required": false,
+          "options": [
+            { "value": "hipaa", "label": "HIPAA" },
+            { "value": "pci_dss", "label": "PCI-DSS" },
+            { "value": "gdpr", "label": "GDPR" },
+            { "value": "ccpa", "label": "CCPA" },
+            { "value": "sox", "label": "SOX" },
+            { "value": "none", "label": "None" }
+          ]
+        },
+        {
+          "id": "rbac_required",
+          "type": "single_select",
+          "label": "Is role-based access control (RBAC) required for the bot management platform?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        },
+        {
+          "id": "security_review_required",
+          "type": "single_select",
+          "label": "Will a customer security review / vendor assessment be required before go-live?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "customer_readiness_and_dependencies",
+      "title": "Customer Readiness & Dependencies",
+      "fields": [
+        {
+          "id": "program_owner_function",
+          "type": "text",
+          "label": "Who is the internal program owner / project sponsor at the customer?",
+          "required": false
+        },
+        {
+          "id": "named_content_owner_exists",
+          "type": "single_select",
+          "label": "Is a named content owner identified who can approve knowledge base content?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "tbd", "label": "TBD" }
+          ]
+        },
+        {
+          "id": "named_integration_owner_exists",
+          "type": "single_select",
+          "label": "Is a named technical / integration owner identified?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "tbd", "label": "TBD" }
+          ]
+        },
+        {
+          "id": "testing_requirements",
+          "type": "textarea",
+          "label": "Describe the customer's testing and UAT expectations before go-live.",
+          "required": false
+        },
+        {
+          "id": "signoff_roles",
+          "type": "textarea",
+          "label": "Who are the stakeholders required to sign off on the virtual agent before launch?",
+          "required": false
+        },
+        {
+          "id": "customer_prerequisites_before_design",
+          "type": "textarea",
+          "label": "List any prerequisites the customer must complete before design work can begin (e.g., content review, API access, security approval).",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "statementOfRequirements": {
+    "sections": [
+      {
+        "id": "sor_business_objectives",
+        "title": "Business Objectives",
+        "sourceFields": [
+          "business_goals",
+          "current_problems_to_solve",
+          "success_90_days",
+          "success_6_12_months",
+          "kpi_baseline_available"
+        ]
+      },
+      {
+        "id": "sor_scope_channels",
+        "title": "Scope & Channels",
+        "sourceFields": [
+          "phase_1_scope_summary",
+          "channels_required_phase_1",
+          "estimated_intent_count",
+          "handoff_to_agent_required"
+        ]
+      },
+      {
+        "id": "sor_use_cases",
+        "title": "Use Cases & Intents",
+        "sourceFields": [
+          "primary_use_cases",
+          "top_use_cases_for_phase_1",
+          "use_case_details"
+        ]
+      },
+      {
+        "id": "sor_conversation_design",
+        "title": "Conversation Design & Handoff",
+        "sourceFields": [
+          "conversation_design_owner",
+          "handoff_platform",
+          "context_transfer_required",
+          "escalation_triggers"
+        ]
+      },
+      {
+        "id": "sor_knowledge_content",
+        "title": "Knowledge & Content",
+        "sourceFields": [
+          "knowledge_source_exists",
+          "knowledge_sources_available",
+          "content_quality_readiness",
+          "customer_content_owner",
+          "customer_must_provide_content_inputs"
+        ]
+      },
+      {
+        "id": "sor_integrations",
+        "title": "Integrations & Actions",
+        "sourceFields": [
+          "crm_in_use",
+          "integration_use_cases_required",
+          "systems_of_record_involved",
+          "sandbox_testing_required",
+          "other_integrations_notes"
+        ]
+      },
+      {
+        "id": "sor_analytics",
+        "title": "Analytics & Optimization",
+        "sourceFields": [
+          "analytics_requirements",
+          "optimization_cadence",
+          "optimization_owner"
+        ]
+      },
+      {
+        "id": "sor_security_compliance",
+        "title": "Security & Compliance",
+        "sourceFields": [
+          "redaction_or_masking_required",
+          "retention_requirements_defined",
+          "compliance_needs",
+          "rbac_required",
+          "security_review_required"
+        ]
+      },
+      {
+        "id": "sor_customer_readiness",
+        "title": "Customer Readiness & Dependencies",
+        "sourceFields": [
+          "program_owner_function",
+          "named_content_owner_exists",
+          "named_integration_owner_exists",
+          "testing_requirements",
+          "signoff_roles",
+          "customer_prerequisites_before_design"
+        ]
+      }
+    ]
+  },
+  "readinessModel": {
+    "dimensions": [
+      {
+        "id": "businessClarity",
+        "label": "Business Clarity",
+        "weight": 0.2,
+        "inputs": [
+          "business_goals",
+          "current_problems_to_solve",
+          "success_90_days",
+          "success_6_12_months",
+          "kpi_baseline_available"
+        ]
+      },
+      {
+        "id": "automationScopeReadiness",
+        "label": "Automation Scope Readiness",
+        "weight": 0.25,
+        "inputs": [
+          "phase_1_scope_summary",
+          "channels_required_phase_1",
+          "primary_use_cases",
+          "top_use_cases_for_phase_1",
+          "estimated_intent_count",
+          "handoff_to_agent_required"
+        ]
+      },
+      {
+        "id": "knowledgeReadiness",
+        "label": "Knowledge Readiness",
+        "weight": 0.2,
+        "inputs": [
+          "knowledge_source_exists",
+          "knowledge_sources_available",
+          "content_quality_readiness",
+          "customer_content_owner",
+          "customer_must_provide_content_inputs"
+        ]
+      },
+      {
+        "id": "integrationReadiness",
+        "label": "Integration Readiness",
+        "weight": 0.15,
+        "inputs": [
+          "crm_in_use",
+          "integration_use_cases_required",
+          "systems_of_record_involved",
+          "sandbox_testing_required"
+        ]
+      },
+      {
+        "id": "governanceReadiness",
+        "label": "Governance & Compliance Readiness",
+        "weight": 0.1,
+        "inputs": [
+          "redaction_or_masking_required",
+          "retention_requirements_defined",
+          "rbac_required",
+          "security_review_required"
+        ]
+      },
+      {
+        "id": "operationalReadiness",
+        "label": "Operational Readiness",
+        "weight": 0.1,
+        "inputs": [
+          "program_owner_function",
+          "named_content_owner_exists",
+          "named_integration_owner_exists",
+          "testing_requirements",
+          "signoff_roles"
+        ]
+      }
+    ],
+    "statusBands": [
+      { "status": "ready", "label": "Ready", "minScore": 80, "color": "#107c10" },
+      { "status": "conditionally_ready", "label": "Conditionally Ready", "minScore": 60, "color": "#ff8c00" },
+      { "status": "not_ready", "label": "Not Ready", "minScore": 0, "color": "#d13438" }
+    ]
+  }
+}
