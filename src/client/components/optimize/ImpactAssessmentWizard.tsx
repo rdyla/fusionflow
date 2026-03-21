@@ -289,7 +289,7 @@ export default function ImpactAssessmentWizard({ projectId, accountName, onCompl
   }
 
   return (
-    <div className="ms-card" style={{ maxWidth: 680, margin: "0 auto", padding: "32px 36px" }}>
+    <div className="ms-card" style={{ padding: "32px 36px" }}>
       {/* Header */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.07em" }}>
