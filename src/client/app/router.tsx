@@ -12,12 +12,16 @@ import SolutionsPage from "../pages/SolutionsPage";
 import SolutionDetailPage from "../pages/SolutionDetailPage";
 import OptimizePage from "../pages/OptimizePage";
 import OptimizeAccountPage from "../pages/OptimizeAccountPage";
+import LoginPage from "../pages/LoginPage";
 
 
 export default function Router() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Login — full page, no app shell, no auth required */}
+        <Route path="/login" element={<LoginPage />} />
+
         {/* Module selection — full page, no app shell */}
         <Route path="/" element={<ModuleSelectPage />} />
 

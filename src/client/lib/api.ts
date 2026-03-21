@@ -1,5 +1,4 @@
 const API_BASE = "/api";
-const DEV_HEADERS: Record<string, string> = import.meta.env.DEV ? { "x-dev-user-email": "rdyla@packetfusion.com" } : {};
 
 export const IMPERSONATE_KEY = "impersonate_email";
 
@@ -16,11 +15,15 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
       "Content-Type": "application/json",
-      ...DEV_HEADERS,
       ...getImpersonationHeaders(),
     },
     ...options,
   });
+
+  if (res.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Unauthorized");
+  }
 
   if (!res.ok) {
     throw new Error(`API error: ${res.status}`);
@@ -772,7 +775,7 @@ export const api = {
 
     const res = await fetch(`${API_BASE}/projects/${projectId}/documents`, {
       method: "POST",
-      headers: { ...DEV_HEADERS, ...getImpersonationHeaders() },
+      headers: { ...getImpersonationHeaders() },
       body: form,
     });
     if (!res.ok) throw new Error(`Upload failed: ${res.status}`);

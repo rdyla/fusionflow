@@ -19,6 +19,7 @@ import statusRoutes from "./routes/status";
 import staffRoutes from "./routes/staff";
 import optimizeRoutes from "./routes/optimize";
 import asanaRoutes from "./routes/asana";
+import authPublicRoutes from "./routes/authPublic";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
@@ -28,6 +29,9 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 app.use("*", cors());
 
 app.get("/api/health", (c) => c.json({ ok: true }));
+
+// Public auth routes (OTP, verify, logout, SSO) — registered before authMiddleware
+app.route("/api/auth", authPublicRoutes);
 
 // Asana OAuth callback — must be registered before authMiddleware because
 // Asana's redirect carries the user's browser session (CF cookies) but not

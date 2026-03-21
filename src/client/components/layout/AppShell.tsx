@@ -327,7 +327,7 @@ function UserChip({ user }: { user: User }) {
           {/* Sign out */}
           <div style={{ padding: "6px 8px" }}>
             <a
-              href="/cdn-cgi/access/logout"
+              href="/api/auth/logout"
               style={{
                 display: "flex", alignItems: "center", gap: 10,
                 padding: "9px 10px", borderRadius: 6,
