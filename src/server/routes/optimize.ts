@@ -258,7 +258,7 @@ const impactAssessmentSchema = z.object({
   conducted_date: z.string().min(1),
   conducted_by_user_id: z.string().nullable().optional(),
   solution_types: z.array(z.string()).min(1),
-  answers: z.record(z.unknown()),
+  answers: z.record(z.string(), z.unknown()),
 });
 
 app.post("/accounts/:projectId/assessments", async (c) => {
