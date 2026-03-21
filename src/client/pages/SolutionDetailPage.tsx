@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis, type SolutionStaffMember } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type GapItem, type RiskItem, type GapCategory, type RiskCategory, type Priority, type GapAnalysis, type SolutionStaffMember, type NeedsAssessment } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { generateSOR } from "../lib/generateSOR";
+import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
+import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -474,6 +476,10 @@ export default function SolutionDetailPage() {
   const [riskForm, setRiskForm] = useState<Omit<RiskItem, "id">>(BLANK_RISK);
   const [savingGapRisk, setSavingGapRisk] = useState(false);
 
+  // Needs Assessment (CI types)
+  const [needsAssessment, setNeedsAssessment] = useState<NeedsAssessment | null>(null);
+  const [naView, setNaView] = useState<"sor" | "wizard">("sor");
+
   // Solution staff
   const [solutionStaff, setSolutionStaff] = useState<SolutionStaffMember[]>([]);
   const [showSolutionStaffModal, setShowSolutionStaffModal] = useState(false);
@@ -502,6 +508,11 @@ export default function SolutionDetailPage() {
     const ga = parseGapAnalysis(s.gap_analysis);
     setGapItems(ga.gaps);
     setRiskItems(ga.risks);
+
+    // Load CI needs assessment for applicable solution types
+    if (["zoom_ra", "rc_ace"].includes(s.solution_type)) {
+      api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
+    }
 
     // Load CRM contacts and solution contacts in parallel
     if (s.dynamics_account_id) {
@@ -1000,7 +1011,47 @@ export default function SolutionDetailPage() {
       )}
 
       {/* ── Assessment Tab ── */}
-      {tab === "assessment" && (
+      {tab === "assessment" && ["zoom_ra", "rc_ace"].includes(solution.solution_type) && (
+        <div>
+          {(naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
+            <NeedsAssessmentWizard
+              solutionId={solution.id}
+              customerName={solution.customer_name}
+              onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
+              onCancel={() => { if (needsAssessment) setNaView("sor"); }}
+            />
+          ) : needsAssessment !== null && naView === "sor" ? (
+            <NeedsAssessmentSOR
+              assessment={needsAssessment}
+              customerName={solution.customer_name}
+              solutionType={solution.solution_type === "zoom_ra" ? "Zoom Revenue Accelerator" : "RingCentral ACE"}
+              onBack={() => setNaView("wizard")}
+              onDelete={async () => {
+                try {
+                  await api.deleteNeedsAssessment(solution.id);
+                  setNeedsAssessment(null);
+                  setNaView("sor");
+                } catch {
+                  showToast("Failed to delete assessment", "error");
+                }
+              }}
+            />
+          ) : (
+            <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
+              <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
+                No needs assessment has been completed for this solution yet.
+              </p>
+              <button
+                className="ms-btn-primary"
+                onClick={() => setNaView("wizard")}
+              >
+                Start Needs Assessment
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {tab === "assessment" && !["zoom_ra", "rc_ace"].includes(solution.solution_type) && (
         <div style={{ display: "grid", gap: 20 }}>
           {ASSESSMENT_SCHEMA[solution.solution_type].map((section) => {
             const checkboxFields = section.fields.filter((f) => f.type === "checkbox");

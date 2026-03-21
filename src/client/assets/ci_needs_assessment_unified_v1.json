@@ -1,0 +1,2908 @@
+{
+  "id": "ci_needs_assessment_unified_v1",
+  "name": "Conversational Intelligence Needs Assessment",
+  "version": "1.0.0",
+  "description": "Pre-solution needs assessment for conversational intelligence platforms used to define business requirements, technical requirements, integrations, customizations, sales methodology alignment, readiness, and a customer-approved Statement of Requirements prior to design and quoting.",
+  "appliesTo": [
+    "ci"
+  ],
+  "estimatedCompletionMinutes": 15,
+  "solutionScope": {
+    "category": "conversational_intelligence",
+    "supportedPlatforms": [
+      "zoom_revenue_accelerator",
+      "ringcentral_ace",
+      "other_ci_platform"
+    ]
+  },
+  "sections": [
+    {
+      "id": "project_context",
+      "title": "Project Context",
+      "sectionCategory": "projectContext",
+      "scored": false,
+      "fields": [
+        {
+          "id": "customer_name",
+          "type": "text",
+          "label": "Customer Name",
+          "required": true
+        },
+        {
+          "id": "assessment_date",
+          "type": "date",
+          "label": "Assessment Date",
+          "required": true
+        },
+        {
+          "id": "platform_under_consideration",
+          "type": "multi_select",
+          "label": "Platform(s) Under Consideration",
+          "required": true,
+          "options": [
+            {
+              "value": "zoom_revenue_accelerator",
+              "label": "Zoom Revenue Accelerator"
+            },
+            {
+              "value": "ringcentral_ace",
+              "label": "RingCentral ACE"
+            },
+            {
+              "value": "other_ci_platform",
+              "label": "Other / TBD"
+            }
+          ]
+        },
+        {
+          "id": "project_stage",
+          "type": "single_select",
+          "label": "Current Project Stage",
+          "required": true,
+          "options": [
+            {
+              "value": "discovery",
+              "label": "Discovery"
+            },
+            {
+              "value": "requirements_definition",
+              "label": "Requirements definition"
+            },
+            {
+              "value": "evaluation",
+              "label": "Evaluation"
+            },
+            {
+              "value": "budgetary_quote",
+              "label": "Budgetary quote"
+            }
+          ]
+        },
+        {
+          "id": "is_new_or_replacement",
+          "type": "single_select",
+          "label": "Is this a new deployment or replacement of an existing platform?",
+          "required": true,
+          "options": [
+            {
+              "value": "new",
+              "label": "New deployment"
+            },
+            {
+              "value": "replacement",
+              "label": "Replacement of an existing tool"
+            },
+            {
+              "value": "expansion",
+              "label": "Expansion of current tooling"
+            }
+          ]
+        },
+        {
+          "id": "existing_platform",
+          "type": "text",
+          "label": "Existing platform (if applicable)",
+          "required": false,
+          "showIf": {
+            "field": "is_new_or_replacement",
+            "operator": "containsAny",
+            "value": [
+              "replacement",
+              "expansion"
+            ]
+          }
+        },
+        {
+          "id": "why_now",
+          "type": "textarea",
+          "label": "Why is the customer evaluating this now?",
+          "required": false
+        },
+        {
+          "id": "primary_contact_name",
+          "type": "text",
+          "label": "Primary Customer Contact",
+          "required": false
+        },
+        {
+          "id": "executive_sponsor",
+          "type": "text",
+          "label": "Executive Sponsor",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "business_objectives",
+      "title": "Business Objectives & Success Measures",
+      "sectionCategory": "businessObjectives",
+      "scored": true,
+      "fields": [
+        {
+          "id": "business_goals",
+          "type": "multi_select",
+          "label": "What are the top business goals for this platform?",
+          "required": true,
+          "options": [
+            {
+              "value": "improve_rep_coaching",
+              "label": "Improve rep coaching"
+            },
+            {
+              "value": "increase_win_rates",
+              "label": "Increase win rates"
+            },
+            {
+              "value": "shorten_sales_cycles",
+              "label": "Shorten sales cycles"
+            },
+            {
+              "value": "improve_forecast_visibility",
+              "label": "Improve forecast visibility"
+            },
+            {
+              "value": "standardize_call_review",
+              "label": "Standardize call review"
+            },
+            {
+              "value": "improve_onboarding",
+              "label": "Improve onboarding / ramp"
+            },
+            {
+              "value": "reduce_manager_review_time",
+              "label": "Reduce manager review time"
+            },
+            {
+              "value": "capture_customer_insights",
+              "label": "Capture customer insights"
+            },
+            {
+              "value": "improve_qualification_consistency",
+              "label": "Improve qualification consistency"
+            }
+          ],
+          "scoring": {
+            "method": "count_band",
+            "scoreMap": {
+              "0": 1,
+              "1": 2,
+              "2": 3,
+              "3": 4,
+              "4_plus": 5
+            }
+          }
+        },
+        {
+          "id": "top_3_priorities_ranked",
+          "type": "ranked_select",
+          "label": "Rank the top 3 priorities",
+          "required": false,
+          "optionsSourceField": "business_goals"
+        },
+        {
+          "id": "current_problems_to_solve",
+          "type": "textarea",
+          "label": "What problems is the customer trying to solve today?",
+          "required": true
+        },
+        {
+          "id": "success_90_days",
+          "type": "textarea",
+          "label": "What does success look like 90 days after launch?",
+          "required": true
+        },
+        {
+          "id": "success_6_12_months",
+          "type": "textarea",
+          "label": "What does success look like after 6-12 months?",
+          "required": true
+        },
+        {
+          "id": "target_kpis",
+          "type": "multi_select",
+          "label": "Which KPIs does the customer expect to improve?",
+          "required": false,
+          "options": [
+            {
+              "value": "win_rate",
+              "label": "Win rate"
+            },
+            {
+              "value": "ramp_time",
+              "label": "Ramp time"
+            },
+            {
+              "value": "deal_velocity",
+              "label": "Deal velocity"
+            },
+            {
+              "value": "coaching_effectiveness",
+              "label": "Coaching effectiveness"
+            },
+            {
+              "value": "forecast_accuracy",
+              "label": "Forecast accuracy"
+            },
+            {
+              "value": "meeting_quality",
+              "label": "Meeting quality"
+            },
+            {
+              "value": "rep_adherence",
+              "label": "Rep process adherence"
+            },
+            {
+              "value": "manager_efficiency",
+              "label": "Manager efficiency"
+            }
+          ]
+        },
+        {
+          "id": "kpi_baseline_available",
+          "type": "single_select",
+          "label": "Are KPI baselines available today?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes"
+            },
+            {
+              "value": "partial",
+              "label": "Partial"
+            },
+            {
+              "value": "no",
+              "label": "No"
+            }
+          ],
+          "scoreMap": {
+            "yes": 5,
+            "partial": 3,
+            "no": 1
+          }
+        }
+      ]
+    },
+    {
+      "id": "scope_users",
+      "title": "In-Scope Teams, Users & Coverage",
+      "sectionCategory": "scope",
+      "scored": true,
+      "fields": [
+        {
+          "id": "teams_in_scope",
+          "type": "multi_select",
+          "label": "What teams are in scope for phase 1?",
+          "required": true,
+          "options": [
+            {
+              "value": "sdr_bdr",
+              "label": "SDR / BDR"
+            },
+            {
+              "value": "ae_mid_market",
+              "label": "Mid-Market AEs"
+            },
+            {
+              "value": "ae_enterprise",
+              "label": "Enterprise AEs"
+            },
+            {
+              "value": "sales_managers",
+              "label": "Sales managers"
+            },
+            {
+              "value": "sales_enablement",
+              "label": "Sales enablement"
+            },
+            {
+              "value": "revenue_operations",
+              "label": "Revenue operations"
+            },
+            {
+              "value": "customer_success",
+              "label": "Customer success"
+            },
+            {
+              "value": "account_management",
+              "label": "Account management"
+            }
+          ]
+        },
+        {
+          "id": "estimated_user_count",
+          "type": "single_select",
+          "label": "Approximate number of users in scope",
+          "required": true,
+          "options": [
+            {
+              "value": "1_25",
+              "label": "1-25",
+              "score": 1
+            },
+            {
+              "value": "26_100",
+              "label": "26-100",
+              "score": 2
+            },
+            {
+              "value": "101_250",
+              "label": "101-250",
+              "score": 3
+            },
+            {
+              "value": "251_500",
+              "label": "251-500",
+              "score": 4
+            },
+            {
+              "value": "500_plus",
+              "label": "500+",
+              "score": 5
+            }
+          ]
+        },
+        {
+          "id": "geographies_in_scope",
+          "type": "multi_select",
+          "label": "Which geographies or business units are in scope?",
+          "required": false,
+          "options": [
+            {
+              "value": "north_america",
+              "label": "North America"
+            },
+            {
+              "value": "emea",
+              "label": "EMEA"
+            },
+            {
+              "value": "apac",
+              "label": "APAC"
+            },
+            {
+              "value": "latam",
+              "label": "LATAM"
+            },
+            {
+              "value": "global",
+              "label": "Global"
+            },
+            {
+              "value": "specific_bu",
+              "label": "Specific business unit(s)"
+            }
+          ]
+        },
+        {
+          "id": "phase_1_vs_future_scope",
+          "type": "textarea",
+          "label": "Describe phase 1 scope versus future-phase scope",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "current_state_workflow",
+      "title": "Current-State Workflow & Operating Model",
+      "sectionCategory": "currentState",
+      "scored": true,
+      "fields": [
+        {
+          "id": "conversation_channels_today",
+          "type": "multi_select",
+          "label": "How are customer conversations happening today?",
+          "required": true,
+          "options": [
+            {
+              "value": "zoom_meetings",
+              "label": "Zoom meetings"
+            },
+            {
+              "value": "ringcentral_calls",
+              "label": "RingCentral calls"
+            },
+            {
+              "value": "dialer",
+              "label": "Dialer"
+            },
+            {
+              "value": "pstn",
+              "label": "PSTN"
+            },
+            {
+              "value": "contact_center",
+              "label": "Contact center"
+            },
+            {
+              "value": "google_meet",
+              "label": "Google Meet"
+            },
+            {
+              "value": "microsoft_teams",
+              "label": "Microsoft Teams"
+            },
+            {
+              "value": "mixed",
+              "label": "Mixed / multiple channels"
+            }
+          ]
+        },
+        {
+          "id": "conversation_types_to_analyze",
+          "type": "multi_select",
+          "label": "Which conversations should be captured and analyzed?",
+          "required": true,
+          "options": [
+            {
+              "value": "external_sales_meetings",
+              "label": "External sales meetings"
+            },
+            {
+              "value": "discovery_calls",
+              "label": "Discovery calls"
+            },
+            {
+              "value": "qualification_calls",
+              "label": "Qualification calls"
+            },
+            {
+              "value": "demo_calls",
+              "label": "Demo / evaluation calls"
+            },
+            {
+              "value": "renewal_expansion_calls",
+              "label": "Renewal / expansion calls"
+            },
+            {
+              "value": "manager_coaching_sessions",
+              "label": "Manager coaching sessions"
+            },
+            {
+              "value": "support_success_calls",
+              "label": "Support / success calls"
+            }
+          ]
+        },
+        {
+          "id": "who_reviews_conversations_today",
+          "type": "multi_select",
+          "label": "Who reviews conversations today?",
+          "required": false,
+          "options": [
+            {
+              "value": "managers",
+              "label": "Managers"
+            },
+            {
+              "value": "enablement",
+              "label": "Enablement"
+            },
+            {
+              "value": "revenue_ops",
+              "label": "Revenue operations"
+            },
+            {
+              "value": "reps",
+              "label": "Reps self-review"
+            },
+            {
+              "value": "executives",
+              "label": "Executives / leadership"
+            },
+            {
+              "value": "nobody_consistently",
+              "label": "No one consistently"
+            }
+          ]
+        },
+        {
+          "id": "coaching_process_today",
+          "type": "textarea",
+          "label": "How is coaching done today?",
+          "required": false
+        },
+        {
+          "id": "notes_summaries_followups_today",
+          "type": "textarea",
+          "label": "How are notes, summaries, and follow-ups handled today?",
+          "required": false
+        },
+        {
+          "id": "insights_shared_with_leadership_today",
+          "type": "textarea",
+          "label": "How are conversation insights shared with leadership today?",
+          "required": false
+        },
+        {
+          "id": "current_state_pain_points",
+          "type": "textarea",
+          "label": "What are the biggest current-state pain points?",
+          "required": true
+        }
+      ]
+    },
+    {
+      "id": "functional_requirements",
+      "title": "Functional Requirements",
+      "sectionCategory": "functionalRequirements",
+      "scored": true,
+      "fields": [
+        {
+          "id": "core_capabilities_required",
+          "type": "multi_select",
+          "label": "Which core capabilities are required?",
+          "required": true,
+          "options": [
+            {
+              "value": "auto_recording",
+              "label": "Automatic call / meeting recording"
+            },
+            {
+              "value": "transcription",
+              "label": "Transcription"
+            },
+            {
+              "value": "summaries",
+              "label": "Conversation summaries"
+            },
+            {
+              "value": "action_items",
+              "label": "Action items / follow-ups"
+            },
+            {
+              "value": "topic_detection",
+              "label": "Topic / keyword detection"
+            },
+            {
+              "value": "search_transcripts",
+              "label": "Search across transcripts"
+            },
+            {
+              "value": "call_scoring",
+              "label": "Call scoring"
+            },
+            {
+              "value": "manager_review_workflows",
+              "label": "Manager review workflows"
+            },
+            {
+              "value": "alerts_flags",
+              "label": "Alerts / flags"
+            },
+            {
+              "value": "clips_highlights",
+              "label": "Clips / highlights"
+            }
+          ],
+          "scoring": {
+            "method": "count_band",
+            "scoreMap": {
+              "0": 1,
+              "1": 2,
+              "2_4": 3,
+              "5_7": 4,
+              "8_plus": 5
+            }
+          }
+        },
+        {
+          "id": "reporting_requirements",
+          "type": "multi_select",
+          "label": "What reporting is required?",
+          "required": false,
+          "options": [
+            {
+              "value": "rep_level",
+              "label": "Rep-level reporting"
+            },
+            {
+              "value": "team_level",
+              "label": "Team-level reporting"
+            },
+            {
+              "value": "manager_level",
+              "label": "Manager-level reporting"
+            },
+            {
+              "value": "executive_dashboards",
+              "label": "Executive dashboards"
+            },
+            {
+              "value": "scheduled_reports",
+              "label": "Scheduled reports"
+            },
+            {
+              "value": "exports",
+              "label": "Exports / raw data"
+            }
+          ]
+        },
+        {
+          "id": "priority_insights",
+          "type": "multi_select",
+          "label": "Which insights matter most?",
+          "required": false,
+          "options": [
+            {
+              "value": "talk_listen_ratio",
+              "label": "Talk/listen ratio"
+            },
+            {
+              "value": "objection_handling",
+              "label": "Objection handling"
+            },
+            {
+              "value": "competitor_mentions",
+              "label": "Competitor mentions"
+            },
+            {
+              "value": "pricing_mentions",
+              "label": "Pricing mentions"
+            },
+            {
+              "value": "next_steps_captured",
+              "label": "Next steps captured"
+            },
+            {
+              "value": "sentiment",
+              "label": "Sentiment"
+            },
+            {
+              "value": "coaching_trends",
+              "label": "Coaching trends"
+            },
+            {
+              "value": "risk_indicators",
+              "label": "Risk indicators"
+            }
+          ]
+        },
+        {
+          "id": "custom_dashboards_or_exports_required",
+          "type": "single_select",
+          "label": "Are custom dashboards or exports required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_phase_1",
+              "label": "Yes, in phase 1",
+              "score": 5
+            },
+            {
+              "value": "yes_future_phase",
+              "label": "Yes, in future phase",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "functional_must_haves",
+          "type": "textarea",
+          "label": "Describe any functional must-haves or non-negotiable requirements",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "customizations",
+      "title": "Customization Requirements",
+      "sectionCategory": "customizations",
+      "scored": true,
+      "fields": [
+        {
+          "id": "custom_trackers_required",
+          "type": "single_select",
+          "label": "Are custom trackers required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_phase_1",
+              "label": "Yes, in phase 1",
+              "score": 5
+            },
+            {
+              "value": "yes_future_phase",
+              "label": "Yes, in future phase",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "tracker_types",
+          "type": "multi_select",
+          "label": "What custom trackers or detections are needed?",
+          "required": false,
+          "showIf": {
+            "field": "custom_trackers_required",
+            "operator": "notEquals",
+            "value": "no"
+          },
+          "options": [
+            {
+              "value": "keywords",
+              "label": "Keywords / phrases"
+            },
+            {
+              "value": "topics",
+              "label": "Topics / themes"
+            },
+            {
+              "value": "competitors",
+              "label": "Competitor mentions"
+            },
+            {
+              "value": "pricing",
+              "label": "Pricing discussions"
+            },
+            {
+              "value": "compliance_language",
+              "label": "Compliance language"
+            },
+            {
+              "value": "next_step_detection",
+              "label": "Next step / commitment detection"
+            },
+            {
+              "value": "risk_language",
+              "label": "Risk / objection language"
+            }
+          ]
+        },
+        {
+          "id": "custom_scorecards_required",
+          "type": "single_select",
+          "label": "Are custom scorecards required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_phase_1",
+              "label": "Yes, in phase 1",
+              "score": 5
+            },
+            {
+              "value": "yes_future_phase",
+              "label": "Yes, in future phase",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "role_specific_views_required",
+          "type": "single_select",
+          "label": "Are role-specific views required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "partial",
+              "label": "Partially",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "team_specific_templates_required",
+          "type": "single_select",
+          "label": "Are team-specific templates required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "partial",
+              "label": "Partial",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "customization_notes",
+          "type": "textarea",
+          "label": "Describe any customization requirements",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "sales_playbook_methodology",
+      "title": "Sales Playbook & Methodology Requirements",
+      "sectionCategory": "playbookMethodology",
+      "scored": true,
+      "fields": [
+        {
+          "id": "current_sales_methodology_status",
+          "type": "single_select",
+          "label": "What best describes the current sales methodology?",
+          "required": true,
+          "options": [
+            {
+              "value": "formal_standardized",
+              "label": "Formal and standardized across teams",
+              "score": 5
+            },
+            {
+              "value": "formal_varies_by_team",
+              "label": "Formal but varies by team/region",
+              "score": 4
+            },
+            {
+              "value": "informal_partial",
+              "label": "Informal / partially adopted",
+              "score": 2
+            },
+            {
+              "value": "none_defined",
+              "label": "No defined methodology today",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "current_methodologies",
+          "type": "multi_select",
+          "label": "Which methodologies or playbooks are used today?",
+          "required": false,
+          "options": [
+            {
+              "value": "spiced",
+              "label": "SPICED"
+            },
+            {
+              "value": "meddpics",
+              "label": "MEDDPICS"
+            },
+            {
+              "value": "meddic",
+              "label": "MEDDIC"
+            },
+            {
+              "value": "bant",
+              "label": "BANT"
+            },
+            {
+              "value": "challenger",
+              "label": "Challenger"
+            },
+            {
+              "value": "solution_selling",
+              "label": "Solution Selling"
+            },
+            {
+              "value": "sandler",
+              "label": "Sandler"
+            },
+            {
+              "value": "spin",
+              "label": "SPIN"
+            },
+            {
+              "value": "custom_internal",
+              "label": "Custom internal methodology"
+            },
+            {
+              "value": "other",
+              "label": "Other"
+            }
+          ]
+        },
+        {
+          "id": "custom_internal_methodology_name",
+          "type": "text",
+          "label": "Internal methodology name",
+          "required": false,
+          "showIf": {
+            "field": "current_methodologies",
+            "operator": "contains",
+            "value": "custom_internal"
+          }
+        },
+        {
+          "id": "desired_methodology_state",
+          "type": "single_select",
+          "label": "What is the desired future-state methodology approach?",
+          "required": true,
+          "options": [
+            {
+              "value": "keep_current",
+              "label": "Keep current methodology as-is",
+              "score": 5
+            },
+            {
+              "value": "standardize_existing",
+              "label": "Standardize an existing methodology",
+              "score": 5
+            },
+            {
+              "value": "adopt_new_methodology",
+              "label": "Adopt a new methodology",
+              "score": 3
+            },
+            {
+              "value": "combine_multiple_frameworks",
+              "label": "Combine multiple frameworks into a custom playbook",
+              "score": 3
+            },
+            {
+              "value": "unsure_need_guidance",
+              "label": "Not yet defined / need guidance",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "desired_methodologies",
+          "type": "multi_select",
+          "label": "Which methodologies should the platform support?",
+          "required": true,
+          "options": [
+            {
+              "value": "spiced",
+              "label": "SPICED"
+            },
+            {
+              "value": "meddpics",
+              "label": "MEDDPICS"
+            },
+            {
+              "value": "meddic",
+              "label": "MEDDIC"
+            },
+            {
+              "value": "bant",
+              "label": "BANT"
+            },
+            {
+              "value": "challenger",
+              "label": "Challenger"
+            },
+            {
+              "value": "solution_selling",
+              "label": "Solution Selling"
+            },
+            {
+              "value": "sandler",
+              "label": "Sandler"
+            },
+            {
+              "value": "spin",
+              "label": "SPIN"
+            },
+            {
+              "value": "custom_internal",
+              "label": "Custom internal methodology"
+            },
+            {
+              "value": "other",
+              "label": "Other"
+            }
+          ]
+        },
+        {
+          "id": "teams_using_methodology",
+          "type": "multi_select",
+          "label": "Which teams should use methodology tracking in the platform?",
+          "required": true,
+          "options": [
+            {
+              "value": "sdr_bdr",
+              "label": "SDR / BDR"
+            },
+            {
+              "value": "ae_mid_market",
+              "label": "Mid-Market AEs"
+            },
+            {
+              "value": "ae_enterprise",
+              "label": "Enterprise AEs"
+            },
+            {
+              "value": "sales_engineers",
+              "label": "Sales Engineers / Solution Consultants"
+            },
+            {
+              "value": "customer_success",
+              "label": "Customer Success"
+            },
+            {
+              "value": "account_management",
+              "label": "Account Management"
+            },
+            {
+              "value": "managers",
+              "label": "Sales Managers"
+            }
+          ]
+        },
+        {
+          "id": "same_playbook_for_all_teams",
+          "type": "single_select",
+          "label": "Should the same playbook apply to all teams?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "partially",
+              "label": "Partially",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "playbook_variation_dimensions",
+          "type": "multi_select",
+          "label": "If playbooks vary, what drives the variation?",
+          "required": false,
+          "showIf": {
+            "field": "same_playbook_for_all_teams",
+            "operator": "notEquals",
+            "value": "yes"
+          },
+          "options": [
+            {
+              "value": "team",
+              "label": "Team"
+            },
+            {
+              "value": "segment",
+              "label": "Customer segment"
+            },
+            {
+              "value": "region",
+              "label": "Region / geography"
+            },
+            {
+              "value": "deal_size",
+              "label": "Deal size"
+            },
+            {
+              "value": "sales_motion",
+              "label": "Sales motion"
+            },
+            {
+              "value": "product_line",
+              "label": "Product line"
+            }
+          ]
+        },
+        {
+          "id": "playbook_enforcement_goal",
+          "type": "multi_select",
+          "label": "What should the platform help enforce or improve?",
+          "required": true,
+          "options": [
+            {
+              "value": "discovery_quality",
+              "label": "Discovery quality"
+            },
+            {
+              "value": "qualification_consistency",
+              "label": "Qualification consistency"
+            },
+            {
+              "value": "manager_coaching",
+              "label": "Manager coaching"
+            },
+            {
+              "value": "deal_inspection",
+              "label": "Deal inspection"
+            },
+            {
+              "value": "forecast_confidence",
+              "label": "Forecast confidence"
+            },
+            {
+              "value": "rep_onboarding",
+              "label": "Rep onboarding"
+            },
+            {
+              "value": "message_consistency",
+              "label": "Message consistency"
+            },
+            {
+              "value": "process_compliance",
+              "label": "Process compliance"
+            }
+          ]
+        },
+        {
+          "id": "methodology_maturity",
+          "type": "single_select",
+          "label": "How mature is the methodology operationally today?",
+          "required": true,
+          "options": [
+            {
+              "value": "highly_mature",
+              "label": "Highly mature and documented",
+              "score": 5
+            },
+            {
+              "value": "moderately_mature",
+              "label": "Moderately mature",
+              "score": 4
+            },
+            {
+              "value": "emerging",
+              "label": "Emerging / inconsistently applied",
+              "score": 2
+            },
+            {
+              "value": "undefined",
+              "label": "Largely undefined",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "track_methodology_elements",
+          "type": "single_select",
+          "label": "Should the platform track methodology elements in conversations?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_required",
+              "label": "Yes, required",
+              "score": 5
+            },
+            {
+              "value": "nice_to_have",
+              "label": "Nice to have",
+              "score": 3
+            },
+            {
+              "value": "not_required",
+              "label": "Not required",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "tracking_methods_required",
+          "type": "multi_select",
+          "label": "How should methodology adherence be captured?",
+          "required": true,
+          "options": [
+            {
+              "value": "auto_detected_keywords",
+              "label": "Automatically via keywords / phrases"
+            },
+            {
+              "value": "auto_detected_topics",
+              "label": "Automatically via topics / themes"
+            },
+            {
+              "value": "auto_generated_score",
+              "label": "Automatically via AI scoring"
+            },
+            {
+              "value": "manager_scorecard",
+              "label": "Manager scorecard / manual review"
+            },
+            {
+              "value": "rep_self_review",
+              "label": "Rep self-review"
+            },
+            {
+              "value": "crm_field_alignment",
+              "label": "Mapped to CRM fields / stage criteria"
+            }
+          ]
+        },
+        {
+          "id": "methodology_elements_to_track",
+          "type": "repeater",
+          "label": "Methodology elements to track",
+          "required": false,
+          "itemSchema": {
+            "type": "object",
+            "properties": {
+              "element_name": {
+                "type": "text",
+                "label": "Element name",
+                "required": true
+              },
+              "mapped_methodology": {
+                "type": "single_select",
+                "label": "Mapped methodology",
+                "required": false,
+                "options": [
+                  {
+                    "value": "spiced",
+                    "label": "SPICED"
+                  },
+                  {
+                    "value": "meddpics",
+                    "label": "MEDDPICS"
+                  },
+                  {
+                    "value": "meddic",
+                    "label": "MEDDIC"
+                  },
+                  {
+                    "value": "bant",
+                    "label": "BANT"
+                  },
+                  {
+                    "value": "challenger",
+                    "label": "Challenger"
+                  },
+                  {
+                    "value": "solution_selling",
+                    "label": "Solution Selling"
+                  },
+                  {
+                    "value": "sandler",
+                    "label": "Sandler"
+                  },
+                  {
+                    "value": "spin",
+                    "label": "SPIN"
+                  },
+                  {
+                    "value": "custom_internal",
+                    "label": "Custom Internal"
+                  }
+                ]
+              },
+              "description": {
+                "type": "textarea",
+                "label": "What should count as evidence of this element?",
+                "required": false
+              },
+              "priority": {
+                "type": "single_select",
+                "label": "Priority",
+                "required": true,
+                "options": [
+                  {
+                    "value": "must",
+                    "label": "Must"
+                  },
+                  {
+                    "value": "should",
+                    "label": "Should"
+                  },
+                  {
+                    "value": "could",
+                    "label": "Could"
+                  }
+                ]
+              },
+              "detection_type": {
+                "type": "multi_select",
+                "label": "Preferred detection method",
+                "required": false,
+                "options": [
+                  {
+                    "value": "keywords",
+                    "label": "Keywords / phrases"
+                  },
+                  {
+                    "value": "ai_pattern",
+                    "label": "AI pattern detection"
+                  },
+                  {
+                    "value": "scorecard",
+                    "label": "Scorecard review"
+                  },
+                  {
+                    "value": "crm_match",
+                    "label": "CRM field match"
+                  }
+                ]
+              },
+              "applies_to_stage": {
+                "type": "multi_select",
+                "label": "Applies to stage(s)",
+                "required": false,
+                "options": [
+                  {
+                    "value": "prospecting",
+                    "label": "Prospecting"
+                  },
+                  {
+                    "value": "discovery",
+                    "label": "Discovery"
+                  },
+                  {
+                    "value": "qualification",
+                    "label": "Qualification"
+                  },
+                  {
+                    "value": "evaluation",
+                    "label": "Evaluation"
+                  },
+                  {
+                    "value": "proposal",
+                    "label": "Proposal"
+                  },
+                  {
+                    "value": "negotiation",
+                    "label": "Negotiation"
+                  },
+                  {
+                    "value": "close",
+                    "label": "Close"
+                  },
+                  {
+                    "value": "post_sale",
+                    "label": "Post-sale / expansion"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "id": "must_have_questions_or_criteria",
+          "type": "textarea",
+          "label": "What questions, criteria, or signals must reps cover or capture in conversations?",
+          "required": false
+        },
+        {
+          "id": "scorecards_required",
+          "type": "single_select",
+          "label": "Are methodology-based scorecards required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_phase_1",
+              "label": "Yes, in phase 1",
+              "score": 5
+            },
+            {
+              "value": "yes_future_phase",
+              "label": "Yes, in a future phase",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "scorecard_types_required",
+          "type": "multi_select",
+          "label": "What scorecard types are needed?",
+          "required": false,
+          "showIf": {
+            "field": "scorecards_required",
+            "operator": "notEquals",
+            "value": "no"
+          },
+          "options": [
+            {
+              "value": "discovery_call",
+              "label": "Discovery call scorecard"
+            },
+            {
+              "value": "qualification_call",
+              "label": "Qualification scorecard"
+            },
+            {
+              "value": "demo_call",
+              "label": "Demo / evaluation scorecard"
+            },
+            {
+              "value": "manager_coaching",
+              "label": "Manager coaching scorecard"
+            },
+            {
+              "value": "forecast_inspection",
+              "label": "Forecast / deal inspection scorecard"
+            },
+            {
+              "value": "custom_team_scorecard",
+              "label": "Custom team-specific scorecard"
+            }
+          ]
+        },
+        {
+          "id": "scorecard_scoring_model",
+          "type": "single_select",
+          "label": "How should scorecards be scored?",
+          "required": false,
+          "showIf": {
+            "field": "scorecards_required",
+            "operator": "notEquals",
+            "value": "no"
+          },
+          "options": [
+            {
+              "value": "binary",
+              "label": "Binary (present / absent)"
+            },
+            {
+              "value": "weighted",
+              "label": "Weighted criteria"
+            },
+            {
+              "value": "rubric_scale",
+              "label": "Rubric scale (e.g. 1-5)"
+            },
+            {
+              "value": "mixed_model",
+              "label": "Mixed model"
+            }
+          ]
+        },
+        {
+          "id": "auto_scoring_required",
+          "type": "single_select",
+          "label": "Should the platform auto-score calls against the methodology?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_required",
+              "label": "Yes, required",
+              "score": 5
+            },
+            {
+              "value": "yes_if_reliable",
+              "label": "Yes, if reliable enough",
+              "score": 4
+            },
+            {
+              "value": "manual_only",
+              "label": "Manual scoring only",
+              "score": 2
+            },
+            {
+              "value": "undecided",
+              "label": "Undecided",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "auto_scoring_tolerance",
+          "type": "single_select",
+          "label": "What level of auto-scoring confidence is acceptable?",
+          "required": false,
+          "showIf": {
+            "field": "auto_scoring_required",
+            "operator": "containsAny",
+            "value": [
+              "yes_required",
+              "yes_if_reliable"
+            ]
+          },
+          "options": [
+            {
+              "value": "high_precision_required",
+              "label": "High precision required"
+            },
+            {
+              "value": "balanced_precision_recall",
+              "label": "Balanced precision and recall"
+            },
+            {
+              "value": "directional_insights_ok",
+              "label": "Directional insights are acceptable"
+            }
+          ]
+        },
+        {
+          "id": "coaching_workflow_requirements",
+          "type": "multi_select",
+          "label": "What coaching workflows should be supported?",
+          "required": false,
+          "options": [
+            {
+              "value": "manager_review_queues",
+              "label": "Manager review queues"
+            },
+            {
+              "value": "rep_self_review",
+              "label": "Rep self-review"
+            },
+            {
+              "value": "call_highlights",
+              "label": "Call highlights / clips"
+            },
+            {
+              "value": "missed_criteria_alerts",
+              "label": "Alerts for missed criteria"
+            },
+            {
+              "value": "team_comparison",
+              "label": "Team comparison / leaderboard views"
+            },
+            {
+              "value": "coaching_history",
+              "label": "Coaching history tracking"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "crm_integrations",
+      "title": "CRM & Systems Integration Requirements",
+      "sectionCategory": "integrations",
+      "scored": true,
+      "fields": [
+        {
+          "id": "crm_in_use",
+          "type": "single_select",
+          "label": "Which CRM is in use?",
+          "required": true,
+          "options": [
+            {
+              "value": "salesforce",
+              "label": "Salesforce",
+              "score": 5
+            },
+            {
+              "value": "hubspot",
+              "label": "HubSpot",
+              "score": 4
+            },
+            {
+              "value": "dynamics",
+              "label": "Dynamics",
+              "score": 4
+            },
+            {
+              "value": "other",
+              "label": "Other",
+              "score": 3
+            },
+            {
+              "value": "none",
+              "label": "None / not applicable",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "crm_integration_required_phase_1",
+          "type": "single_select",
+          "label": "Is CRM integration required for phase 1?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "future_phase",
+              "label": "Future phase",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "crm_objects_that_matter",
+          "type": "multi_select",
+          "label": "Which CRM objects matter most?",
+          "required": false,
+          "options": [
+            {
+              "value": "accounts",
+              "label": "Accounts"
+            },
+            {
+              "value": "contacts",
+              "label": "Contacts"
+            },
+            {
+              "value": "leads",
+              "label": "Leads"
+            },
+            {
+              "value": "opportunities",
+              "label": "Opportunities"
+            },
+            {
+              "value": "activities",
+              "label": "Activities"
+            },
+            {
+              "value": "tasks",
+              "label": "Tasks"
+            },
+            {
+              "value": "custom_objects",
+              "label": "Custom objects"
+            }
+          ]
+        },
+        {
+          "id": "data_sync_to_crm",
+          "type": "multi_select",
+          "label": "What data should sync from the CI platform into CRM?",
+          "required": false,
+          "options": [
+            {
+              "value": "call_summaries",
+              "label": "Call summaries"
+            },
+            {
+              "value": "next_steps",
+              "label": "Next steps"
+            },
+            {
+              "value": "recordings",
+              "label": "Recording links"
+            },
+            {
+              "value": "transcript_links",
+              "label": "Transcript links"
+            },
+            {
+              "value": "activity_logs",
+              "label": "Activity logs"
+            },
+            {
+              "value": "coaching_notes",
+              "label": "Coaching notes"
+            },
+            {
+              "value": "scorecard_results",
+              "label": "Scorecard results"
+            },
+            {
+              "value": "risk_flags",
+              "label": "Risk flags"
+            }
+          ]
+        },
+        {
+          "id": "data_sync_from_crm",
+          "type": "multi_select",
+          "label": "What data should sync from CRM into the CI platform?",
+          "required": false,
+          "options": [
+            {
+              "value": "account_owner",
+              "label": "Account owner"
+            },
+            {
+              "value": "opportunity_stage",
+              "label": "Opportunity stage"
+            },
+            {
+              "value": "contacts",
+              "label": "Contacts"
+            },
+            {
+              "value": "custom_fields",
+              "label": "Custom fields"
+            },
+            {
+              "value": "territory",
+              "label": "Territory / segment"
+            },
+            {
+              "value": "pipeline_metadata",
+              "label": "Pipeline metadata"
+            }
+          ]
+        },
+        {
+          "id": "crm_methodology_alignment_required",
+          "type": "single_select",
+          "label": "Should the sales methodology align to CRM fields, stages, or exit criteria?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_required",
+              "label": "Yes, required",
+              "score": 5
+            },
+            {
+              "value": "partially",
+              "label": "Partially",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "crm_methodology_fields",
+          "type": "textarea",
+          "label": "What CRM fields, stage criteria, or qualification fields are relevant?",
+          "required": false
+        },
+        {
+          "id": "crm_validation_rules_or_constraints",
+          "type": "textarea",
+          "label": "Are there CRM validation rules, workflow constraints, or admin dependencies?",
+          "required": false
+        },
+        {
+          "id": "crm_admin_owner",
+          "type": "text",
+          "label": "Who owns CRM administration?",
+          "required": false
+        },
+        {
+          "id": "sandbox_testing_required",
+          "type": "single_select",
+          "label": "Is sandbox testing required before production?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "maybe",
+              "label": "Maybe",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "other_integrations_required",
+          "type": "multi_select",
+          "label": "What other integrations are required?",
+          "required": false,
+          "options": [
+            {
+              "value": "sso_idp",
+              "label": "SSO / IdP"
+            },
+            {
+              "value": "calendar",
+              "label": "Calendar"
+            },
+            {
+              "value": "email",
+              "label": "Email"
+            },
+            {
+              "value": "dialer",
+              "label": "Dialer"
+            },
+            {
+              "value": "bi_warehouse",
+              "label": "BI / data warehouse"
+            },
+            {
+              "value": "lms_enablement",
+              "label": "LMS / enablement platform"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security_governance",
+      "title": "Security, Compliance & Governance",
+      "sectionCategory": "securityGovernance",
+      "scored": true,
+      "fields": [
+        {
+          "id": "recording_consent_requirements",
+          "type": "single_select",
+          "label": "Are there recording consent or compliance requirements?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "unknown",
+              "label": "Unknown",
+              "score": 2
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "regional_recording_restrictions",
+          "type": "textarea",
+          "label": "Describe any legal or regional recording restrictions",
+          "required": false
+        },
+        {
+          "id": "retention_requirements",
+          "type": "single_select",
+          "label": "Are there retention requirements for recordings or transcripts?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes_defined",
+              "label": "Yes, defined",
+              "score": 5
+            },
+            {
+              "value": "yes_not_defined",
+              "label": "Yes, but not defined",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No / none known",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "data_residency_required",
+          "type": "single_select",
+          "label": "Are there data residency requirements?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "unknown",
+              "label": "Unknown",
+              "score": 2
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "sensitive_data_concerns",
+          "type": "multi_select",
+          "label": "Are there sensitive data concerns?",
+          "required": false,
+          "options": [
+            {
+              "value": "pii",
+              "label": "PII"
+            },
+            {
+              "value": "phi",
+              "label": "PHI"
+            },
+            {
+              "value": "financial_data",
+              "label": "Financial data"
+            },
+            {
+              "value": "regulated_industry_data",
+              "label": "Regulated industry data"
+            },
+            {
+              "value": "none_identified",
+              "label": "None identified"
+            }
+          ]
+        },
+        {
+          "id": "redaction_or_masking_required",
+          "type": "single_select",
+          "label": "Are redaction or masking capabilities required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "maybe",
+              "label": "Maybe",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "rbac_required",
+          "type": "single_select",
+          "label": "Are role-based access controls required?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "partial",
+              "label": "Partial",
+              "score": 3
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "sso_scim_required",
+          "type": "single_select",
+          "label": "Does the customer require SSO and/or SCIM?",
+          "required": true,
+          "options": [
+            {
+              "value": "sso_scim",
+              "label": "SSO and SCIM",
+              "score": 5
+            },
+            {
+              "value": "sso_only",
+              "label": "SSO only",
+              "score": 4
+            },
+            {
+              "value": "maybe",
+              "label": "Maybe / TBD",
+              "score": 2
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "security_or_procurement_review_required",
+          "type": "single_select",
+          "label": "Is security review or procurement review required before purchase?",
+          "required": true,
+          "options": [
+            {
+              "value": "yes",
+              "label": "Yes",
+              "score": 5
+            },
+            {
+              "value": "unknown",
+              "label": "Unknown",
+              "score": 2
+            },
+            {
+              "value": "no",
+              "label": "No",
+              "score": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "adoption_enablement",
+      "title": "Adoption, Enablement & Ownership",
+      "sectionCategory": "adoptionReadiness",
+      "scored": true,
+      "fields": [
+        {
+          "id": "program_owner_function",
+          "type": "single_select",
+          "label": "Who will own the program internally?",
+          "required": true,
+          "options": [
+            {
+              "value": "sales_ops",
+              "label": "Sales operations",
+              "score": 5
+            },
+            {
+              "value": "enablement",
+              "label": "Enablement",
+              "score": 5
+            },
+            {
+              "value": "it",
+              "label": "IT",
+              "score": 3
+            },
+            {
+              "value": "sales_leadership",
+              "label": "Sales leadership",
+              "score": 4
+            },
+            {
+              "value": "rev_ops",
+              "label": "Revenue operations",
+              "score": 5
+            },
+            {
+              "value": "unknown",
+              "label": "Unknown",
+              "score": 1
+            }
+          ]
+        },
+        {
+          "id": "platform_admin_owner",
+          "type": "text",
+          "label": "Who will administer the platform?",
+          "required": false
+        },
+        {
+          "id": "who_maintains_trackers_and_scorecards",
+          "type": "text",
+          "label": "Who will build and maintain trackers and scorecards?",
+          "required": false
+        },
+        {
+          "id": "training_needed_for_roles",
+          "type": "multi_select",
+          "label": "What training is needed?",
+          "required": false,
+          "options": [
+            {
+              "value": "admins",
+              "label": "Admins"
+            },
+            {
+              "value": "managers",
+              "label": "Managers"
+            },
+            {
+              "value": "end_users",
+              "label": "End users / reps"
+            },
+            {
+              "value": "executives",
+              "label": "Executives / leadership"
+            }
+          ]
+        },
+        {
+          "id": "behaviors_to_drive_after_launch",
+          "type": "textarea",
+          "label": "What behaviors should the platform help drive after launch?",
+          "required": false
+        },
+        {
+          "id": "rep_or_manager_adoption_concerns",
+          "type": "textarea",
+          "label": "Are there concerns about rep or manager adoption?",
+          "required": false
+        },
+        {
+          "id": "internal_adoption_measurement_plan",
+          "type": "textarea",
+          "label": "How will the customer measure adoption internally?",
+          "required": false
+        }
+      ]
+    },
+    {
+      "id": "timeline_dependencies",
+      "title": "Timeline, Dependencies & Approval",
+      "sectionCategory": "timelineDependencies",
+      "scored": true,
+      "fields": [
+        {
+          "id": "target_go_live_date",
+          "type": "date",
+          "label": "Target go-live date",
+          "required": false
+        },
+        {
+          "id": "business_deadlines",
+          "type": "textarea",
+          "label": "What business deadlines or events are driving the timeline?",
+          "required": false
+        },
+        {
+          "id": "key_dependencies_before_design",
+          "type": "multi_select",
+          "label": "What dependencies must be resolved before design begins?",
+          "required": true,
+          "options": [
+            {
+              "value": "crm_access",
+              "label": "CRM access / discovery"
+            },
+            {
+              "value": "admin_contacts",
+              "label": "Named admin contacts"
+            },
+            {
+              "value": "call_recording_configuration",
+              "label": "Call recording configuration"
+            },
+            {
+              "value": "sample_scorecards",
+              "label": "Sample scorecards / coaching rubric"
+            },
+            {
+              "value": "keyword_lists",
+              "label": "Keyword / topic lists"
+            },
+            {
+              "value": "security_approvals",
+              "label": "Security approvals"
+            },
+            {
+              "value": "procurement_approvals",
+              "label": "Procurement approvals"
+            },
+            {
+              "value": "sso_identity",
+              "label": "Identity / SSO requirements"
+            },
+            {
+              "value": "sandbox_testing",
+              "label": "Sandbox testing plan"
+            }
+          ]
+        },
+        {
+          "id": "customer_prerequisites_before_implementation",
+          "type": "multi_select",
+          "label": "What must the customer provide before implementation can proceed?",
+          "required": true,
+          "options": [
+            {
+              "value": "crm_admin_resources",
+              "label": "CRM admin resources"
+            },
+            {
+              "value": "business_owner",
+              "label": "Business owner / approver"
+            },
+            {
+              "value": "sample_calls",
+              "label": "Sample calls / recordings"
+            },
+            {
+              "value": "coaching_rubric",
+              "label": "Coaching rubric / scorecards"
+            },
+            {
+              "value": "keyword_library",
+              "label": "Keyword / tracker library"
+            },
+            {
+              "value": "security_signoff",
+              "label": "Security signoff"
+            },
+            {
+              "value": "methodology_documentation",
+              "label": "Sales methodology / playbook documentation"
+            },
+            {
+              "value": "integration_field_mapping",
+              "label": "Integration / field mapping"
+            }
+          ]
+        },
+        {
+          "id": "approval_criteria_for_sor",
+          "type": "textarea",
+          "label": "What are the criteria for approving the Statement of Requirements?",
+          "required": false
+        },
+        {
+          "id": "signoff_roles",
+          "type": "multi_select",
+          "label": "Who must sign off before design / quote?",
+          "required": true,
+          "options": [
+            {
+              "value": "sales_leadership",
+              "label": "Sales leadership"
+            },
+            {
+              "value": "sales_ops",
+              "label": "Sales operations"
+            },
+            {
+              "value": "enablement",
+              "label": "Enablement"
+            },
+            {
+              "value": "revenue_ops",
+              "label": "Revenue operations"
+            },
+            {
+              "value": "crm_admin",
+              "label": "CRM admin"
+            },
+            {
+              "value": "it_security",
+              "label": "IT / security"
+            },
+            {
+              "value": "procurement",
+              "label": "Procurement"
+            },
+            {
+              "value": "executive_sponsor",
+              "label": "Executive sponsor"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "statementOfRequirements": {
+    "enabled": true,
+    "title": "Statement of Requirements",
+    "sections": [
+      {
+        "id": "sor_customer_goals",
+        "title": "Customer Goals & Success Outcomes",
+        "sourceFields": [
+          "business_goals",
+          "top_3_priorities_ranked",
+          "current_problems_to_solve",
+          "success_90_days",
+          "success_6_12_months",
+          "target_kpis"
+        ]
+      },
+      {
+        "id": "sor_scope",
+        "title": "In-Scope Teams & Coverage",
+        "sourceFields": [
+          "teams_in_scope",
+          "estimated_user_count",
+          "geographies_in_scope",
+          "phase_1_vs_future_scope"
+        ]
+      },
+      {
+        "id": "sor_required_capabilities",
+        "title": "Required Capabilities",
+        "sourceFields": [
+          "core_capabilities_required",
+          "functional_must_haves",
+          "reporting_requirements",
+          "priority_insights"
+        ]
+      },
+      {
+        "id": "sor_playbook_methodology",
+        "title": "Sales Playbook & Methodology Requirements",
+        "sourceFields": [
+          "current_sales_methodology_status",
+          "current_methodologies",
+          "custom_internal_methodology_name",
+          "desired_methodology_state",
+          "desired_methodologies",
+          "teams_using_methodology",
+          "same_playbook_for_all_teams",
+          "playbook_variation_dimensions",
+          "playbook_enforcement_goal",
+          "methodology_maturity",
+          "track_methodology_elements",
+          "tracking_methods_required",
+          "methodology_elements_to_track",
+          "must_have_questions_or_criteria",
+          "scorecards_required",
+          "scorecard_types_required",
+          "scorecard_scoring_model",
+          "auto_scoring_required",
+          "auto_scoring_tolerance",
+          "coaching_workflow_requirements"
+        ]
+      },
+      {
+        "id": "sor_crm_integrations",
+        "title": "CRM & Integration Requirements",
+        "sourceFields": [
+          "crm_in_use",
+          "crm_integration_required_phase_1",
+          "crm_objects_that_matter",
+          "data_sync_to_crm",
+          "data_sync_from_crm",
+          "crm_methodology_alignment_required",
+          "crm_methodology_fields",
+          "crm_validation_rules_or_constraints",
+          "sandbox_testing_required",
+          "other_integrations_required"
+        ]
+      },
+      {
+        "id": "sor_customizations",
+        "title": "Customization Requirements",
+        "sourceFields": [
+          "custom_trackers_required",
+          "tracker_types",
+          "custom_scorecards_required",
+          "role_specific_views_required",
+          "team_specific_templates_required",
+          "customization_notes"
+        ]
+      },
+      {
+        "id": "sor_security_governance",
+        "title": "Security, Compliance & Governance Requirements",
+        "sourceFields": [
+          "recording_consent_requirements",
+          "regional_recording_restrictions",
+          "retention_requirements",
+          "data_residency_required",
+          "sensitive_data_concerns",
+          "redaction_or_masking_required",
+          "rbac_required",
+          "sso_scim_required",
+          "security_or_procurement_review_required"
+        ]
+      },
+      {
+        "id": "sor_customer_responsibilities",
+        "title": "Customer Responsibilities & Preconditions",
+        "sourceFields": [
+          "key_dependencies_before_design",
+          "customer_prerequisites_before_implementation",
+          "approval_criteria_for_sor",
+          "signoff_roles"
+        ]
+      },
+      {
+        "id": "sor_assumptions_exclusions",
+        "title": "Assumptions & Exclusions",
+        "sourceFields": [
+          "phase_1_vs_future_scope"
+        ]
+      }
+    ]
+  },
+  "requirementGeneration": {
+    "enabled": true,
+    "statementTemplates": [
+      {
+        "id": "core_capability_requirement",
+        "condition": "core_capabilities_required.length > 0",
+        "category": "functional",
+        "priority": "must",
+        "statementTemplate": "The platform must support the following core capabilities in scope: {{core_capabilities_required}}."
+      },
+      {
+        "id": "crm_phase_1_requirement",
+        "condition": "crm_integration_required_phase_1 == 'yes'",
+        "category": "integration",
+        "priority": "must",
+        "statementTemplate": "CRM integration is required in phase 1, including support for relevant objects and data synchronization defined by the customer."
+      },
+      {
+        "id": "custom_tracker_requirement",
+        "condition": "custom_trackers_required == 'yes_phase_1'",
+        "category": "customization",
+        "priority": "must",
+        "statementTemplate": "The solution must support customer-specific trackers in phase 1, including the following tracker types: {{tracker_types}}."
+      },
+      {
+        "id": "scorecard_requirement",
+        "condition": "custom_scorecards_required == 'yes_phase_1' || scorecards_required == 'yes_phase_1'",
+        "category": "scorecards",
+        "priority": "must",
+        "statementTemplate": "The solution must support scorecard functionality in phase 1 aligned to the customer's coaching and methodology requirements."
+      },
+      {
+        "id": "playbook_support_requirement",
+        "condition": "desired_methodologies.length > 0",
+        "category": "playbook_methodology",
+        "priority": "must",
+        "statementTemplate": "The platform must support the customer's selected sales methodology framework(s): {{desired_methodologies}}."
+      },
+      {
+        "id": "methodology_tracking_requirement",
+        "condition": "track_methodology_elements == 'yes_required'",
+        "category": "playbook_tracking",
+        "priority": "must",
+        "statementTemplate": "The platform must track methodology adherence within customer conversations using the required tracking methods: {{tracking_methods_required}}."
+      },
+      {
+        "id": "auto_scoring_requirement",
+        "condition": "auto_scoring_required == 'yes_required' || auto_scoring_required == 'yes_if_reliable'",
+        "category": "auto_scoring",
+        "priority": "should",
+        "statementTemplate": "The platform should provide automated scoring against methodology criteria, using the following scoring tolerance target: {{auto_scoring_tolerance}}."
+      },
+      {
+        "id": "crm_methodology_alignment_requirement",
+        "condition": "crm_methodology_alignment_required == 'yes_required'",
+        "category": "crm_alignment",
+        "priority": "must",
+        "statementTemplate": "The methodology framework must align to CRM stages, fields, or qualification criteria where applicable."
+      },
+      {
+        "id": "security_review_requirement",
+        "condition": "security_or_procurement_review_required == 'yes'",
+        "category": "security_governance",
+        "priority": "must",
+        "statementTemplate": "Customer security and/or procurement review is a required dependency before purchase and implementation."
+      },
+      {
+        "id": "customer_prerequisite_requirement",
+        "condition": "customer_prerequisites_before_implementation.length > 0",
+        "category": "customer_prerequisite",
+        "priority": "must",
+        "statementTemplate": "Before solution design or implementation proceeds, the customer must provide the following prerequisites: {{customer_prerequisites_before_implementation}}."
+      }
+    ]
+  },
+  "readinessModel": {
+    "enabled": true,
+    "dimensions": {
+      "businessClarity": {
+        "weight": 0.2,
+        "inputs": [
+          "business_goals",
+          "current_problems_to_solve",
+          "success_90_days",
+          "success_6_12_months",
+          "kpi_baseline_available"
+        ]
+      },
+      "technicalReadiness": {
+        "weight": 0.2,
+        "inputs": [
+          "crm_in_use",
+          "crm_integration_required_phase_1",
+          "other_integrations_required",
+          "sandbox_testing_required"
+        ]
+      },
+      "crmReadiness": {
+        "weight": 0.2,
+        "inputs": [
+          "crm_objects_that_matter",
+          "data_sync_to_crm",
+          "data_sync_from_crm",
+          "crm_methodology_alignment_required",
+          "crm_methodology_fields",
+          "crm_admin_owner"
+        ]
+      },
+      "methodologyReadiness": {
+        "weight": 0.2,
+        "inputs": [
+          "current_sales_methodology_status",
+          "desired_methodology_state",
+          "desired_methodologies",
+          "methodology_maturity",
+          "track_methodology_elements",
+          "scorecards_required",
+          "auto_scoring_required"
+        ]
+      },
+      "operationalReadiness": {
+        "weight": 0.2,
+        "inputs": [
+          "program_owner_function",
+          "platform_admin_owner",
+          "who_maintains_trackers_and_scorecards",
+          "customer_prerequisites_before_implementation",
+          "signoff_roles"
+        ]
+      }
+    },
+    "statusBands": [
+      {
+        "label": "ready",
+        "min": 80,
+        "max": 100
+      },
+      {
+        "label": "conditionally_ready",
+        "min": 60,
+        "max": 79
+      },
+      {
+        "label": "not_ready",
+        "min": 0,
+        "max": 59
+      }
+    ]
+  },
+  "calculationRules": {
+    "ignoreUnansweredOptionalFields": true,
+    "scoredFieldsOnly": true,
+    "defaultSectionFormula": "((averageRawScore - 1) / 4) * 100",
+    "overallReadinessFormula": "sum(dimensionScore * dimensionWeight)",
+    "rounding": {
+      "sectionScores": "nearest_integer",
+      "dimensionScores": "nearest_integer",
+      "overallReadiness": "nearest_integer"
+    }
+  },
+  "decisionModel": {
+    "enabled": true,
+    "recommendations": [
+      {
+        "condition": "overallReadiness >= 80",
+        "status": "ready",
+        "recommendedAction": "Proceed to solution design and quote once Statement of Requirements is approved."
+      },
+      {
+        "condition": "overallReadiness >= 60 && overallReadiness < 80",
+        "status": "conditionally_ready",
+        "recommendedAction": "Proceed only after open prerequisites, dependencies, or requirement gaps are resolved."
+      },
+      {
+        "condition": "overallReadiness < 60",
+        "status": "not_ready",
+        "recommendedAction": "Do not proceed to design/quote until discovery gaps are closed and prerequisites are documented."
+      }
+    ]
+  },
+  "responseShape": {
+    "assessmentId": "string",
+    "surveyId": "ci_needs_assessment_unified_v1",
+    "customerId": "string",
+    "submittedAt": "ISO-8601 datetime",
+    "submittedBy": {
+      "name": "string",
+      "role": "string",
+      "email": "string"
+    },
+    "answers": {},
+    "generated": {
+      "requirements": [],
+      "statementOfRequirements": {},
+      "sectionScores": {},
+      "readinessDimensions": {},
+      "overallReadiness": 0,
+      "status": "ready | conditionally_ready | not_ready",
+      "recommendedAction": "string"
+    }
+  },
+  "exampleResponse": {
+    "assessmentId": "ci_na_1001",
+    "surveyId": "ci_needs_assessment_unified_v1",
+    "customerId": "cust_2001",
+    "submittedAt": "2026-03-20T12:00:00Z",
+    "submittedBy": {
+      "name": "Jane Smith",
+      "role": "Revenue Operations Director",
+      "email": "jane@example.com"
+    },
+    "answers": {
+      "customer_name": "Example Co",
+      "assessment_date": "2026-03-20",
+      "platform_under_consideration": [
+        "zoom_revenue_accelerator"
+      ],
+      "project_stage": "requirements_definition",
+      "is_new_or_replacement": "replacement",
+      "existing_platform": "Legacy call review tool",
+      "why_now": "Managers lack visibility into deal quality and rep adherence to MEDDPICS.",
+      "executive_sponsor": "VP Sales",
+      "business_goals": [
+        "improve_rep_coaching",
+        "improve_forecast_visibility",
+        "improve_qualification_consistency"
+      ],
+      "current_problems_to_solve": "Manual review is inconsistent and qualification is not measurable.",
+      "success_90_days": "Managers use scorecards weekly and reps capture stronger discovery evidence.",
+      "success_6_12_months": "Forecast confidence and qualification consistency measurably improve.",
+      "target_kpis": [
+        "forecast_accuracy",
+        "coaching_effectiveness",
+        "rep_adherence"
+      ],
+      "kpi_baseline_available": "partial",
+      "teams_in_scope": [
+        "ae_enterprise",
+        "sales_managers",
+        "revenue_operations"
+      ],
+      "estimated_user_count": "101_250",
+      "conversation_channels_today": [
+        "zoom_meetings",
+        "dialer",
+        "mixed"
+      ],
+      "conversation_types_to_analyze": [
+        "discovery_calls",
+        "qualification_calls",
+        "demo_calls"
+      ],
+      "current_state_pain_points": "No consistent review process, poor visibility into methodology adoption.",
+      "core_capabilities_required": [
+        "transcription",
+        "summaries",
+        "action_items",
+        "call_scoring",
+        "manager_review_workflows",
+        "search_transcripts"
+      ],
+      "reporting_requirements": [
+        "rep_level",
+        "manager_level",
+        "executive_dashboards"
+      ],
+      "priority_insights": [
+        "objection_handling",
+        "next_steps_captured",
+        "risk_indicators"
+      ],
+      "custom_dashboards_or_exports_required": "yes_future_phase",
+      "custom_trackers_required": "yes_phase_1",
+      "tracker_types": [
+        "keywords",
+        "topics",
+        "next_step_detection",
+        "risk_language"
+      ],
+      "custom_scorecards_required": "yes_phase_1",
+      "role_specific_views_required": "yes",
+      "team_specific_templates_required": "partial",
+      "current_sales_methodology_status": "formal_varies_by_team",
+      "current_methodologies": [
+        "meddpics",
+        "custom_internal"
+      ],
+      "custom_internal_methodology_name": "Enterprise Discovery Framework",
+      "desired_methodology_state": "standardize_existing",
+      "desired_methodologies": [
+        "meddpics",
+        "custom_internal"
+      ],
+      "teams_using_methodology": [
+        "ae_enterprise",
+        "managers"
+      ],
+      "same_playbook_for_all_teams": "partially",
+      "playbook_variation_dimensions": [
+        "segment",
+        "deal_size"
+      ],
+      "playbook_enforcement_goal": [
+        "qualification_consistency",
+        "manager_coaching",
+        "forecast_confidence"
+      ],
+      "methodology_maturity": "moderately_mature",
+      "track_methodology_elements": "yes_required",
+      "tracking_methods_required": [
+        "auto_detected_topics",
+        "auto_generated_score",
+        "manager_scorecard",
+        "crm_field_alignment"
+      ],
+      "methodology_elements_to_track": [
+        {
+          "element_name": "Metrics",
+          "mapped_methodology": "meddpics",
+          "description": "Rep identifies measurable business impact tied to the opportunity.",
+          "priority": "must",
+          "detection_type": [
+            "ai_pattern",
+            "scorecard"
+          ],
+          "applies_to_stage": [
+            "discovery",
+            "qualification"
+          ]
+        },
+        {
+          "element_name": "Economic Buyer",
+          "mapped_methodology": "meddpics",
+          "description": "Rep confirms identification of the economic buyer.",
+          "priority": "must",
+          "detection_type": [
+            "keywords",
+            "crm_match",
+            "scorecard"
+          ],
+          "applies_to_stage": [
+            "qualification",
+            "evaluation"
+          ]
+        }
+      ],
+      "must_have_questions_or_criteria": "Pain, metrics, decision process, and next steps must be captured by end of discovery.",
+      "scorecards_required": "yes_phase_1",
+      "scorecard_types_required": [
+        "discovery_call",
+        "qualification_call",
+        "forecast_inspection"
+      ],
+      "scorecard_scoring_model": "weighted",
+      "auto_scoring_required": "yes_if_reliable",
+      "auto_scoring_tolerance": "balanced_precision_recall",
+      "coaching_workflow_requirements": [
+        "manager_review_queues",
+        "missed_criteria_alerts",
+        "coaching_history"
+      ],
+      "crm_in_use": "salesforce",
+      "crm_integration_required_phase_1": "yes",
+      "crm_objects_that_matter": [
+        "opportunities",
+        "activities"
+      ],
+      "data_sync_to_crm": [
+        "call_summaries",
+        "next_steps",
+        "scorecard_results",
+        "risk_flags"
+      ],
+      "data_sync_from_crm": [
+        "opportunity_stage",
+        "account_owner",
+        "custom_fields"
+      ],
+      "crm_methodology_alignment_required": "yes_required",
+      "crm_methodology_fields": "MEDDPICS completion, deal risk, next step quality",
+      "sandbox_testing_required": "yes",
+      "other_integrations_required": [
+        "sso_idp",
+        "calendar"
+      ],
+      "recording_consent_requirements": "yes",
+      "retention_requirements": "yes_defined",
+      "data_residency_required": "no",
+      "redaction_or_masking_required": "maybe",
+      "rbac_required": "yes",
+      "sso_scim_required": "sso_only",
+      "security_or_procurement_review_required": "yes",
+      "program_owner_function": "rev_ops",
+      "platform_admin_owner": "Revenue Operations Manager",
+      "who_maintains_trackers_and_scorecards": "RevOps with Enablement input",
+      "training_needed_for_roles": [
+        "admins",
+        "managers",
+        "end_users"
+      ],
+      "key_dependencies_before_design": [
+        "crm_access",
+        "sample_scorecards",
+        "keyword_lists",
+        "security_approvals"
+      ],
+      "customer_prerequisites_before_implementation": [
+        "crm_admin_resources",
+        "business_owner",
+        "sample_calls",
+        "coaching_rubric",
+        "methodology_documentation",
+        "integration_field_mapping"
+      ],
+      "signoff_roles": [
+        "sales_leadership",
+        "revenue_ops",
+        "crm_admin",
+        "it_security"
+      ]
+    },
+    "generated": {
+      "requirements": [
+        {
+          "category": "functional",
+          "priority": "must",
+          "statement": "The platform must support the following core capabilities in scope: transcription, summaries, action items, call scoring, manager review workflows, search transcripts."
+        },
+        {
+          "category": "integration",
+          "priority": "must",
+          "statement": "CRM integration is required in phase 1, including support for relevant objects and data synchronization defined by the customer."
+        },
+        {
+          "category": "playbook_methodology",
+          "priority": "must",
+          "statement": "The platform must support the customer's selected sales methodology framework(s): MEDDPICS and custom internal methodology."
+        }
+      ],
+      "statementOfRequirements": {
+        "title": "Statement of Requirements",
+        "sections": {
+          "customerGoals": "Customer seeks stronger qualification consistency, better manager coaching, and improved forecast visibility.",
+          "scope": "Phase 1 includes enterprise AEs, sales managers, and Revenue Operations.",
+          "requiredCapabilities": "Required capabilities include transcription, summaries, action items, scoring, and manager review workflows.",
+          "playbookMethodology": "The platform must support MEDDPICS-aligned methodology tracking, scorecards, and partial team-specific variations.",
+          "crmIntegrations": "Salesforce integration is required in phase 1 with alignment to opportunity stages and methodology fields.",
+          "customerResponsibilities": "Customer must provide CRM admin resources, sample calls, methodology documentation, and field mappings prior to implementation."
+        }
+      },
+      "sectionScores": {
+        "businessObjectives": 76,
+        "scope": 63,
+        "currentState": 72,
+        "functionalRequirements": 84,
+        "customizations": 88,
+        "playbookMethodology": 81,
+        "integrations": 86,
+        "securityGovernance": 73,
+        "adoptionReadiness": 78,
+        "timelineDependencies": 85
+      },
+      "readinessDimensions": {
+        "businessClarity": 75,
+        "technicalReadiness": 84,
+        "crmReadiness": 82,
+        "methodologyReadiness": 80,
+        "operationalReadiness": 79
+      },
+      "overallReadiness": 80,
+      "status": "ready",
+      "recommendedAction": "Proceed to solution design and quote once Statement of Requirements is approved."
+    }
+  }
+}

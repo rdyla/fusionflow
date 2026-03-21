@@ -512,6 +512,17 @@ export type RoadmapItem = {
   created_at: string;
 };
 
+export type NeedsAssessment = {
+  id: string;
+  solution_id: string;
+  survey_id: string;
+  answers: Record<string, unknown>;
+  readiness_score: number | null;
+  readiness_status: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type UtilizationSnapshot = {
   id: string;
   project_id: string;
@@ -1101,5 +1112,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ asana_project_id: null, managed_in_asana: 0 }),
     }),
+
+  // ── Needs Assessments ────────────────────────────────────────────────────────
+  needsAssessment: (solutionId: string) =>
+    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`),
+  upsertNeedsAssessment: (solutionId: string, body: { answers: Record<string, unknown> }) =>
+    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteNeedsAssessment: (solutionId: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessment`, { method: "DELETE" }),
 
 };
