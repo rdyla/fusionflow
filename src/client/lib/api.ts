@@ -824,7 +824,7 @@ export const api = {
     email: string;
     name?: string;
     organization_name?: string;
-    role: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
+    role: "admin" | "executive" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
     dynamics_account_id?: string;
   }) =>
     request<User>("/admin/users", {
@@ -838,7 +838,7 @@ export const api = {
       email?: string;
       name?: string;
       organization_name?: string;
-      role?: "admin" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
+      role?: "admin" | "executive" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
       is_active?: number;
       dynamics_account_id?: string | null;
     }
