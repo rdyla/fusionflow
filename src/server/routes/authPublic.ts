@@ -137,13 +137,14 @@ app.get("/logout", async (c) => {
 // GET /api/auth/sso — redirect to Microsoft login (for internal PF staff)
 app.get("/sso", async (c) => {
   const tenantId = c.env.DYNAMICS_TENANT_ID;
-  const clientId = c.env.DYNAMICS_CLIENT_ID;
-  if (!tenantId || !clientId) {
+  const clientId = c.env.SSO_CLIENT_ID;
+  const clientSecret = c.env.SSO_CLIENT_SECRET;
+  if (!tenantId || !clientId || !clientSecret) {
     return c.redirect("/login?sso_error=not_configured");
   }
 
-  const origin = new URL(c.req.url).origin;
-  const redirectUri = `${origin}/api/auth/sso/callback`;
+  const appUrl = (c.env.APP_URL ?? "https://fusionflow360.com").replace(/\/$/, "");
+  const redirectUri = `${appUrl}/api/auth/sso/callback`;
 
   const state = crypto.randomUUID();
   await c.env.KV.put(`sso_state:${state}`, redirectUri, { expirationTtl: 300 });
@@ -175,8 +176,8 @@ app.get("/sso/callback", async (c) => {
   await c.env.KV.delete(`sso_state:${state}`);
 
   const params = new URLSearchParams({
-    client_id: c.env.DYNAMICS_CLIENT_ID ?? "",
-    client_secret: c.env.DYNAMICS_CLIENT_SECRET ?? "",
+    client_id: c.env.SSO_CLIENT_ID ?? "",
+    client_secret: c.env.SSO_CLIENT_SECRET ?? "",
     code,
     redirect_uri: redirectUri,
     grant_type: "authorization_code",

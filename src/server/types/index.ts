@@ -26,6 +26,9 @@ export type Bindings = {
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;
   DYNAMICS_CLIENT_SECRET?: string;
+  // SSO app registration (fusionflow-sso, separate from Dynamics)
+  SSO_CLIENT_ID?: string;
+  SSO_CLIENT_SECRET?: string;
   // Zoom org-level S2S OAuth (set via wrangler secret put)
   ZOOM_ORG_ACCOUNT_ID?: string;
   ZOOM_ORG_CLIENT_ID?: string;
