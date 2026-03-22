@@ -212,6 +212,9 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
   const warnings: string[] = [];
   if (analyticsRes.status === "rejected") {
     warnings.push(`Call analytics unavailable: ${analyticsRes.reason}`);
+  } else {
+    // TEMP DEBUG — remove once response shape is confirmed
+    warnings.push(`Analytics raw: ${JSON.stringify(analyticsRes.value)}`);
   }
 
   const ivrData = settled(ivrRes);
