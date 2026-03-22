@@ -48,8 +48,6 @@ function DurationTile({ label, totalSec, callCount }: { label: string; totalSec:
 
 function AnalyticsDashboard({ a }: { a: RCAnalytics }) {
   const answerRate = pct(a.answered, a.total_calls);
-  const slaDenom = a.queue_sla_in + a.queue_sla_out;
-  const slaRate = pct(a.queue_sla_in, slaDenom);
   const afterHoursPct = pct(a.after_hours, a.total_calls);
 
   return (
@@ -67,19 +65,13 @@ function AnalyticsDashboard({ a }: { a: RCAnalytics }) {
         </div>
       </div>
 
-      {/* Queue & After-Hours Health */}
+      {/* After-Hours & Abandoned */}
       <div className="ms-section-card">
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Queue &amp; After-Hours Health</div>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>After-Hours &amp; Abandonment</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          {slaDenom > 0
-            ? <PctTile label="Queue SLA %" value={slaRate} goodThreshold={80} warnThreshold={60} />
-            : <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Queue SLA %</div>
-                <div style={{ fontSize: 13, color: "#94a3b8" }}>No queue data</div>
-              </div>
-          }
           <MetricTile label="Abandoned Calls" value={a.abandoned} />
           <MetricTile label="After-Hours Calls" value={a.after_hours} />
+          <MetricTile label="Business Hours Calls" value={a.business_hours} />
           <PctTile label="After-Hours %" value={afterHoursPct} goodThreshold={101} warnThreshold={20} />
         </div>
       </div>
@@ -214,6 +206,55 @@ function StatusDashboard({ status, onDisconnect }: { status: RCStatus; onDisconn
           ))}
         </div>
       )}
+
+      {/* Licensing */}
+      <div className="ms-section-card">
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Licensing</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Service Plan</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#1e293b", lineHeight: 1.2 }}>{status.account?.service_plan ?? "—"}</div>
+          </div>
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Billing Plan</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: "#1e293b", lineHeight: 1.2 }}>{status.account?.billing_plan ?? "—"}</div>
+          </div>
+          {status.account?.included_lines != null && (
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px", gridColumn: "span 2" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Seat Utilization</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                <span style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{status.total_extensions ?? "—"}</span>
+                <span style={{ fontSize: 14, color: "#94a3b8" }}>/ {status.account.included_lines} included lines</span>
+                {status.total_extensions != null && (
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, marginLeft: 4,
+                    color: status.total_extensions >= status.account.included_lines * 0.9 ? "#16a34a"
+                      : status.total_extensions <= status.account.included_lines * 0.6 ? "#d97706" : "#475569"
+                  }}>
+                    ({Math.round((status.total_extensions / status.account.included_lines) * 100)}% utilized)
+                  </span>
+                )}
+              </div>
+              <div style={{ marginTop: 8, height: 6, background: "#e2e8f0", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 3,
+                  width: `${Math.min(100, Math.round(((status.total_extensions ?? 0) / status.account.included_lines) * 100))}%`,
+                  background: (status.total_extensions ?? 0) >= status.account.included_lines * 0.9 ? "#16a34a"
+                    : (status.total_extensions ?? 0) <= status.account.included_lines * 0.6 ? "#d97706" : "#3b82f6",
+                }} />
+              </div>
+            </div>
+          )}
+          {status.account?.account_since && (
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Customer Since</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#1e293b", lineHeight: 1.2 }}>
+                {new Date(status.account.account_since).toLocaleDateString("en-US", { month: "short", year: "numeric" })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Account Overview */}
       <div className="ms-section-card">

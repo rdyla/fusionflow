@@ -20,15 +20,22 @@ export type RCAnalytics = {
   inbound: number;
   outbound: number;
   total_duration_sec: number;
-  queue_sla_in: number;
-  queue_sla_out: number;
   abandoned: number;
   business_hours: number;
   after_hours: number;
 };
 
 export type RCStatus = {
-  account: { name: string; main_number: string | null; brand: string | null } | null;
+  account: {
+    name: string;
+    main_number: string | null;
+    brand: string | null;
+    service_plan: string | null;
+    billing_plan: string | null;
+    included_lines: number | null;
+    account_since: string | null;
+    status: string | null;
+  } | null;
   total_extensions: number | null;
   call_queues: number | null;
   ivr_menus: number | null;
@@ -113,7 +120,6 @@ type AnalyticsResponse = {
       callsByResponse?: AnalyticsCounter;
       callsByDirection?: AnalyticsCounter;
       callsByResult?: AnalyticsCounter;
-      callsByQueueSla?: AnalyticsCounter;
       callsByCompanyHours?: AnalyticsCounter;
     };
     timers?: {
@@ -137,8 +143,6 @@ function parseAnalytics(raw: AnalyticsResponse): RCAnalytics {
     inbound: findNamed(c?.callsByDirection?.values, "Inbound"),
     outbound: findNamed(c?.callsByDirection?.values, "Outbound"),
     total_duration_sec: t?.allCallsDuration?.values?.[0]?.value ?? 0,
-    queue_sla_in: findNamed(c?.callsByQueueSla?.values, "InSla"),
-    queue_sla_out: findNamed(c?.callsByQueueSla?.values, "OutSla"),
     abandoned: findNamed(c?.callsByResult?.values, "Abandoned"),
     business_hours: findNamed(c?.callsByCompanyHours?.values, "BusinessHours"),
     after_hours: findNamed(c?.callsByCompanyHours?.values, "AfterHours"),
@@ -172,7 +176,6 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
         callsByResponse: { aggregationType: "Sum" },
         callsByDirection: { aggregationType: "Sum" },
         callsByResult: { aggregationType: "Sum" },
-        callsByQueueSla: { aggregationType: "Sum" },
         callsByCompanyHours: { aggregationType: "Sum" },
       },
       timers: {
@@ -182,7 +185,17 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
   };
 
   const [accountRes, extensionsRes, queuesRes, ivrRes, devicesRes, analyticsRes] = await Promise.allSettled([
-    rcGet<{ name: string; mainNumber: string; serviceInfo: { brand: { name: string } } }>(token, "/account/~"),
+    rcGet<{
+      name: string;
+      mainNumber: string;
+      status: string;
+      serviceInfo: {
+        brand: { name: string };
+        servicePlan: { name: string };
+        billingPlan: { name: string; includedPhoneLines: number };
+      };
+      signupInfo: { creationTime: string };
+    }>(token, "/account/~"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?perPage=1"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?type=Department&perPage=1"),
     rcGet<{ paging?: { totalElements: number }; navigation?: { totalRecords: number } }>(token, "/account/~/ivr-menus?perPage=1"),
@@ -209,6 +222,11 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
       name: accountData.name,
       main_number: accountData.mainNumber ?? null,
       brand: accountData.serviceInfo?.brand?.name ?? null,
+      service_plan: accountData.serviceInfo?.servicePlan?.name ?? null,
+      billing_plan: accountData.serviceInfo?.billingPlan?.name ?? null,
+      included_lines: accountData.serviceInfo?.billingPlan?.includedPhoneLines ?? null,
+      account_since: accountData.signupInfo?.creationTime ?? null,
+      status: accountData.status ?? null,
     },
     total_extensions: settled(extensionsRes)?.paging?.totalElements ?? null,
     call_queues: settled(queuesRes)?.paging?.totalElements ?? null,
