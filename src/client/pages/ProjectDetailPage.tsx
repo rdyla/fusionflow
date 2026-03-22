@@ -948,7 +948,7 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* ── Asana Phase Progress ──────────────────────────────────────── */}
-          {project.managed_in_asana && asanaSectionSummaries.length > 0 && (
+          {!!project.managed_in_asana && asanaSectionSummaries.length > 0 && (
             <div className="ms-section-card">
               <div className="ms-section-title">Phase Progress</div>
               <div style={{ display: "grid", gap: 10 }}>
