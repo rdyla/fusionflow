@@ -111,41 +111,37 @@ async function rcPost<T>(token: string, path: string, body: unknown): Promise<T>
   return res.json() as Promise<T>;
 }
 
-type AnalyticsNamedValue = { name?: string; value?: number };
-type AnalyticsCounter = { values?: AnalyticsNamedValue[] };
 type AnalyticsResponse = {
-  data?: Array<{
-    counters?: {
-      allCalls?: AnalyticsCounter;
-      callsByResponse?: AnalyticsCounter;
-      callsByDirection?: AnalyticsCounter;
-      callsByResult?: AnalyticsCounter;
-      callsByCompanyHours?: AnalyticsCounter;
-    };
-    timers?: {
-      allCallsDuration?: AnalyticsCounter;
-    };
-  }>;
+  data?: {
+    records?: Array<{
+      counters?: {
+        allCalls?: { values?: number };
+        callsByDirection?: { values?: { inbound?: number; outbound?: number } };
+        callsByResponse?: { values?: { answered?: number; notAnswered?: number; connected?: number; notConnected?: number } };
+        callsByResult?: { values?: { abandoned?: number; voicemail?: number; missed?: number } };
+        callsByCompanyHours?: { values?: { businessHours?: number; afterHours?: number } };
+      };
+      timers?: {
+        allCalls?: { values?: number };
+      };
+    }>;
+  };
 };
 
-function findNamed(values: AnalyticsNamedValue[] | undefined, name: string): number {
-  return values?.find((v) => v.name === name)?.value ?? 0;
-}
-
 function parseAnalytics(raw: AnalyticsResponse): RCAnalytics {
-  const row = raw.data?.[0];
+  const row = raw.data?.records?.[0];
   const c = row?.counters;
   const t = row?.timers;
   return {
-    total_calls: c?.allCalls?.values?.[0]?.value ?? 0,
-    answered: findNamed(c?.callsByResponse?.values, "Answered"),
-    missed: findNamed(c?.callsByResponse?.values, "NotAnswered"),
-    inbound: findNamed(c?.callsByDirection?.values, "Inbound"),
-    outbound: findNamed(c?.callsByDirection?.values, "Outbound"),
-    total_duration_sec: t?.allCallsDuration?.values?.[0]?.value ?? 0,
-    abandoned: findNamed(c?.callsByResult?.values, "Abandoned"),
-    business_hours: findNamed(c?.callsByCompanyHours?.values, "BusinessHours"),
-    after_hours: findNamed(c?.callsByCompanyHours?.values, "AfterHours"),
+    total_calls: c?.allCalls?.values ?? 0,
+    answered: c?.callsByResponse?.values?.answered ?? 0,
+    missed: c?.callsByResponse?.values?.notAnswered ?? 0,
+    inbound: c?.callsByDirection?.values?.inbound ?? 0,
+    outbound: c?.callsByDirection?.values?.outbound ?? 0,
+    total_duration_sec: t?.allCalls?.values ?? 0,
+    abandoned: c?.callsByResult?.values?.abandoned ?? 0,
+    business_hours: c?.callsByCompanyHours?.values?.businessHours ?? 0,
+    after_hours: c?.callsByCompanyHours?.values?.afterHours ?? 0,
   };
 }
 
@@ -212,9 +208,6 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
   const warnings: string[] = [];
   if (analyticsRes.status === "rejected") {
     warnings.push(`Call analytics unavailable: ${analyticsRes.reason}`);
-  } else {
-    // TEMP DEBUG — remove once response shape is confirmed
-    warnings.push(`Analytics raw: ${JSON.stringify(analyticsRes.value)}`);
   }
 
   const ivrData = settled(ivrRes);
