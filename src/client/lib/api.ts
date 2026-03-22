@@ -364,6 +364,8 @@ export type Note = {
   id: string;
   project_id: string;
   author_user_id: string | null;
+  author_name: string | null;
+  author_org: string | null;
   body: string;
   visibility: string | null;
   created_at: string;

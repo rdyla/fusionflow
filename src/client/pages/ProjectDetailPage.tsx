@@ -539,11 +539,13 @@ export default function ProjectDetailPage() {
     setSavingNote(true);
     setNoteMessage(null);
     try {
-      const created = await api.createNote(project.id, { body: newNoteBody.trim(), visibility: newNoteVisibility });
+      // Partner AEs always post at partner visibility (server also enforces this)
+      const visibility = currentUserRole === "partner_ae" ? "partner" : newNoteVisibility;
+      const created = await api.createNote(project.id, { body: newNoteBody.trim(), visibility });
       setNotes((prev) => [created, ...prev]);
       setNewNoteBody("");
       setNewNoteVisibility("internal");
-      showToast("Note added.", "success");
+      showToast(currentUserRole === "partner_ae" ? "Comment posted." : "Note added.", "success");
     } catch (err) {
       setNoteMessage(err instanceof Error ? err.message : "Failed to add note");
     } finally {
@@ -1096,58 +1098,102 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Activity ──────────────────────────────────────────────────────── */}
-      {tab === "activity" && (
-        <div style={{ display: "grid", gap: 16 }}>
-          {canEdit && <div className="ms-section-card">
-            <div className="ms-section-title">Add Note</div>
-            <div style={{ display: "grid", gap: 12 }}>
-              <label className="ms-label">
-                <span>Visibility</span>
-                <select className="ms-input" value={newNoteVisibility} onChange={(e) => setNewNoteVisibility(e.target.value as "internal" | "partner" | "public")}>
-                  <option value="internal">Internal</option>
-                  <option value="partner">Partner</option>
-                  <option value="public">Public</option>
-                </select>
-              </label>
-              <label className="ms-label">
-                <span>Note</span>
-                <textarea
-                  className="ms-input"
-                  value={newNoteBody}
-                  onChange={(e) => setNewNoteBody(e.target.value)}
-                  rows={5}
-                  style={{ resize: "vertical", minHeight: 110 }}
-                  placeholder="Add a project update..."
-                />
-              </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                <button className="ms-btn-primary" onClick={handleAddNote} disabled={savingNote}>
-                  {savingNote ? "Saving..." : "Add Note"}
-                </button>
-                {noteMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{noteMessage}</span>}
-              </div>
-            </div>
-          </div>}
-
-          <div className="ms-section-card">
-            <div className="ms-section-title">Notes & Activity</div>
-            {notes.length === 0 ? (
-              <div style={{ color: "#a19f9d", fontSize: 14 }}>No notes recorded.</div>
-            ) : (
-              <div style={{ display: "grid", gap: 8 }}>
-                {notes.map((note) => (
-                  <div key={note.id} style={{ padding: 14, background: "rgba(0,0,0,0.02)", border: "1px solid rgba(0,0,0,0.07)", borderRadius: 2 }}>
-                    <div style={{ color: "#1e293b", marginBottom: 8, fontSize: 14 }}>{note.body}</div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Visibility: {note.visibility ?? "—"} · Author: {userName(note.author_user_id)} · {note.created_at}
-                    </div>
+      {tab === "activity" && (() => {
+        const isPartnerAe = currentUserRole === "partner_ae";
+        const isPfAe = currentUserRole === "pf_ae";
+        const canComment = canEdit || isPartnerAe || isPfAe;
+        return (
+          <div style={{ display: "grid", gap: 16 }}>
+            {canComment && (
+              <div className="ms-section-card">
+                <div className="ms-section-title">{isPartnerAe ? "Add Comment" : "Add Note"}</div>
+                <div style={{ display: "grid", gap: 12 }}>
+                  {!isPartnerAe && (
+                    <label className="ms-label">
+                      <span>Visibility</span>
+                      <select className="ms-input" value={newNoteVisibility} onChange={(e) => setNewNoteVisibility(e.target.value as "internal" | "partner" | "public")}>
+                        {!isPfAe && <option value="internal">Internal</option>}
+                        <option value="partner">Partner</option>
+                        {!isPfAe && <option value="public">Public</option>}
+                      </select>
+                    </label>
+                  )}
+                  <label className="ms-label">
+                    <span>{isPartnerAe ? "Comment" : "Note"}</span>
+                    <textarea
+                      className="ms-input"
+                      value={newNoteBody}
+                      onChange={(e) => setNewNoteBody(e.target.value)}
+                      rows={4}
+                      style={{ resize: "vertical", minHeight: 90 }}
+                      placeholder={isPartnerAe ? "Share an update with the project team..." : "Add a project update..."}
+                    />
+                  </label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <button className="ms-btn-primary" onClick={handleAddNote} disabled={savingNote}>
+                      {savingNote ? "Posting..." : isPartnerAe ? "Post Comment" : "Add Note"}
+                    </button>
+                    {noteMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{noteMessage}</span>}
                   </div>
-                ))}
+                </div>
               </div>
             )}
+
+            <div className="ms-section-card">
+              <div className="ms-section-title">Activity</div>
+              {notes.length === 0 ? (
+                <div style={{ color: "#a19f9d", fontSize: 14 }}>No activity yet.</div>
+              ) : (
+                <div style={{ display: "grid", gap: 12 }}>
+                  {notes.map((note) => {
+                    const initials = note.author_name
+                      ? note.author_name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase()
+                      : "?";
+                    const isPartner = note.author_org && note.author_org !== "Packet Fusion";
+                    const visibilityColor: Record<string, string> = { internal: "#94a3b8", partner: "#63c1ea", public: "#107c10" };
+                    return (
+                      <div key={note.id} style={{ display: "flex", gap: 12 }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: "50%", flexShrink: 0, display: "flex",
+                          alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700,
+                          background: isPartner ? "linear-gradient(135deg, rgba(16,124,16,0.25), rgba(16,124,16,0.1))" : "linear-gradient(135deg, rgba(0,120,212,0.25), rgba(99,193,234,0.15))",
+                          border: isPartner ? "1px solid rgba(16,124,16,0.25)" : "1px solid rgba(99,193,234,0.25)",
+                          color: isPartner ? "#107c10" : "#63c1ea",
+                        }}>
+                          {initials}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+                            <span style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>
+                              {note.author_name ?? "Unknown"}
+                            </span>
+                            {note.author_org && (
+                              <span style={{ fontSize: 11, color: "#94a3b8" }}>{note.author_org}</span>
+                            )}
+                            <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: "auto" }}>
+                              {formatDate(note.created_at)}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 13, color: "#334155", lineHeight: 1.55, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                            {note.body}
+                          </div>
+                          {canEdit && note.visibility && (
+                            <div style={{ marginTop: 6 }}>
+                              <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: visibilityColor[note.visibility] ?? "#94a3b8" }}>
+                                {note.visibility}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Zoom ──────────────────────────────────────────────────────────── */}
       {tab === "zoom" && (() => {
