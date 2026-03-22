@@ -137,6 +137,9 @@ export default function ProjectDetailPage() {
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
+  const [showPartnerModal, setShowPartnerModal] = useState(false);
+  const [addPartnerUserId, setAddPartnerUserId] = useState("");
+  const [addingPartner, setAddingPartner] = useState(false);
 
   // Asana section summaries (loaded for managed_in_asana projects)
   const [asanaSectionSummaries, setAsanaSectionSummaries] = useState<AsanaSectionSummary[]>([]);
@@ -282,6 +285,33 @@ export default function ProjectDetailPage() {
       showToast("Staff member removed.", "success");
     } catch {
       showToast("Failed to remove staff member", "error");
+    }
+  }
+
+  async function handleAddPartner() {
+    if (!addPartnerUserId || !project) return;
+    setAddingPartner(true);
+    try {
+      const added = await api.addProjectStaff(project.id, { user_id: addPartnerUserId, staff_role: "partner_ae" });
+      setProjectStaff((prev) => [...prev, added]);
+      setAddPartnerUserId("");
+      setShowPartnerModal(false);
+      showToast("Partner AE added.", "success");
+    } catch {
+      showToast("Failed to add partner AE", "error");
+    } finally {
+      setAddingPartner(false);
+    }
+  }
+
+  async function handleRemovePartner(staffId: string) {
+    if (!project) return;
+    try {
+      await api.removeProjectStaff(project.id, staffId);
+      setProjectStaff((prev) => prev.filter((s) => s.id !== staffId));
+      showToast("Partner AE removed.", "success");
+    } catch {
+      showToast("Failed to remove partner AE", "error");
     }
   }
 
@@ -635,10 +665,10 @@ export default function ProjectDetailPage() {
                   </div>
                 );
               })()}
-              {/* Additional staff */}
-              {projectStaff.map((s) => {
+              {/* Additional PF staff (excludes partner AEs — shown in their own section below) */}
+              {projectStaff.filter(s => s.staff_role !== "partner_ae").map((s) => {
                 const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const roleLabel: Record<string, string> = { ae: "Account Executive", partner_ae: "Partner AE", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer", pm: "Project Manager" };
+                const roleLabel: Record<string, string> = { ae: "Account Executive", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer", pm: "Project Manager" };
                 const photo = staffPhotoMap[s.email] ?? s.avatar_url;
                 return (
                   <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)", position: "relative" }}>
@@ -657,7 +687,7 @@ export default function ProjectDetailPage() {
                   </div>
                 );
               })}
-              {projectStaff.length === 0 && !project.pm_user_id && (
+              {projectStaff.filter(s => s.staff_role !== "partner_ae").length === 0 && !project.pm_user_id && (
                 <div style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic", gridColumn: "1 / -1" }}>No staff assigned.</div>
               )}
             </div>
@@ -669,6 +699,50 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {/* ── Partner AE Access ────────────────────────────────────────────── */}
+          {(() => {
+            const partnerStaff = projectStaff.filter(s => s.staff_role === "partner_ae");
+            const assignablePartners = users.filter(u => u.role === "partner_ae" && !partnerStaff.some(s => s.user_id === u.id));
+            if (!canEdit && partnerStaff.length === 0) return null;
+            return (
+              <div className="ms-section-card">
+                <div className="ms-section-title">Partner Access</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: partnerStaff.length > 0 ? 14 : 0 }}>
+                  {partnerStaff.map((s) => {
+                    const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
+                    const photo = staffPhotoMap[s.email] ?? s.avatar_url;
+                    return (
+                      <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)", position: "relative" }}>
+                        {photo
+                          ? <img src={photo} alt={s.name ?? s.email} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                          : <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(16,124,16,0.25), rgba(16,124,16,0.1))", border: "1px solid rgba(16,124,16,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#107c10" }}>{abbr}</div>
+                        }
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 2 }}>{s.organization_name ?? "Partner AE"}</div>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name ?? s.email}</div>
+                          <a href={`mailto:${s.email}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{s.email}</a>
+                        </div>
+                        {canEdit && (
+                          <button onClick={() => handleRemovePartner(s.id)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {partnerStaff.length === 0 && (
+                    <div style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic", gridColumn: "1 / -1" }}>No partner AEs assigned.</div>
+                  )}
+                </div>
+                {canEdit && (
+                  <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
+                    <button className="ms-btn-secondary" onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>
+                      + Add Partner AE
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {canEdit && <div className="ms-section-card">
             <div className="ms-section-title">Asana Integration</div>
@@ -1501,7 +1575,6 @@ export default function ProjectDetailPage() {
                 <select className="ms-input" value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
                   <option value="">— Select role —</option>
                   <option value="ae">Account Executive</option>
-                  <option value="partner_ae">Partner AE</option>
                   <option value="sa">Solution Architect</option>
                   <option value="csm">Client Success Manager</option>
                   <option value="engineer">Implementation Engineer</option>
@@ -1527,6 +1600,38 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Add Partner AE Modal ─────────────────────────────────────────── */}
+      {showPartnerModal && (() => {
+        const assignablePartners = users.filter(u => u.role === "partner_ae" && !projectStaff.some(s => s.staff_role === "partner_ae" && s.user_id === u.id));
+        return (
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowPartnerModal(false); }}>
+            <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Add Partner AE</h2>
+                <button onClick={() => setShowPartnerModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+              </div>
+              <div style={{ padding: "20px 24px" }}>
+                <label className="ms-label">
+                  <span>Partner AE</span>
+                  <select className="ms-input" value={addPartnerUserId} onChange={(e) => setAddPartnerUserId(e.target.value)}>
+                    <option value="">— Select partner AE —</option>
+                    {assignablePartners.map((u) => (
+                      <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+                <button className="ms-btn-primary" disabled={!addPartnerUserId || addingPartner} onClick={handleAddPartner}>
+                  {addingPartner ? "Adding…" : "Add Partner AE"}
+                </button>
+                <button className="ms-btn-secondary" onClick={() => setShowPartnerModal(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Add Contact Modal ──────────────────────────────────────────────── */}
       {showContactModal && (

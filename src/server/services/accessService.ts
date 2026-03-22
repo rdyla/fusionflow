@@ -59,7 +59,12 @@ export async function canViewProject(
       .prepare(`SELECT id FROM project_access WHERE project_id = ? AND user_id IN (${ph}) LIMIT 1`)
       .bind(projectId, ...teamIds)
       .first();
-    return !!explicitAccess;
+    if (explicitAccess) return true;
+    const staffAccess = await db
+      .prepare(`SELECT id FROM project_staff WHERE project_id = ? AND staff_role = 'partner_ae' AND user_id IN (${ph}) LIMIT 1`)
+      .bind(projectId, ...teamIds)
+      .first();
+    return !!staffAccess;
   }
 
   // pm and any other roles: check explicit project_access for the user only

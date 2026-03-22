@@ -24,8 +24,13 @@ app.get("/summary", async (c) => {
     filterBindings = teamIds;
   } else if (auth.role === "partner_ae") {
     teamIds = await getTeamUserIds(auth.user.id, db);
-    projectFilter = `WHERE id IN (SELECT project_id FROM project_access WHERE user_id IN (${inPlaceholders(teamIds)}))`;
-    filterBindings = teamIds;
+    const ph = inPlaceholders(teamIds);
+    projectFilter = `WHERE id IN (
+      SELECT project_id FROM project_access WHERE user_id IN (${ph})
+      UNION
+      SELECT project_id FROM project_staff WHERE staff_role = 'partner_ae' AND user_id IN (${ph})
+    )`;
+    filterBindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) {
       return c.json({ user: auth.user, summary: { activeProjects: 0, atRiskProjects: 0, openTasks: 0, openRisks: 0 }, projects: [], openTasks: [], openRisks: [], phaseDistribution: [], vendorDistribution: [], typeDistribution: [] });

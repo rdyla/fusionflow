@@ -421,6 +421,7 @@ export type ProjectStaffMember = {
   email: string;
   role: string;
   avatar_url: string | null;
+  organization_name: string | null;
   created_at: string;
 };
 

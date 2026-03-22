@@ -32,8 +32,13 @@ app.get("/", async (c) => {
     bindings = teamIds;
   } else if (auth.role === "partner_ae") {
     const teamIds = await getTeamUserIds(auth.user.id, db);
-    sql += ` AND id IN (SELECT project_id FROM project_access WHERE user_id IN (${inPlaceholders(teamIds)}))`;
-    bindings = teamIds;
+    const ph = inPlaceholders(teamIds);
+    sql += ` AND id IN (
+      SELECT project_id FROM project_access WHERE user_id IN (${ph})
+      UNION
+      SELECT project_id FROM project_staff WHERE staff_role = 'partner_ae' AND user_id IN (${ph})
+    )`;
+    bindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) return c.json([]);
     sql += " AND dynamics_account_id = ?";
@@ -292,7 +297,7 @@ app.get("/:id/staff", async (c) => {
 
   const rows = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url
+           u.name, u.email, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps
     JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ?
@@ -317,7 +322,7 @@ app.post("/:id/staff", async (c) => {
 
   const created = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url
+           u.name, u.email, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
   `).bind(projectId, user_id, staff_role).first();
