@@ -198,7 +198,7 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
         callsByCompanyHours: { aggregationType: "Sum" },
       },
       timers: {
-        allCalls: { aggregationType: "Sum" },
+        allCallsDuration: { aggregationType: "Sum" },
       },
     },
   };
