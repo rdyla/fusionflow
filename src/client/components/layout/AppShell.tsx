@@ -78,7 +78,6 @@ export default function AppShell() {
             <SideLink to="/admin/optimize" onClick={() => setDrawerOpen(false)}>Optimize</SideLink>
             <SideLink to="/admin/labor" onClick={() => setDrawerOpen(false)}>Labor Config</SideLink>
             <SideLink to="/admin/users" onClick={() => setDrawerOpen(false)}>Users</SideLink>
-            <SideLink to="/admin/access" onClick={() => setDrawerOpen(false)}>Access</SideLink>
           </>
         )}
       </nav>
