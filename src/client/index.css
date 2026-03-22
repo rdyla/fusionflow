@@ -19,9 +19,9 @@
     font-family: inherit;
   }
 
-  /* Force light theme on all selects — prevents OS dark mode from making
-     dropdown option text invisible on light backgrounds */
-  select {
+  /* Force light theme on all form inputs — Tailwind v4 preflight resets
+     background to initial which lets OS dark mode bleed through */
+  input, textarea, select {
     background-color: #ffffff;
     color: #1e293b;
   }
