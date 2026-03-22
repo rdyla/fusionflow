@@ -156,6 +156,14 @@ export default function ProjectDetailPage() {
   const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
+
+  // Apply template
+  const [templateList, setTemplateList] = useState<{ id: string; name: string; phase_count?: number; task_count?: number }[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number } | null>(null);
+
   const { showToast } = useToast();
 
   const groupedTasks = useMemo(
@@ -220,6 +228,11 @@ export default function ProjectDetailPage() {
     load();
   }, [id]);
 
+  // Load template list for apply-template panel (admin/pm only — if it fails we just hide the section)
+  useEffect(() => {
+    api.adminTemplates().then(setTemplateList).catch(() => {});
+  }, []);
+
   // Must be before early returns — hooks must always run in the same order
   useEffect(() => {
     if (!editingTask || !project) {
@@ -275,6 +288,26 @@ export default function ProjectDetailPage() {
       showToast(message, "error");
     } finally {
       setSavingProject(false);
+    }
+  }
+
+  async function handleApplyTemplate() {
+    if (!project || !selectedTemplateId) return;
+    setApplyingTemplate(true);
+    try {
+      const result = await api.applyTemplate(project.id, selectedTemplateId);
+      setApplyResult(result);
+      setShowApplyConfirm(false);
+      // Reload phases and tasks
+      const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
+      setPhases(newPhases);
+      setTasks(newTasks);
+      showToast(`Template applied: ${result.phases_created} phases, ${result.tasks_created} tasks added.`, "success");
+      setSelectedTemplateId("");
+    } catch {
+      showToast("Failed to apply template", "error");
+    } finally {
+      setApplyingTemplate(false);
     }
   }
 
@@ -877,6 +910,37 @@ export default function ProjectDetailPage() {
               </button>
               {saveMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{saveMessage}</span>}
             </div>
+
+            {templateList.length > 0 && (
+              <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid #f1f5f9" }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 10 }}>Apply Template</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <select
+                    className="ms-input"
+                    style={{ flex: 1 }}
+                    value={selectedTemplateId}
+                    onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}
+                  >
+                    <option value="">— Select a template —</option>
+                    {templateList.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                  <button
+                    className="ms-btn-secondary"
+                    disabled={!selectedTemplateId || applyingTemplate}
+                    onClick={() => setShowApplyConfirm(true)}
+                  >
+                    Apply
+                  </button>
+                </div>
+                {applyResult && (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#059669" }}>
+                    Applied: {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added.
+                  </div>
+                )}
+              </div>
+            )}
           </div>}
 
           {/* ── Customer Contacts ─────────────────────────────────────────── */}
@@ -1884,6 +1948,33 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* Apply Template Confirm */}
+      {showApplyConfirm && selectedTemplateId && (() => {
+        const tmpl = templateList.find((t) => t.id === selectedTemplateId);
+        return (
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowApplyConfirm(false); }}>
+            <div className="ms-modal" style={{ maxWidth: 440 }}>
+              <h2>Apply Template</h2>
+              <p style={{ color: "#475569", margin: "12px 0 20px" }}>
+                This will add <strong>{tmpl?.phase_count ?? "?"} phases</strong> and{" "}
+                <strong>{tmpl?.task_count ?? "?"} tasks</strong> from{" "}
+                <strong style={{ color: "#1e293b" }}>{tmpl?.name}</strong> to this project. Continue?
+              </p>
+              <div style={{ display: "flex", gap: 10 }}>
+                <button
+                  className="ms-btn-primary"
+                  disabled={applyingTemplate}
+                  onClick={handleApplyTemplate}
+                >
+                  {applyingTemplate ? "Applying..." : "Apply Template"}
+                </button>
+                <button className="ms-btn-secondary" onClick={() => setShowApplyConfirm(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

@@ -10,6 +10,7 @@ import AdminProjectsPage from "../pages/AdminProjectsPage";
 import AdminSolutionsPage from "../pages/AdminSolutionsPage";
 import AdminOptimizePage from "../pages/AdminOptimizePage";
 import AdminLaborPage from "../pages/AdminLaborPage";
+import AdminTemplatesPage from "../pages/AdminTemplatesPage";
 import SolutionsPage from "../pages/SolutionsPage";
 import SolutionDetailPage from "../pages/SolutionDetailPage";
 import OptimizePage from "../pages/OptimizePage";
@@ -42,6 +43,7 @@ export default function Router() {
           <Route path="/admin/solutions" element={<AdminSolutionsPage />} />
           <Route path="/admin/optimize" element={<AdminOptimizePage />} />
           <Route path="/admin/labor" element={<AdminLaborPage />} />
+          <Route path="/admin/templates" element={<AdminTemplatesPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

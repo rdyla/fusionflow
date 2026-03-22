@@ -588,6 +588,37 @@ export type UtilizationSnapshot = {
 };
 
 
+// ── Template types ────────────────────────────────────────────────────────────
+
+export type TemplateTask = {
+  id: string;
+  template_id: string;
+  phase_id: string | null;
+  title: string;
+  priority: string | null;
+  order_index: number;
+};
+
+export type TemplatePhase = {
+  id: string;
+  template_id: string;
+  name: string;
+  order_index: number;
+  tasks: TemplateTask[];
+};
+
+export type Template = {
+  id: string;
+  name: string;
+  solution_type: string | null;
+  description: string | null;
+  phase_count?: number;
+  task_count?: number;
+  phases?: TemplatePhase[];
+  created_at: string;
+  updated_at: string;
+};
+
 export const api = {
   me: () => request<MeResponse>("/me"),
   systemStatus: () => request<SystemStatusResponse>("/status"),
@@ -1204,5 +1235,28 @@ export const api = {
     }),
   deleteNeedsAssessment: (solutionId: string) =>
     request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessment`, { method: "DELETE" }),
+
+  // ── Templates ────────────────────────────────────────────────────────────────
+  adminTemplates: () => request<Template[]>("/admin/templates"),
+  adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
+  adminCreateTemplate: (payload: { name: string; solution_type?: string; description?: string }) =>
+    request<Template>("/admin/templates", { method: "POST", body: JSON.stringify(payload) }),
+  adminUpdateTemplate: (id: string, payload: { name?: string; solution_type?: string; description?: string }) =>
+    request<Template>(`/admin/templates/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  adminDeleteTemplate: (id: string) =>
+    request<{ success: boolean }>(`/admin/templates/${id}`, { method: "DELETE" }),
+  adminAddTemplatePhase: (templateId: string, payload: { name: string; order_index: number }) =>
+    request<TemplatePhase>(`/admin/templates/${templateId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
+  adminDeleteTemplatePhase: (templateId: string, phaseId: string) =>
+    request<{ success: boolean }>(`/admin/templates/${templateId}/phases/${phaseId}`, { method: "DELETE" }),
+  adminAddTemplateTask: (templateId: string, payload: { title: string; priority?: string; phase_id?: string; order_index?: number }) =>
+    request<TemplateTask>(`/admin/templates/${templateId}/tasks`, { method: "POST", body: JSON.stringify(payload) }),
+  adminDeleteTemplateTask: (templateId: string, taskId: string) =>
+    request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
+  applyTemplate: (projectId: string, templateId: string) =>
+    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-template`, {
+      method: "POST",
+      body: JSON.stringify({ template_id: templateId }),
+    }),
 
 };

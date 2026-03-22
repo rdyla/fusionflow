@@ -22,6 +22,7 @@ import statusRoutes from "./routes/status";
 import staffRoutes from "./routes/staff";
 import optimizeRoutes from "./routes/optimize";
 import asanaRoutes from "./routes/asana";
+import templateRoutes from "./routes/templates";
 import authPublicRoutes from "./routes/authPublic";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder, milestoneOverdue } from "./lib/emailTemplates";
@@ -105,6 +106,8 @@ app.route("/api", statusRoutes);
 app.route("/api/staff", staffRoutes);
 app.route("/api/optimize", optimizeRoutes);
 app.route("/api/asana", asanaRoutes);
+app.route("/api/admin", templateRoutes);
+app.route("/api/projects", templateRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means
