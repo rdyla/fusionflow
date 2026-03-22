@@ -184,35 +184,36 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
     },
   };
 
-  const [accountRes, extensionsRes, queuesRes, ivrRes, devicesRes, analyticsRes] = await Promise.allSettled([
-    rcGet<{
-      name: string;
-      mainNumber: string;
-      status: string;
-      serviceInfo: {
-        brand: { name: string };
-        servicePlan: { name: string };
-        billingPlan: { name: string; includedPhoneLines: number };
-      };
-      signupInfo: { creationTime: string };
-    }>(token, "/account/~"),
+  // Fetch account first — we need the numeric account ID for the analytics endpoint
+  // (the analytics API does not reliably support the ~ wildcard)
+  const accountData = await rcGet<{
+    id: number;
+    name: string;
+    mainNumber: string;
+    status: string;
+    serviceInfo: {
+      brand: { name: string };
+      servicePlan: { name: string };
+      billingPlan: { name: string; includedPhoneLines: number };
+    };
+    signupInfo: { creationTime: string };
+  }>(token, "/account/~");
+
+  const accountId = String(accountData.id);
+
+  const [extensionsRes, queuesRes, ivrRes, devicesRes, analyticsRes] = await Promise.allSettled([
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?perPage=1"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?type=Department&perPage=1"),
     rcGet<{ paging?: { totalElements: number }; navigation?: { totalRecords: number } }>(token, "/account/~/ivr-menus?perPage=1"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/device?perPage=1"),
-    rcPost<AnalyticsResponse>(token, "/analytics/calls/v1/accounts/~/aggregation/fetch", analyticsBody),
+    rcPost<AnalyticsResponse>(token, `/analytics/calls/v1/accounts/${accountId}/aggregation/fetch`, analyticsBody),
   ]);
-
-  if (accountRes.status === "rejected") {
-    throw new Error(`RingCentral account lookup failed: ${accountRes.reason}`);
-  }
 
   const warnings: string[] = [];
   if (analyticsRes.status === "rejected") {
     warnings.push(`Call analytics unavailable: ${analyticsRes.reason}`);
   }
 
-  const accountData = accountRes.value;
   const ivrData = settled(ivrRes);
   const ivrTotal = ivrData?.paging?.totalElements ?? ivrData?.navigation?.totalRecords ?? null;
   const analyticsData = settled(analyticsRes);
