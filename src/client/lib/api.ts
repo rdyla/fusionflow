@@ -863,6 +863,9 @@ export const api = {
   adminDeleteProject: (id: string) =>
     request<{ success: boolean }>(`/admin/projects/${id}`, { method: "DELETE" }),
 
+  adminRunHealthScoring: () =>
+    request<{ scored: number }>("/admin/run-health-scoring", { method: "POST" }),
+
   adminUsers: () => request<User[]>("/admin/users"),
 
   adminDeleteUser: (id: string) =>

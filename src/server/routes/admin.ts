@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
+import { computeProjectHealth } from "../lib/healthScore";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -388,6 +389,32 @@ app.delete("/labor-config/:category", async (c) => {
   }
   await db.prepare("DELETE FROM labor_config WHERE category = ?").bind(category).run();
   return c.json({ ok: true });
+});
+
+// ── Health Scoring ────────────────────────────────────────────────────────────
+
+app.post("/run-health-scoring", async (c) => {
+  const db = c.env.DB;
+
+  const rows = await db
+    .prepare(
+      `SELECT id, target_go_live_date, updated_at FROM projects
+       WHERE (archived = 0 OR archived IS NULL) AND health_override IS NULL`
+    )
+    .all<{ id: string; target_go_live_date: string | null; updated_at: string | null }>();
+
+  let scored = 0;
+  for (const project of rows.results ?? []) {
+    try {
+      const health = await computeProjectHealth(db, project.id, project);
+      await db.prepare("UPDATE projects SET health = ? WHERE id = ?").bind(health, project.id).run();
+      scored++;
+    } catch {
+      // skip
+    }
+  }
+
+  return c.json({ scored });
 });
 
 export default app;

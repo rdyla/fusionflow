@@ -5,6 +5,7 @@ import { useToast } from "../components/ui/ToastProvider";
 export default function AdminProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scoring, setScoring] = useState(false);
   const { showToast } = useToast();
 
   useEffect(() => { loadProjects(); }, []);
@@ -31,6 +32,19 @@ export default function AdminProjectsPage() {
     }
   }
 
+  async function handleRunHealthScoring() {
+    setScoring(true);
+    try {
+      const result = await api.adminRunHealthScoring();
+      await loadProjects();
+      showToast(`Health scored for ${result.scored} project${result.scored !== 1 ? "s" : ""}.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Health scoring failed", "error");
+    } finally {
+      setScoring(false);
+    }
+  }
+
   async function handleDelete(project: Project) {
     if (!window.confirm(`Permanently delete "${project.name}"? This cannot be undone.`)) return;
     try {
@@ -51,9 +65,19 @@ export default function AdminProjectsPage() {
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       <div className="ms-page-header">
         <h1 className="ms-page-title">Projects</h1>
-        <span style={{ fontSize: 12, color: "#94a3b8" }}>
-          {active.length} active · {archived.length} archived
-        </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>
+            {active.length} active · {archived.length} archived
+          </span>
+          <button
+            className="ms-btn-secondary"
+            onClick={handleRunHealthScoring}
+            disabled={scoring}
+            style={{ fontSize: 12 }}
+          >
+            {scoring ? "Scoring…" : "⚡ Run Health Scoring"}
+          </button>
+        </div>
       </div>
 
       <ProjectTable projects={active} onToggleArchive={toggleArchive} onDelete={handleDelete} />
