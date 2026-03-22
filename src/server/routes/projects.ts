@@ -4,7 +4,6 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject, canViewProject } from "../services/accessService";
-import { STANDARD_PHASES } from "../lib/standardPhases";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { sendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
@@ -127,16 +126,6 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     )
     .bind(projectId, name, customer_name ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null)
     .run();
-
-  // Auto-seed standard phases
-  for (let i = 0; i < STANDARD_PHASES.length; i++) {
-    await db
-      .prepare(
-        `INSERT INTO phases (id, project_id, name, sort_order, status) VALUES (?, ?, ?, ?, 'not_started')`
-      )
-      .bind(crypto.randomUUID(), projectId, STANDARD_PHASES[i], i + 1)
-      .run();
-  }
 
   const created = await db
     .prepare(
