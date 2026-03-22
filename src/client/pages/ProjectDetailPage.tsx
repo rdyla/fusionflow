@@ -23,9 +23,10 @@ import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import AsanaProjectView from "../components/asana/AsanaProjectView";
+import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "activity" | "zoom" | "asana";
+type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "asana";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -686,9 +687,10 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const managedInAsana = !!project.managed_in_asana;
+        const hasCrm = !!project.dynamics_account_id;
         const visibleTabs: DetailTab[] = managedInAsana
-          ? ["overview", "asana", "documents", "activity", "zoom"]
-          : ["overview", "timeline", "tasks", "risks", "milestones", "documents", "activity", "zoom"];
+          ? ["overview", "asana", "documents", ...(hasCrm ? ["sharepoint" as const] : []), "activity", "zoom"]
+          : ["overview", "timeline", "tasks", "risks", "milestones", "documents", ...(hasCrm ? ["sharepoint" as const] : []), "activity", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -697,7 +699,7 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "asana" ? "Asana" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "asana" ? "Asana" : t === "sharepoint" ? "SharePoint" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -1197,6 +1199,11 @@ export default function ProjectDetailPage() {
           tasks={tasks}
           onDocumentsChange={setDocuments}
         />
+      )}
+
+      {/* ── SharePoint ────────────────────────────────────────────────────── */}
+      {tab === "sharepoint" && project.dynamics_account_id && (
+        <SharePointDocs recordId={project.dynamics_account_id} />
       )}
 
       {/* ── Activity ──────────────────────────────────────────────────────── */}

@@ -23,6 +23,7 @@ import staffRoutes from "./routes/staff";
 import optimizeRoutes from "./routes/optimize";
 import asanaRoutes from "./routes/asana";
 import templateRoutes from "./routes/templates";
+import sharepointRoutes from "./routes/sharepoint";
 import authPublicRoutes from "./routes/authPublic";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder, milestoneOverdue } from "./lib/emailTemplates";
@@ -106,6 +107,7 @@ app.route("/api", statusRoutes);
 app.route("/api/staff", staffRoutes);
 app.route("/api/optimize", optimizeRoutes);
 app.route("/api/asana", asanaRoutes);
+app.route("/api/sharepoint", sharepointRoutes);
 app.route("/api/admin", templateRoutes);
 app.route("/api/projects", templateRoutes);
 

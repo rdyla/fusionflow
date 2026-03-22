@@ -104,6 +104,23 @@ export type Solution = {
 export type DashboardTask = Task & { project_name: string };
 export type DashboardRisk = Risk & { project_name: string };
 
+export type SPLocation = {
+  id: string;
+  name: string;
+  absoluteUrl: string;
+};
+
+export type SPFile = {
+  id: string;
+  name: string;
+  size: number | null;
+  lastModified: string | null;
+  webUrl: string;
+  downloadUrl: string | null;
+  isFolder: boolean;
+  mimeType: string | null;
+};
+
 export type DashboardSummaryResponse = {
   user: User;
   summary: {
@@ -940,6 +957,26 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/ringcentral/credentials`, { method: "PUT", body: JSON.stringify(creds) }),
   rcDeleteCredentials: (projectId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/ringcentral/credentials`, { method: "DELETE" }),
+
+  // SharePoint
+  spLocations: (recordId: string) =>
+    request<{ locations: SPLocation[] }>(`/sharepoint/locations?recordId=${encodeURIComponent(recordId)}`),
+  spFiles: (folderUrl: string) =>
+    request<{ files: SPFile[] }>(`/sharepoint/files?url=${encodeURIComponent(folderUrl)}`),
+  spUpload: async (folderUrl: string, file: File): Promise<{ file: SPFile }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/sharepoint/upload?url=${encodeURIComponent(folderUrl)}`, {
+      method: "POST",
+      headers: { ...getImpersonationHeaders() },
+      body: form,
+    });
+    if (res.status === 401) { window.location.href = "/login"; throw new Error("Unauthorized"); }
+    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    return res.json();
+  },
+  spDelete: (webUrl: string) =>
+    request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
 
   // Admin
   adminProjects: () => request<Project[]>("/admin/projects"),

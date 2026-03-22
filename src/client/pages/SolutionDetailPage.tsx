@@ -5,6 +5,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
+import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
 import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
@@ -404,7 +405,7 @@ function parseJSON(raw: string | null): Record<string, string> {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "assessment" | "scope" | "handoff" | "labor";
+type Tab = "overview" | "assessment" | "scope" | "handoff" | "labor" | "sharepoint";
 
 export default function SolutionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -571,11 +572,12 @@ export default function SolutionDetailPage() {
   const isTerminal = solution.status === "won" || solution.status === "lost";
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "overview",   label: "Overview"         },
-    { key: "assessment", label: "Needs Assessment" },
-    { key: "scope",      label: "Scope of Work"    },
-    { key: "handoff",    label: "Handoff"          },
-    { key: "labor",      label: "Labor Estimate"   },
+    { key: "overview",    label: "Overview"         },
+    { key: "assessment",  label: "Needs Assessment" },
+    { key: "scope",       label: "Scope of Work"    },
+    { key: "handoff",     label: "Handoff"          },
+    { key: "labor",       label: "Labor Estimate"   },
+    ...(solution?.dynamics_account_id ? [{ key: "sharepoint" as const, label: "SharePoint" }] : []),
   ];
 
   return (
@@ -1269,6 +1271,10 @@ export default function SolutionDetailPage() {
         />
       )}
 
+      {/* ── SharePoint Tab ── */}
+      {tab === "sharepoint" && solution.dynamics_account_id && (
+        <SharePointDocs recordId={solution.dynamics_account_id} />
+      )}
 
     </div>
   );
