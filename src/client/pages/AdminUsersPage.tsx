@@ -220,7 +220,7 @@ export default function AdminUsersPage() {
                       ⋮
                     </button>
                     {openMenu?.id === user.id && (
-                      <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#142236", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.45)" }}>
+                      <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
                         <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
                         <MenuItem
                           onClick={() => { toggleActive(user); setOpenMenu(null); }}
