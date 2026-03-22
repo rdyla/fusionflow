@@ -33,6 +33,11 @@ export type ZoomStatus = {
   devices: ZoomDevice[];
   devices_total: number;
   warnings: string[];
+  phone_users_total: number | null;
+  call_queues_total: number | null;
+  auto_receptionists_total: number | null;
+  cc_users_total: number | null;
+  cc_queues_total: number | null;
 };
 
 function credsKey(projectId: string) { return `zoom:creds:${projectId}`; }
@@ -355,11 +360,26 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
 
   const token = await getToken(kv, creds, projectId);
 
-  const [accountRes, plansRes, usersRes, devicesRes] = await Promise.allSettled([
+  const [
+    accountRes,
+    plansRes,
+    usersRes,
+    devicesRes,
+    phoneUsersRes,
+    callQueuesRes,
+    autoReceptionistsRes,
+    ccUsersRes,
+    ccQueuesRes,
+  ] = await Promise.allSettled([
     zoomGet<{ id: string; account_name: string; account_type: number }>(token, "/accounts/me"),
     zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
     zoomGet<{ total_records: number }>(token, "/users?page_size=1"),
     zoomGet<{ devices?: ZoomDevice[]; total_records: number }>(token, "/phone/devices?page_size=100"),
+    zoomGet<{ total_records: number }>(token, "/phone/users?page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/phone/call_queues?page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/phone/auto_receptionists?page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/contact_center/users?page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/contact_center/queues?page_size=1"),
   ]);
 
   if (accountRes.status === "rejected") {
@@ -390,5 +410,10 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     devices: devicesData?.devices ?? [],
     devices_total: devicesData?.total_records ?? 0,
     warnings,
+    phone_users_total: settled(phoneUsersRes)?.total_records ?? null,
+    call_queues_total: settled(callQueuesRes)?.total_records ?? null,
+    auto_receptionists_total: settled(autoReceptionistsRes)?.total_records ?? null,
+    cc_users_total: settled(ccUsersRes)?.total_records ?? null,
+    cc_queues_total: settled(ccQueuesRes)?.total_records ?? null,
   };
 }

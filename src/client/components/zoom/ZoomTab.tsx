@@ -89,6 +89,32 @@ function parsePlans(plans: Record<string, unknown>): PlanSection[] {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+function MetricTile({ label, value }: { label: string; value: number | null | undefined }) {
+  return (
+    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{value ?? "—"}</div>
+    </div>
+  );
+}
+
+function UsageBar({ assigned, purchased }: { assigned: number | null | undefined; purchased: number | null | undefined }) {
+  if (!purchased || !assigned) return null;
+  const pct = Math.min(100, Math.round((assigned / purchased) * 100));
+  const color = pct > 90 ? "#d13438" : pct >= 70 ? "#ff8c00" : "#059669";
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "#64748b", marginBottom: 4 }}>
+        <span>{assigned} assigned</span>
+        <span>{purchased} purchased ({pct}%)</span>
+      </div>
+      <div style={{ height: 8, background: "#e2e8f0", borderRadius: 999, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 999 }} />
+      </div>
+    </div>
+  );
+}
+
 function PlanBadge({ item }: { item: PlanItem }) {
   return (
     <div style={{
@@ -199,7 +225,7 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
           <li>Sign in using the <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
           <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
           <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
-          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code></li>
+          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>contact_center:read:admin</code></li>
           <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
         </ol>
       </div>
@@ -239,11 +265,18 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
 function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisconnect: () => void }) {
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [showSubscriptions, setShowSubscriptions] = useState(false);
+  const [showDevices, setShowDevices] = useState(false);
 
   async function handleDisconnect() {
     setDisconnecting(true);
     await onDisconnect();
   }
+
+  // Derive meeting license info from plans
+  const planBase = status.plans?.plan_base as { hosts?: number; type?: string } | undefined;
+  const meetingLicensesPurchased = planBase?.hosts ?? null;
+  const meetingLicensesAssigned = status.total_users ?? null;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
@@ -291,47 +324,102 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
         </div>
       )}
 
-      {/* Subscriptions */}
+      {/* License Overview */}
       <div className="ms-section-card">
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Subscriptions</div>
-        <SubscriptionList plans={status.plans ?? {}} />
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>License Overview</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Meeting Licenses</div>
+            <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>
+              {meetingLicensesAssigned ?? "—"}
+              {meetingLicensesPurchased != null && (
+                <span style={{ fontSize: 14, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>/ {meetingLicensesPurchased}</span>
+              )}
+            </div>
+            <UsageBar assigned={meetingLicensesAssigned} purchased={meetingLicensesPurchased} />
+          </div>
+          <MetricTile label="Phone Users" value={status.phone_users_total} />
+        </div>
       </div>
 
-      {/* Devices */}
+      {/* Phone System */}
+      <div className="ms-section-card">
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Phone System</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+          <MetricTile label="Phone Users" value={status.phone_users_total} />
+          <MetricTile label="Phone Devices" value={status.devices_total ?? null} />
+          <MetricTile label="Call Queues" value={status.call_queues_total} />
+          <MetricTile label="Auto Receptionists" value={status.auto_receptionists_total} />
+        </div>
+      </div>
+
+      {/* Contact Center — only if cc data present */}
+      {status.cc_users_total != null && (
+        <div className="ms-section-card">
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Contact Center</div>
+          <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14 }}>Contact Center (Zoom CC)</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+            <MetricTile label="CC Users" value={status.cc_users_total} />
+            <MetricTile label="CC Queues" value={status.cc_queues_total} />
+          </div>
+        </div>
+      )}
+
+      {/* Subscriptions — collapsible */}
+      <div className="ms-section-card">
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showSubscriptions ? 14 : 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>Subscriptions</div>
+          <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}
+            onClick={() => setShowSubscriptions((v) => !v)}>
+            {showSubscriptions ? "Hide subscriptions" : "Show subscriptions"}
+          </button>
+        </div>
+        {showSubscriptions && <SubscriptionList plans={status.plans ?? {}} />}
+      </div>
+
+      {/* Devices — collapsible */}
       {status.devices && status.devices.length > 0 && (
         <div className="ms-section-card" style={{ padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "14px 18px 10px", fontWeight: 600, fontSize: 13 }}>
-            Registered Devices
-            {(status.devices_total ?? 0) > status.devices.length && (
-              <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 8, fontSize: 12 }}>
-                (showing {status.devices.length} of {status.devices_total})
-              </span>
-            )}
+          <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontWeight: 600, fontSize: 13 }}>
+              Registered Devices
+              {(status.devices_total ?? 0) > status.devices.length && (
+                <span style={{ fontWeight: 400, color: "#64748b", marginLeft: 8, fontSize: 12 }}>
+                  (showing {status.devices.length} of {status.devices_total})
+                </span>
+              )}
+            </div>
+            <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}
+              onClick={() => setShowDevices((v) => !v)}>
+              {showDevices ? "Hide devices" : "Show devices"}
+            </button>
           </div>
-          <table className="ms-table">
-            <thead>
-              <tr>
-                <th>Display Name</th>
-                <th>Model</th>
-                <th>MAC Address</th>
-                <th>Status</th>
-                <th>Assigned To</th>
-                <th>Extension</th>
-              </tr>
-            </thead>
-            <tbody>
-              {status.devices.map((device: ZoomDevice) => (
-                <tr key={device.id}>
-                  <td style={{ fontWeight: 500 }}>{device.display_name || "—"}</td>
-                  <td style={{ color: "#64748b" }}>{device.model || "—"}</td>
-                  <td style={{ color: "#64748b", fontFamily: "monospace", fontSize: 12 }}>{device.mac_address || "—"}</td>
-                  <td><DeviceStatusDot status={device.status} /></td>
-                  <td style={{ color: "#64748b" }}>{device.assignee?.name ?? "Unassigned"}</td>
-                  <td style={{ color: "#64748b" }}>{device.assignee?.extension_number ?? "—"}</td>
+          {showDevices && (
+            <table className="ms-table">
+              <thead>
+                <tr>
+                  <th>Display Name</th>
+                  <th>Model</th>
+                  <th>MAC Address</th>
+                  <th>Status</th>
+                  <th>Assigned To</th>
+                  <th>Extension</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {status.devices.map((device: ZoomDevice) => (
+                  <tr key={device.id}>
+                    <td style={{ fontWeight: 500 }}>{device.display_name || "—"}</td>
+                    <td style={{ color: "#64748b" }}>{device.model || "—"}</td>
+                    <td style={{ color: "#64748b", fontFamily: "monospace", fontSize: 12 }}>{device.mac_address || "—"}</td>
+                    <td><DeviceStatusDot status={device.status} /></td>
+                    <td style={{ color: "#64748b" }}>{device.assignee?.name ?? "Unassigned"}</td>
+                    <td style={{ color: "#64748b" }}>{device.assignee?.extension_number ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
     </div>

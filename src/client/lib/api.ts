@@ -329,6 +329,17 @@ export type Document = {
 
 export const DOCUMENT_CATEGORIES = ["LOA", "Cut Sheet", "CSR", "Contract", "Design Doc", "Test Plan", "Other"] as const;
 
+export type RCStatus = {
+  configured: boolean;
+  error?: string;
+  account?: { name: string; main_number: string | null; brand: string | null } | null;
+  total_extensions?: number | null;
+  call_queues?: number | null;
+  ivr_menus?: number | null;
+  devices?: number | null;
+  warnings?: string[];
+};
+
 export type ZoomDevice = {
   id: string;
   display_name: string;
@@ -347,6 +358,11 @@ export type ZoomStatus = {
   devices?: ZoomDevice[];
   devices_total?: number;
   warnings?: string[];
+  phone_users_total?: number | null;
+  call_queues_total?: number | null;
+  auto_receptionists_total?: number | null;
+  cc_users_total?: number | null;
+  cc_queues_total?: number | null;
 };
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
@@ -850,6 +866,14 @@ export const api = {
     }),
   zoomDeleteCredentials: (projectId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, { method: "DELETE" }),
+
+  // RingCentral
+  rcStatus: (projectId: string) =>
+    request<RCStatus>(`/projects/${projectId}/ringcentral/status`),
+  rcSaveCredentials: (projectId: string, creds: { client_id: string; client_secret: string; jwt_token: string }) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/ringcentral/credentials`, { method: "PUT", body: JSON.stringify(creds) }),
+  rcDeleteCredentials: (projectId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/ringcentral/credentials`, { method: "DELETE" }),
 
   // Admin
   adminProjects: () => request<Project[]>("/admin/projects"),
