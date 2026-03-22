@@ -82,7 +82,10 @@ app.get("/summary", async (c) => {
     .prepare(
       `SELECT id, name, customer_name, vendor, solution_type, status, health,
               kickoff_date, target_go_live_date, actual_go_live_date,
-              pm_user_id, ae_user_id
+              pm_user_id, ae_user_id,
+              (SELECT GROUP_CONCAT(u.name, ', ')
+               FROM project_staff ps JOIN users u ON u.id = ps.user_id
+               WHERE ps.project_id = projects.id AND ps.staff_role = 'partner_ae') AS partner_ae_names
        FROM projects ${projectFilter}
        ORDER BY updated_at DESC`
     )

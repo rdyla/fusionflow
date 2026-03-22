@@ -238,7 +238,7 @@ export default function DashboardPage() {
         <table className="ms-table">
           <thead>
             <tr>
-              {["Project", "Customer", "Vendor", "Status", "Health", "Target Go-Live"].map((h) => (
+              {["Project", "Customer", "Vendor", "Partner AE", "Status", "Health", "Target Go-Live"].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
@@ -246,7 +246,7 @@ export default function DashboardPage() {
           <tbody>
             {projects.length === 0 && (
               <tr>
-                <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
+                <td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -263,6 +263,7 @@ export default function DashboardPage() {
                 </td>
                 <td style={{ color: "#475569" }}>{p.customer_name ?? "—"}</td>
                 <td style={{ color: "#475569" }}>{p.vendor ?? "—"}</td>
+                <td style={{ color: "#475569" }}>{p.partner_ae_names ?? "—"}</td>
                 <td>
                   <Badge
                     label={p.status?.replace("_", " ") ?? "—"}

@@ -136,6 +136,7 @@ export type Project = {
   ae_user_id: string | null;
   ae_name: string | null;
   sa_name: string | null;
+  partner_ae_names: string | null;
   csm_name: string | null;
   engineer_name: string | null;
   dynamics_account_id: string | null;
