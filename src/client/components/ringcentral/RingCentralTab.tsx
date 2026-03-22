@@ -12,6 +12,52 @@ function MetricTile({ label, value }: { label: string; value: number | null | un
   );
 }
 
+const EXT_TYPE_LABELS: Record<string, string> = {
+  User: "Users",
+  DigitalUser: "Digital Users",
+  VirtualUser: "Virtual Users",
+  FaxUser: "Fax Users",
+  Department: "Call Queues",
+  IvrMenu: "IVR Menus",
+  TakeMessageOnly: "Voicemail-Only",
+  AnnouncementOnly: "Announcement-Only",
+  SharedLinesGroup: "Shared Lines Groups",
+  PagingOnlyGroup: "Paging Groups",
+  ParkLocation: "Park Locations",
+  ApplicationExtension: "Application Extensions",
+};
+const EXT_TYPE_ORDER = Object.keys(EXT_TYPE_LABELS);
+
+function ExtensionBreakdown({ breakdown, devices }: { breakdown: Record<string, number> | null | undefined; devices: number | null | undefined }) {
+  const entries = EXT_TYPE_ORDER
+    .map(type => ({ type, label: EXT_TYPE_LABELS[type], count: breakdown?.[type] ?? 0 }))
+    .filter(e => e.count > 0);
+  const unknown = Object.entries(breakdown ?? {})
+    .filter(([t]) => !EXT_TYPE_LABELS[t])
+    .map(([t, n]) => ({ type: t, label: t, count: n }));
+  const all = [...entries, ...unknown];
+
+  return (
+    <div className="ms-section-card">
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Extensions &amp; Devices</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "6px 24px", alignItems: "center" }}>
+        {all.map(({ type, label, count }) => (
+          <>
+            <div key={`${type}-label`} style={{ fontSize: 13, color: "#475569" }}>{label}</div>
+            <div key={`${type}-count`} style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", textAlign: "right" }}>{count.toLocaleString()}</div>
+          </>
+        ))}
+        {devices != null && (
+          <>
+            <div style={{ fontSize: 13, color: "#475569", borderTop: "1px solid #e2e8f0", paddingTop: 8, marginTop: 2 }}>Devices</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", textAlign: "right", borderTop: "1px solid #e2e8f0", paddingTop: 8, marginTop: 2 }}>{devices.toLocaleString()}</div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function pct(num: number, denom: number): number | null {
   return denom > 0 ? Math.round((num / denom) * 100) : null;
 }
@@ -256,23 +302,7 @@ function StatusDashboard({ status, onDisconnect }: { status: RCStatus; onDisconn
         </div>
       </div>
 
-      {/* Account Overview */}
-      <div className="ms-section-card">
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Account Overview</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          <MetricTile label="Total Extensions" value={status.total_extensions} />
-          <MetricTile label="Devices" value={status.devices} />
-        </div>
-      </div>
-
-      {/* Phone System */}
-      <div className="ms-section-card">
-        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Phone System</div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
-          <MetricTile label="Call Queues" value={status.call_queues} />
-          <MetricTile label="IVR Menus (Auto Receptionists)" value={status.ivr_menus} />
-        </div>
-      </div>
+      <ExtensionBreakdown breakdown={status.extension_breakdown} devices={status.devices} />
 
       {/* Analytics */}
       {status.analytics_30d

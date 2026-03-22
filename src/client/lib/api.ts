@@ -355,6 +355,7 @@ export type RCStatus = {
     status: string | null;
   } | null;
   total_extensions?: number | null;
+  extension_breakdown?: Record<string, number> | null;
   call_queues?: number | null;
   ivr_menus?: number | null;
   devices?: number | null;

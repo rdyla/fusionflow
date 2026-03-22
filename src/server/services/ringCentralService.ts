@@ -37,6 +37,7 @@ export type RCStatus = {
     status: string | null;
   } | null;
   total_extensions: number | null;
+  extension_breakdown: Record<string, number> | null;
   call_queues: number | null;
   ivr_menus: number | null;
   devices: number | null;
@@ -149,6 +150,28 @@ function settled<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
 }
 
+type ExtensionRecord = { type: string };
+type ExtensionPage = { records: ExtensionRecord[]; paging: { totalPages: number; totalElements: number } };
+
+async function getExtensionBreakdown(token: string): Promise<{ total: number; byType: Record<string, number> }> {
+  const first = await rcGet<ExtensionPage>(token, "/account/~/extension?perPage=1000");
+  const allRecords = [...first.records];
+
+  if (first.paging.totalPages > 1) {
+    const remaining = Array.from({ length: first.paging.totalPages - 1 }, (_, i) =>
+      rcGet<ExtensionPage>(token, `/account/~/extension?perPage=1000&page=${i + 2}`)
+    );
+    const rest = await Promise.all(remaining);
+    for (const r of rest) allRecords.push(...r.records);
+  }
+
+  const byType: Record<string, number> = {};
+  for (const ext of allRecords) {
+    byType[ext.type] = (byType[ext.type] ?? 0) + 1;
+  }
+  return { total: first.paging.totalElements, byType };
+}
+
 export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<RCStatus | null> {
   const creds = await getCreds(kv, projectId);
   if (!creds) return null;
@@ -175,7 +198,7 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
         callsByCompanyHours: { aggregationType: "Sum" },
       },
       timers: {
-        allCallsDuration: { aggregationType: "Sum" },
+        allCalls: { aggregationType: "Sum" },
       },
     },
   };
@@ -197,15 +220,17 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
 
   const accountId = String(accountData.id);
 
-  const [extensionsRes, queuesRes, ivrRes, devicesRes, analyticsRes] = await Promise.allSettled([
-    rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?perPage=1"),
-    rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?type=Department&perPage=1"),
+  const [extensionBreakdownRes, ivrRes, devicesRes, analyticsRes] = await Promise.allSettled([
+    getExtensionBreakdown(token),
     rcGet<{ paging?: { totalElements: number }; navigation?: { totalRecords: number } }>(token, "/account/~/ivr-menus?perPage=1"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/device?perPage=1"),
     rcPost<AnalyticsResponse>(token, `/analytics/calls/v1/accounts/${accountId}/aggregation/fetch`, analyticsBody),
   ]);
 
   const warnings: string[] = [];
+  if (extensionBreakdownRes.status === "rejected") {
+    warnings.push(`Extension data unavailable: ${extensionBreakdownRes.reason}`);
+  }
   if (analyticsRes.status === "rejected") {
     warnings.push(`Call analytics unavailable: ${analyticsRes.reason}`);
   }
@@ -213,6 +238,7 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
   const ivrData = settled(ivrRes);
   const ivrTotal = ivrData?.paging?.totalElements ?? ivrData?.navigation?.totalRecords ?? null;
   const analyticsData = settled(analyticsRes);
+  const extData = settled(extensionBreakdownRes);
 
   return {
     account: {
@@ -225,8 +251,9 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
       account_since: accountData.signupInfo?.creationTime ?? null,
       status: accountData.status ?? null,
     },
-    total_extensions: settled(extensionsRes)?.paging?.totalElements ?? null,
-    call_queues: settled(queuesRes)?.paging?.totalElements ?? null,
+    total_extensions: extData?.total ?? null,
+    extension_breakdown: extData?.byType ?? null,
+    call_queues: extData?.byType?.Department ?? null,
     ivr_menus: ivrTotal,
     devices: settled(devicesRes)?.paging?.totalElements ?? null,
     analytics_30d: analyticsData ? parseAnalytics(analyticsData) : null,
