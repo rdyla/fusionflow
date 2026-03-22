@@ -72,6 +72,7 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
           role: "client",
           is_active: 1,
           dynamics_account_id: contact.accountId,
+          manager_id: null,
           can_open_cases: contact.canOpenCases,
         };
         return { user: clientUser, role: "client", organization: contact.accountName };
