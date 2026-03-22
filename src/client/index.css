@@ -18,6 +18,17 @@
   input, select, textarea, button {
     font-family: inherit;
   }
+
+  /* Force light theme on all selects — prevents OS dark mode from making
+     dropdown option text invisible on light backgrounds */
+  select {
+    background-color: #ffffff;
+    color: #1e293b;
+  }
+  select option {
+    background-color: #ffffff;
+    color: #1e293b;
+  }
 }
 
 @layer components {
