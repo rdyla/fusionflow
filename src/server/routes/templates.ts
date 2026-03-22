@@ -260,28 +260,41 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .bind(template_id)
     .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number }>();
 
-  // Determine starting sort_order for phases
-  const maxSortRow = await db
-    .prepare("SELECT MAX(sort_order) AS max_sort FROM phases WHERE project_id = ?")
+  // Load existing phases by name so we can reuse them instead of duplicating
+  const existingPhases = await db
+    .prepare("SELECT id, name, sort_order FROM phases WHERE project_id = ?")
     .bind(projectId)
-    .first<{ max_sort: number | null }>();
-  let sortOffset = (maxSortRow?.max_sort ?? 0) + 1;
+    .all<{ id: string; name: string; sort_order: number }>();
+  const existingByName: Record<string, string> = {};
+  for (const ep of existingPhases.results ?? []) {
+    existingByName[ep.name.trim().toLowerCase()] = ep.id;
+  }
 
-  // Map template phase id -> newly created project phase id
+  const maxSort = existingPhases.results.reduce((m, p) => Math.max(m, p.sort_order ?? 0), 0);
+  let sortOffset = maxSort + 1;
+
+  // Map template phase id -> project phase id (existing or newly created)
   const phaseIdMap: Record<string, string> = {};
   let phasesCreated = 0;
 
   for (const phase of phases.results ?? []) {
-    const newPhaseId = crypto.randomUUID();
-    phaseIdMap[phase.id] = newPhaseId;
-    await db
-      .prepare(
-        "INSERT INTO phases (id, project_id, name, sort_order, status) VALUES (?, ?, ?, ?, 'not_started')"
-      )
-      .bind(newPhaseId, projectId, phase.name, sortOffset)
-      .run();
-    sortOffset++;
-    phasesCreated++;
+    const key = phase.name.trim().toLowerCase();
+    if (existingByName[key]) {
+      // Reuse existing phase — no new phase created
+      phaseIdMap[phase.id] = existingByName[key];
+    } else {
+      const newPhaseId = crypto.randomUUID();
+      phaseIdMap[phase.id] = newPhaseId;
+      await db
+        .prepare(
+          "INSERT INTO phases (id, project_id, name, sort_order, status) VALUES (?, ?, ?, ?, 'not_started')"
+        )
+        .bind(newPhaseId, projectId, phase.name, sortOffset)
+        .run();
+      existingByName[key] = newPhaseId;
+      sortOffset++;
+      phasesCreated++;
+    }
   }
 
   let tasksCreated = 0;

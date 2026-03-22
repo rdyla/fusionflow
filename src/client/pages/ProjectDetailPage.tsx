@@ -302,7 +302,7 @@ export default function ProjectDetailPage() {
       const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
       setPhases(newPhases);
       setTasks(newTasks);
-      showToast(`Template applied: ${result.phases_created} phases, ${result.tasks_created} tasks added.`, "success");
+      showToast(`Template applied: ${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""} created, ${result.tasks_created} tasks added.`, "success");
       setSelectedTemplateId("");
     } catch {
       showToast("Failed to apply template", "error");
