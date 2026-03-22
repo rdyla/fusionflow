@@ -23,7 +23,8 @@ import optimizeRoutes from "./routes/optimize";
 import asanaRoutes from "./routes/asana";
 import authPublicRoutes from "./routes/authPublic";
 import { sendEmail } from "./services/emailService";
-import { goLiveReminder } from "./lib/emailTemplates";
+import { goLiveReminder, milestoneOverdue } from "./lib/emailTemplates";
+import { computeProjectHealth } from "./lib/healthScore";
 import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -129,10 +130,20 @@ async function runGoLiveReminders(env: Bindings): Promise<void> {
       .all<{ id: string; name: string; customer_name: string | null; target_go_live_date: string; pm_user_id: string | null; ae_user_id: string | null }>();
 
     for (const project of rows.results ?? []) {
-      const userIds = [project.pm_user_id, project.ae_user_id].filter(Boolean) as string[];
-      const uniqueIds = [...new Set(userIds)];
+      // Core recipients: PM + AE from project record
+      const coreIds = [project.pm_user_id, project.ae_user_id].filter(Boolean) as string[];
+      const recipientIds = new Set(coreIds);
 
-      for (const userId of uniqueIds) {
+      // Also include partner AEs assigned via project_staff
+      const partnerAes = await env.DB
+        .prepare(
+          `SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'partner_ae'`
+        )
+        .bind(project.id)
+        .all<{ user_id: string }>();
+      for (const row of partnerAes.results ?? []) recipientIds.add(row.user_id);
+
+      for (const userId of recipientIds) {
         const user = await env.DB
           .prepare("SELECT email, name FROM users WHERE id = ? AND is_active = 1 LIMIT 1")
           .bind(userId)
@@ -146,6 +157,80 @@ async function runGoLiveReminders(env: Bindings): Promise<void> {
           });
         }
       }
+    }
+  }
+}
+
+async function runMilestoneOverdueReminders(env: Bindings): Promise<void> {
+  const appUrl = env.APP_URL ?? "";
+  const today = new Date().toISOString().slice(0, 10);
+
+  // Find milestones not yet completed that are past their target date
+  const rows = await env.DB
+    .prepare(
+      `SELECT m.id, m.name AS milestone_name, m.target_date,
+              p.id AS project_id, p.name AS project_name, p.pm_user_id
+       FROM milestones m
+       JOIN projects p ON p.id = m.project_id
+       WHERE m.status != 'completed'
+         AND m.target_date IS NOT NULL
+         AND m.target_date < ?
+         AND (p.archived = 0 OR p.archived IS NULL)`
+    )
+    .bind(today)
+    .all<{ id: string; milestone_name: string; target_date: string; project_id: string; project_name: string; pm_user_id: string | null }>();
+
+  for (const row of rows.results ?? []) {
+    if (!row.pm_user_id) continue;
+
+    const pm = await env.DB
+      .prepare("SELECT email, name FROM users WHERE id = ? AND is_active = 1 LIMIT 1")
+      .bind(row.pm_user_id)
+      .first<{ email: string; name: string }>();
+
+    if (!pm) continue;
+
+    const targetDate = new Date(row.target_date);
+    const nowDate = new Date(today);
+    const daysOverdue = Math.round((nowDate.getTime() - targetDate.getTime()) / 86_400_000);
+
+    // Only send on day 1, 3, and 7 overdue to avoid spam
+    if (![1, 3, 7].includes(daysOverdue)) continue;
+
+    sendEmail(env, {
+      to: pm.email,
+      subject: `Milestone overdue: ${row.milestone_name} (${row.project_name})`,
+      html: milestoneOverdue({
+        pmName: pm.name ?? pm.email,
+        milestoneName: row.milestone_name,
+        projectName: row.project_name,
+        targetDate: row.target_date,
+        daysOverdue,
+        appUrl,
+        projectId: row.project_id,
+      }),
+    });
+  }
+}
+
+async function runHealthScoring(env: Bindings): Promise<void> {
+  // Only score projects without a manual override
+  const rows = await env.DB
+    .prepare(
+      `SELECT id, target_go_live_date, updated_at FROM projects
+       WHERE (archived = 0 OR archived IS NULL) AND health_override IS NULL`
+    )
+    .all<{ id: string; target_go_live_date: string | null; updated_at: string | null }>();
+
+  for (const project of rows.results ?? []) {
+    try {
+      const health = await computeProjectHealth(env.DB, project.id, project);
+      await env.DB
+        .prepare("UPDATE projects SET health = ? WHERE id = ?")
+        .bind(health, project.id)
+        .run();
+    } catch {
+      // Skip on error — don't let one bad project break the batch
     }
   }
 }
@@ -186,6 +271,8 @@ export default {
     ctx.waitUntil(Promise.all([
       runGoLiveReminders(env),
       runUtilizationSnapshots(env),
+      runMilestoneOverdueReminders(env),
+      runHealthScoring(env),
     ]));
   },
 };

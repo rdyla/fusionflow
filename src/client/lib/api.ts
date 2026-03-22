@@ -128,6 +128,7 @@ export type Project = {
   solution_type: string | null;
   status: string | null;
   health: string | null;
+  health_override: string | null;
   kickoff_date: string | null;
   target_go_live_date: string | null;
   actual_go_live_date: string | null;
@@ -632,6 +633,7 @@ export const api = {
     payload: {
       status?: string;
       health?: string;
+      clear_health_override?: boolean;
       target_go_live_date?: string;
       actual_go_live_date?: string;
       pm_user_id?: string | null;

@@ -299,6 +299,81 @@ export function goLiveReminder(data: {
   `, data.appUrl);
 }
 
+// ── Project At Risk ────────────────────────────────────────────────────────────
+
+export function projectAtRisk(data: {
+  recipientName: string;
+  projectName: string;
+  customerName: string | null;
+  appUrl: string;
+  projectId: string;
+}): string {
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#ff8c00;">Project Health: At Risk</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.recipientName}, the project <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> has been flagged as <strong style="color:#ff8c00;">At Risk</strong> and may need attention.</p>
+    <div style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <table style="border-collapse:collapse;">
+        ${detail("Project", data.projectName)}
+        ${data.customerName ? detail("Customer", data.customerName) : ""}
+        ${detail("Health", pill("At Risk", "#ff8c00"))}
+      </table>
+    </div>
+    ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
+  `, data.appUrl);
+}
+
+// ── Partner AE: Note Posted ────────────────────────────────────────────────────
+
+export function partnerNotePosted(data: {
+  recipientName: string;
+  authorName: string;
+  projectName: string;
+  noteBody: string;
+  appUrl: string;
+  projectId: string;
+}): string {
+  const preview = data.noteBody.length > 200 ? data.noteBody.slice(0, 200) + "…" : data.noteBody;
+
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">New Comment on Your Project</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.recipientName}, <strong style="color:rgba(240,246,255,0.9);">${data.authorName}</strong> posted a comment on <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> that is visible to you.</p>
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:13px;color:rgba(240,246,255,0.8);line-height:1.6;margin-bottom:12px;">${preview}</div>
+      <table style="border-collapse:collapse;">
+        ${detail("Project", data.projectName)}
+        ${detail("Posted By", data.authorName)}
+      </table>
+    </div>
+    ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
+  `, data.appUrl);
+}
+
+// ── Milestone Overdue ──────────────────────────────────────────────────────────
+
+export function milestoneOverdue(data: {
+  pmName: string;
+  milestoneName: string;
+  projectName: string;
+  targetDate: string;
+  daysOverdue: number;
+  appUrl: string;
+  projectId: string;
+}): string {
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Milestone Overdue</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.pmName}, a milestone on <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> is past its target date.</p>
+    <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${data.milestoneName}</div>
+      <table style="border-collapse:collapse;">
+        ${detail("Project", data.projectName)}
+        ${detail("Target Date", data.targetDate)}
+        ${detail("Days Overdue", pill(`${data.daysOverdue} day${data.daysOverdue !== 1 ? "s" : ""}`, "#d13438"))}
+      </table>
+    </div>
+    ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
+  `, data.appUrl);
+}
+
 // ── High Severity Risk (legacy — kept for compatibility) ───────────────────────
 
 export function highRiskAdded(data: {

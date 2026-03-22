@@ -260,6 +260,24 @@ export default function ProjectDetailPage() {
     }
   }
 
+  async function handleClearHealthOverride() {
+    if (!project) return;
+    setSavingProject(true);
+    setSaveMessage(null);
+    try {
+      const updated = await api.updateProject(project.id, { clear_health_override: true });
+      setProject(updated);
+      setEditHealth(updated.health ?? "");
+      setSaveMessage("Health reset to auto.");
+      showToast("Health reset to auto-computed.", "success");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to reset health";
+      showToast(message, "error");
+    } finally {
+      setSavingProject(false);
+    }
+  }
+
   async function handleAddStaff() {
     if (!addStaffUserId || !addStaffRole || !project) return;
     setAddingStaff(true);
@@ -606,6 +624,15 @@ export default function ProjectDetailPage() {
                 <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8" }} />
                   {project.health.replace("_", " ")}
+                  <span style={{
+                    fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+                    padding: "1px 6px", borderRadius: 10,
+                    background: project.health_override ? "rgba(124,58,237,0.12)" : "rgba(8,145,178,0.12)",
+                    color: project.health_override ? "#7c3aed" : "#0891b2",
+                    border: `1px solid ${project.health_override ? "rgba(124,58,237,0.3)" : "rgba(8,145,178,0.3)"}`,
+                  }}>
+                    {project.health_override ? "Manual" : "Auto"}
+                  </span>
                 </span>
               ) : "—"}
             </div>
@@ -820,12 +847,23 @@ export default function ProjectDetailPage() {
                 </select>
               </label>
               <label className="ms-label">
-                <span>Health</span>
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  Health
+                  {project.health_override && (
+                    <button
+                      type="button"
+                      onClick={handleClearHealthOverride}
+                      style={{ fontSize: 11, fontWeight: 600, color: "#0891b2", background: "rgba(8,145,178,0.08)", border: "1px solid rgba(8,145,178,0.25)", borderRadius: 4, padding: "1px 8px", cursor: "pointer" }}
+                    >
+                      Reset to Auto
+                    </button>
+                  )}
+                </span>
                 <select className="ms-input" value={editHealth} onChange={(e) => setEditHealth(e.target.value)}>
                   <option value="">Select health</option>
                   <option value="on_track">On Track</option>
                   <option value="at_risk">At Risk</option>
-                  <option value="delayed">Delayed</option>
+                  <option value="off_track">Off Track</option>
                 </select>
               </label>
               <label className="ms-label">

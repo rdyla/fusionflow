@@ -6,6 +6,9 @@ import { requireRole } from "../middleware/requireRole";
 import { canEditProject, canViewProject } from "../services/accessService";
 import { STANDARD_PHASES } from "../lib/standardPhases";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { sendEmail } from "../services/emailService";
+import { projectAtRisk } from "../lib/emailTemplates";
+import { computeProjectHealth } from "../lib/healthScore";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -153,6 +156,7 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
 const updateProjectSchema = z.object({
   status: z.string().min(1).optional(),
   health: z.string().min(1).optional(),
+  clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
@@ -182,15 +186,44 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
-  const updates = parsed.data;
+  // Capture current health before update so we can detect at_risk transitions
+  const before = await db
+    .prepare("SELECT health, name, customer_name, pm_user_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null }>();
+
+  const { clear_health_override, ...updates } = parsed.data;
   const fields: string[] = [];
   const values: unknown[] = [];
+
+  // Handle "reset to auto" — clear override and compute health immediately
+  if (clear_health_override) {
+    const projectRow = await db
+      .prepare("SELECT target_go_live_date, updated_at FROM projects WHERE id = ? LIMIT 1")
+      .bind(projectId)
+      .first<{ target_go_live_date: string | null; updated_at: string | null }>();
+    const autoHealth = projectRow
+      ? await computeProjectHealth(db, projectId, projectRow)
+      : "on_track";
+    await db
+      .prepare("UPDATE projects SET health = ?, health_override = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(autoHealth, projectId)
+      .run();
+    const updated = await db.prepare("SELECT * FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
+    return c.json(updated);
+  }
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
       fields.push(`${key} = ?`);
       values.push(value);
     }
+  }
+
+  // When health is explicitly set by a PM, record it as a manual override
+  if (updates.health !== undefined) {
+    fields.push("health_override = ?");
+    values.push(updates.health);
   }
 
   if (!fields.length) {
@@ -214,6 +247,50 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
     .prepare("SELECT * FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
     .first();
+
+  // Notify when health transitions to at_risk
+  if (updates.health === "at_risk" && before?.health !== "at_risk" && before) {
+    const appUrl = c.env.APP_URL ?? "";
+
+    // Collect recipients: PM + partner AEs assigned via project_staff
+    const partnerAes = await db
+      .prepare(
+        `SELECT u.id, u.email, u.name FROM project_staff ps
+         JOIN users u ON u.id = ps.user_id
+         WHERE ps.project_id = ? AND ps.staff_role = 'partner_ae' AND u.is_active = 1`
+      )
+      .bind(projectId)
+      .all<{ id: string; email: string; name: string }>();
+
+    const recipients: { email: string; name: string }[] = [];
+
+    if (before.pm_user_id) {
+      const pm = await db
+        .prepare("SELECT email, name FROM users WHERE id = ? AND is_active = 1 LIMIT 1")
+        .bind(before.pm_user_id)
+        .first<{ email: string; name: string }>();
+      if (pm) recipients.push(pm);
+    }
+
+    for (const ae of partnerAes.results ?? []) {
+      if (!recipients.some((r) => r.email === ae.email)) recipients.push(ae);
+    }
+
+    for (const recipient of recipients) {
+      const html = projectAtRisk({
+        recipientName: recipient.name ?? recipient.email,
+        projectName: before.name,
+        customerName: before.customer_name,
+        appUrl,
+        projectId,
+      });
+      c.executionCtx.waitUntil(sendEmail(c.env, {
+        to: recipient.email,
+        subject: `Project at risk: ${before.name}`,
+        html,
+      }));
+    }
+  }
 
   return c.json(updated);
 });

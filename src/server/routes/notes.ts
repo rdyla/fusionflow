@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
-import { pmNoteAdded } from "../lib/emailTemplates";
+import { pmNoteAdded, partnerNotePosted } from "../lib/emailTemplates";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -78,17 +78,48 @@ app.post("/:id/notes", async (c) => {
     .bind(projectId)
     .first<{ name: string; pm_user_id: string | null }>();
 
+  const appUrl = c.env.APP_URL ?? "";
+
+  // Notify PM of new note (skip if PM wrote it)
   if (project?.pm_user_id && project.pm_user_id !== auth.user.id) {
     const pm = await db
       .prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1")
       .bind(project.pm_user_id)
       .first<{ email: string; name: string }>();
     if (pm) {
-      const appUrl = c.env.APP_URL ?? "";
       c.executionCtx.waitUntil(sendEmail(c.env, {
         to: pm.email,
         subject: `New note on ${project.name}`,
         html: pmNoteAdded({ pmName: pm.name ?? pm.email, authorName: auth.user.name ?? auth.user.email, projectName: project.name, noteBody: body, visibility, appUrl, projectId }),
+      }));
+    }
+  }
+
+  // Notify partner AEs when a partner- or public-visible note is posted by PF team
+  if ((visibility === "partner" || visibility === "public") && auth.role !== "partner_ae") {
+    const partnerAes = await db
+      .prepare(
+        `SELECT u.id, u.email, u.name FROM project_staff ps
+         JOIN users u ON u.id = ps.user_id
+         WHERE ps.project_id = ? AND ps.staff_role = 'partner_ae' AND u.is_active = 1
+           AND u.id != ?`
+      )
+      .bind(projectId, auth.user.id)
+      .all<{ id: string; email: string; name: string }>();
+
+    const authorName = auth.user.name ?? auth.user.email;
+    for (const ae of partnerAes.results ?? []) {
+      c.executionCtx.waitUntil(sendEmail(c.env, {
+        to: ae.email,
+        subject: `New comment on ${project!.name}`,
+        html: partnerNotePosted({
+          recipientName: ae.name ?? ae.email,
+          authorName,
+          projectName: project!.name,
+          noteBody: body,
+          appUrl,
+          projectId,
+        }),
       }));
     }
   }
