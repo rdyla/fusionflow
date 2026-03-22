@@ -116,51 +116,9 @@ Link projects to Asana workspaces to sync phases and tasks into Asana for teams 
 
 ---
 
-## Getting Started (Development)
+## Deployment
 
-### Prerequisites
-- Node.js 18+
-- A Cloudflare account with Workers and D1 enabled
-- Wrangler CLI: `npm install -g wrangler`
-
-### Install dependencies
-```bash
-npm install
-```
-
-### Configure environment
-Copy `wrangler.toml` and fill in your D1 database binding, KV namespace, R2 bucket, and any API keys. For local development, create a `.dev.vars` file:
-```
-DYNAMICS_TENANT_ID=...
-DYNAMICS_CLIENT_ID=...
-DYNAMICS_CLIENT_SECRET=...
-RESEND_API_KEY=...
-ZOOM_ORG_ACCOUNT_ID=...
-ZOOM_ORG_CLIENT_ID=...
-ZOOM_ORG_CLIENT_SECRET=...
-```
-
-### Run migrations
-```bash
-npx wrangler d1 migrations apply fusionflow --local
-```
-
-### Start the development server
-```bash
-npm run dev
-```
-
-The app will be available at [http://localhost:5173](http://localhost:5173).
-
-### Deploy to production
-```bash
-npm run build && npm run deploy
-```
-
-### Monitor worker logs
-```bash
-npx wrangler tail
-```
+FusionFlow is live at **[fusionflow360.com](https://fusionflow360.com)**, deployed on Cloudflare Workers with a D1 database, KV store for sessions and credentials, and R2 for document storage.
 
 ---
 
