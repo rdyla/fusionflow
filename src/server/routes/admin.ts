@@ -190,8 +190,12 @@ app.delete("/projects/:id", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "Project not found" });
 
   // Cascade delete in dependency order
+  await db.prepare("DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId).run();
   await db.prepare("DELETE FROM documents WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM project_access WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM project_staff WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM project_contacts WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM utilization_snapshots WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM notes WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM risks WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM tasks WHERE project_id = ?").bind(projectId).run();
