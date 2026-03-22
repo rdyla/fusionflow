@@ -1,4 +1,5 @@
 const RC_API_BASE = "https://platform.ringcentral.com/restapi/v1.0";
+const RC_ANALYTICS_BASE = "https://platform.ringcentral.com";
 const RC_TOKEN_URL = "https://platform.ringcentral.com/restapi/oauth/token";
 
 export type RCCreds = {
@@ -12,12 +13,27 @@ type TokenCache = {
   expires_at: number;
 };
 
+export type RCAnalytics = {
+  total_calls: number;
+  answered: number;
+  missed: number;
+  inbound: number;
+  outbound: number;
+  total_duration_sec: number;
+  queue_sla_in: number;
+  queue_sla_out: number;
+  abandoned: number;
+  business_hours: number;
+  after_hours: number;
+};
+
 export type RCStatus = {
   account: { name: string; main_number: string | null; brand: string | null } | null;
   total_extensions: number | null;
   call_queues: number | null;
   ivr_menus: number | null;
   devices: number | null;
+  analytics_30d: RCAnalytics | null;
   warnings: string[];
 };
 
@@ -75,6 +91,60 @@ async function rcGet<T>(token: string, path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+async function rcPost<T>(token: string, path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${RC_ANALYTICS_BASE}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`RC Analytics API ${res.status} ${path}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+type AnalyticsNamedValue = { name?: string; value?: number };
+type AnalyticsCounter = { values?: AnalyticsNamedValue[] };
+type AnalyticsResponse = {
+  data?: Array<{
+    counters?: {
+      allCalls?: AnalyticsCounter;
+      callsByResponse?: AnalyticsCounter;
+      callsByDirection?: AnalyticsCounter;
+      callsByResult?: AnalyticsCounter;
+      callsByQueueSla?: AnalyticsCounter;
+      callsByCompanyHours?: AnalyticsCounter;
+    };
+    timers?: {
+      allCallsDuration?: AnalyticsCounter;
+    };
+  }>;
+};
+
+function findNamed(values: AnalyticsNamedValue[] | undefined, name: string): number {
+  return values?.find((v) => v.name === name)?.value ?? 0;
+}
+
+function parseAnalytics(raw: AnalyticsResponse): RCAnalytics {
+  const row = raw.data?.[0];
+  const c = row?.counters;
+  const t = row?.timers;
+  return {
+    total_calls: c?.allCalls?.values?.[0]?.value ?? 0,
+    answered: findNamed(c?.callsByResponse?.values, "Answered"),
+    missed: findNamed(c?.callsByResponse?.values, "NotAnswered"),
+    inbound: findNamed(c?.callsByDirection?.values, "Inbound"),
+    outbound: findNamed(c?.callsByDirection?.values, "Outbound"),
+    total_duration_sec: t?.allCallsDuration?.values?.[0]?.value ?? 0,
+    queue_sla_in: findNamed(c?.callsByQueueSla?.values, "InSla"),
+    queue_sla_out: findNamed(c?.callsByQueueSla?.values, "OutSla"),
+    abandoned: findNamed(c?.callsByResult?.values, "Abandoned"),
+    business_hours: findNamed(c?.callsByCompanyHours?.values, "BusinessHours"),
+    after_hours: findNamed(c?.callsByCompanyHours?.values, "AfterHours"),
+  };
+}
+
 function settled<T>(result: PromiseSettledResult<T>): T | null {
   return result.status === "fulfilled" ? result.value : null;
 }
@@ -85,12 +155,39 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
 
   const token = await getToken(kv, creds, projectId);
 
-  const [accountRes, extensionsRes, queuesRes, ivrRes, devicesRes] = await Promise.allSettled([
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const analyticsBody = {
+    grouping: { groupBy: "Company" },
+    timeSettings: {
+      timeZone: "UTC",
+      timeRange: {
+        from: thirtyDaysAgo.toISOString(),
+        to: now.toISOString(),
+      },
+    },
+    responseOptions: {
+      counters: {
+        allCalls: { aggregationType: "Sum" },
+        callsByResponse: { aggregationType: "Sum" },
+        callsByDirection: { aggregationType: "Sum" },
+        callsByResult: { aggregationType: "Sum" },
+        callsByQueueSla: { aggregationType: "Sum" },
+        callsByCompanyHours: { aggregationType: "Sum" },
+      },
+      timers: {
+        allCallsDuration: { aggregationType: "Sum" },
+      },
+    },
+  };
+
+  const [accountRes, extensionsRes, queuesRes, ivrRes, devicesRes, analyticsRes] = await Promise.allSettled([
     rcGet<{ name: string; mainNumber: string; serviceInfo: { brand: { name: string } } }>(token, "/account/~"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?perPage=1"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/extension?type=Department&perPage=1"),
     rcGet<{ paging?: { totalElements: number }; navigation?: { totalRecords: number } }>(token, "/account/~/ivr-menus?perPage=1"),
     rcGet<{ paging: { totalElements: number } }>(token, "/account/~/device?perPage=1"),
+    rcPost<AnalyticsResponse>(token, "/analytics/calls/v1/accounts/~/aggregation/fetch", analyticsBody),
   ]);
 
   if (accountRes.status === "rejected") {
@@ -98,10 +195,14 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
   }
 
   const warnings: string[] = [];
+  if (analyticsRes.status === "rejected") {
+    warnings.push(`Call analytics unavailable: ${analyticsRes.reason}`);
+  }
 
   const accountData = accountRes.value;
   const ivrData = settled(ivrRes);
   const ivrTotal = ivrData?.paging?.totalElements ?? ivrData?.navigation?.totalRecords ?? null;
+  const analyticsData = settled(analyticsRes);
 
   return {
     account: {
@@ -113,6 +214,7 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
     call_queues: settled(queuesRes)?.paging?.totalElements ?? null,
     ivr_menus: ivrTotal,
     devices: settled(devicesRes)?.paging?.totalElements ?? null,
+    analytics_30d: analyticsData ? parseAnalytics(analyticsData) : null,
     warnings,
   };
 }

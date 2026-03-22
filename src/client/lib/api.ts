@@ -329,6 +329,20 @@ export type Document = {
 
 export const DOCUMENT_CATEGORIES = ["LOA", "Cut Sheet", "CSR", "Contract", "Design Doc", "Test Plan", "Other"] as const;
 
+export type RCAnalytics = {
+  total_calls: number;
+  answered: number;
+  missed: number;
+  inbound: number;
+  outbound: number;
+  total_duration_sec: number;
+  queue_sla_in: number;
+  queue_sla_out: number;
+  abandoned: number;
+  business_hours: number;
+  after_hours: number;
+};
+
 export type RCStatus = {
   configured: boolean;
   error?: string;
@@ -337,6 +351,7 @@ export type RCStatus = {
   call_queues?: number | null;
   ivr_menus?: number | null;
   devices?: number | null;
+  analytics_30d?: RCAnalytics | null;
   warnings?: string[];
 };
 

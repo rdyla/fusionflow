@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type RCStatus } from "../../lib/api";
+import { api, type RCAnalytics, type RCStatus } from "../../lib/api";
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -9,6 +9,81 @@ function MetricTile({ label, value }: { label: string; value: number | null | un
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{value ?? "—"}</div>
     </div>
+  );
+}
+
+function pct(num: number, denom: number): number | null {
+  return denom > 0 ? Math.round((num / denom) * 100) : null;
+}
+
+function fmtDuration(sec: number): string {
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${sec}s`;
+}
+
+function PctTile({ label, value, goodThreshold = 80, warnThreshold = 60 }: {
+  label: string; value: number | null; goodThreshold?: number; warnThreshold?: number;
+}) {
+  const color = value === null ? "#94a3b8" : value >= goodThreshold ? "#16a34a" : value >= warnThreshold ? "#d97706" : "#dc2626";
+  return (
+    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1 }}>{value !== null ? `${value}%` : "—"}</div>
+    </div>
+  );
+}
+
+function DurationTile({ label, totalSec, callCount }: { label: string; totalSec: number; callCount: number }) {
+  const avgSec = callCount > 0 ? Math.round(totalSec / callCount) : null;
+  return (
+    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{avgSec !== null ? fmtDuration(avgSec) : "—"}</div>
+    </div>
+  );
+}
+
+function AnalyticsDashboard({ a }: { a: RCAnalytics }) {
+  const answerRate = pct(a.answered, a.total_calls);
+  const slaDenom = a.queue_sla_in + a.queue_sla_out;
+  const slaRate = pct(a.queue_sla_in, slaDenom);
+  const afterHoursPct = pct(a.after_hours, a.total_calls);
+
+  return (
+    <>
+      {/* Call Activity */}
+      <div className="ms-section-card">
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Call Activity — Last 30 Days</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          <MetricTile label="Total Calls" value={a.total_calls} />
+          <PctTile label="Answer Rate" value={answerRate} goodThreshold={85} warnThreshold={70} />
+          <MetricTile label="Inbound Calls" value={a.inbound} />
+          <MetricTile label="Outbound Calls" value={a.outbound} />
+          <DurationTile label="Avg Call Duration" totalSec={a.total_duration_sec} callCount={a.total_calls} />
+          <MetricTile label="Missed / No Answer" value={a.missed} />
+        </div>
+      </div>
+
+      {/* Queue & After-Hours Health */}
+      <div className="ms-section-card">
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Queue &amp; After-Hours Health</div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          {slaDenom > 0
+            ? <PctTile label="Queue SLA %" value={slaRate} goodThreshold={80} warnThreshold={60} />
+            : <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Queue SLA %</div>
+                <div style={{ fontSize: 13, color: "#94a3b8" }}>No queue data</div>
+              </div>
+          }
+          <MetricTile label="Abandoned Calls" value={a.abandoned} />
+          <MetricTile label="After-Hours Calls" value={a.after_hours} />
+          <PctTile label="After-Hours %" value={afterHoursPct} goodThreshold={101} warnThreshold={20} />
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -157,6 +232,19 @@ function StatusDashboard({ status, onDisconnect }: { status: RCStatus; onDisconn
           <MetricTile label="IVR Menus (Auto Receptionists)" value={status.ivr_menus} />
         </div>
       </div>
+
+      {/* Analytics */}
+      {status.analytics_30d
+        ? <AnalyticsDashboard a={status.analytics_30d} />
+        : (
+          <div style={{
+            background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8,
+            padding: "14px 18px", fontSize: 13, color: "#64748b", lineHeight: 1.6,
+          }}>
+            <strong style={{ color: "#475569" }}>Call analytics unavailable.</strong> Ensure the app has the <code>Analytics</code> and <code>ReadReports</code> scopes.
+          </div>
+        )
+      }
 
       {/* Note card */}
       <div style={{
