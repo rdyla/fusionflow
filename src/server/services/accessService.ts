@@ -1,4 +1,5 @@
 import type { AppRole, AppUser } from "../types";
+import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
 export async function canViewProject(
   db: D1Database,
@@ -36,30 +37,34 @@ export async function canViewProject(
   }
 
   if (user.role === "pf_ae") {
+    const teamIds = await getTeamUserIds(user.id, db);
+    const ph = inPlaceholders(teamIds);
     const tiedToProject = await db
-      .prepare(
-        `
-        SELECT id
-        FROM projects
-        WHERE id = ? AND ae_user_id = ?
-        LIMIT 1
-        `
-      )
-      .bind(projectId, user.id)
+      .prepare(`SELECT id FROM projects WHERE id = ? AND ae_user_id IN (${ph}) LIMIT 1`)
+      .bind(projectId, ...teamIds)
       .first();
-
     if (tiedToProject) return true;
+    // Also check explicit project_access grants for any team member
+    const explicitAccess = await db
+      .prepare(`SELECT id FROM project_access WHERE project_id = ? AND user_id IN (${ph}) LIMIT 1`)
+      .bind(projectId, ...teamIds)
+      .first();
+    return !!explicitAccess;
   }
 
+  if (user.role === "partner_ae") {
+    const teamIds = await getTeamUserIds(user.id, db);
+    const ph = inPlaceholders(teamIds);
+    const explicitAccess = await db
+      .prepare(`SELECT id FROM project_access WHERE project_id = ? AND user_id IN (${ph}) LIMIT 1`)
+      .bind(projectId, ...teamIds)
+      .first();
+    return !!explicitAccess;
+  }
+
+  // pm and any other roles: check explicit project_access for the user only
   const explicitAccess = await db
-    .prepare(
-      `
-      SELECT id
-      FROM project_access
-      WHERE project_id = ? AND user_id = ?
-      LIMIT 1
-      `
-    )
+    .prepare("SELECT id FROM project_access WHERE project_id = ? AND user_id = ? LIMIT 1")
     .bind(projectId, user.id)
     .first();
 

@@ -43,7 +43,7 @@ export default function AdminUsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
-  const [editForm, setEditForm] = useState<Partial<User & { role: Role }>>({});
+  const [editForm, setEditForm] = useState<Partial<User & { role: Role; manager_id: string | null }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
   const [openMenu, setOpenMenu] = useState<{ id: string; top: number; right: number } | null>(null);
@@ -115,6 +115,7 @@ export default function AdminUsersPage() {
       email: user.email,
       organization_name: user.organization_name ?? "",
       role: user.role as Role,
+      manager_id: user.manager_id ?? null,
     });
   }
 
@@ -128,6 +129,7 @@ export default function AdminUsersPage() {
         email: typeof editForm.email === "string" ? editForm.email.trim() || undefined : undefined,
         organization_name: typeof editForm.organization_name === "string" ? editForm.organization_name.trim() || undefined : undefined,
         role: editForm.role,
+        manager_id: editForm.manager_id ?? null,
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setEditingUser(null);
@@ -329,6 +331,31 @@ export default function AdminUsersPage() {
                     {MANAGEABLE_ROLES.map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
                   </select>
                 </label>
+                {(editForm.role === "pf_ae" || editForm.role === "partner_ae") && (
+                  <label className="ms-label">
+                    <span>Reports to</span>
+                    <select
+                      className="ms-input"
+                      value={editForm.manager_id ?? ""}
+                      onChange={(e) => setEditForm({ ...editForm, manager_id: e.target.value || null })}
+                    >
+                      <option value="">— None —</option>
+                      {users
+                        .filter((u) =>
+                          u.id !== editingUser?.id &&
+                          (editingUser?.organization_name
+                            ? u.organization_name === editingUser.organization_name
+                            : true) &&
+                          u.is_active
+                        )
+                        .map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name ?? u.email} ({ROLE_LABELS[u.role as Role] ?? u.role})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                )}
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>

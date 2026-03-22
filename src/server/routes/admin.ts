@@ -17,7 +17,7 @@ app.get("/users", async (c) => {
   const db = c.env.DB;
   const rows = await db
     .prepare(
-      `SELECT id, email, name, organization_name, role, is_active, created_at, updated_at
+      `SELECT id, email, name, organization_name, role, is_active, manager_id, created_at, updated_at
        FROM users
        ORDER BY name ASC`
     )
@@ -85,6 +85,7 @@ const updateUserSchema = z.object({
   role: z.enum(["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]).optional(),
   is_active: z.number().int().min(0).max(1).optional(),
   dynamics_account_id: z.string().nullable().optional(),
+  manager_id: z.string().nullable().optional(),
 });
 
 app.patch("/users/:id", async (c) => {

@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
+import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -25,17 +26,28 @@ const SOLUTION_TYPE_LABELS: Record<string, string> = {
   rc_air: "RingCentral AIR",
 };
 
-function accessClause(role: string, userId: string): { where: string; bindings: string[] } {
+function accessClause(role: string, teamIds: string[]): { where: string; bindings: string[] } {
   if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
-  if (role === "pf_ae") return { where: "(s.pf_ae_user_id = ? OR s.created_by = ? OR s.id IN (SELECT solution_id FROM solution_staff WHERE user_id = ? AND staff_role = 'pf_ae'))", bindings: [userId, userId, userId] };
-  return { where: "s.partner_ae_user_id = ?", bindings: [userId] };
+  if (role === "pf_ae") {
+    const ph = inPlaceholders(teamIds);
+    return {
+      where: `(s.pf_ae_user_id IN (${ph}) OR s.created_by IN (${ph}) OR s.id IN (SELECT solution_id FROM solution_staff WHERE user_id IN (${ph}) AND staff_role = 'pf_ae'))`,
+      bindings: [...teamIds, ...teamIds, ...teamIds],
+    };
+  }
+  // partner_ae
+  const ph = inPlaceholders(teamIds);
+  return { where: `s.partner_ae_user_id IN (${ph})`, bindings: [...teamIds] };
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
 
 app.get("/", async (c) => {
   const auth = c.get("auth");
-  const { where, bindings } = accessClause(auth.role, auth.user.id);
+  const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
+    ? await getTeamUserIds(auth.user.id, c.env.DB)
+    : [auth.user.id];
+  const { where, bindings } = accessClause(auth.role, teamIds);
   const rows = await c.env.DB
     .prepare(`${SOLUTION_SELECT} WHERE ${where} ORDER BY s.updated_at DESC`)
     .bind(...bindings)
@@ -126,7 +138,10 @@ app.post("/", async (c) => {
 app.get("/:id", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
-  const { where, bindings } = accessClause(auth.role, auth.user.id);
+  const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
+    ? await getTeamUserIds(auth.user.id, db)
+    : [auth.user.id];
+  const { where, bindings } = accessClause(auth.role, teamIds);
   const solution = await db
     .prepare(`${SOLUTION_SELECT} WHERE s.id = ? AND (${where}) LIMIT 1`)
     .bind(c.req.param("id"), ...bindings)

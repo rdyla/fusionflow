@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject, canViewProject } from "../services/accessService";
 import { STANDARD_PHASES } from "../lib/standardPhases";
+import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -26,15 +27,13 @@ app.get("/", async (c) => {
     sql += " AND pm_user_id = ?";
     bindings = [auth.user.id];
   } else if (auth.role === "pf_ae") {
-    sql += " AND ae_user_id = ?";
-    bindings = [auth.user.id];
+    const teamIds = await getTeamUserIds(auth.user.id, db);
+    sql += ` AND ae_user_id IN (${inPlaceholders(teamIds)})`;
+    bindings = teamIds;
   } else if (auth.role === "partner_ae") {
-    sql += `
-      AND id IN (
-        SELECT project_id FROM project_access WHERE user_id = ?
-      )
-    `;
-    bindings = [auth.user.id];
+    const teamIds = await getTeamUserIds(auth.user.id, db);
+    sql += ` AND id IN (SELECT project_id FROM project_access WHERE user_id IN (${inPlaceholders(teamIds)}))`;
+    bindings = teamIds;
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) return c.json([]);
     sql += " AND dynamics_account_id = ?";

@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
+import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -11,15 +12,20 @@ app.get("/summary", async (c) => {
   let projectFilter = "";
   let filterBindings: string[] = [];
 
+  // Resolve team IDs for AE roles (manager sees self + direct reports)
+  let teamIds: string[] = [auth.user.id];
+
   if (auth.role === "pm") {
     projectFilter = "WHERE pm_user_id = ?";
     filterBindings = [auth.user.id];
   } else if (auth.role === "pf_ae") {
-    projectFilter = "WHERE ae_user_id = ?";
-    filterBindings = [auth.user.id];
+    teamIds = await getTeamUserIds(auth.user.id, db);
+    projectFilter = `WHERE ae_user_id IN (${inPlaceholders(teamIds)})`;
+    filterBindings = teamIds;
   } else if (auth.role === "partner_ae") {
-    projectFilter = `WHERE id IN (SELECT project_id FROM project_access WHERE user_id = ?)`;
-    filterBindings = [auth.user.id];
+    teamIds = await getTeamUserIds(auth.user.id, db);
+    projectFilter = `WHERE id IN (SELECT project_id FROM project_access WHERE user_id IN (${inPlaceholders(teamIds)}))`;
+    filterBindings = teamIds;
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) {
       return c.json({ user: auth.user, summary: { activeProjects: 0, atRiskProjects: 0, openTasks: 0, openRisks: 0 }, projects: [], openTasks: [], openRisks: [], phaseDistribution: [], vendorDistribution: [], typeDistribution: [] });
@@ -46,10 +52,11 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings, "at_risk")
     .first<{ count: number }>();
 
-  // AEs only see tasks assigned to them; PMs/admins see all tasks on their projects
+  // AEs only see tasks assigned to them; managers and PMs/admins see all tasks on their projects
   const isAE = auth.role === "pf_ae" || auth.role === "partner_ae" || auth.role === "pf_sa";
-  const taskAssigneeClause = isAE ? " AND assignee_user_id = ?" : "";
-  const taskAssigneeBinding: string[] = isAE ? [auth.user.id] : [];
+  const isManager = teamIds.length > 1;
+  const taskAssigneeClause = isAE && !isManager ? " AND assignee_user_id = ?" : "";
+  const taskAssigneeBinding: string[] = isAE && !isManager ? [auth.user.id] : [];
 
   const openTasksCount = await db
     .prepare(

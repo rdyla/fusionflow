@@ -41,6 +41,7 @@ export type User = {
   is_active: number;
   avatar_url?: string | null;
   dynamics_account_id?: string | null;
+  manager_id?: string | null;
   can_open_cases?: boolean;
 };
 
