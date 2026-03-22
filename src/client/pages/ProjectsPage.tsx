@@ -353,8 +353,8 @@ export default function ProjectsPage() {
                 {dynOpen && dynResults.length > 0 && (
                   <div style={{
                     position: "absolute", zIndex: 100, left: 0, right: 0,
-                    background: "#142236", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 4,
-                    boxShadow: "0 4px 16px rgba(0,0,0,0.12)", maxHeight: 220, overflowY: "auto",
+                    background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 4,
+                    boxShadow: "0 4px 16px rgba(0,0,0,0.10)", maxHeight: 220, overflowY: "auto",
                   }}>
                     {dynResults.map((acct) => (
                       <button
