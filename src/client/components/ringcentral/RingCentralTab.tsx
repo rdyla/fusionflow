@@ -123,7 +123,7 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
         <ol style={{ margin: "8px 0 0 0", paddingLeft: 18 }}>
           <li>Sign in to <strong style={{ color: "#334155" }}>developers.ringcentral.com</strong> as the customer's admin</li>
           <li>Click <strong style={{ color: "#334155" }}>Create App</strong> → <strong style={{ color: "#334155" }}>REST API App</strong> → Auth type: <strong style={{ color: "#334155" }}>JWT auth flow</strong></li>
-          <li>Under <strong style={{ color: "#334155" }}>OAuth Scopes</strong>, add: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>ReadAccounts</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>ReadCallLog</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>ReadReports</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>Analytics</code></li>
+          <li>Under <strong style={{ color: "#334155" }}>OAuth Scopes</strong>, add: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>Read Account</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>Read Call Log</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>Analytics</code></li>
           <li>Go to <strong style={{ color: "#334155" }}>Credentials</strong> → generate a <strong style={{ color: "#334155" }}>JWT token</strong> for a super-admin service user</li>
           <li>Copy Client ID, Client Secret, and JWT Token and paste below</li>
         </ol>
@@ -241,7 +241,7 @@ function StatusDashboard({ status, onDisconnect }: { status: RCStatus; onDisconn
             background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8,
             padding: "14px 18px", fontSize: 13, color: "#64748b", lineHeight: 1.6,
           }}>
-            <strong style={{ color: "#475569" }}>Call analytics unavailable.</strong> Ensure the app has the <code>Analytics</code> and <code>ReadReports</code> scopes.
+            <strong style={{ color: "#475569" }}>Call analytics unavailable.</strong> Ensure the app has the <code>Analytics</code> and <code>Read Call Log</code> scopes.
           </div>
         )
       }
