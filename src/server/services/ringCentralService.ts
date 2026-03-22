@@ -162,8 +162,8 @@ export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<R
     timeSettings: {
       timeZone: "UTC",
       timeRange: {
-        from: thirtyDaysAgo.toISOString(),
-        to: now.toISOString(),
+        timeFrom: thirtyDaysAgo.toISOString(),
+        timeTo: now.toISOString(),
       },
     },
     responseOptions: {
