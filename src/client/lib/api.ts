@@ -372,12 +372,21 @@ export type ZoomDevice = {
   assignee: { name: string; extension_number: string | null } | null;
 };
 
+export type ZoomCallingPlan = {
+  name: string;
+  type: number;
+  subscribed: number;
+  assigned: number;
+  available: number;
+};
+
 export type ZoomStatus = {
   configured: boolean;
   error?: string;
   account?: { id: string; account_name: string; account_type: number };
   plans?: Record<string, unknown>;
   total_users?: number | null;
+  active_users_30d?: number | null;
   devices?: ZoomDevice[];
   devices_total?: number;
   warnings?: string[];
@@ -386,6 +395,9 @@ export type ZoomStatus = {
   auto_receptionists_total?: number | null;
   cc_users_total?: number | null;
   cc_queues_total?: number | null;
+  calling_plans?: ZoomCallingPlan[] | null;
+  meeting_activity_30d?: { participants: number; meeting_minutes: number } | null;
+  phone_calls_30d?: number | null;
 };
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 

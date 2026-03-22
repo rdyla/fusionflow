@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type ZoomDevice, type ZoomStatus } from "../../lib/api";
+import { api, type ZoomCallingPlan, type ZoomDevice, type ZoomStatus } from "../../lib/api";
 
 // Human-readable labels for plan section keys returned by Zoom
 const PLAN_SECTION_LABELS: Record<string, string> = {
@@ -88,6 +88,59 @@ function parsePlans(plans: Record<string, unknown>): PlanSection[] {
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
+
+function fmtMinutes(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function pct(num: number, denom: number): number | null {
+  return denom > 0 ? Math.round((num / denom) * 100) : null;
+}
+
+function AdoptionTile({ label, active, total }: { label: string; active: number | null | undefined; total: number | null | undefined }) {
+  const rate = active != null && total != null ? pct(active, total) : null;
+  const color = rate === null ? "#94a3b8" : rate >= 70 ? "#16a34a" : rate >= 40 ? "#d97706" : "#dc2626";
+  return (
+    <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>{label}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color, lineHeight: 1 }}>{rate !== null ? `${rate}%` : "—"}</div>
+      {active != null && total != null && (
+        <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{active.toLocaleString()} of {total.toLocaleString()} users active</div>
+      )}
+    </div>
+  );
+}
+
+function CallingPlanList({ plans }: { plans: ZoomCallingPlan[] | null | undefined }) {
+  if (!plans || plans.length === 0) return null;
+  return (
+    <div className="ms-section-card">
+      <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Zoom Phone Calling Plans</div>
+      <div style={{ display: "grid", gap: 12 }}>
+        {plans.map((plan, i) => {
+          const usedPct = plan.subscribed > 0 ? Math.min(100, Math.round((plan.assigned / plan.subscribed) * 100)) : 0;
+          const barColor = usedPct >= 90 ? "#16a34a" : usedPct <= 60 ? "#d97706" : "#3b82f6";
+          return (
+            <div key={i} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", marginBottom: 8 }}>{plan.name}</div>
+              <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 24, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{plan.assigned}</span>
+                <span style={{ fontSize: 13, color: "#94a3b8" }}>/ {plan.subscribed} subscribed &nbsp;·&nbsp; {plan.available} available</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: barColor, marginLeft: 4 }}>({usedPct}% utilized)</span>
+              </div>
+              <div style={{ height: 6, background: "#e2e8f0", borderRadius: 3, overflow: "hidden" }}>
+                <div style={{ height: "100%", borderRadius: 3, width: `${usedPct}%`, background: barColor }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function MetricTile({ label, value }: { label: string; value: number | null | undefined }) {
   return (
@@ -225,7 +278,7 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
           <li>Sign in using the <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
           <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
           <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
-          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>contact_center:read:admin</code></li>
+          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>report:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>contact_center:read:admin</code></li>
           <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
         </ol>
       </div>
@@ -338,9 +391,34 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
             </div>
             <UsageBar assigned={meetingLicensesAssigned} purchased={meetingLicensesPurchased} />
           </div>
-          <MetricTile label="Phone Users" value={status.phone_users_total} />
+          <AdoptionTile label="30-Day Active Users" active={status.active_users_30d} total={status.total_users} />
         </div>
       </div>
+
+      {/* Meeting Activity */}
+      {status.meeting_activity_30d && (
+        <div className="ms-section-card">
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Meeting Activity — Last 30 Days</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+            <MetricTile label="Participant Sessions" value={status.meeting_activity_30d.participants} />
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Total Meeting Time</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{fmtMinutes(status.meeting_activity_30d.meeting_minutes)}</div>
+            </div>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>Avg Session Length</div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>
+                {status.meeting_activity_30d.participants > 0
+                  ? fmtMinutes(Math.round(status.meeting_activity_30d.meeting_minutes / status.meeting_activity_30d.participants))
+                  : "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Calling Plans */}
+      <CallingPlanList plans={status.calling_plans} />
 
       {/* Phone System */}
       <div className="ms-section-card">
@@ -351,6 +429,11 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
           <MetricTile label="Call Queues" value={status.call_queues_total} />
           <MetricTile label="Auto Receptionists" value={status.auto_receptionists_total} />
         </div>
+        {status.phone_calls_30d != null && (
+          <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            <MetricTile label="Phone Calls (30d)" value={status.phone_calls_30d} />
+          </div>
+        )}
       </div>
 
       {/* Contact Center — only if cc data present */}

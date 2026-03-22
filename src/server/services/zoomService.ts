@@ -21,6 +21,14 @@ export type ZoomDevice = {
   assignee: { name: string; extension_number: string | null } | null;
 };
 
+export type ZoomCallingPlan = {
+  name: string;
+  type: number;
+  subscribed: number;
+  assigned: number;
+  available: number;
+};
+
 export type ZoomStatus = {
   account: {
     id: string;
@@ -30,6 +38,7 @@ export type ZoomStatus = {
   // Raw plans object — parsed dynamically on the frontend
   plans: Record<string, unknown>;
   total_users: number | null;
+  active_users_30d: number | null;
   devices: ZoomDevice[];
   devices_total: number;
   warnings: string[];
@@ -38,6 +47,9 @@ export type ZoomStatus = {
   auto_receptionists_total: number | null;
   cc_users_total: number | null;
   cc_queues_total: number | null;
+  calling_plans: ZoomCallingPlan[] | null;
+  meeting_activity_30d: { participants: number; meeting_minutes: number } | null;
+  phone_calls_30d: number | null;
 };
 
 function credsKey(projectId: string) { return `zoom:creds:${projectId}`; }
@@ -360,6 +372,18 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
 
   const token = await getToken(kv, creds, projectId);
 
+  // Date ranges for 30-day activity window
+  const today = new Date();
+  const from30Date = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const from30 = fmt(from30Date);
+  const to = fmt(today);
+  const currYear = today.getFullYear();
+  const currMonth = today.getMonth() + 1;
+  const needsPrevMonth = from30Date.getMonth() !== today.getMonth() || from30Date.getFullYear() !== today.getFullYear();
+  const prevYear = currMonth === 1 ? currYear - 1 : currYear;
+  const prevMonth = currMonth === 1 ? 12 : currMonth - 1;
+
   const [
     accountRes,
     plansRes,
@@ -370,6 +394,11 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     autoReceptionistsRes,
     ccUsersRes,
     ccQueuesRes,
+    callingPlansRes,
+    activeUsersRes,
+    dailyCurrRes,
+    dailyPrevRes,
+    phoneCallsRes,
   ] = await Promise.allSettled([
     zoomGet<{ id: string; account_name: string; account_type: number }>(token, "/accounts/me"),
     zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
@@ -380,6 +409,13 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     zoomGet<{ total_records: number }>(token, "/phone/auto_receptionists?page_size=1"),
     zoomGet<{ total_records: number }>(token, "/contact_center/users?page_size=1"),
     zoomGet<{ total_records: number }>(token, "/contact_center/queues?page_size=1"),
+    zoomGet<{ calling_plans?: ZoomCallingPlan[] }>(token, "/phone/calling_plans"),
+    zoomGet<{ total_records: number }>(token, `/report/users?type=active&from=${from30}&to=${to}&page_size=1`),
+    zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(token, `/report/daily?year=${currYear}&month=${currMonth}`),
+    needsPrevMonth
+      ? zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(token, `/report/daily?year=${prevYear}&month=${prevMonth}`)
+      : Promise.resolve(null),
+    zoomGet<{ total_records: number }>(token, `/phone/call_logs?from=${from30}&to=${to}&type=all&page_size=1`),
   ]);
 
   if (accountRes.status === "rejected") {
@@ -399,6 +435,15 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
   const accountData = accountRes.value;
   const devicesData = settled(devicesRes);
 
+  // Roll up daily report dates into 30-day totals
+  const currDates = settled(dailyCurrRes)?.dates ?? [];
+  const prevDates = settled(dailyPrevRes)?.dates ?? [];
+  const windowDates = [...prevDates, ...currDates].filter((d) => d.date >= from30 && d.date <= to);
+  const meeting_activity_30d = windowDates.length > 0 ? {
+    participants: windowDates.reduce((s, d) => s + (d.participants ?? 0), 0),
+    meeting_minutes: windowDates.reduce((s, d) => s + (d.meeting_minutes ?? 0), 0),
+  } : null;
+
   return {
     account: {
       id: accountData.id,
@@ -407,6 +452,7 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     },
     plans: settled(plansRes) ?? {},
     total_users: settled(usersRes)?.total_records ?? null,
+    active_users_30d: settled(activeUsersRes)?.total_records ?? null,
     devices: devicesData?.devices ?? [],
     devices_total: devicesData?.total_records ?? 0,
     warnings,
@@ -415,5 +461,8 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     auto_receptionists_total: settled(autoReceptionistsRes)?.total_records ?? null,
     cc_users_total: settled(ccUsersRes)?.total_records ?? null,
     cc_queues_total: settled(ccQueuesRes)?.total_records ?? null,
+    calling_plans: settled(callingPlansRes)?.calling_plans ?? null,
+    meeting_activity_30d,
+    phone_calls_30d: settled(phoneCallsRes)?.total_records ?? null,
   };
 }
