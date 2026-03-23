@@ -689,8 +689,8 @@ export default function ProjectDetailPage() {
         const managedInAsana = !!project.managed_in_asana;
         const hasCrm = !!project.dynamics_account_id;
         const visibleTabs: DetailTab[] = managedInAsana
-          ? ["overview", "asana", "documents", ...(hasCrm ? ["sharepoint" as const] : []), "activity", "zoom"]
-          : ["overview", "timeline", "tasks", "risks", "milestones", "documents", ...(hasCrm ? ["sharepoint" as const] : []), "activity", "zoom"];
+          ? ["overview", "asana", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "zoom"]
+          : ["overview", "timeline", "tasks", "risks", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
