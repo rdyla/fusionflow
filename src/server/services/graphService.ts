@@ -98,7 +98,21 @@ async function graphPut<T>(token: string, path: string, body: ArrayBuffer, conte
 
 function encodeShareUrl(url: string): string {
   // Microsoft Graph shares token: base64url("u!" + url)
-  const b64 = btoa("u!" + url);
+  // The URL must be percent-encoded — literal spaces in SharePoint folder paths
+  // (common with CRM-generated locations) make the token undecodable by Graph.
+  // Only encode the path portion; leave the scheme+host intact.
+  let normalized = url;
+  try {
+    const parsed = new URL(url);
+    // Re-encode path segments so spaces become %20 without double-encoding
+    parsed.pathname = parsed.pathname
+      .split("/")
+      .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
+      .join("/");
+    normalized = parsed.origin + parsed.pathname;
+  } catch { /* fall through with original url */ }
+
+  const b64 = btoa("u!" + normalized);
   return b64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
