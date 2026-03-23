@@ -200,7 +200,7 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
               {WORKSTREAMS.map((ws, i) => {
                 const base = estimate.base_hours[ws] ?? 0;
                 const driverAdj = Math.round(wsDriverTotal[ws] ?? 0);
-                const computed = estimate.pre_override_hours[ws] ?? 0;
+                const computed = Math.round((estimate.pre_override_hours[ws] ?? 0) * estimate.complexity.multiplier);
                 const final = estimate.final_hours[ws] ?? 0;
                 const hasOverride = estimate.overrides[ws] !== undefined;
 
@@ -247,7 +247,7 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
                   {(() => { const t = Object.values(wsDriverTotal).reduce((a, b) => a + b, 0); return t > 0 ? `+${Math.round(t)}h` : "—"; })()}
                 </td>
                 <td style={{ padding: "12px 12px", textAlign: "right", color: "#475569", fontWeight: 600 }}>
-                  {Object.values(estimate.pre_override_hours).reduce((a, b) => a + b, 0)}h
+                  {Math.round(Object.values(estimate.pre_override_hours).reduce((a, b) => a + b, 0) * estimate.complexity.multiplier)}h
                 </td>
                 {canEdit && <td />}
                 <td style={{ padding: "12px 20px", textAlign: "right", fontWeight: 800, color: "#03395f", fontSize: 15 }}>

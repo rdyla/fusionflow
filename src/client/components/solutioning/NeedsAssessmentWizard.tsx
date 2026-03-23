@@ -345,8 +345,14 @@ function FieldInput({ field, answers, onChange, allSections }: FieldProps) {
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
 export default function NeedsAssessmentWizard({ solutionId, customerName, surveyJson, initialAnswers, onComplete, onCancel }: Props) {
+  const AUTO_FILLED_FIELDS = new Set(["customer_name", "assessment_date"]);
+
   const SECTIONS = useMemo(
-    () => (surveyJson.sections as SectionDef[]).filter((s) => s.id !== "project_context"),
+    () => (surveyJson.sections as SectionDef[]).map((s) =>
+      s.id === "project_context"
+        ? { ...s, fields: s.fields.filter((f) => !AUTO_FILLED_FIELDS.has(f.id)) }
+        : s
+    ),
     [surveyJson]
   );
 
