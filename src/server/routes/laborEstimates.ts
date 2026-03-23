@@ -252,7 +252,7 @@ function computeEstimate(
   }
 
   // Complexity score
-  const complexityScore = computeComplexityScore(category, answers);
+  const { score: complexityScore, factors: complexityFactors } = computeComplexityScore(category, answers);
   const complexityBand = complexityScore >= 70 ? "high" : complexityScore >= 35 ? "medium" : "low";
   const complexityMultiplier = complexityBand === "high" ? 1.2 : complexityBand === "medium" ? 1.0 : 0.9;
 
@@ -296,7 +296,7 @@ function computeEstimate(
     solutionTypeCategory: category,
     baseHours: { ...base },
     driverAdjustments: driverAdjustments.filter((d) => d.hoursAdded > 0),
-    complexity: { score: complexityScore, band: complexityBand, multiplier: complexityMultiplier },
+    complexity: { score: complexityScore, band: complexityBand, multiplier: complexityMultiplier, factors: complexityFactors },
     preOverrideHours,
     finalHours,
     overrides,
@@ -306,31 +306,51 @@ function computeEstimate(
   };
 }
 
-function computeComplexityScore(category: string, answers: Record<string, unknown>): number {
-  let score = 0;
+type ComplexityFactor = { label: string; points: number; detail: string };
 
-  if (category === "ucaas") {
-    if (isNonEmpty(answers["geographic_or_country_scope"])) score += 20;
-    score += ({ yes: 30, partial: 15, no: 0 }[answers["migration_required"] as string] ?? 0);
-    score += ({ yes: 30, partial: 15, no: 0 }[answers["number_porting_required"] as string] ?? 0);
-    score += Math.min((Array.isArray(answers["endpoint_types_required"]) ? answers["endpoint_types_required"].length : 0) * 5, 20);
-  } else if (category === "ccaas") {
-    score += Math.min((Array.isArray(answers["channels_required_phase_1"]) ? answers["channels_required_phase_1"].length : 0) * 10, 40);
-    score += Math.min((Array.isArray(answers["routing_capabilities_required"]) ? answers["routing_capabilities_required"].length : 0) * 8, 32);
-    if (answers["wfm_required"] === "yes_phase_1") score += 15;
-    if (answers["qm_required"] === "yes_phase_1") score += 15;
-  } else if (category === "ci") {
-    score += Math.min((Array.isArray(answers["methodology_elements_to_track"]) ? answers["methodology_elements_to_track"].length : 0) * 5, 30);
-    if (answers["custom_trackers_required"] === "yes_phase_1") score += 15;
-    if (answers["custom_scorecards_required"] === "yes_phase_1") score += 15;
-    score += ({ yes: 25, future_phase: 10, no: 0 }[answers["crm_integration_required_phase_1"] as string] ?? 0);
-  } else if (category === "virtual_agent") {
-    score += ({ "1_10": 5, "1_5": 5, "6_15": 15, "11_25": 20, "16_30": 30, "26_50": 40, "31_60": 45, "51_plus": 55, "60_plus": 60 }[answers["estimated_intent_count"] as string] ?? 0);
-    score += Math.min((Array.isArray(answers["integration_use_cases_required"]) ? answers["integration_use_cases_required"].length : 0) * 8, 40);
-    score += ({ ready: 0, ready_now: 0, needs_review: 20, needs_cleanup: 20, needs_creation: 35, significant_gaps: 35, unknown: 10 }[answers["content_quality_readiness"] as string] ?? 0);
+function computeComplexityScore(category: string, answers: Record<string, unknown>): { score: number; factors: ComplexityFactor[] } {
+  let score = 0;
+  const factors: ComplexityFactor[] = [];
+
+  function add(pts: number, label: string, detail: string) {
+    if (pts <= 0) return;
+    score += pts;
+    factors.push({ label, points: pts, detail });
   }
 
-  return Math.min(score, 100);
+  if (category === "ucaas") {
+    if (isNonEmpty(answers["geographic_or_country_scope"])) add(20, "Multi-country / geographic scope", String(answers["geographic_or_country_scope"]));
+    const migPts = { yes: 30, partial: 15, no: 0 }[answers["migration_required"] as string] ?? 0;
+    add(migPts, "Migration required", answers["migration_required"] === "partial" ? "Partial migration" : "Full migration");
+    const portPts = { yes: 30, partial: 15, no: 0 }[answers["number_porting_required"] as string] ?? 0;
+    add(portPts, "Number porting required", answers["number_porting_required"] === "partial" ? "Partial porting" : "Full porting");
+    const epCount = Array.isArray(answers["endpoint_types_required"]) ? answers["endpoint_types_required"].length : 0;
+    add(Math.min(epCount * 5, 20), "Endpoint type variety", `${epCount} endpoint type${epCount !== 1 ? "s" : ""}`);
+  } else if (category === "ccaas") {
+    const chanCount = Array.isArray(answers["channels_required_phase_1"]) ? answers["channels_required_phase_1"].length : 0;
+    add(Math.min(chanCount * 10, 40), "Channels in scope (phase 1)", `${chanCount} channel${chanCount !== 1 ? "s" : ""}`);
+    const routeCount = Array.isArray(answers["routing_capabilities_required"]) ? answers["routing_capabilities_required"].length : 0;
+    add(Math.min(routeCount * 8, 32), "Routing capabilities required", `${routeCount} capability type${routeCount !== 1 ? "s" : ""}`);
+    if (answers["wfm_required"] === "yes_phase_1") add(15, "WFM included in phase 1", "In scope");
+    if (answers["qm_required"] === "yes_phase_1") add(15, "QM included in phase 1", "In scope");
+  } else if (category === "ci") {
+    const methCount = Array.isArray(answers["methodology_elements_to_track"]) ? answers["methodology_elements_to_track"].length : 0;
+    add(Math.min(methCount * 5, 30), "Methodology elements tracked", `${methCount} element${methCount !== 1 ? "s" : ""}`);
+    if (answers["custom_trackers_required"] === "yes_phase_1") add(15, "Custom trackers in phase 1", "In scope");
+    if (answers["custom_scorecards_required"] === "yes_phase_1") add(15, "Custom scorecards in phase 1", "In scope");
+    const crmPts = { yes: 25, future_phase: 10, no: 0 }[answers["crm_integration_required_phase_1"] as string] ?? 0;
+    add(crmPts, "CRM integration", answers["crm_integration_required_phase_1"] === "future_phase" ? "Planned for future phase" : "Phase 1");
+  } else if (category === "virtual_agent") {
+    const intentPts = ({ "1_10": 5, "1_5": 5, "6_15": 15, "11_25": 20, "16_30": 30, "26_50": 40, "31_60": 45, "51_plus": 55, "60_plus": 60 } as Record<string, number>)[answers["estimated_intent_count"] as string] ?? 0;
+    add(intentPts, "Intent count", String(answers["estimated_intent_count"] ?? "").replace(/_/g, "–"));
+    const intCount = Array.isArray(answers["integration_use_cases_required"]) ? answers["integration_use_cases_required"].length : 0;
+    add(Math.min(intCount * 8, 40), "Integration use cases", `${intCount} use case${intCount !== 1 ? "s" : ""}`);
+    const contentPts = ({ ready: 0, ready_now: 0, needs_review: 20, needs_cleanup: 20, needs_creation: 35, significant_gaps: 35, unknown: 10 } as Record<string, number>)[answers["content_quality_readiness"] as string] ?? 0;
+    const contentLabels: Record<string, string> = { needs_review: "Content needs review", needs_cleanup: "Content needs cleanup", needs_creation: "Content needs creation", significant_gaps: "Content has significant gaps", unknown: "Content readiness unknown" };
+    add(contentPts, contentLabels[answers["content_quality_readiness"] as string] ?? "Content readiness", String(answers["content_quality_readiness"] ?? ""));
+  }
+
+  return { score: Math.min(score, 100), factors };
 }
 
 function computeConfidence(category: string, answers: Record<string, unknown>): { score: number; band: string } {

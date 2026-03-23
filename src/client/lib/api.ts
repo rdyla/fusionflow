@@ -611,7 +611,7 @@ export type LaborEstimate = {
     hoursAdded: number;
     reason: string;
   }>;
-  complexity: { score: number; band: string; multiplier: number };
+  complexity: { score: number; band: string; multiplier: number; factors: Array<{ label: string; points: number; detail: string }> };
   pre_override_hours: Record<string, number>;
   final_hours: Record<string, number>;
   overrides: Record<string, number>;

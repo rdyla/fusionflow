@@ -43,6 +43,7 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDrivers, setShowDrivers] = useState(false);
+  const [showComplexity, setShowComplexity] = useState(true);
 
   async function generate(keepOverrides = false) {
     setSaving(true);
@@ -178,6 +179,51 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
           </div>
         )}
       </div>
+
+      {/* ── Complexity factors ── */}
+      {estimate.complexity.factors && estimate.complexity.factors.length > 0 && (
+        <div className="ms-card">
+          <button
+            type="button"
+            onClick={() => setShowComplexity((v) => !v)}
+            style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: 0 }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Complexity Factors
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 12, background: `${complexityColor}18`, color: complexityColor, textTransform: "capitalize" }}>
+                {estimate.complexity.band} · {estimate.complexity.score}/100 · ×{estimate.complexity.multiplier}
+              </span>
+            </div>
+            <span style={{ fontSize: 11, color: "#94a3b8" }}>{showComplexity ? "▲ Hide" : "▼ Show"}</span>
+          </button>
+          {showComplexity && (
+            <div style={{ marginTop: 14 }}>
+              <p style={{ margin: "0 0 12px", fontSize: 12, color: "#64748b", lineHeight: 1.5 }}>
+                The complexity score is built from the following assessment inputs. A higher score means more moving parts and drives a larger hours multiplier.
+              </p>
+              <div style={{ display: "grid", gap: 6 }}>
+                {estimate.complexity.factors.map((f, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: "9px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid #f1f5f9", fontSize: 12 }}>
+                    <span style={{ fontWeight: 700, color: complexityColor, minWidth: 48, textAlign: "right" }}>+{f.points} pts</span>
+                    <div style={{ flex: 1 }}>
+                      <span style={{ fontWeight: 600, color: "#334155" }}>{f.label}</span>
+                      {f.detail && <span style={{ color: "#94a3b8", marginLeft: 6 }}>· {f.detail}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ marginTop: 10, padding: "8px 14px", background: `${complexityColor}0d`, borderRadius: 8, border: `1px solid ${complexityColor}30`, fontSize: 12, color: "#475569", display: "flex", justifyContent: "space-between" }}>
+                <span style={{ fontWeight: 600 }}>Total complexity score</span>
+                <span style={{ fontWeight: 700, color: complexityColor }}>
+                  {estimate.complexity.score}/100 → <span style={{ textTransform: "capitalize" }}>{estimate.complexity.band}</span> (×{estimate.complexity.multiplier} applied to all workstreams)
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Workstream table ── */}
       <div className="ms-card" style={{ padding: 0, overflow: "hidden" }}>
