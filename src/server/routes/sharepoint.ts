@@ -85,4 +85,12 @@ app.delete("/file", async (c) => {
   }
 });
 
+// POST /api/sharepoint/clear-token-cache
+// Clears the cached Graph token so a fresh one is fetched on next request.
+// Useful after changing app registration permissions.
+app.post("/clear-token-cache", async (c) => {
+  await c.env.KV.delete("graph:token");
+  return c.json({ ok: true, message: "Graph token cache cleared" });
+});
+
 export default app;
