@@ -85,6 +85,47 @@ app.delete("/file", async (c) => {
   }
 });
 
+// POST /api/sharepoint/enable-app-auth
+// Uses the app's SharePointTenantSettings.ReadWrite.All Graph permission to
+// enable app-only auth on the SharePoint tenant — equivalent to:
+//   Set-PnPTenant -DisableCustomAppAuthentication $false
+app.post("/enable-app-auth", async (c) => {
+  try {
+    const tokenRes = await fetch(
+      `https://login.microsoftonline.com/${c.env.DYNAMICS_TENANT_ID}/oauth2/v2.0/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: c.env.DYNAMICS_CLIENT_ID ?? "",
+          client_secret: c.env.DYNAMICS_CLIENT_SECRET ?? "",
+          scope: "https://graph.microsoft.com/.default",
+        }),
+      }
+    );
+    if (!tokenRes.ok) return c.json({ error: `Token fetch failed: ${await tokenRes.text()}` }, 500);
+    const { access_token } = await tokenRes.json() as { access_token: string };
+
+    const patchRes = await fetch("https://graph.microsoft.com/v1.0/admin/sharepoint/settings", {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${access_token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ isAppOnlyAuthEnabled: true }),
+    });
+
+    if (!patchRes.ok) {
+      return c.json({ error: `Graph PATCH failed: ${await patchRes.text()}` }, 500);
+    }
+
+    return c.json({ ok: true, message: "SharePoint app-only auth enabled. Clear the SP token cache and retry." });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Unknown error" }, 500);
+  }
+});
+
 // GET /api/sharepoint/debug-token
 // Fetches a fresh Graph token and returns its decoded claims (app ID, roles/permissions).
 // Use this to verify which app is being used and what Graph permissions it has.
