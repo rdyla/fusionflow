@@ -174,8 +174,11 @@ app.get("/debug-token", async (c) => {
 // Clears the cached Graph token so a fresh one is fetched on next request.
 // Useful after changing app registration permissions.
 app.post("/clear-token-cache", async (c) => {
-  await c.env.KV.delete("graph:token");
-  return c.json({ ok: true, message: "Graph token cache cleared" });
+  await Promise.all([
+    c.env.KV.delete("graph:token"),
+    c.env.KV.delete("sp:token:https://packetfusioncrm.sharepoint.com"),
+  ]);
+  return c.json({ ok: true, message: "Token cache cleared" });
 });
 
 export default app;
