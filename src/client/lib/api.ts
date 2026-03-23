@@ -26,7 +26,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    throw new Error(`API error: ${res.status}`);
+    const body = await res.json().catch(() => null) as { error?: string } | null;
+    throw new Error(body?.error ?? `API error: ${res.status}`);
   }
 
   return res.json();
@@ -972,7 +973,10 @@ export const api = {
       body: form,
     });
     if (res.status === 401) { window.location.href = "/login"; throw new Error("Unauthorized"); }
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    if (!res.ok) {
+      const body = await res.json().catch(() => null) as { error?: string } | null;
+      throw new Error(body?.error ?? `Upload failed: ${res.status}`);
+    }
     return res.json();
   },
   spDelete: (webUrl: string) =>
