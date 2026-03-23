@@ -85,6 +85,50 @@ app.delete("/file", async (c) => {
   }
 });
 
+// GET /api/sharepoint/debug-token
+// Fetches a fresh Graph token and returns its decoded claims (app ID, roles/permissions).
+// Use this to verify which app is being used and what Graph permissions it has.
+app.get("/debug-token", async (c) => {
+  try {
+    // Force-fresh token (bypass cache)
+    await c.env.KV.delete("graph:token");
+
+    const res = await fetch(
+      `https://login.microsoftonline.com/${c.env.DYNAMICS_TENANT_ID}/oauth2/v2.0/token`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: c.env.DYNAMICS_CLIENT_ID ?? "",
+          client_secret: c.env.DYNAMICS_CLIENT_SECRET ?? "",
+          scope: "https://graph.microsoft.com/.default",
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      return c.json({ error: `Token fetch failed: ${res.status}`, detail: text }, 500);
+    }
+
+    const data = await res.json() as { access_token: string; expires_in: number };
+
+    // Decode JWT payload (middle segment) without verification — just for inspection
+    const parts = data.access_token.split(".");
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+
+    return c.json({
+      app_id: payload.appid ?? payload.azp,
+      tenant_id: payload.tid,
+      roles: payload.roles ?? [],
+      expires_in: data.expires_in,
+    });
+  } catch (err) {
+    return c.json({ error: err instanceof Error ? err.message : "Unknown error" }, 500);
+  }
+});
+
 // POST /api/sharepoint/clear-token-cache
 // Clears the cached Graph token so a fresh one is fetched on next request.
 // Useful after changing app registration permissions.
