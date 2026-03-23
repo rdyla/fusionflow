@@ -181,7 +181,7 @@ app.get("/debug-token", async (c) => {
 app.post("/clear-token-cache", async (c) => {
   await Promise.all([
     c.env.KV.delete("graph:token"),
-    c.env.KV.delete("sp:token:https://packetfusioncrm.sharepoint.com"),
+    c.env.KV.delete("sp:token:https://packetfusioncrm.sharepoint.com"), // legacy SP REST token
   ]);
   return c.json({ ok: true, message: "Token cache cleared" });
 });
