@@ -107,20 +107,25 @@ app.post("/enable-app-auth", async (c) => {
     if (!tokenRes.ok) return c.json({ error: `Token fetch failed: ${await tokenRes.text()}` }, 500);
     const { access_token } = await tokenRes.json() as { access_token: string };
 
+    // Read current value first
+    const getRes = await fetch("https://graph.microsoft.com/v1.0/admin/sharepoint/settings", {
+      headers: { Authorization: `Bearer ${access_token}`, Accept: "application/json" },
+    });
+    const before = getRes.ok ? await getRes.json() : null;
+
     const patchRes = await fetch("https://graph.microsoft.com/v1.0/admin/sharepoint/settings", {
       method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${access_token}`,
-        "Content-Type": "application/json",
-      },
+      headers: { Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ isAppOnlyAuthEnabled: true }),
     });
 
     if (!patchRes.ok) {
-      return c.json({ error: `Graph PATCH failed: ${await patchRes.text()}` }, 500);
+      const detail = await patchRes.text();
+      return c.json({ error: `Graph PATCH failed: ${patchRes.status}`, detail, before }, 500);
     }
 
-    return c.json({ ok: true, message: "SharePoint app-only auth enabled. Clear the SP token cache and retry." });
+    const after = await patchRes.json();
+    return c.json({ ok: true, before, after });
   } catch (err) {
     return c.json({ error: err instanceof Error ? err.message : "Unknown error" }, 500);
   }
