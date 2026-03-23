@@ -94,26 +94,57 @@ async function graphPut<T>(token: string, path: string, body: ArrayBuffer, conte
   return res.json() as Promise<T>;
 }
 
-// ── SharePoint URL encoding for the /shares endpoint ──────────────────────────
+// ── SharePoint URL resolution via site + drive ─────────────────────────────────
+//
+// The /shares endpoint is designed for sharing links and is unreliable for raw
+// SharePoint folder paths from Dynamics CRM. Instead we resolve explicitly:
+//   1. GET /sites/{hostname}              → site ID
+//   2. GET /sites/{siteId}/drives         → find drive by library name
+//   3. Navigate within the drive by path  → list / upload / delete
 
-function encodeShareUrl(url: string): string {
-  // Microsoft Graph shares token: base64url("u!" + url)
-  // The URL must be percent-encoded — literal spaces in SharePoint folder paths
-  // (common with CRM-generated locations) make the token undecodable by Graph.
-  // Only encode the path portion; leave the scheme+host intact.
-  let normalized = url;
-  try {
-    const parsed = new URL(url);
-    // Re-encode path segments so spaces become %20 without double-encoding
-    parsed.pathname = parsed.pathname
-      .split("/")
-      .map((seg) => encodeURIComponent(decodeURIComponent(seg)))
-      .join("/");
-    normalized = parsed.origin + parsed.pathname;
-  } catch { /* fall through with original url */ }
+type ResolvedSPPath = {
+  driveId: string;
+  // Decoded path segments within the drive (empty = drive root)
+  segments: string[];
+};
 
-  const b64 = btoa("u!" + normalized);
-  return b64.replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+async function resolveSharePointPath(token: string, url: string): Promise<ResolvedSPPath> {
+  const parsed = new URL(url);
+  const hostname = parsed.hostname;
+
+  // Decode every path segment, filtering empty strings from leading/trailing slashes
+  const allSegments = parsed.pathname
+    .split("/")
+    .filter(Boolean)
+    .map((s) => { try { return decodeURIComponent(s); } catch { return s; } });
+
+  if (allSegments.length === 0) throw new Error(`SharePoint URL has no path: ${url}`);
+
+  // First segment is the document library name (e.g. "account", "Documents")
+  const libraryName = allSegments[0];
+  const pathWithinDrive = allSegments.slice(1);
+
+  const site = await graphGet<{ id: string }>(token, `/sites/${hostname}`);
+
+  const drivesRes = await graphGet<{ value: Array<{ id: string; name: string }> }>(
+    token, `/sites/${site.id}/drives`
+  );
+
+  const drive = drivesRes.value.find(
+    (d) => d.name.toLowerCase() === libraryName.toLowerCase()
+  );
+
+  if (!drive) {
+    const names = drivesRes.value.map((d) => d.name).join(", ");
+    throw new Error(`Document library "${libraryName}" not found on ${hostname}. Available: ${names}`);
+  }
+
+  return { driveId: drive.id, segments: pathWithinDrive };
+}
+
+// Encode path segments for a Graph API path — each segment encoded, joined with /
+function graphPath(segments: string[]): string {
+  return segments.map(encodeURIComponent).join("/");
 }
 
 // ── Dynamics document location resolution ─────────────────────────────────────
@@ -208,24 +239,19 @@ export async function getSharePointLocations(env: GraphEnv, recordId: string): P
 
 // ── File operations ────────────────────────────────────────────────────────────
 
-export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: string): Promise<SPFile[]> {
-  const token = await getGraphToken(env);
-  const encoded = encodeShareUrl(folderAbsoluteUrl);
+type GraphDriveItem = {
+  id: string;
+  name: string;
+  size?: number;
+  lastModifiedDateTime?: string;
+  webUrl?: string;
+  "@microsoft.graph.downloadUrl"?: string;
+  folder?: object;
+  file?: { mimeType?: string };
+};
 
-  const res = await graphGet<{
-    value: Array<{
-      id: string;
-      name: string;
-      size?: number;
-      lastModifiedDateTime?: string;
-      webUrl?: string;
-      "@microsoft.graph.downloadUrl"?: string;
-      folder?: object;
-      file?: { mimeType?: string };
-    }>;
-  }>(token, `/shares/${encoded}/driveItem/children?$orderby=name asc`);
-
-  return res.value.map((item) => ({
+function mapDriveItem(item: GraphDriveItem): SPFile {
+  return {
     id: item.id,
     name: item.name,
     size: item.size ?? null,
@@ -234,7 +260,20 @@ export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: stri
     downloadUrl: item["@microsoft.graph.downloadUrl"] ?? null,
     isFolder: !!item.folder,
     mimeType: item.file?.mimeType ?? null,
-  }));
+  };
+}
+
+export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: string): Promise<SPFile[]> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);
+
+  const encodedPath = graphPath(segments);
+  const apiPath = encodedPath
+    ? `/drives/${driveId}/root:/${encodedPath}:/children?$orderby=name asc`
+    : `/drives/${driveId}/root/children?$orderby=name asc`;
+
+  const res = await graphGet<{ value: GraphDriveItem[] }>(token, apiPath);
+  return res.value.map(mapDriveItem);
 }
 
 export async function uploadToSharePoint(
@@ -245,42 +284,15 @@ export async function uploadToSharePoint(
   mimeType: string
 ): Promise<SPFile> {
   const token = await getGraphToken(env);
-  const encoded = encodeShareUrl(folderAbsoluteUrl);
+  const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);
 
-  // Get the folder's driveItem to obtain its drive ID and item ID
-  const folder = await graphGet<{
-    id: string;
-    parentReference: { driveId: string };
-  }>(token, `/shares/${encoded}/driveItem`);
+  const encodedPath = graphPath(segments);
+  const uploadPath = encodedPath
+    ? `/drives/${driveId}/root:/${encodedPath}/${encodeURIComponent(filename)}:/content`
+    : `/drives/${driveId}/root:/${encodeURIComponent(filename)}:/content`;
 
-  const driveId = folder.parentReference.driveId;
-  const folderId = folder.id;
-
-  const item = await graphPut<{
-    id: string;
-    name: string;
-    size: number;
-    webUrl: string;
-    lastModifiedDateTime?: string;
-    "@microsoft.graph.downloadUrl"?: string;
-    file?: { mimeType?: string };
-  }>(
-    token,
-    `/drives/${driveId}/items/${folderId}:/${encodeURIComponent(filename)}:/content`,
-    content,
-    mimeType
-  );
-
-  return {
-    id: item.id,
-    name: item.name,
-    size: item.size,
-    lastModified: item.lastModifiedDateTime ?? null,
-    webUrl: item.webUrl,
-    downloadUrl: item["@microsoft.graph.downloadUrl"] ?? null,
-    isFolder: false,
-    mimeType: item.file?.mimeType ?? null,
-  };
+  const item = await graphPut<GraphDriveItem>(token, uploadPath, content, mimeType);
+  return mapDriveItem(item);
 }
 
 export async function deleteSharePointFile(
@@ -288,14 +300,13 @@ export async function deleteSharePointFile(
   fileWebUrl: string
 ): Promise<void> {
   const token = await getGraphToken(env);
-  const encoded = encodeShareUrl(fileWebUrl);
+  const { driveId, segments } = await resolveSharePointPath(token, fileWebUrl);
 
-  const item = await graphGet<{ id: string; parentReference: { driveId: string } }>(
-    token, `/shares/${encoded}/driveItem`
-  );
+  const encodedPath = graphPath(segments);
+  const item = await graphGet<{ id: string }>(token, `/drives/${driveId}/root:/${encodedPath}`);
 
   const res = await fetch(
-    `${GRAPH_API_BASE}/drives/${item.parentReference.driveId}/items/${item.id}`,
+    `${GRAPH_API_BASE}/drives/${driveId}/items/${item.id}`,
     { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
   );
 
