@@ -56,6 +56,25 @@ Full end-to-end lifecycle linking across all three core modules.
 **UI — Optimize direct enroll modal**
 - Optional "Link to Project" select to associate a direct-enrolled account with an existing project
 
+### Unified `LifecycleChain` Component
+
+Replaced three separate chain/breadcrumb implementations with a single shared component (`src/client/components/ui/LifecycleChain.tsx`).
+
+- Consistent pill design across all three detail pages (Solution, Project, Optimize account)
+- Color-coded by module: purple = Solution, teal = Project, cyan = Optimization
+- Always renders all three steps with `→` arrows between them
+- Filled pill with `●` dot = current page; outlined pill = linked (clickable); dashed pill = not yet linked
+- `actions` slot for link/unlink buttons, rendered below the chain row
+
+### 1:1:1 Chain Enforcement (Solution → Project → Optimization)
+
+Tightened the lifecycle relationship from one-to-many to strictly one-to-one at every step.
+
+- **Backend**: `POST /solutions/:id/create-project` and `POST /solutions/:id/link-project` now return `409` if the solution already has a linked project
+- **UI — Solution detail**: "Create Project" button hidden once a project is linked; "Unlink Project" action added; link modal filters to only show unlinked projects
+- **UI — Solution detail**: `linkedProject` state is now a single `Project | null` (was an array)
+- **LifecycleChain**: `projects` array prop replaced with single `project` prop; Optimization node always visible on all three pages
+
 ---
 
 ## 2026-03-20
