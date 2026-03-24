@@ -278,8 +278,8 @@ export default function SolutionsPage() {
                           key={r.id}
                           type="button"
                           style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer" }}
-                          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(99,193,234,0.1)"; }}
-                          onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "none"; }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.1)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
                           onClick={() => selectCrmAccount(r)}
                         >
                           {r.name}
