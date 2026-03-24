@@ -19,6 +19,7 @@ import {
   type TaskComment,
   type User,
 } from "../lib/api";
+import LifecycleChain from "../components/ui/LifecycleChain";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
@@ -739,62 +740,46 @@ export default function ProjectDetailPage() {
       {tab === "overview" && (
         <div style={{ display: "grid", gap: 16 }}>
           {/* ── Lifecycle Chain ──────────────────────────────────────────── */}
-          <div className="ms-section-card">
-            <div className="ms-section-title">Lifecycle Chain</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              {chain?.solution ? (
-                <Link
-                  to={`/solutions/${chain.solution.id}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", background: "rgba(135,100,184,0.1)", border: "1px solid rgba(135,100,184,0.3)", borderRadius: 4, color: "#8764b8", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
-                >
-                  ← Solution: {chain.solution.name}
-                </Link>
-              ) : (
-                <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No linked solution</span>
-              )}
-              <span style={{ fontSize: 13, color: "#475569", fontWeight: 600 }}>· Project (here) ·</span>
-              {chain?.optimizeAccount ? (
-                <Link
-                  to={`/optimize/${chain.optimizeAccount.project_id}`}
-                  style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", background: "rgba(8,145,178,0.1)", border: "1px solid rgba(8,145,178,0.3)", borderRadius: 4, color: "#0891b2", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
-                >
-                  Optimization → View
-                </Link>
-              ) : (
-                <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No linked optimization</span>
-              )}
-            </div>
-            {canEdit && !chain?.solution && (
-              <button
-                className="ms-btn-secondary"
-                style={{ fontSize: 12, marginTop: 12 }}
-                onClick={() => {
-                  setShowLinkSolutionModal(true);
-                  setLinkSolutionId("");
-                  api.solutions().then(setAllSolutions).catch(() => {});
-                }}
-              >
-                + Link to Solution
-              </button>
+          <LifecycleChain
+            current="project"
+            currentLabel={project.name}
+            solution={chain?.solution ?? null}
+            optimization={chain?.optimizeAccount ?? null}
+            actions={canEdit && (
+              <>
+                {!chain?.solution && (
+                  <button
+                    className="ms-btn-secondary"
+                    style={{ fontSize: 12 }}
+                    onClick={() => {
+                      setShowLinkSolutionModal(true);
+                      setLinkSolutionId("");
+                      api.solutions().then(setAllSolutions).catch(() => {});
+                    }}
+                  >
+                    + Link to Solution
+                  </button>
+                )}
+                {chain?.solution && (
+                  <button
+                    className="ms-btn-ghost"
+                    style={{ fontSize: 12, color: "#94a3b8" }}
+                    onClick={async () => {
+                      try {
+                        await api.unlinkProjectFromSolution(chain.solution!.id, project.id);
+                        setChain((c) => c ? { ...c, solution: null } : null);
+                        showToast("Solution unlinked.", "success");
+                      } catch {
+                        showToast("Failed to unlink solution", "error");
+                      }
+                    }}
+                  >
+                    Unlink Solution
+                  </button>
+                )}
+              </>
             )}
-            {canEdit && chain?.solution && (
-              <button
-                className="ms-btn-ghost"
-                style={{ fontSize: 12, marginTop: 12, color: "#94a3b8" }}
-                onClick={async () => {
-                  try {
-                    await api.unlinkProjectFromSolution(chain.solution!.id, project.id);
-                    setChain((c) => c ? { ...c, solution: null } : null);
-                    showToast("Solution unlinked.", "success");
-                  } catch {
-                    showToast("Failed to unlink solution", "error");
-                  }
-                }}
-              >
-                Unlink Solution
-              </button>
-            )}
-          </div>
+          />
 
           {/* ── Project Team ──────────────────────────────────────────────── */}
           <div className="ms-section-card">

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import LifecycleChain from "../components/ui/LifecycleChain";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
@@ -458,25 +459,11 @@ export default function SolutionDetailPage() {
           </div>
 
           {/* ── Lifecycle Chain ── */}
-          <div className="ms-card">
-            <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Lifecycle Chain</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: linkedProjects.length > 0 ? 14 : 0 }}>
-              <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>Solution (here)</span>
-              <span style={{ color: "#475569" }}>→</span>
-              {linkedProjects.length > 0 ? (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                  {linkedProjects.map((p) => (
-                    <Link key={p.id} to={`/projects/${p.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", background: "rgba(99,193,234,0.1)", border: "1px solid rgba(99,193,234,0.3)", borderRadius: 4, color: "#63c1ea", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>
-                      {p.name}
-                      {p.has_optimization ? <span style={{ marginLeft: 4, fontSize: 10, color: "#0891b2" }}>→ Optimize</span> : null}
-                    </Link>
-                  ))}
-                </div>
-              ) : (
-                <span style={{ fontSize: 12, color: "#94a3b8" }}>No linked projects yet</span>
-              )}
-            </div>
-            {canEdit && (
+          <LifecycleChain
+            current="solution"
+            currentLabel={solution.name}
+            projects={linkedProjects}
+            actions={canEdit && (
               <button
                 className="ms-btn-secondary"
                 style={{ fontSize: 12 }}
@@ -489,7 +476,7 @@ export default function SolutionDetailPage() {
                 + Link Existing Project
               </button>
             )}
-          </div>
+          />
 
           {/* ── Customer Contacts ── */}
           <div className="ms-card">
