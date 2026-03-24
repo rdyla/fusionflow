@@ -84,6 +84,8 @@ export type Solution = {
   solution_type: SolutionType;
   status: SolutionStatus;
   pf_ae_user_id: string | null;
+  pf_sa_user_id: string | null;
+  pf_csm_user_id: string | null;
   partner_ae_user_id: string | null;
   partner_ae_name: string | null;
   partner_ae_email: string | null;
@@ -99,6 +101,8 @@ export type Solution = {
   // Joined fields
   pf_ae_name: string | null;
   pf_ae_email_addr: string | null;
+  pf_sa_name: string | null;
+  pf_csm_name: string | null;
   partner_ae_display_name: string | null;
 };
 
@@ -1091,6 +1095,8 @@ export const api = {
     vendor: SolutionVendor;
     solution_type: SolutionType;
     pf_ae_user_id?: string;
+    pf_sa_user_id?: string;
+    pf_csm_user_id?: string;
     partner_ae_user_id?: string;
     partner_ae_name?: string;
     partner_ae_email?: string;

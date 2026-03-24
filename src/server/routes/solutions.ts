@@ -11,10 +11,14 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const SOLUTION_SELECT = `
   SELECT s.*,
     u1.name as pf_ae_name, u1.email as pf_ae_email_addr,
-    u2.name as partner_ae_display_name
+    u2.name as partner_ae_display_name,
+    u3.name as pf_sa_name,
+    u4.name as pf_csm_name
   FROM solutions s
   LEFT JOIN users u1 ON u1.id = s.pf_ae_user_id
   LEFT JOIN users u2 ON u2.id = s.partner_ae_user_id
+  LEFT JOIN users u3 ON u3.id = s.pf_sa_user_id
+  LEFT JOIN users u4 ON u4.id = s.pf_csm_user_id
 `;
 
 const SOLUTION_TYPE_LABELS: Record<string, string> = {
@@ -63,6 +67,8 @@ const createSolutionSchema = z.object({
   vendor: z.enum(["zoom", "ringcentral"]),
   solution_type: z.enum(["ucaas", "ccaas", "zoom_ra", "zoom_va", "rc_ace", "rc_air"]),
   pf_ae_user_id: z.string().optional(),
+  pf_sa_user_id: z.string().optional(),
+  pf_csm_user_id: z.string().optional(),
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
   partner_ae_email: z.string().email().optional().or(z.literal("")),
@@ -77,7 +83,8 @@ app.post("/", async (c) => {
 
   const {
     customer_name, dynamics_account_id, vendor, solution_type,
-    pf_ae_user_id, partner_ae_user_id, partner_ae_name, partner_ae_email,
+    pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
+    partner_ae_user_id, partner_ae_name, partner_ae_email,
   } = parsed.data;
 
   const name = `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
@@ -119,13 +126,14 @@ app.post("/", async (c) => {
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, dynamics_account_id, vendor, solution_type,
-          pf_ae_user_id, partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
+          partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, dynamics_account_id ?? null, vendor, solution_type,
-      pf_ae_user_id ?? null, resolvedPartnerAeUserId,
-      partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
+      pf_ae_user_id ?? null, pf_sa_user_id ?? null, pf_csm_user_id ?? null,
+      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
     .run();
 
@@ -160,6 +168,8 @@ const updateSolutionSchema = z.object({
   solution_type: z.enum(["ucaas", "ccaas", "zoom_ra", "rc_ace"]).optional(),
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   pf_ae_user_id: z.string().nullable().optional(),
+  pf_sa_user_id: z.string().nullable().optional(),
+  pf_csm_user_id: z.string().nullable().optional(),
   partner_ae_user_id: z.string().nullable().optional(),
   partner_ae_name: z.string().nullable().optional(),
   partner_ae_email: z.string().nullable().optional(),

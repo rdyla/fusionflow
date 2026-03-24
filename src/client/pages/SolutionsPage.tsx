@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  api, type Solution, type SolutionType, type SolutionStatus, type SolutionVendor, type User,
+  api, type Solution, type SolutionType, type SolutionStatus, type SolutionVendor, type User, type CrmAccountTeam,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
@@ -51,6 +51,8 @@ const EMPTY_FORM = {
   vendor: "zoom" as SolutionVendor,
   solution_type: "ucaas" as SolutionType,
   pf_ae_user_id: "",
+  pf_sa_user_id: "",
+  pf_csm_user_id: "",
   partner_ae_user_id: "",
   partner_ae_name: "",
   partner_ae_email: "",
@@ -67,6 +69,8 @@ export default function SolutionsPage() {
   const [crmSearch, setCrmSearch] = useState("");
   const [crmResults, setCrmResults] = useState<{ id: string; name: string }[]>([]);
   const [crmSearching, setCrmSearching] = useState(false);
+  const [crmTeam, setCrmTeam] = useState<CrmAccountTeam | null>(null);
+  const [crmTeamLoading, setCrmTeamLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [vendorFilter, setVendorFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -101,6 +105,22 @@ export default function SolutionsPage() {
     setForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.id }));
     setCrmSearch(account.name);
     setCrmResults([]);
+    setCrmTeam(null);
+    setCrmTeamLoading(true);
+    api.optimizeCrmAccountTeam(account.id)
+      .then((team) => {
+        setCrmTeam(team);
+        const matchId = (email: string | null) =>
+          email ? (users.find((u) => u.email.toLowerCase() === email.toLowerCase())?.id ?? "") : "";
+        setForm((f) => ({
+          ...f,
+          pf_ae_user_id: matchId(team.ae_email),
+          pf_sa_user_id: matchId(team.sa_email),
+          pf_csm_user_id: matchId(team.csm_email),
+        }));
+      })
+      .catch(() => setCrmTeam(null))
+      .finally(() => setCrmTeamLoading(false));
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -115,6 +135,8 @@ export default function SolutionsPage() {
       };
       if (form.dynamics_account_id) payload.dynamics_account_id = form.dynamics_account_id;
       if (form.pf_ae_user_id) payload.pf_ae_user_id = form.pf_ae_user_id;
+      if (form.pf_sa_user_id) payload.pf_sa_user_id = form.pf_sa_user_id;
+      if (form.pf_csm_user_id) payload.pf_csm_user_id = form.pf_csm_user_id;
       if (form.partner_ae_mode === "existing" && form.partner_ae_user_id) {
         payload.partner_ae_user_id = form.partner_ae_user_id;
       } else if (form.partner_ae_mode === "new" && form.partner_ae_email) {
@@ -138,6 +160,8 @@ export default function SolutionsPage() {
   }
 
   const pfAes = users.filter((u) => u.role === "pf_ae");
+  const pfSas = users.filter((u) => u.role === "pf_sa");
+  const pfCsms = users.filter((u) => u.role === "pf_csm");
   const partnerAes = users.filter((u) => u.role === "partner_ae");
   const availableTypes = VENDOR_TYPES[form.vendor];
 
@@ -328,7 +352,37 @@ export default function SolutionsPage() {
                 </select>
               </label>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+              {/* CRM team suggestion */}
+              {(crmTeamLoading || crmTeam) && (
+                <div style={{ padding: "10px 14px", background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad", marginBottom: 8 }}>From CRM</div>
+                  {crmTeamLoading ? (
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Loading team…</div>
+                  ) : crmTeam && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                      {[
+                        { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
+                        { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
+                        { label: "CSM", name: crmTeam.csm_name, email: crmTeam.csm_email },
+                      ].map(({ label, name, email }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
+                          {name ? (
+                            <>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{name}</div>
+                              {email && <div style={{ fontSize: 11, color: "#64748b" }}>{email}</div>}
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* PF AE */}
                 <label className="ms-label">
                   <span>PF Account Executive</span>
@@ -368,6 +422,24 @@ export default function SolutionsPage() {
                     </select>
                   ) : null}
                 </label>
+
+                {/* SA */}
+                <label className="ms-label">
+                  <span>Solution Architect</span>
+                  <select className="ms-input" value={form.pf_sa_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_sa_user_id: e.target.value }))}>
+                    <option value="">— Unassigned —</option>
+                    {pfSas.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                  </select>
+                </label>
+
+                {/* CSM */}
+                <label className="ms-label">
+                  <span>Customer Success Manager</span>
+                  <select className="ms-input" value={form.pf_csm_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_csm_user_id: e.target.value }))}>
+                    <option value="">— Unassigned —</option>
+                    {pfCsms.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                  </select>
+                </label>
               </div>
 
               {/* New Partner AE fields */}
@@ -388,7 +460,7 @@ export default function SolutionsPage() {
                 <button type="submit" className="ms-btn-primary" disabled={saving || !form.customer_name.trim()}>
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); }}>
                   Cancel
                 </button>
               </div>
