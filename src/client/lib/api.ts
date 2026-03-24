@@ -1371,5 +1371,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ recipient_user_id: recipientUserId, body }),
     }),
+  deleteNotification: (id: string) =>
+    request<{ ok: boolean }>(`/inbox/${id}`, { method: "DELETE" }),
 
 };

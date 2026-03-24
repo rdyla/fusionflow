@@ -96,6 +96,12 @@ export default function InboxPage() {
     setMarkingAll(false);
   }
 
+  async function handleDelete(id: string) {
+    await api.deleteNotification(id).catch(() => {});
+    setItems((prev) => prev.filter((n) => n.id !== id));
+    setTotal((t) => Math.max(0, t - 1));
+  }
+
   async function handleSend() {
     if (!compose.recipientId || !compose.body.trim()) return;
     setSending(true);
@@ -108,12 +114,6 @@ export default function InboxPage() {
     } finally {
       setSending(false);
     }
-  }
-
-  function handleNotificationClick(n: Notification) {
-    if (!n.read_at) handleMarkRead(n.id);
-    const link = notificationLink(n);
-    if (link) navigate(link);
   }
 
   const filteredUsers = users.filter((u) =>
@@ -284,12 +284,11 @@ export default function InboxPage() {
             const label = TYPE_LABELS[n.type] ?? n.type;
             const isUnread = !n.read_at;
             const isMessage = n.type === "direct_message";
-            const hasLink = !!notificationLink(n);
+            const link = notificationLink(n);
 
             return (
               <div
                 key={n.id}
-                onClick={() => handleNotificationClick(n)}
                 style={{
                   display: "flex",
                   gap: 14,
@@ -297,11 +296,7 @@ export default function InboxPage() {
                   background: isUnread ? "#f0f9ff" : "#fff",
                   border: `1px solid ${isUnread ? "#bae6fd" : "#f1f5f9"}`,
                   borderRadius: 10,
-                  cursor: hasLink || isMessage ? "pointer" : "default",
-                  transition: "background 0.15s",
                 }}
-                onMouseEnter={(e) => { if (hasLink || isMessage) (e.currentTarget as HTMLDivElement).style.background = isUnread ? "#e0f2fe" : "#f8fafc"; }}
-                onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = isUnread ? "#f0f9ff" : "#fff"; }}
               >
                 {/* Unread dot */}
                 <div style={{ paddingTop: 4, flexShrink: 0 }}>
@@ -326,19 +321,36 @@ export default function InboxPage() {
                       {n.body}
                     </div>
                   )}
-                </div>
 
-                {/* Mark read button */}
-                {isUnread && (
-                  <button
-                    type="button"
-                    title="Mark as read"
-                    onClick={(e) => { e.stopPropagation(); handleMarkRead(n.id); }}
-                    style={{ flexShrink: 0, background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 16, padding: "0 4px", alignSelf: "flex-start", marginTop: 2 }}
-                  >
-                    ✓
-                  </button>
-                )}
+                  {/* Action row */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8 }}>
+                    {link && (
+                      <button
+                        type="button"
+                        onClick={() => { if (isUnread) handleMarkRead(n.id); navigate(link); }}
+                        style={{ fontSize: 12, fontWeight: 600, color: "#0b9aad", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                      >
+                        Go to →
+                      </button>
+                    )}
+                    {isUnread && (
+                      <button
+                        type="button"
+                        onClick={() => handleMarkRead(n.id)}
+                        style={{ fontSize: 12, color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+                      >
+                        Mark read
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(n.id)}
+                      style={{ fontSize: 12, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: 0, marginLeft: "auto" }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
               </div>
             );
           })}

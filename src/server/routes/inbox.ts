@@ -94,6 +94,18 @@ app.post("/read-all", async (c) => {
   return c.json({ ok: true });
 });
 
+// ── DELETE /api/inbox/:id ─────────────────────────────────────────────────────
+
+app.delete("/:id", async (c) => {
+  const auth = c.get("auth");
+  const id = c.req.param("id");
+  await c.env.DB
+    .prepare("DELETE FROM notifications WHERE id = ? AND recipient_user_id = ?")
+    .bind(id, auth.user.id)
+    .run();
+  return c.json({ ok: true });
+});
+
 // ── POST /api/inbox/messages ──────────────────────────────────────────────────
 
 const messageSchema = z.object({
