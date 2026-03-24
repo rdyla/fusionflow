@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { pmNoteAdded, partnerNotePosted } from "../lib/emailTemplates";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -92,6 +93,16 @@ app.post("/:id/notes", async (c) => {
         subject: `New note on ${project.name}`,
         html: pmNoteAdded({ pmName: pm.name ?? pm.email, authorName: auth.user.name ?? auth.user.email, projectName: project.name, noteBody: body, visibility, appUrl, projectId }),
       }));
+      c.executionCtx.waitUntil(createNotification(db, {
+        recipientUserId: project.pm_user_id,
+        type: "note_added",
+        title: `New note on ${project.name}`,
+        body: body.slice(0, 120) + (body.length > 120 ? "…" : ""),
+        entityType: "note",
+        entityId: noteId,
+        projectId,
+        senderUserId: auth.user.id,
+      }));
     }
   }
 
@@ -120,6 +131,16 @@ app.post("/:id/notes", async (c) => {
           appUrl,
           projectId,
         }),
+      }));
+      c.executionCtx.waitUntil(createNotification(db, {
+        recipientUserId: ae.id,
+        type: "note_added",
+        title: `New comment on ${project!.name}`,
+        body: body.slice(0, 120) + (body.length > 120 ? "…" : ""),
+        entityType: "note",
+        entityId: noteId,
+        projectId,
+        senderUserId: auth.user.id,
       }));
     }
   }

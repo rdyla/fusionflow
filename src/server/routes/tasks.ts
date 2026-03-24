@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -89,6 +90,16 @@ app.post("/:id/tasks", async (c) => {
         subject: `You've been assigned: ${created.title}`,
         html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: created.title, projectName: project.name, dueDate: created.due_date, priority: created.priority, appUrl, projectId }),
       }));
+      c.executionCtx.waitUntil(createNotification(db, {
+        recipientUserId: created.assignee_user_id,
+        type: "task_assigned",
+        title: `You've been assigned: ${created.title}`,
+        body: project.name,
+        entityType: "task",
+        entityId: created.id,
+        projectId,
+        senderUserId: auth.user.id,
+      }));
     }
   }
 
@@ -110,11 +121,6 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const projectId = c.req.param("id");
   const taskId = c.req.param("taskId");
 
-  const allowed = await canEditProject(db, auth.user, projectId);
-  if (!allowed) {
-    throw new HTTPException(403, { message: "Forbidden" });
-  }
-
   const existing = await db
     .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
@@ -124,11 +130,29 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     throw new HTTPException(404, { message: "Task not found" });
   }
 
+  // pf_engineer may update status of tasks assigned to them
+  const isEngineerOnOwnTask =
+    auth.role === "pf_engineer" && existing.assignee_user_id === auth.user.id;
+  const canEdit = await canEditProject(db, auth.user, projectId);
+  if (!canEdit && !isEngineerOnOwnTask) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
   const rawBody = await c.req.json();
   const parsed = updateTaskSchema.safeParse(rawBody);
 
   if (!parsed.success) {
     throw new HTTPException(400, { message: "Invalid request body" });
+  }
+
+  // Engineers on own tasks may only change status
+  if (isEngineerOnOwnTask && !canEdit) {
+    const disallowed = Object.keys(parsed.data).filter(
+      (k) => k !== "status" && parsed.data[k as keyof typeof parsed.data] !== undefined
+    );
+    if (disallowed.length > 0) {
+      throw new HTTPException(403, { message: "Engineers may only update task status" });
+    }
   }
 
   const updates = parsed.data;
@@ -176,6 +200,16 @@ app.patch("/:id/tasks/:taskId", async (c) => {
         subject: `You've been assigned: ${updated.title}`,
         html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: updated.title, projectName: project.name, dueDate: updated.due_date, priority: updated.priority, appUrl, projectId }),
       }));
+      c.executionCtx.waitUntil(createNotification(db, {
+        recipientUserId: updated.assignee_user_id,
+        type: "task_assigned",
+        title: `You've been assigned: ${updated.title}`,
+        body: project.name,
+        entityType: "task",
+        entityId: taskId,
+        projectId,
+        senderUserId: auth.user.id,
+      }));
     }
   }
 
@@ -206,6 +240,18 @@ app.patch("/:id/tasks/:taskId", async (c) => {
         subject: `Task blocked: ${updated?.title ?? ""}`,
         html: taskBlocked({ pmName: pm.name ?? pm.email, taskTitle: updated?.title ?? "", projectName: project.name, assigneeName, appUrl, projectId }),
       }));
+      if (project.pm_user_id !== auth.user.id) {
+        c.executionCtx.waitUntil(createNotification(db, {
+          recipientUserId: project.pm_user_id,
+          type: "task_blocked",
+          title: `Task blocked: ${updated?.title ?? ""}`,
+          body: `${assigneeName ? `Assigned to ${assigneeName} · ` : ""}${project.name}`,
+          entityType: "task",
+          entityId: taskId,
+          projectId,
+          senderUserId: auth.user.id,
+        }));
+      }
     }
   }
 

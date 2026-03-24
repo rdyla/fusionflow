@@ -25,8 +25,10 @@ import asanaRoutes from "./routes/asana";
 import templateRoutes from "./routes/templates";
 import sharepointRoutes from "./routes/sharepoint";
 import authPublicRoutes from "./routes/authPublic";
+import inboxRoutes from "./routes/inbox";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder, milestoneOverdue } from "./lib/emailTemplates";
+import { createNotification } from "./lib/notifications";
 import { computeProjectHealth } from "./lib/healthScore";
 import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
 
@@ -108,6 +110,7 @@ app.route("/api/staff", staffRoutes);
 app.route("/api/optimize", optimizeRoutes);
 app.route("/api/asana", asanaRoutes);
 app.route("/api/sharepoint", sharepointRoutes);
+app.route("/api/inbox", inboxRoutes);
 app.route("/api/admin", templateRoutes);
 app.route("/api/projects", templateRoutes);
 
@@ -161,6 +164,15 @@ async function runGoLiveReminders(env: Bindings): Promise<void> {
             to: user.email,
             subject: `Go-live ${days === 1 ? "tomorrow" : `in ${days} days`}: ${project.name}`,
             html: goLiveReminder({ recipientName: user.name ?? user.email, projectName: project.name, customerName: project.customer_name, goLiveDate: project.target_go_live_date, daysOut: days, appUrl, projectId: project.id }),
+          });
+          await createNotification(env.DB, {
+            recipientUserId: userId,
+            type: "go_live_reminder",
+            title: `Go-live ${days === 1 ? "tomorrow" : `in ${days} days`}: ${project.name}`,
+            body: `Target date: ${project.target_go_live_date}`,
+            entityType: "project",
+            entityId: project.id,
+            projectId: project.id,
           });
         }
       }
@@ -216,6 +228,15 @@ async function runMilestoneOverdueReminders(env: Bindings): Promise<void> {
         appUrl,
         projectId: row.project_id,
       }),
+    });
+    await createNotification(env.DB, {
+      recipientUserId: row.pm_user_id!,
+      type: "milestone_overdue",
+      title: `Milestone overdue: ${row.milestone_name}`,
+      body: `${row.project_name} · ${daysOverdue} day${daysOverdue !== 1 ? "s" : ""} overdue`,
+      entityType: "milestone",
+      entityId: row.id,
+      projectId: row.project_id,
     });
   }
 }

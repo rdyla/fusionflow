@@ -13,6 +13,7 @@ export default function AppShell() {
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [sysStatus, setSysStatus] = useState<SystemStatusResponse | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -37,6 +38,15 @@ export default function AppShell() {
     }
     fetchStatus();
     const id = setInterval(fetchStatus, 300_000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    function fetchUnread() {
+      api.inboxUnreadCount().then((r) => setUnreadCount(r.count)).catch(() => {});
+    }
+    fetchUnread();
+    const id = setInterval(fetchUnread, 60_000);
     return () => clearInterval(id);
   }, []);
 
@@ -67,6 +77,19 @@ export default function AppShell() {
           <>
             <NavSection label="Projects" />
             <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>My Projects</SideLink>
+            <Divider />
+          </>
+        )}
+        {!isClient && (
+          <>
+            <NavSection label="Me" />
+            <SideLink to="/inbox" onClick={() => setDrawerOpen(false)}>
+              Inbox{unreadCount > 0 && (
+                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: "#d13438", color: "#fff", borderRadius: 10, padding: "1px 6px", verticalAlign: "middle" }}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </SideLink>
             <Divider />
           </>
         )}
@@ -187,6 +210,28 @@ export default function AppShell() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <SystemStatusBadge status={sysStatus} />
+            <button
+              type="button"
+              onClick={() => navigate("/inbox")}
+              title="Inbox"
+              style={{ position: "relative", background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.75)", padding: 4, display: "flex", alignItems: "center" }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 20, height: 20 }}>
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+              </svg>
+              {unreadCount > 0 && (
+                <span style={{
+                  position: "absolute", top: 0, right: 0,
+                  fontSize: 9, fontWeight: 800,
+                  background: "#d13438", color: "#fff",
+                  borderRadius: 10, padding: "1px 4px",
+                  lineHeight: 1.4, minWidth: 14, textAlign: "center",
+                }}>
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                </span>
+              )}
+            </button>
           </div>
         </header>
 

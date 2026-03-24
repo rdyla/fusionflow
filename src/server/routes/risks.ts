@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { riskAssigned, pmRiskNotification } from "../lib/emailTemplates";
+import { createNotification } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -74,11 +75,20 @@ app.post("/:id/risks", async (c) => {
           subject: `You've been assigned a risk: ${created.title}`,
           html: riskAssigned({ ownerName: owner.name ?? owner.email, riskTitle: created.title, riskDescription: created.description, projectName: project?.name ?? "", severity: created.severity, appUrl, projectId }),
         }));
+        c.executionCtx.waitUntil(createNotification(db, {
+          recipientUserId: created.owner_user_id,
+          type: "risk_assigned",
+          title: `Risk assigned to you: ${created.title}`,
+          body: project?.name ?? "",
+          entityType: "risk",
+          entityId: id,
+          projectId,
+          senderUserId: auth.user.id,
+        }));
       }
     }
 
     // Notify PM of new risk (skip if PM is the one who created it)
-    const auth = c.get("auth");
     if (project?.pm_user_id && project.pm_user_id !== auth.user.id) {
       const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
       if (pm) {
@@ -86,6 +96,16 @@ app.post("/:id/risks", async (c) => {
           to: pm.email,
           subject: `Risk added on ${project.name}: ${created.title}`,
           html: pmRiskNotification({ pmName: pm.name ?? pm.email, riskTitle: created.title, riskDescription: created.description, projectName: project.name, severity: created.severity, status: "open", isNew: true, appUrl, projectId }),
+        }));
+        c.executionCtx.waitUntil(createNotification(db, {
+          recipientUserId: project.pm_user_id,
+          type: "risk_added",
+          title: `New risk on ${project.name}: ${created.title}`,
+          body: created.description ?? undefined,
+          entityType: "risk",
+          entityId: id,
+          projectId,
+          senderUserId: auth.user.id,
         }));
       }
     }

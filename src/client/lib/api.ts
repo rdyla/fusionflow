@@ -625,6 +625,28 @@ export type LaborEstimate = {
   updated_at: string;
 };
 
+export type Notification = {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  entity_type: string | null;
+  entity_id: string | null;
+  project_id: string | null;
+  read_at: string | null;
+  created_at: string;
+  sender_id: string | null;
+  sender_name: string | null;
+  sender_email: string | null;
+};
+
+export type InboxPage = {
+  items: Notification[];
+  total: number;
+  page: number;
+  hasMore: boolean;
+};
+
 export type UtilizationSnapshot = {
   id: string;
   project_id: string;
@@ -1333,6 +1355,21 @@ export const api = {
     request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
+    }),
+
+  // ── Inbox ─────────────────────────────────────────────────────────────────
+  inboxUnreadCount: () =>
+    request<{ count: number }>("/inbox/unread-count"),
+  inbox: (tab: "all" | "notifications" | "messages" = "all", page = 1) =>
+    request<InboxPage>(`/inbox?tab=${tab}&page=${page}`),
+  markNotificationRead: (id: string) =>
+    request<{ ok: boolean }>(`/inbox/${id}/read`, { method: "PATCH" }),
+  markAllRead: () =>
+    request<{ ok: boolean }>("/inbox/read-all", { method: "POST" }),
+  sendMessage: (recipientUserId: string, body: string) =>
+    request<{ ok: boolean }>("/inbox/messages", {
+      method: "POST",
+      body: JSON.stringify({ recipient_user_id: recipientUserId, body }),
     }),
 
 };

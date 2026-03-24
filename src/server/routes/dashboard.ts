@@ -57,11 +57,12 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings, "at_risk")
     .first<{ count: number }>();
 
-  // AEs only see tasks assigned to them; managers and PMs/admins see all tasks on their projects
+  // AEs and engineers only see tasks assigned to them; managers and PMs/admins see all tasks
   const isAE = auth.role === "pf_ae" || auth.role === "partner_ae" || auth.role === "pf_sa";
   const isManager = teamIds.length > 1;
-  const taskAssigneeClause = isAE && !isManager ? " AND assignee_user_id = ?" : "";
-  const taskAssigneeBinding: string[] = isAE && !isManager ? [auth.user.id] : [];
+  const scopeToAssigned = (isAE && !isManager) || auth.role === "pf_engineer";
+  const taskAssigneeClause = scopeToAssigned ? " AND assignee_user_id = ?" : "";
+  const taskAssigneeBinding: string[] = scopeToAssigned ? [auth.user.id] : [];
 
   const openTasksCount = await db
     .prepare(
