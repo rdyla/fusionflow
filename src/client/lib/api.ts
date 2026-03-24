@@ -239,6 +239,14 @@ export type DynamicsAccount = {
   address1_stateorprovince: string | null;
 };
 
+export type CrmAccountTeam = {
+  ae_name: string | null;
+  ae_email: string | null;
+  sa_name: string | null;
+  sa_email: string | null;
+  csm_name: string | null;
+};
+
 export type DynamicsContact = {
   contactid: string;
   firstname: string | null;
@@ -1165,6 +1173,8 @@ export const api = {
   // ── Optimize ─────────────────────────────────────────────────────────────
   optimizeCrmSearch: (q: string) =>
     request<DynamicsAccount[]>(`/optimize/crm/accounts?q=${encodeURIComponent(q)}`),
+  optimizeCrmAccountTeam: (accountId: string) =>
+    request<CrmAccountTeam>(`/optimize/crm/accounts/${accountId}/team`),
   optimizeAccounts: () => request<OptimizeAccount[]>("/optimize/accounts"),
   optimizeEligible: () => request<OptimizeEligible[]>("/optimize/eligible"),
   optimizeAccount: (projectId: string) => request<OptimizeAccount>(`/optimize/accounts/${projectId}`),

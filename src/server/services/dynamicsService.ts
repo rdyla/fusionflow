@@ -190,6 +190,44 @@ export type DynamicsOpportunity = {
   statecode: number;
 };
 
+export type AccountTeam = {
+  ae_name: string | null;
+  ae_email: string | null;
+  sa_name: string | null;
+  sa_email: string | null;
+  csm_name: string | null; // sourced from territory name
+};
+
+export async function getAccountTeam(env: Env, accountId: string): Promise<AccountTeam> {
+  if (!isConfigured(env)) return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null };
+
+  const expand = [
+    "owninguser($select=systemuserid,internalemailaddress,fullname)",
+    "pfi_solutionarchitect($select=systemuserid,internalemailaddress,fullname)",
+    "territoryid($select=name,territoryid)",
+  ].join(",");
+  const path = `/accounts(${accountId})?$select=accountid&$expand=${expand}`;
+
+  type RawTeam = {
+    owninguser?: { systemuserid: string; internalemailaddress: string | null; fullname: string | null } | null;
+    pfi_solutionarchitect?: { systemuserid: string; internalemailaddress: string | null; fullname: string | null } | null;
+    territoryid?: { name: string | null } | null;
+  };
+
+  try {
+    const data = await dynamicsGet<RawTeam>(env, path);
+    return {
+      ae_name: data.owninguser?.fullname ?? null,
+      ae_email: data.owninguser?.internalemailaddress ?? null,
+      sa_name: data.pfi_solutionarchitect?.fullname ?? null,
+      sa_email: data.pfi_solutionarchitect?.internalemailaddress ?? null,
+      csm_name: data.territoryid?.name ?? null,
+    };
+  } catch {
+    return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null };
+  }
+}
+
 export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {
   if (!isConfigured(env)) return [];
 

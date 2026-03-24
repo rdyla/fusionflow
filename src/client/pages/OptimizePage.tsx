@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount } from "../lib/api";
+import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount, type CrmAccountTeam } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -42,6 +42,8 @@ export default function OptimizePage() {
   const [crmSearching, setCrmSearching] = useState(false);
   const [selectedCrm, setSelectedCrm] = useState<DynamicsAccount | null>(null);
   const [crmMode, setCrmMode] = useState<"search" | "manual">("search");
+  const [crmTeam, setCrmTeam] = useState<CrmAccountTeam | null>(null);
+  const [crmTeamLoading, setCrmTeamLoading] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
 
@@ -70,6 +72,7 @@ export default function OptimizePage() {
     setCrmResults(null);
     setSelectedCrm(null);
     setCrmMode("search");
+    setCrmTeam(null);
   }
 
   async function handleCrmSearch() {
@@ -90,11 +93,31 @@ export default function OptimizePage() {
     setDirectForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.accountid }));
     setCrmResults(null);
     setCrmQuery("");
+    setCrmTeam(null);
+    setCrmTeamLoading(true);
+    api.optimizeCrmAccountTeam(account.accountid)
+      .then((team) => {
+        setCrmTeam(team);
+        // Auto-match SA by email
+        if (team.sa_email) {
+          const match = users.find((u) => u.email.toLowerCase() === team.sa_email!.toLowerCase());
+          if (match) setDirectForm((f) => ({ ...f, sa_user_id: match.id }));
+        }
+        // Auto-match CSM by name (territory name = CSM's name)
+        if (team.csm_name) {
+          const needle = team.csm_name.toLowerCase();
+          const match = users.find((u) => u.name && u.name.toLowerCase() === needle);
+          if (match) setDirectForm((f) => ({ ...f, csm_user_id: match.id }));
+        }
+      })
+      .catch(() => setCrmTeam(null))
+      .finally(() => setCrmTeamLoading(false));
   }
 
   function clearCrmSelection() {
     setSelectedCrm(null);
-    setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "" }));
+    setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "", sa_user_id: "", csm_user_id: "" }));
+    setCrmTeam(null);
   }
 
   async function handleDirectEnroll(e: React.FormEvent) {
@@ -331,6 +354,38 @@ export default function OptimizePage() {
                   </>
                 )}
               </div>
+
+              {/* CRM team suggestion */}
+              {(crmTeamLoading || crmTeam) && (
+                <div style={{ padding: "10px 14px", background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad", marginBottom: 8 }}>
+                    From CRM
+                  </div>
+                  {crmTeamLoading ? (
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Loading team…</div>
+                  ) : crmTeam && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                      {[
+                        { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
+                        { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
+                        { label: "CSM", name: crmTeam.csm_name, email: null },
+                      ].map(({ label, name, email }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
+                          {name ? (
+                            <>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{name}</div>
+                              {email && <div style={{ fontSize: 11, color: "#64748b" }}>{email}</div>}
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <label className="ms-label">
