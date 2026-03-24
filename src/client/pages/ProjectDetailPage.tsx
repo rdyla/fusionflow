@@ -156,6 +156,7 @@ export default function ProjectDetailPage() {
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
+  const [crmSyncing, setCrmSyncing] = useState(false);
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
 
   // Apply template
@@ -326,6 +327,25 @@ export default function ProjectDetailPage() {
       showToast("Failed to add staff member", "error");
     } finally {
       setAddingStaff(false);
+    }
+  }
+
+  async function handleCrmSync() {
+    if (!project) return;
+    setCrmSyncing(true);
+    try {
+      const { staff, crm } = await api.projectCrmSync(project.id);
+      setProjectStaff(staff);
+      const matched = [
+        crm.ae_name  ? `AE: ${crm.ae_name}`  : null,
+        crm.sa_name  ? `SA: ${crm.sa_name}`  : null,
+        crm.csm_name ? `CSM: ${crm.csm_name}` : null,
+      ].filter(Boolean);
+      showToast(matched.length ? `Synced from CRM — ${matched.join(", ")}` : "Synced from CRM (no team found)", "success");
+    } catch {
+      showToast("CRM sync failed", "error");
+    } finally {
+      setCrmSyncing(false);
     }
   }
 
@@ -756,7 +776,12 @@ export default function ProjectDetailPage() {
               )}
             </div>
             {canEdit && (
-              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
+              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {project.dynamics_account_id && (
+                  <button className="ms-btn-secondary" style={{ fontSize: 12 }} disabled={crmSyncing} onClick={handleCrmSync}>
+                    {crmSyncing ? "Syncing…" : "Sync from CRM"}
+                  </button>
+                )}
                 <button className="ms-btn-secondary" onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>
                   + Add Staff Member
                 </button>
@@ -1729,12 +1754,15 @@ export default function ProjectDetailPage() {
                 <span>Role on Project</span>
                 <select className="ms-input" value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
                   <option value="">— Select role —</option>
-                  <option value="ae">Account Executive</option>
-                  <option value="sa">Solution Architect</option>
-                  <option value="csm">Client Success Manager</option>
+                  {!project?.dynamics_account_id && <option value="ae">Account Executive</option>}
+                  {!project?.dynamics_account_id && <option value="sa">Solution Architect</option>}
+                  {!project?.dynamics_account_id && <option value="csm">Client Success Manager</option>}
                   <option value="engineer">Implementation Engineer</option>
                   <option value="pm">Project Manager</option>
                 </select>
+                {project?.dynamics_account_id && (
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>AE, SA, and CSM are managed via CRM sync.</div>
+                )}
               </label>
               <label className="ms-label">
                 <span>Team Member</span>

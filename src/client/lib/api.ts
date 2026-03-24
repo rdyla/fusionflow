@@ -1172,6 +1172,8 @@ export const api = {
     }),
   removeProjectStaff: (projectId: string, staffId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/staff/${staffId}`, { method: "DELETE" }),
+  projectCrmSync: (projectId: string) =>
+    request<{ staff: ProjectStaffMember[]; crm: { ae_name: string | null; sa_name: string | null; csm_name: string | null } }>(`/projects/${projectId}/crm-sync`, { method: "POST" }),
 
   // ── Solution Staff ────────────────────────────────────────────────────────
   solutionStaff: (solutionId: string) => request<SolutionStaffMember[]>(`/solutions/${solutionId}/staff`),

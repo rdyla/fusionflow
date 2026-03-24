@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-type D1Database = Bindings["DB"];
+import { findOrCreatePfUser } from "../lib/crmUsers";
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
 import { scoreAssessment } from "../lib/scoringEngine";
@@ -98,23 +98,6 @@ app.get("/crm/accounts", async (c) => {
   const results = await searchAccounts(c.env, q);
   return c.json(results);
 });
-
-// ── Shared helper: find user by email or create from CRM data ─────────────────
-
-async function findOrCreatePfUser(db: D1Database, email: string | null, name: string | null, role: string): Promise<string | null> {
-  if (!email) return null;
-  const existing = await db
-    .prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1")
-    .bind(email)
-    .first<{ id: string }>();
-  if (existing) return existing.id;
-  const newId = crypto.randomUUID();
-  await db
-    .prepare("INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, 1)")
-    .bind(newId, email.toLowerCase(), name ?? null, role)
-    .run();
-  return newId;
-}
 
 // ── CRM account team (find-or-create users, return with IDs) ──────────────────
 
