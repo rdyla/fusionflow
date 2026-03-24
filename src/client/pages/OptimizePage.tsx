@@ -103,10 +103,9 @@ export default function OptimizePage() {
           const match = users.find((u) => u.email.toLowerCase() === team.sa_email!.toLowerCase());
           if (match) setDirectForm((f) => ({ ...f, sa_user_id: match.id }));
         }
-        // Auto-match CSM by name (territory name = CSM's name)
-        if (team.csm_name) {
-          const needle = team.csm_name.toLowerCase();
-          const match = users.find((u) => u.name && u.name.toLowerCase() === needle);
+        // Auto-match CSM by email (territory manager email)
+        if (team.csm_email) {
+          const match = users.find((u) => u.email.toLowerCase() === team.csm_email!.toLowerCase());
           if (match) setDirectForm((f) => ({ ...f, csm_user_id: match.id }));
         }
       })
@@ -368,7 +367,7 @@ export default function OptimizePage() {
                       {[
                         { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
                         { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
-                        { label: "CSM", name: crmTeam.csm_name, email: null },
+                        { label: "CSM", name: crmTeam.csm_name, email: crmTeam.csm_email },
                       ].map(({ label, name, email }) => (
                         <div key={label}>
                           <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>

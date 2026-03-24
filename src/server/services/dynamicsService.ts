@@ -195,11 +195,12 @@ export type AccountTeam = {
   ae_email: string | null;
   sa_name: string | null;
   sa_email: string | null;
-  csm_name: string | null; // sourced from territory name
+  csm_name: string | null;
+  csm_email: string | null;
 };
 
 export async function getAccountTeam(env: Env, accountId: string): Promise<AccountTeam> {
-  if (!isConfigured(env)) return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null };
+  if (!isConfigured(env)) return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null, csm_email: null };
 
   // Step 1: fetch the account with annotated formatted values for the three lookup fields.
   // Using $select with the _value convention plus annotation header gives us names without $expand.
@@ -213,6 +214,7 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
   let sa_name: string | null = null;
   let sa_email: string | null = null;
   let csm_name: string | null = null;
+  let csm_email: string | null = null;
 
   try {
     const data = await dynamicsGetAnnotated<RawAccount>(env, path);
@@ -223,33 +225,44 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
     const saId = data["_pfi_solutionarchitect_value"] as string | null;
     sa_name = (data["_pfi_solutionarchitect_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
 
-    csm_name = (data["_territoryid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+    const territoryId = data["_territoryid_value"] as string | null;
 
-    // Step 2: fetch emails for AE and SA by their user GUIDs
+    // Step 2: fetch emails for AE and SA, and resolve CSM via territory manager
+    const userFetch = async (id: string) => {
+      const u = await dynamicsGet<{ internalemailaddress: string | null }>(
+        env, `/systemusers(${id})?$select=internalemailaddress`
+      );
+      return u.internalemailaddress ?? null;
+    };
+
     if (aeId) {
-      try {
-        const u = await dynamicsGet<{ internalemailaddress: string | null }>(
-          env, `/systemusers(${aeId})?$select=internalemailaddress`
-        );
-        ae_email = u.internalemailaddress ?? null;
-      } catch { /* non-fatal */ }
+      try { ae_email = await userFetch(aeId); } catch { /* non-fatal */ }
     }
 
     if (saId && saId !== aeId) {
-      try {
-        const u = await dynamicsGet<{ internalemailaddress: string | null }>(
-          env, `/systemusers(${saId})?$select=internalemailaddress`
-        );
-        sa_email = u.internalemailaddress ?? null;
-      } catch { /* non-fatal */ }
+      try { sa_email = await userFetch(saId); } catch { /* non-fatal */ }
     } else if (saId && saId === aeId) {
       sa_email = ae_email;
+    }
+
+    // Step 3: fetch territory manager for CSM name + email
+    if (territoryId) {
+      try {
+        const territory = await dynamicsGetAnnotated<{ [key: string]: unknown }>(
+          env, `/territories(${territoryId})?$select=_managerid_value`
+        );
+        const managerId = territory["_managerid_value"] as string | null;
+        csm_name = (territory["_managerid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+        if (managerId) {
+          try { csm_email = await userFetch(managerId); } catch { /* non-fatal */ }
+        }
+      } catch { /* non-fatal */ }
     }
   } catch {
     // Return whatever we managed to collect
   }
 
-  return { ae_name, ae_email, sa_name, sa_email, csm_name };
+  return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email };
 }
 
 export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {

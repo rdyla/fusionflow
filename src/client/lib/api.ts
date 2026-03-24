@@ -245,6 +245,7 @@ export type CrmAccountTeam = {
   sa_name: string | null;
   sa_email: string | null;
   csm_name: string | null;
+  csm_email: string | null;
 };
 
 export type DynamicsContact = {
