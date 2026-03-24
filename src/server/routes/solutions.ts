@@ -5,6 +5,8 @@ import type { Bindings, Variables } from "../types";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { getAccountTeam } from "../services/dynamicsService";
+import { findOrCreatePfUser } from "../lib/crmUsers";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -424,6 +426,60 @@ app.delete("/:id/staff/:staffId", async (c) => {
   await c.env.DB.prepare("DELETE FROM solution_staff WHERE id = ? AND solution_id = ?")
     .bind(c.req.param("staffId"), c.req.param("id")).run();
   return c.json({ success: true });
+});
+
+// ── CRM team sync ─────────────────────────────────────────────────────────────
+
+app.post("/:id/crm-sync", async (c) => {
+  const auth = c.get("auth");
+  const { role } = auth;
+  if (!["admin", "pm", "pf_ae", "pf_sa"].includes(role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const solution = await db
+    .prepare("SELECT dynamics_account_id FROM solutions WHERE id = ? LIMIT 1")
+    .bind(solutionId)
+    .first<{ dynamics_account_id: string | null }>();
+
+  if (!solution?.dynamics_account_id) {
+    throw new HTTPException(400, { message: "No CRM account linked to this solution" });
+  }
+
+  const team = await getAccountTeam(c.env, solution.dynamics_account_id);
+
+  const [ae_user_id, sa_user_id, csm_user_id] = await Promise.all([
+    findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+    findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+    findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
+  ]);
+
+  const staffToSync = [
+    { userId: ae_user_id,  role: "pf_ae"  },
+    { userId: sa_user_id,  role: "pf_sa"  },
+    { userId: csm_user_id, role: "pf_csm" },
+  ];
+
+  for (const { userId, role: staffRole } of staffToSync) {
+    if (!userId) continue;
+    await db.prepare("DELETE FROM solution_staff WHERE solution_id = ? AND staff_role = ?")
+      .bind(solutionId, staffRole).run();
+    await db.prepare("INSERT INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), solutionId, userId, staffRole).run();
+  }
+
+  const staff = await db.prepare(`
+    SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
+           u.name, u.email, u.role, u.avatar_url
+    FROM solution_staff ss JOIN users u ON u.id = ss.user_id
+    WHERE ss.solution_id = ?
+  `).bind(solutionId).all();
+
+  return c.json({
+    staff: staff.results ?? [],
+    crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name },
+  });
 });
 
 export default app;

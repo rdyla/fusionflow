@@ -1184,6 +1184,8 @@ export const api = {
     }),
   removeSolutionStaff: (solutionId: string, staffId: string) =>
     request<{ success: boolean }>(`/solutions/${solutionId}/staff/${staffId}`, { method: "DELETE" }),
+  solutionCrmSync: (solutionId: string) =>
+    request<{ staff: SolutionStaffMember[]; crm: { ae_name: string | null; sa_name: string | null; csm_name: string | null } }>(`/solutions/${solutionId}/crm-sync`, { method: "POST" }),
 
   // ── Optimize ─────────────────────────────────────────────────────────────
   optimizeCrmSearch: (q: string) =>

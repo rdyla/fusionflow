@@ -86,6 +86,7 @@ export default function SolutionDetailPage() {
   const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
   const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("");
   const [addingSolutionStaff, setAddingSolutionStaff] = useState(false);
+  const [crmSyncing, setCrmSyncing] = useState(false);
   const [solutionStaffPhotoMap, setSolutionStaffPhotoMap] = useState<Record<string, string | null>>({});
 
   const load = useCallback(async () => {
@@ -170,6 +171,25 @@ export default function SolutionDetailPage() {
       showToast("Failed to add staff member", "error");
     } finally {
       setAddingSolutionStaff(false);
+    }
+  }
+
+  async function handleCrmSync() {
+    if (!id) return;
+    setCrmSyncing(true);
+    try {
+      const { staff, crm } = await api.solutionCrmSync(id);
+      setSolutionStaff(staff);
+      const matched = [
+        crm.ae_name  ? `AE: ${crm.ae_name}`  : null,
+        crm.sa_name  ? `SA: ${crm.sa_name}`  : null,
+        crm.csm_name ? `CSM: ${crm.csm_name}` : null,
+      ].filter(Boolean);
+      showToast(matched.length ? `Synced from CRM — ${matched.join(", ")}` : "Synced from CRM (no team found)", "success");
+    } catch {
+      showToast("CRM sync failed", "error");
+    } finally {
+      setCrmSyncing(false);
     }
   }
 
@@ -395,7 +415,12 @@ export default function SolutionDetailPage() {
             )}
 
             {canEdit && (
-              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9", marginBottom: 16 }}>
+              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9", marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {solution.dynamics_account_id && (
+                  <button className="ms-btn-secondary" style={{ fontSize: 12 }} disabled={crmSyncing} onClick={handleCrmSync}>
+                    {crmSyncing ? "Syncing…" : "Sync from CRM"}
+                  </button>
+                )}
                 <button className="ms-btn-secondary" onClick={() => { setShowSolutionStaffModal(true); setAddSolutionStaffUser(""); setAddSolutionStaffRole(""); }}>
                   + Add Staff Member
                 </button>
@@ -500,20 +525,30 @@ export default function SolutionDetailPage() {
             <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
               <label className="ms-label">
                 <span>Role on Solution</span>
-                <select className="ms-input" value={addSolutionStaffRole} onChange={(e) => setAddSolutionStaffRole(e.target.value)}>
+                <select className="ms-input" value={addSolutionStaffRole} onChange={(e) => { setAddSolutionStaffRole(e.target.value); setAddSolutionStaffUser(""); }}>
                   <option value="">— Select role —</option>
-                  <option value="pf_ae">Account Executive</option>
-                  <option value="pf_sa">Solution Architect</option>
-                  <option value="pf_csm">Client Success Manager</option>
+                  {!solution.dynamics_account_id && <option value="pf_ae">Account Executive</option>}
+                  {!solution.dynamics_account_id && <option value="pf_sa">Solution Architect</option>}
+                  {!solution.dynamics_account_id && <option value="pf_csm">Client Success Manager</option>}
                   <option value="pf_engineer">Implementation Engineer</option>
                   <option value="pm">Project Manager</option>
                 </select>
+                {solution.dynamics_account_id && (
+                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>AE, SA, and CSM are managed via CRM sync.</div>
+                )}
               </label>
               <label className="ms-label">
                 <span>Team Member</span>
                 <select className="ms-input" value={addSolutionStaffUser} onChange={(e) => setAddSolutionStaffUser(e.target.value)}>
                   <option value="">— Select team member —</option>
-                  {users.filter((u) => u.role !== "partner_ae").map((u) => (
+                  {users.filter((u) => {
+                    if (addSolutionStaffRole === "pm") return u.role === "pm";
+                    if (addSolutionStaffRole === "pf_engineer") return u.role === "pf_engineer";
+                    if (addSolutionStaffRole === "pf_ae")  return u.role === "pf_ae";
+                    if (addSolutionStaffRole === "pf_sa")  return u.role === "pf_sa";
+                    if (addSolutionStaffRole === "pf_csm") return u.role === "pf_csm";
+                    return u.role !== "partner_ae" && u.role !== "client";
+                  }).map((u) => (
                     <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
                   ))}
                 </select>
