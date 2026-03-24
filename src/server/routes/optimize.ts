@@ -30,8 +30,9 @@ app.get("/accounts", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
-      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
+      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
       ae.name AS ae_name, sa.name AS sa_name, csm.name AS csm_name,
+      sol.name AS linked_solution_name,
       (SELECT conducted_date FROM impact_assessments WHERE project_id = oa.project_id
        ORDER BY conducted_date DESC LIMIT 1) AS last_assessment_date,
       (SELECT overall_score FROM impact_assessments WHERE project_id = oa.project_id
@@ -41,6 +42,7 @@ app.get("/accounts", async (c) => {
     LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
     LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
     LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN solutions sol ON sol.id = p.solution_id
     ORDER BY oa.graduated_at DESC
   `).all();
   return c.json(rows.results ?? []);
@@ -75,7 +77,8 @@ app.get("/accounts/:projectId", async (c) => {
       oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
-      p.pm_name,
+      p.pm_name, p.solution_id,
+      sol.name AS linked_solution_name,
       ae.name  AS ae_name,  ae.email  AS ae_email,
       sa.name  AS sa_name,  sa.email  AS sa_email,
       csm.name AS csm_name, csm.email AS csm_email
@@ -84,10 +87,28 @@ app.get("/accounts/:projectId", async (c) => {
     LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
     LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
     LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN solutions sol ON sol.id = p.solution_id
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });
   return c.json(row);
+});
+
+// ── Linked solution for an optimize account ────────────────────────────────────
+
+app.get("/accounts/:projectId/linked-solution", async (c) => {
+  assertOptimizeAccess(c.get("auth").role);
+  const db = c.env.DB;
+  const projectId = c.req.param("projectId");
+
+  const row = await db.prepare(`
+    SELECT s.id, s.name, s.customer_name, s.status, s.solution_type, s.vendor
+    FROM solutions s
+    JOIN projects p ON p.solution_id = s.id
+    WHERE p.id = ? LIMIT 1
+  `).bind(projectId).first();
+
+  return c.json(row ?? null);
 });
 
 // ── CRM account search ─────────────────────────────────────────────────────────
@@ -182,6 +203,7 @@ const directEnrollSchema = z.object({
   next_review_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
+  project_id: z.string().nullable().optional(),
 });
 
 app.post("/accounts/direct", async (c) => {
@@ -193,17 +215,28 @@ app.post("/accounts/direct", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
   const d = parsed.data;
 
-  // Create a minimal project shell
-  const projectId = crypto.randomUUID();
-  await db.prepare(`
-    INSERT INTO projects (id, name, customer_name, vendor, solution_type, actual_go_live_date,
-      status, health, dynamics_account_id, archived)
-    VALUES (?, ?, ?, ?, ?, ?, 'not_started', 'on_track', ?, 0)
-  `).bind(
-    projectId, d.customer_name, d.customer_name,
-    d.vendor ?? null, d.solution_type ?? null,
-    d.actual_go_live_date ?? null, d.dynamics_account_id ?? null
-  ).run();
+  let projectId: string;
+
+  if (d.project_id) {
+    // Use an existing project rather than creating a shell
+    const existing = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(d.project_id).first();
+    if (!existing) throw new HTTPException(404, { message: "Project not found" });
+    const alreadyInOptimize = await db.prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1").bind(d.project_id).first();
+    if (alreadyInOptimize) throw new HTTPException(409, { message: "Project is already in Optimize" });
+    projectId = d.project_id;
+  } else {
+    // Create a minimal project shell
+    projectId = crypto.randomUUID();
+    await db.prepare(`
+      INSERT INTO projects (id, name, customer_name, vendor, solution_type, actual_go_live_date,
+        status, health, dynamics_account_id, archived)
+      VALUES (?, ?, ?, ?, ?, ?, 'not_started', 'on_track', ?, 0)
+    `).bind(
+      projectId, d.customer_name, d.customer_name,
+      d.vendor ?? null, d.solution_type ?? null,
+      d.actual_go_live_date ?? null, d.dynamics_account_id ?? null
+    ).run();
+  }
 
   // Create the optimize account
   const accountId = crypto.randomUUID();
@@ -223,14 +256,16 @@ app.post("/accounts/direct", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
-      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
+      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
       ae.name AS ae_name, sa.name AS sa_name, csm.name AS csm_name,
+      sol.name AS linked_solution_name,
       NULL AS last_assessment_date, NULL AS last_assessment_score
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
     LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
     LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
     LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN solutions sol ON sol.id = p.solution_id
     WHERE oa.id = ? LIMIT 1
   `).bind(accountId).first();
   return c.json(created, 201);

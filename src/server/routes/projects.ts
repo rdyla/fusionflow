@@ -21,7 +21,8 @@ app.get("/", async (c) => {
     SELECT id, name, customer_name, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
-           managed_in_asana, asana_project_id, created_at, updated_at
+           managed_in_asana, asana_project_id, solution_id, created_at, updated_at,
+           CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
     FROM projects
     WHERE (archived = 0 OR archived IS NULL)
   `;
@@ -70,12 +71,19 @@ app.get("/:id", async (c) => {
   const project = await db
     .prepare(
       `
-      SELECT id, name, customer_name, vendor, solution_type, status, health,
-             kickoff_date, target_go_live_date, actual_go_live_date,
-             pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
-             dynamics_account_id, asana_project_id, managed_in_asana, created_at, updated_at
-      FROM projects
-      WHERE id = ?
+      SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_type, p.status, p.health,
+             p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
+             p.pm_user_id, p.pm_name, p.ae_user_id, p.ae_name, p.sa_name, p.csm_name, p.engineer_name,
+             p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id,
+             p.created_at, p.updated_at,
+             s.name AS linked_solution_name,
+             s.customer_name AS linked_solution_customer,
+             s.status AS linked_solution_status,
+             s.solution_type AS linked_solution_type,
+             CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
+      FROM projects p
+      LEFT JOIN solutions s ON s.id = p.solution_id
+      WHERE p.id = ?
       LIMIT 1
       `
     )
@@ -104,6 +112,7 @@ const createProjectSchema = z.object({
   csm_name: z.string().max(500).nullable().optional(),
   engineer_name: z.string().max(500).nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
+  solution_id: z.string().nullable().optional(),
 });
 
 app.post("/", requireRole("admin", "pm"), async (c) => {
@@ -116,17 +125,17 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id } = parsed.data;
+  const { name, customer_name, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
   const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
 
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id)
-       VALUES (?, ?, ?, ?, ?, 'not_started', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id)
+       VALUES (?, ?, ?, ?, ?, 'not_started', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null)
+    .bind(projectId, name, customer_name ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null)
     .run();
 
   const created = await db
@@ -159,6 +168,7 @@ const updateProjectSchema = z.object({
   engineer_name: z.string().max(500).nullable().optional(),
   asana_project_id: z.string().nullable().optional(),
   managed_in_asana: z.number().int().min(0).max(1).optional(),
+  solution_id: z.string().nullable().optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm"), async (c) => {
@@ -284,6 +294,36 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
   }
 
   return c.json(updated);
+});
+
+// ── Lifecycle chain ───────────────────────────────────────────────────────────
+
+app.get("/:id/chain", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const project = await db
+    .prepare("SELECT solution_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ solution_id: string | null }>();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+
+  const [solution, optimizeAccount] = await Promise.all([
+    project.solution_id
+      ? db.prepare(
+          "SELECT id, name, customer_name, status, solution_type, vendor FROM solutions WHERE id = ? LIMIT 1"
+        ).bind(project.solution_id).first()
+      : Promise.resolve(null),
+    db.prepare(
+      "SELECT project_id, optimize_status FROM optimize_accounts WHERE project_id = ? LIMIT 1"
+    ).bind(projectId).first(),
+  ]);
+
+  return c.json({ solution, optimizeAccount });
 });
 
 // ── Project Contacts ──────────────────────────────────────────────────────────

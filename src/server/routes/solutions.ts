@@ -15,7 +15,8 @@ const SOLUTION_SELECT = `
     u1.name as pf_ae_name, u1.email as pf_ae_email_addr,
     u2.name as partner_ae_display_name,
     u3.name as pf_sa_name,
-    u4.name as pf_csm_name
+    u4.name as pf_csm_name,
+    (SELECT COUNT(*) FROM projects p WHERE p.solution_id = s.id) AS linked_project_count
   FROM solutions s
   LEFT JOIN users u1 ON u1.id = s.pf_ae_user_id
   LEFT JOIN users u2 ON u2.id = s.partner_ae_user_id
@@ -303,6 +304,75 @@ app.delete("/:id/contacts/:contactId", async (c) => {
   return c.json({ success: true });
 });
 
+// ── Linked projects list ──────────────────────────────────────────────────────
+
+app.get("/:id/projects", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
+    ? await getTeamUserIds(auth.user.id, db)
+    : [auth.user.id];
+  const { where, bindings } = accessClause(auth.role, teamIds);
+  const solution = await db
+    .prepare(`SELECT s.id FROM solutions s WHERE s.id = ? AND (${where}) LIMIT 1`)
+    .bind(solutionId, ...bindings)
+    .first();
+  if (!solution) throw new HTTPException(404, { message: "Solution not found" });
+
+  const rows = await db.prepare(`
+    SELECT id, name, customer_name, vendor, solution_type, status, health,
+           kickoff_date, target_go_live_date, actual_go_live_date,
+           pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name,
+           solution_id, created_at, updated_at,
+           CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
+    FROM projects
+    WHERE solution_id = ? AND (archived = 0 OR archived IS NULL)
+    ORDER BY created_at DESC
+  `).bind(solutionId).all();
+
+  return c.json(rows.results ?? []);
+});
+
+// ── Link / unlink existing project ────────────────────────────────────────────
+
+app.post("/:id/link-project", async (c) => {
+  const auth = c.get("auth");
+  if (auth.role !== "admin" && auth.role !== "pm") throw new HTTPException(403, { message: "Forbidden" });
+
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const solution = await db.prepare("SELECT id FROM solutions WHERE id = ? LIMIT 1").bind(solutionId).first();
+  if (!solution) throw new HTTPException(404, { message: "Solution not found" });
+
+  const { project_id } = await c.req.json<{ project_id: string }>();
+  if (!project_id) throw new HTTPException(400, { message: "project_id required" });
+
+  const project = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(project_id).first();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+
+  await db.prepare("UPDATE projects SET solution_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(solutionId, project_id).run();
+
+  return c.json({ success: true });
+});
+
+app.delete("/:id/link-project/:projectId", async (c) => {
+  const auth = c.get("auth");
+  if (auth.role !== "admin" && auth.role !== "pm") throw new HTTPException(403, { message: "Forbidden" });
+
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+  const projectId = c.req.param("projectId");
+
+  await db.prepare("UPDATE projects SET solution_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND solution_id = ?")
+    .bind(projectId, solutionId).run();
+
+  return c.json({ success: true });
+});
+
 // ── Handoff: Create Project ───────────────────────────────────────────────────
 
 app.post("/:id/create-project", async (c) => {
@@ -319,19 +389,19 @@ app.post("/:id/create-project", async (c) => {
     .bind(solutionId)
     .first<{
       id: string; name: string; customer_name: string; vendor: string; solution_type: string;
-      pf_ae_user_id: string | null; partner_ae_user_id: string | null; linked_project_id: string | null;
+      pf_ae_user_id: string | null; partner_ae_user_id: string | null;
+      dynamics_account_id: string | null;
     }>();
 
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
-  if (solution.linked_project_id) throw new HTTPException(409, { message: "A project has already been created for this solution" });
 
   const VENDOR_LABELS: Record<string, string> = { zoom: "Zoom", ringcentral: "RingCentral" };
 
   const projectId = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, ae_user_id)
-       VALUES (?, ?, ?, ?, ?, 'planning', ?)`
+      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, ae_user_id, solution_id, dynamics_account_id)
+       VALUES (?, ?, ?, ?, ?, 'planning', ?, ?, ?)`
     )
     .bind(
       projectId,
@@ -339,9 +409,26 @@ app.post("/:id/create-project", async (c) => {
       solution.customer_name,
       VENDOR_LABELS[solution.vendor] ?? solution.vendor,
       solution.solution_type,
-      solution.pf_ae_user_id ?? null
+      solution.pf_ae_user_id ?? null,
+      solutionId,
+      solution.dynamics_account_id ?? null,
     )
     .run();
+
+  // Copy solution_staff (pf_ae/pf_sa/pf_csm) into project_staff (ae/sa/csm)
+  const solutionStaff = await db
+    .prepare("SELECT user_id, staff_role FROM solution_staff WHERE solution_id = ? AND staff_role IN ('pf_ae', 'pf_sa', 'pf_csm')")
+    .bind(solutionId)
+    .all<{ user_id: string; staff_role: string }>();
+
+  const roleMap: Record<string, string> = { pf_ae: "ae", pf_sa: "sa", pf_csm: "csm" };
+  for (const ss of solutionStaff.results ?? []) {
+    const projectRole = roleMap[ss.staff_role];
+    if (projectRole) {
+      await db.prepare("INSERT OR IGNORE INTO project_staff (id, project_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
+        .bind(crypto.randomUUID(), projectId, ss.user_id, projectRole).run();
+    }
+  }
 
   // Grant partner AE viewer access on the new project
   if (solution.partner_ae_user_id) {
