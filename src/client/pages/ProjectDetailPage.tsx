@@ -11,6 +11,7 @@ import {
   type Note,
   type Phase,
   type Project,
+  type ProjectChain,
   type ProjectContact,
   type ProjectStaffMember,
   type Risk,
@@ -159,6 +160,13 @@ export default function ProjectDetailPage() {
   const [crmSyncing, setCrmSyncing] = useState(false);
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
 
+  // Lifecycle chain
+  const [chain, setChain] = useState<ProjectChain | null>(null);
+  const [showLinkSolutionModal, setShowLinkSolutionModal] = useState(false);
+  const [allSolutions, setAllSolutions] = useState<{ id: string; name: string; customer_name: string }[]>([]);
+  const [linkSolutionId, setLinkSolutionId] = useState("");
+  const [linkingSolution, setLinkingSolution] = useState(false);
+
   // Apply template
   const [templateList, setTemplateList] = useState<{ id: string; name: string; phase_count?: number; task_count?: number }[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -191,6 +199,7 @@ export default function ProjectDetailPage() {
             api.me(),
           ]);
         api.projectContacts(id).then(setContacts).catch(() => {});
+        api.projectChain(id).then(setChain).catch(() => {});
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
         setEditHealth(projectData.health ?? "");
@@ -729,6 +738,64 @@ export default function ProjectDetailPage() {
       {/* ── Overview ──────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <div style={{ display: "grid", gap: 16 }}>
+          {/* ── Lifecycle Chain ──────────────────────────────────────────── */}
+          <div className="ms-section-card">
+            <div className="ms-section-title">Lifecycle Chain</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {chain?.solution ? (
+                <Link
+                  to={`/solutions/${chain.solution.id}`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", background: "rgba(135,100,184,0.1)", border: "1px solid rgba(135,100,184,0.3)", borderRadius: 4, color: "#8764b8", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                >
+                  ← Solution: {chain.solution.name}
+                </Link>
+              ) : (
+                <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No linked solution</span>
+              )}
+              <span style={{ fontSize: 13, color: "#475569", fontWeight: 600 }}>· Project (here) ·</span>
+              {chain?.optimizeAccount ? (
+                <Link
+                  to={`/optimize/${chain.optimizeAccount.project_id}`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "5px 12px", background: "rgba(8,145,178,0.1)", border: "1px solid rgba(8,145,178,0.3)", borderRadius: 4, color: "#0891b2", fontSize: 12, fontWeight: 600, textDecoration: "none" }}
+                >
+                  Optimization → View
+                </Link>
+              ) : (
+                <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No linked optimization</span>
+              )}
+            </div>
+            {canEdit && !chain?.solution && (
+              <button
+                className="ms-btn-secondary"
+                style={{ fontSize: 12, marginTop: 12 }}
+                onClick={() => {
+                  setShowLinkSolutionModal(true);
+                  setLinkSolutionId("");
+                  api.solutions().then(setAllSolutions).catch(() => {});
+                }}
+              >
+                + Link to Solution
+              </button>
+            )}
+            {canEdit && chain?.solution && (
+              <button
+                className="ms-btn-ghost"
+                style={{ fontSize: 12, marginTop: 12, color: "#94a3b8" }}
+                onClick={async () => {
+                  try {
+                    await api.unlinkProjectFromSolution(chain.solution!.id, project.id);
+                    setChain((c) => c ? { ...c, solution: null } : null);
+                    showToast("Solution unlinked.", "success");
+                  } catch {
+                    showToast("Failed to unlink solution", "error");
+                  }
+                }}
+              >
+                Unlink Solution
+              </button>
+            )}
+          </div>
+
           {/* ── Project Team ──────────────────────────────────────────────── */}
           <div className="ms-section-card">
             <div className="ms-section-title">PF Team</div>
@@ -1737,6 +1804,54 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
+          </div>
+        </div>
+      )}
+
+      {/* ── Link Solution Modal ──────────────────────────────────────────── */}
+      {showLinkSolutionModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowLinkSolutionModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Link to Solution</h2>
+              <button onClick={() => setShowLinkSolutionModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+            <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
+              <label className="ms-label">
+                <span>Solution</span>
+                <select className="ms-input" value={linkSolutionId} onChange={(e) => setLinkSolutionId(e.target.value)}>
+                  <option value="">— Select a solution —</option>
+                  {allSolutions.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}{s.customer_name ? ` — ${s.customer_name}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Associates this project with a solutioning record for lifecycle tracking. Existing project data will not be overwritten.</p>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <button
+                className="ms-btn-primary"
+                disabled={!linkSolutionId || linkingSolution}
+                onClick={async () => {
+                  if (!linkSolutionId || !project) return;
+                  setLinkingSolution(true);
+                  try {
+                    await api.linkProjectToSolution(linkSolutionId, project.id);
+                    const updatedChain = await api.projectChain(project.id);
+                    setChain(updatedChain);
+                    setShowLinkSolutionModal(false);
+                    showToast("Linked to solution.", "success");
+                  } catch {
+                    showToast("Failed to link solution", "error");
+                  } finally {
+                    setLinkingSolution(false);
+                  }
+                }}
+              >
+                {linkingSolution ? "Linking…" : "Link Solution"}
+              </button>
+              <button className="ms-btn-secondary" onClick={() => setShowLinkSolutionModal(false)}>Cancel</button>
+            </div>
           </div>
         </div>
       )}

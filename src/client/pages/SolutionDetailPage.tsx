@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
@@ -89,6 +89,13 @@ export default function SolutionDetailPage() {
   const [crmSyncing, setCrmSyncing] = useState(false);
   const [solutionStaffPhotoMap, setSolutionStaffPhotoMap] = useState<Record<string, string | null>>({});
 
+  // Linked projects
+  const [linkedProjects, setLinkedProjects] = useState<Project[]>([]);
+  const [showLinkProjectModal, setShowLinkProjectModal] = useState(false);
+  const [allProjects, setAllProjects] = useState<Project[]>([]);
+  const [linkingProjectId, setLinkingProjectId] = useState("");
+  const [linking, setLinking] = useState(false);
+
   const load = useCallback(async () => {
     if (!id) return;
     const [s, u, me] = await Promise.all([api.solution(id), api.users(), api.me()]);
@@ -125,6 +132,7 @@ export default function SolutionDetailPage() {
         api.staffPhotos(emails).then(setSolutionStaffPhotoMap).catch(() => {});
       }
     }).catch(() => {});
+    api.solutionProjects(id).then(setLinkedProjects).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -447,6 +455,40 @@ export default function SolutionDetailPage() {
                 </button>
               )}
             </div>
+          </div>
+
+          {/* ── Lifecycle Chain ── */}
+          <div className="ms-card">
+            <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Lifecycle Chain</h3>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: linkedProjects.length > 0 ? 14 : 0 }}>
+              <span style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>Solution (here)</span>
+              <span style={{ color: "#475569" }}>→</span>
+              {linkedProjects.length > 0 ? (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {linkedProjects.map((p) => (
+                    <Link key={p.id} to={`/projects/${p.id}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", background: "rgba(99,193,234,0.1)", border: "1px solid rgba(99,193,234,0.3)", borderRadius: 4, color: "#63c1ea", fontSize: 12, fontWeight: 600, textDecoration: "none" }}>
+                      {p.name}
+                      {p.has_optimization ? <span style={{ marginLeft: 4, fontSize: 10, color: "#0891b2" }}>→ Optimize</span> : null}
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ fontSize: 12, color: "#94a3b8" }}>No linked projects yet</span>
+              )}
+            </div>
+            {canEdit && (
+              <button
+                className="ms-btn-secondary"
+                style={{ fontSize: 12 }}
+                onClick={() => {
+                  setShowLinkProjectModal(true);
+                  setLinkingProjectId("");
+                  api.projects().then(setAllProjects).catch(() => {});
+                }}
+              >
+                + Link Existing Project
+              </button>
+            )}
           </div>
 
           {/* ── Customer Contacts ── */}
@@ -826,39 +868,83 @@ export default function SolutionDetailPage() {
 
           {/* Create Project */}
           {(currentRole === "admin" || currentRole === "pm") && (
-            <div className="ms-card" style={{ border: solution.linked_project_id ? "1px solid rgba(16,124,16,0.35)" : "1px solid rgba(99,193,234,0.25)", background: solution.linked_project_id ? "rgba(16,124,16,0.06)" : "rgba(99,193,234,0.04)" }}>
-              <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: solution.linked_project_id ? "#107c10" : "#63c1ea", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                {solution.linked_project_id ? "✓ Project Created" : "Create Project"}
+            <div className="ms-card" style={{ border: "1px solid rgba(99,193,234,0.25)", background: "rgba(99,193,234,0.04)" }}>
+              <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#63c1ea", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                Create Project
               </h3>
-              {solution.linked_project_id ? (
-                <div>
-                  <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: "0 0 12px" }}>
-                    This solution has been handed off. The project has been created and the partner AE has been granted access.
-                  </p>
-                  <Link
-                    to={`/projects/${solution.linked_project_id}`}
-                    style={{ display: "inline-block", padding: "8px 18px", background: "rgba(16,124,16,0.15)", border: "1px solid rgba(16,124,16,0.4)", borderRadius: 4, color: "#107c10", fontWeight: 600, fontSize: 13, textDecoration: "none" }}
-                  >
-                    View Project →
-                  </Link>
-                </div>
-              ) : (
-                <div>
-                  <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: "0 0 16px" }}>
-                    When this solution is ready to proceed, create an implementation project. The project will be pre-populated with the solution data and the partner AE will automatically receive access.
-                  </p>
-                  <button
-                    className="ms-btn-primary"
-                    disabled={creatingProject}
-                    onClick={handleCreateProject}
-                    style={{ background: "#63c1ea", borderColor: "#63c1ea", color: "#021a2e" }}
-                  >
-                    {creatingProject ? "Creating Project…" : "Create Implementation Project →"}
-                  </button>
+              {linkedProjects.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Existing projects from this solution:</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {linkedProjects.map((p) => (
+                      <Link key={p.id} to={`/projects/${p.id}`} style={{ display: "inline-block", padding: "5px 12px", background: "rgba(16,124,16,0.1)", border: "1px solid rgba(16,124,16,0.3)", borderRadius: 4, color: "#107c10", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
+                        {p.name} →
+                      </Link>
+                    ))}
+                  </div>
                 </div>
               )}
+              <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: "0 0 16px" }}>
+                Create a new implementation project from this solution. It will be pre-populated with the solution data and the partner AE will automatically receive access.
+              </p>
+              <button
+                className="ms-btn-primary"
+                disabled={creatingProject}
+                onClick={handleCreateProject}
+                style={{ background: "#63c1ea", borderColor: "#63c1ea", color: "#021a2e" }}
+              >
+                {creatingProject ? "Creating Project…" : "Create Implementation Project →"}
+              </button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Link Project Modal ── */}
+      {showLinkProjectModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowLinkProjectModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Link Existing Project</h2>
+              <button onClick={() => setShowLinkProjectModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+            <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
+              <label className="ms-label">
+                <span>Project</span>
+                <select className="ms-input" value={linkingProjectId} onChange={(e) => setLinkingProjectId(e.target.value)}>
+                  <option value="">— Select a project —</option>
+                  {allProjects.filter((p) => !linkedProjects.some((lp) => lp.id === p.id)).map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.customer_name ? ` — ${p.customer_name}` : ""}</option>
+                  ))}
+                </select>
+              </label>
+              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>This will associate the selected project with this solution. Existing project data will not be overwritten.</p>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <button
+                className="ms-btn-primary"
+                disabled={!linkingProjectId || linking}
+                onClick={async () => {
+                  if (!id || !linkingProjectId) return;
+                  setLinking(true);
+                  try {
+                    await api.linkProjectToSolution(id, linkingProjectId);
+                    const updated = await api.solutionProjects(id);
+                    setLinkedProjects(updated);
+                    setShowLinkProjectModal(false);
+                    showToast("Project linked.", "success");
+                  } catch {
+                    showToast("Failed to link project", "error");
+                  } finally {
+                    setLinking(false);
+                  }
+                }}
+              >
+                {linking ? "Linking…" : "Link Project"}
+              </button>
+              <button className="ms-btn-secondary" onClick={() => setShowLinkProjectModal(false)}>Cancel</button>
+            </div>
+          </div>
         </div>
       )}
 

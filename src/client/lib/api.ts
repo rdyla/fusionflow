@@ -104,6 +104,7 @@ export type Solution = {
   pf_sa_name: string | null;
   pf_csm_name: string | null;
   partner_ae_display_name: string | null;
+  linked_project_count: number | null;
 };
 
 export type DashboardTask = Task & { project_name: string };
@@ -166,8 +167,20 @@ export type Project = {
   asana_project_id: string | null;
   managed_in_asana: number | null;
   archived: number | null;
+  solution_id: string | null;
+  // Joined chain fields (detail + list)
+  linked_solution_name: string | null;
+  linked_solution_customer: string | null;
+  linked_solution_status: string | null;
+  linked_solution_type: string | null;
+  has_optimization: number | null;
   created_at: string;
   updated_at: string;
+};
+
+export type ProjectChain = {
+  solution: Pick<Solution, "id" | "name" | "customer_name" | "status" | "solution_type" | "vendor"> | null;
+  optimizeAccount: { project_id: string; optimize_status: string } | null;
 };
 
 export type AsanaSectionSummary = {
@@ -545,6 +558,8 @@ export type OptimizeAccount = {
   next_review_date: string | null;
   notes: string | null;
   dynamics_account_id: string | null;
+  solution_id: string | null;
+  linked_solution_name: string | null;
   last_assessment_date: string | null;
   last_assessment_score: number | null;
 };
@@ -763,6 +778,7 @@ export const api = {
     target_go_live_date?: string;
     pm_user_id?: string | null;
     dynamics_account_id?: string | null;
+    solution_id?: string | null;
   }) =>
     request<Project>("/projects", {
       method: "POST",
@@ -778,12 +794,16 @@ export const api = {
       target_go_live_date?: string;
       actual_go_live_date?: string;
       pm_user_id?: string | null;
+      solution_id?: string | null;
     }
   ) =>
     request<Project>(`/projects/${id}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+
+  projectChain: (projectId: string) =>
+    request<ProjectChain>(`/projects/${projectId}/chain`),
 
   createRisk: (
     projectId: string,
@@ -1141,6 +1161,20 @@ export const api = {
   createProjectFromSolution: (id: string) =>
     request<Project>(`/solutions/${id}/create-project`, { method: "POST" }),
 
+  solutionProjects: (solutionId: string) =>
+    request<Project[]>(`/solutions/${solutionId}/projects`),
+
+  linkProjectToSolution: (solutionId: string, projectId: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/link-project`, {
+      method: "POST",
+      body: JSON.stringify({ project_id: projectId }),
+    }),
+
+  unlinkProjectFromSolution: (solutionId: string, projectId: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/link-project/${projectId}`, {
+      method: "DELETE",
+    }),
+
   // Solution Contacts
   solutionContacts: (solutionId: string) =>
     request<SolutionContact[]>(`/solutions/${solutionId}/contacts`),
@@ -1208,11 +1242,17 @@ export const api = {
     next_review_date?: string | null;
     notes?: string | null;
     dynamics_account_id?: string | null;
+    project_id?: string | null;
   }) =>
     request<OptimizeAccount>("/optimize/accounts/direct", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  optimizeLinkedSolution: (projectId: string) =>
+    request<Pick<Solution, "id" | "name" | "customer_name" | "status" | "solution_type" | "vendor"> | null>(
+      `/optimize/accounts/${projectId}/linked-solution`
+    ),
   optimizeUpdateAccount: (projectId: string, payload: {
     ae_user_id?: string | null;
     sa_user_id?: string | null;

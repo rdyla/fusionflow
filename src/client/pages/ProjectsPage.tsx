@@ -250,13 +250,14 @@ export default function ProjectsPage() {
               <th>Status</th>
               <th>Health</th>
               <th>Go-Live</th>
+              <th>Chain</th>
               <th>Phase Flow</th>
             </tr>
           </thead>
           <tbody>
             {projects.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
+                <td colSpan={8} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -290,6 +291,23 @@ export default function ProjectsPage() {
                     ) : "—"}
                   </td>
                   <td style={{ color: "#64748b" }}>{project.target_go_live_date ?? "—"}</td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      {project.linked_solution_name ? (
+                        <span className="ms-badge" style={{ background: "rgba(135,100,184,0.1)", color: "#8764b8", border: "1px solid rgba(135,100,184,0.3)", fontSize: 11 }}>
+                          ← Solution
+                        </span>
+                      ) : null}
+                      {project.has_optimization ? (
+                        <span className="ms-badge" style={{ background: "rgba(8,145,178,0.1)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.3)", fontSize: 11 }}>
+                          Optimize →
+                        </span>
+                      ) : null}
+                      {!project.linked_solution_name && !project.has_optimization && (
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                      )}
+                    </div>
+                  </td>
                   <td><PhaseFlowIndicator phases={projectPhases[project.id]} /></td>
                 </tr>
               ))
