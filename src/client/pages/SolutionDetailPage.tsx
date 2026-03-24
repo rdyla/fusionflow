@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type User, type DynamicsContact, type SolutionContact, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
@@ -38,370 +38,9 @@ const STATUS_FLOW: SolutionStatus[] = ["draft", "assessment", "requirements", "s
 const TYPE_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
-  zoom_ra: "Zoom Revenue Accelerator",
-  zoom_va: "Zoom Virtual Agent",
-  rc_ace: "RingCentral ACE",
-  rc_air: "RingCentral AIR",
+  ci: "Conversation Intelligence",
+  va: "AI Virtual Agent",
 };
-
-
-// ── Assessment Schema ─────────────────────────────────────────────────────────
-
-type FieldDef =
-  | { type: "text" | "date" | "number" | "textarea"; key: string; label: string; placeholder?: string }
-  | { type: "select"; key: string; label: string; options: string[] }
-  | { type: "checkbox"; key: string; label: string };
-
-type SectionDef = { title: string; fields: FieldDef[] };
-
-const ASSESSMENT_SCHEMA: Record<SolutionType, SectionDef[]> = {
-  ucaas: [
-    {
-      title: "Current Environment",
-      fields: [
-        { type: "text", key: "current_vendor", label: "Current Phone System / Vendor" },
-        { type: "date", key: "current_contract_end", label: "Contract End Date" },
-        { type: "text", key: "carrier", label: "Current Carrier" },
-        { type: "number", key: "total_users", label: "Total Users / Seats" },
-        { type: "number", key: "office_locations", label: "Number of Locations" },
-      ],
-    },
-    {
-      title: "Feature Requirements",
-      fields: [
-        { type: "checkbox", key: "feat_calling", label: "Voice Calling" },
-        { type: "checkbox", key: "feat_sms", label: "SMS / Business Messaging" },
-        { type: "checkbox", key: "feat_video", label: "Video Meetings" },
-        { type: "checkbox", key: "feat_team_chat", label: "Team Chat" },
-        { type: "checkbox", key: "feat_recording", label: "Call Recording" },
-        { type: "checkbox", key: "feat_analytics", label: "Analytics & Reporting" },
-        { type: "checkbox", key: "feat_ai", label: "AI Assistant" },
-        { type: "checkbox", key: "feat_fax", label: "Fax" },
-        { type: "checkbox", key: "feat_rooms", label: "Conference Room Systems" },
-      ],
-    },
-    {
-      title: "Compliance & Security",
-      fields: [
-        { type: "checkbox", key: "compliance_hipaa", label: "HIPAA Required" },
-        { type: "checkbox", key: "compliance_pci", label: "PCI Compliance" },
-        { type: "checkbox", key: "intl_calling", label: "International Calling Needed" },
-      ],
-    },
-    {
-      title: "Integrations",
-      fields: [
-        { type: "text", key: "crm_system", label: "CRM System" },
-        { type: "select", key: "productivity_suite", label: "Productivity Suite", options: ["", "Microsoft 365", "Google Workspace", "Other", "None"] },
-        { type: "textarea", key: "other_integrations", label: "Other Integration Requirements" },
-      ],
-    },
-    {
-      title: "Number Porting",
-      fields: [
-        { type: "number", key: "numbers_to_port", label: "Estimated Numbers to Port" },
-        { type: "text", key: "porting_carrier", label: "Current Carrier for Porting" },
-      ],
-    },
-    {
-      title: "Timeline",
-      fields: [
-        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
-        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
-        { type: "textarea", key: "notes", label: "Additional Notes" },
-      ],
-    },
-  ],
-
-  ccaas: [
-    {
-      title: "Current Environment",
-      fields: [
-        { type: "text", key: "current_platform", label: "Current Contact Center Platform" },
-        { type: "date", key: "current_contract_end", label: "Contract End Date" },
-        { type: "number", key: "total_agents", label: "Total Agents" },
-        { type: "number", key: "supervisors", label: "Supervisors" },
-        { type: "number", key: "part_time_agents", label: "Part-Time Agents" },
-      ],
-    },
-    {
-      title: "Channels Required",
-      fields: [
-        { type: "checkbox", key: "ch_voice", label: "Voice" },
-        { type: "checkbox", key: "ch_email", label: "Email" },
-        { type: "checkbox", key: "ch_chat", label: "Web Chat" },
-        { type: "checkbox", key: "ch_sms", label: "SMS" },
-        { type: "checkbox", key: "ch_social", label: "Social Media" },
-        { type: "checkbox", key: "ch_video", label: "Video" },
-      ],
-    },
-    {
-      title: "Routing & IVR",
-      fields: [
-        { type: "select", key: "ivr_complexity", label: "IVR Complexity", options: ["", "Simple (basic menu)", "Moderate (multi-level)", "Complex (custom logic)"] },
-        { type: "checkbox", key: "skill_routing", label: "Skill-Based Routing" },
-        { type: "checkbox", key: "callback", label: "Callback / Queue Management" },
-        { type: "checkbox", key: "wfm", label: "Workforce Management Needed" },
-      ],
-    },
-    {
-      title: "CRM Integration",
-      fields: [
-        { type: "text", key: "crm_system", label: "CRM System" },
-        { type: "select", key: "crm_depth", label: "Integration Depth", options: ["", "Basic (screen pop)", "Advanced (2-way sync)", "Custom"] },
-      ],
-    },
-    {
-      title: "Quality & Compliance",
-      fields: [
-        { type: "checkbox", key: "call_recording", label: "Call Recording" },
-        { type: "checkbox", key: "screen_recording", label: "Screen Recording" },
-        { type: "checkbox", key: "quality_mgmt", label: "Quality Management / Scoring" },
-        { type: "checkbox", key: "compliance_hipaa", label: "HIPAA Required" },
-        { type: "checkbox", key: "compliance_pci", label: "PCI Compliance" },
-      ],
-    },
-    {
-      title: "AI Features",
-      fields: [
-        { type: "checkbox", key: "ai_virtual_agent", label: "Virtual Agent / Bot" },
-        { type: "checkbox", key: "ai_assist", label: "Agent Assist / Real-Time Guidance" },
-        { type: "checkbox", key: "ai_sentiment", label: "Sentiment Analysis" },
-      ],
-    },
-    {
-      title: "Timeline",
-      fields: [
-        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
-        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
-        { type: "textarea", key: "notes", label: "Additional Notes" },
-      ],
-    },
-  ],
-
-  zoom_ra: [
-    {
-      title: "Current State",
-      fields: [
-        { type: "text", key: "current_ci_solution", label: "Current Conversation Intelligence Solution (if any)" },
-        { type: "number", key: "sales_reps", label: "Number of Sales Reps" },
-        { type: "number", key: "sales_managers", label: "Number of Sales Managers" },
-      ],
-    },
-    {
-      title: "Zoom Environment",
-      fields: [
-        { type: "checkbox", key: "has_zoom_phone", label: "Uses Zoom Phone" },
-        { type: "checkbox", key: "has_zoom_meetings", label: "Uses Zoom Meetings" },
-        { type: "number", key: "zoom_seat_count", label: "Zoom Seat Count" },
-      ],
-    },
-    {
-      title: "CRM",
-      fields: [
-        { type: "select", key: "crm_system", label: "CRM System", options: ["", "Salesforce", "HubSpot", "Microsoft Dynamics", "Pipedrive", "Other", "None"] },
-        { type: "text", key: "crm_version", label: "CRM Version / Edition" },
-      ],
-    },
-    {
-      title: "Use Cases",
-      fields: [
-        { type: "checkbox", key: "uc_coaching", label: "Call Coaching & Scoring" },
-        { type: "checkbox", key: "uc_deal_intel", label: "Deal Intelligence" },
-        { type: "checkbox", key: "uc_forecasting", label: "Revenue Forecasting" },
-        { type: "checkbox", key: "uc_competitive", label: "Competitive Intelligence" },
-        { type: "checkbox", key: "uc_onboarding", label: "Rep Onboarding & Training" },
-      ],
-    },
-    {
-      title: "Timeline",
-      fields: [
-        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
-        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
-        { type: "textarea", key: "notes", label: "Additional Notes" },
-      ],
-    },
-  ],
-
-  zoom_va: [
-    {
-      title: "Current State",
-      fields: [
-        { type: "text", key: "current_va_solution", label: "Current Virtual Agent / Chatbot Solution (if any)" },
-        { type: "select", key: "primary_use_case", label: "Primary Use Case", options: ["", "Customer Support", "IT Helpdesk", "Sales Assistance", "HR Self-Service", "Other"] },
-        { type: "number", key: "monthly_interactions", label: "Estimated Monthly Interactions" },
-      ],
-    },
-    {
-      title: "Zoom Environment",
-      fields: [
-        { type: "checkbox", key: "has_zoom_contact_center", label: "Zoom Contact Center" },
-        { type: "checkbox", key: "has_zoom_phone", label: "Zoom Phone" },
-        { type: "checkbox", key: "has_zoom_meetings", label: "Zoom Meetings" },
-        { type: "number", key: "zoom_seat_count", label: "Zoom Seat Count" },
-      ],
-    },
-    {
-      title: "Channels",
-      fields: [
-        { type: "checkbox", key: "ch_web_chat", label: "Website Chat Widget" },
-        { type: "checkbox", key: "ch_mobile", label: "Mobile App" },
-        { type: "checkbox", key: "ch_sms", label: "SMS" },
-        { type: "checkbox", key: "ch_voice", label: "Voice IVR" },
-        { type: "checkbox", key: "ch_slack", label: "Slack" },
-        { type: "checkbox", key: "ch_teams", label: "Microsoft Teams" },
-      ],
-    },
-    {
-      title: "Escalation & Routing",
-      fields: [
-        { type: "checkbox", key: "live_agent_escalation", label: "Live Agent Escalation Required" },
-        { type: "select", key: "escalation_target", label: "Escalation Target", options: ["", "Zoom Contact Center", "External Contact Center", "Email Queue", "Other"] },
-        { type: "checkbox", key: "context_handoff", label: "Conversation Context Passed on Escalation" },
-      ],
-    },
-    {
-      title: "Integrations & Knowledge",
-      fields: [
-        { type: "select", key: "crm_system", label: "CRM System", options: ["", "Salesforce", "HubSpot", "Microsoft Dynamics", "ServiceNow", "Zendesk", "Other", "None"] },
-        { type: "checkbox", key: "ticketing_integration", label: "Ticketing System Integration (e.g. Zendesk, ServiceNow)" },
-        { type: "text", key: "ticketing_platform", label: "Ticketing Platform" },
-        { type: "checkbox", key: "knowledge_base", label: "Existing Knowledge Base to Connect" },
-        { type: "textarea", key: "key_intents", label: "Key Topics / Intents to Handle" },
-      ],
-    },
-    {
-      title: "Compliance & Language",
-      fields: [
-        { type: "checkbox", key: "compliance_hipaa", label: "HIPAA Required" },
-        { type: "checkbox", key: "compliance_pci", label: "PCI Compliance" },
-        { type: "text", key: "languages", label: "Languages Required (e.g. English, Spanish)" },
-      ],
-    },
-    {
-      title: "Timeline",
-      fields: [
-        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
-        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
-        { type: "textarea", key: "notes", label: "Additional Notes" },
-      ],
-    },
-  ],
-
-  rc_ace: [
-    {
-      title: "Current State",
-      fields: [
-        { type: "text", key: "current_ci_solution", label: "Current Conversation Intelligence Solution (if any)" },
-        { type: "number", key: "sales_reps", label: "Number of Sales Reps" },
-        { type: "number", key: "sales_managers", label: "Number of Sales Managers" },
-      ],
-    },
-    {
-      title: "RingCentral Environment",
-      fields: [
-        { type: "checkbox", key: "has_ring_ex", label: "RingEX (UCaaS)" },
-        { type: "checkbox", key: "has_ring_cx", label: "RingCX (CCaaS)" },
-        { type: "number", key: "rc_seat_count", label: "RingCentral Seat Count" },
-      ],
-    },
-    {
-      title: "CRM",
-      fields: [
-        { type: "select", key: "crm_system", label: "CRM System", options: ["", "Salesforce", "HubSpot", "Microsoft Dynamics", "Pipedrive", "Other", "None"] },
-        { type: "text", key: "crm_version", label: "CRM Version / Edition" },
-      ],
-    },
-    {
-      title: "Use Cases",
-      fields: [
-        { type: "checkbox", key: "uc_coaching", label: "Call Coaching & Scoring" },
-        { type: "checkbox", key: "uc_deal_intel", label: "Deal Intelligence" },
-        { type: "checkbox", key: "uc_analytics", label: "Conversation Analytics" },
-        { type: "checkbox", key: "uc_forecasting", label: "Revenue Forecasting" },
-        { type: "checkbox", key: "uc_onboarding", label: "Rep Onboarding & Training" },
-      ],
-    },
-    {
-      title: "Timeline",
-      fields: [
-        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
-        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
-        { type: "textarea", key: "notes", label: "Additional Notes" },
-      ],
-    },
-  ],
-
-  rc_air: [
-    {
-      title: "Current State",
-      fields: [
-        { type: "text", key: "current_va_solution", label: "Current Virtual Agent / Chatbot Solution (if any)" },
-        { type: "select", key: "primary_use_case", label: "Primary Use Case", options: ["", "Customer Support", "IT Helpdesk", "Sales Assistance", "HR Self-Service", "Other"] },
-        { type: "number", key: "monthly_interactions", label: "Estimated Monthly Interactions" },
-      ],
-    },
-    {
-      title: "RingCentral Environment",
-      fields: [
-        { type: "checkbox", key: "has_ring_cx", label: "RingCX (Contact Center)" },
-        { type: "checkbox", key: "has_ring_ex", label: "RingEX (UCaaS)" },
-        { type: "number", key: "rc_seat_count", label: "RingCentral Seat Count" },
-      ],
-    },
-    {
-      title: "Channels",
-      fields: [
-        { type: "checkbox", key: "ch_web_chat", label: "Website Chat Widget" },
-        { type: "checkbox", key: "ch_mobile", label: "Mobile App" },
-        { type: "checkbox", key: "ch_sms", label: "SMS" },
-        { type: "checkbox", key: "ch_voice", label: "Voice IVR" },
-        { type: "checkbox", key: "ch_social", label: "Social / Messaging Platforms" },
-      ],
-    },
-    {
-      title: "Escalation & Routing",
-      fields: [
-        { type: "checkbox", key: "live_agent_escalation", label: "Live Agent Escalation Required" },
-        { type: "select", key: "escalation_target", label: "Escalation Target", options: ["", "RingCX Agents", "External Contact Center", "Email Queue", "Other"] },
-        { type: "checkbox", key: "context_handoff", label: "Conversation Context Passed on Escalation" },
-      ],
-    },
-    {
-      title: "Integrations & Knowledge",
-      fields: [
-        { type: "select", key: "crm_system", label: "CRM System", options: ["", "Salesforce", "HubSpot", "Microsoft Dynamics", "ServiceNow", "Zendesk", "Other", "None"] },
-        { type: "checkbox", key: "ticketing_integration", label: "Ticketing System Integration" },
-        { type: "text", key: "ticketing_platform", label: "Ticketing Platform" },
-        { type: "checkbox", key: "knowledge_base", label: "Existing Knowledge Base to Connect" },
-        { type: "textarea", key: "key_intents", label: "Key Topics / Intents to Handle" },
-      ],
-    },
-    {
-      title: "Compliance & Language",
-      fields: [
-        { type: "checkbox", key: "compliance_hipaa", label: "HIPAA Required" },
-        { type: "checkbox", key: "compliance_pci", label: "PCI Compliance" },
-        { type: "text", key: "languages", label: "Languages Required (e.g. English, Spanish)" },
-      ],
-    },
-    {
-      title: "Timeline",
-      fields: [
-        { type: "date", key: "desired_go_live", label: "Desired Go-Live Date" },
-        { type: "select", key: "urgency", label: "Urgency", options: ["", "Low", "Medium", "High", "ASAP"] },
-        { type: "textarea", key: "notes", label: "Additional Notes" },
-      ],
-    },
-  ],
-};
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function parseJSON(raw: string | null): Record<string, string> {
-  if (!raw) return {};
-  try { return JSON.parse(raw); } catch { return {}; }
-}
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -430,8 +69,7 @@ export default function SolutionDetailPage() {
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
 
   // Tab-local state
-  const [overview, setOverview] = useState({ name: "", customer_name: "", pf_ae_user_id: "", partner_ae_user_id: "", status: "" as SolutionStatus });
-  const [assessment, setAssessment] = useState<Record<string, string>>({});
+  const [overview, setOverview] = useState({ name: "", customer_name: "", vendor: "tbd" as SolutionVendor, solution_type: "ucaas" as SolutionType, pf_ae_user_id: "", partner_ae_user_id: "", status: "" as SolutionStatus });
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
@@ -459,18 +97,17 @@ export default function SolutionDetailPage() {
     setOverview({
       name: s.name,
       customer_name: s.customer_name,
+      vendor: s.vendor as SolutionVendor,
+      solution_type: s.solution_type as SolutionType,
       pf_ae_user_id: s.pf_ae_user_id ?? "",
       partner_ae_user_id: s.partner_ae_user_id ?? "",
       status: s.status,
     });
-    setAssessment(parseJSON(s.needs_assessment));
     setScope(s.scope_of_work ?? "");
     setHandoffNotes(s.handoff_notes ?? "");
 
-    // Load needs assessment for applicable solution types
-    if (["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air", "ucaas"].includes(s.solution_type)) {
-      api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
-    }
+    // Load needs assessment for all solution types
+    api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
 
     // Load labor estimate (all solution types)
     api.laborEstimate(id).then(setLaborEstimate).catch(() => {});
@@ -685,11 +322,30 @@ export default function SolutionDetailPage() {
               </label>
               <label className="ms-label">
                 <span>Vendor</span>
-                <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.vendor === "zoom" ? "Zoom" : "RingCentral"}</div>
+                {canEdit ? (
+                  <select className="ms-input" value={overview.vendor ?? "tbd"} onChange={(e) => setOverview((o) => ({ ...o, vendor: e.target.value as typeof overview.vendor }))}>
+                    <option value="tbd">— Not yet assigned —</option>
+                    <option value="zoom">Zoom</option>
+                    <option value="ringcentral">RingCentral</option>
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 14, color: solution.vendor === "tbd" ? "#94a3b8" : "#334155", padding: "8px 0" }}>
+                    {solution.vendor === "zoom" ? "Zoom" : solution.vendor === "ringcentral" ? "RingCentral" : "— Not yet assigned —"}
+                  </div>
+                )}
               </label>
               <label className="ms-label">
-                <span>Solution Type</span>
-                <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type]}</div>
+                <span>Technology</span>
+                {canEdit ? (
+                  <select className="ms-input" value={overview.solution_type ?? solution.solution_type} onChange={(e) => setOverview((o) => ({ ...o, solution_type: e.target.value as typeof overview.solution_type }))}>
+                    <option value="ucaas">UCaaS</option>
+                    <option value="ccaas">CCaaS</option>
+                    <option value="ci">Conversation Intelligence</option>
+                    <option value="va">AI Virtual Agent</option>
+                  </select>
+                ) : (
+                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type] ?? solution.solution_type}</div>
+                )}
               </label>
               {solution.dynamics_account_id && (
                 <label className="ms-label">
@@ -700,7 +356,7 @@ export default function SolutionDetailPage() {
             </div>
             {canEdit && (
               <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
-                onClick={() => save({ name: overview.name, customer_name: overview.customer_name })}>
+                onClick={() => save({ name: overview.name, customer_name: overview.customer_name, vendor: overview.vendor, solution_type: overview.solution_type })}>
                 {saving ? "Saving…" : "Save Changes"}
               </button>
             )}
@@ -972,21 +628,15 @@ export default function SolutionDetailPage() {
       )}
 
       {/* ── Assessment Tab ── */}
-      {tab === "assessment" && ["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air", "ucaas"].includes(solution.solution_type) && (
+      {tab === "assessment" && (
         <div>
           {(() => {
             const surveyJson =
               solution.solution_type === "ccaas" ? ccaasSurveyJson :
-              (solution.solution_type === "zoom_va" || solution.solution_type === "rc_air") ? virtualAgentSurveyJson :
+              solution.solution_type === "va" ? virtualAgentSurveyJson :
               solution.solution_type === "ucaas" ? ucaasSurveyJson :
               ciSurveyJson;
-            const solutionTypeLabel =
-              solution.solution_type === "zoom_ra" ? "Zoom Revenue Accelerator" :
-              solution.solution_type === "rc_ace" ? "RingCentral ACE" :
-              solution.solution_type === "zoom_va" ? "Zoom Virtual Agent" :
-              solution.solution_type === "rc_air" ? "RingCentral AIR" :
-              solution.solution_type === "ucaas" ? "UCaaS" :
-              "CCaaS";
+            const solutionTypeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
             return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
                 solutionId={solution.id}
@@ -1031,89 +681,6 @@ export default function SolutionDetailPage() {
           })()}
         </div>
       )}
-      {tab === "assessment" && !["zoom_ra", "rc_ace", "ccaas", "zoom_va", "rc_air", "ucaas"].includes(solution.solution_type) && (
-        <div style={{ display: "grid", gap: 20 }}>
-          {ASSESSMENT_SCHEMA[solution.solution_type].map((section) => {
-            const checkboxFields = section.fields.filter((f) => f.type === "checkbox");
-            const otherFields = section.fields.filter((f) => f.type !== "checkbox");
-            return (
-              <div key={section.title} className="ms-card">
-                <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  {section.title}
-                </h3>
-
-                {/* Non-checkbox fields in 2-col grid */}
-                {otherFields.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: checkboxFields.length > 0 ? 16 : 0 }}>
-                    {otherFields.map((field) => (
-                      <label key={field.key} className="ms-label" style={field.type === "textarea" ? { gridColumn: "1 / -1" } : {}}>
-                        <span>{field.label}</span>
-                        {field.type === "textarea" ? (
-                          <textarea
-                            className="ms-input"
-                            rows={3}
-                            style={{ resize: "vertical" }}
-                            value={assessment[field.key] ?? ""}
-                            onChange={(e) => setAssessment((a) => ({ ...a, [field.key]: e.target.value }))}
-                            disabled={!canEdit}
-                          />
-                        ) : field.type === "select" ? (
-                          <select
-                            className="ms-input"
-                            value={assessment[field.key] ?? ""}
-                            onChange={(e) => setAssessment((a) => ({ ...a, [field.key]: e.target.value }))}
-                            disabled={!canEdit}
-                          >
-                            {field.options.map((o) => <option key={o} value={o}>{o || "— Select —"}</option>)}
-                          </select>
-                        ) : (
-                          <input
-                            type={field.type}
-                            className="ms-input"
-                            value={assessment[field.key] ?? ""}
-                            onChange={(e) => setAssessment((a) => ({ ...a, [field.key]: e.target.value }))}
-                            disabled={!canEdit}
-                            placeholder={"placeholder" in field ? field.placeholder : undefined}
-                          />
-                        )}
-                      </label>
-                    ))}
-                  </div>
-                )}
-
-                {/* Checkboxes in 3-col grid */}
-                {checkboxFields.length > 0 && (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
-                    {checkboxFields.map((field) => (
-                      <label key={field.key} style={{ display: "flex", alignItems: "center", gap: 8, cursor: canEdit ? "pointer" : "default" }}>
-                        <input
-                          type="checkbox"
-                          checked={assessment[field.key] === "true"}
-                          onChange={(e) => canEdit && setAssessment((a) => ({ ...a, [field.key]: e.target.checked ? "true" : "false" }))}
-                          style={{ width: 15, height: 15, accentColor: "#63c1ea" }}
-                          disabled={!canEdit}
-                        />
-                        <span style={{ fontSize: 13, color: "#475569" }}>{field.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {canEdit && (
-            <button
-              className="ms-btn-primary"
-              disabled={saving}
-              style={{ width: "fit-content" }}
-              onClick={() => save({ needs_assessment: JSON.stringify(assessment) })}
-            >
-              {saving ? "Saving…" : "Save Assessment"}
-            </button>
-          )}
-        </div>
-      )}
 
       {/* ── Scope Tab ── */}
       {tab === "scope" && (
@@ -1151,8 +718,8 @@ export default function SolutionDetailPage() {
               <tbody>
                 {[
                   ["Customer", solution.customer_name],
-                  ["Vendor", solution.vendor === "zoom" ? "Zoom" : "RingCentral"],
-                  ["Solution Type", TYPE_LABELS[solution.solution_type]],
+                  ["Vendor", solution.vendor === "zoom" ? "Zoom" : solution.vendor === "ringcentral" ? "RingCentral" : "— Not yet assigned —"],
+                  ["Technology", TYPE_LABELS[solution.solution_type] ?? solution.solution_type],
                   ["PF Account Executive", solution.pf_ae_name ?? "—"],
                   ["Partner AE", solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"],
                   ["Status", STATUS_LABELS[solution.status]],

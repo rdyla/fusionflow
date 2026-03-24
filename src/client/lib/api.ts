@@ -46,7 +46,7 @@ export type User = {
   can_open_cases?: boolean;
 };
 
-export type SolutionType = "ucaas" | "ccaas" | "zoom_ra" | "zoom_va" | "rc_ace" | "rc_air";
+export type SolutionType = "ucaas" | "ccaas" | "ci" | "va";
 
 export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
 export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
@@ -73,7 +73,7 @@ export type RiskItem = {
 
 export type GapAnalysis = { gaps: GapItem[]; risks: RiskItem[] };
 export type SolutionStatus = "draft" | "assessment" | "requirements" | "scope" | "handoff" | "won" | "lost";
-export type SolutionVendor = "zoom" | "ringcentral";
+export type SolutionVendor = "zoom" | "ringcentral" | "tbd";
 
 export type Solution = {
   id: string;
@@ -1092,7 +1092,7 @@ export const api = {
   createSolution: (payload: {
     customer_name: string;
     dynamics_account_id?: string;
-    vendor: SolutionVendor;
+    vendor?: SolutionVendor;
     solution_type: SolutionType;
     pf_ae_user_id?: string;
     pf_sa_user_id?: string;

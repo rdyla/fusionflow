@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  api, type Solution, type SolutionType, type SolutionStatus, type SolutionVendor, type User, type CrmAccountTeam,
+  api, type Solution, type SolutionType, type SolutionStatus, type User, type CrmAccountTeam,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const SOLUTION_TYPE_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
-  zoom_ra: "Zoom Revenue Accelerator",
-  zoom_va: "Zoom Virtual Agent",
-  rc_ace: "RingCentral ACE",
-  rc_air: "RingCentral AIR",
+  ci: "Conversation Intelligence",
+  va: "AI Virtual Agent",
 };
 
 const STATUS_LABELS: Record<SolutionStatus, string> = {
@@ -34,21 +32,10 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
   lost: "#d13438",
 };
 
-const VENDOR_COLOR: Record<SolutionVendor, string> = {
-  zoom: "#0b5cff",
-  ringcentral: "#ff5c00",
-};
-
-// Which solution types belong to which vendor
-const VENDOR_TYPES: Record<SolutionVendor, SolutionType[]> = {
-  zoom: ["ucaas", "ccaas", "zoom_ra", "zoom_va"],
-  ringcentral: ["ucaas", "ccaas", "rc_ace", "rc_air"],
-};
 
 const EMPTY_FORM = {
   customer_name: "",
   dynamics_account_id: "",
-  vendor: "zoom" as SolutionVendor,
   solution_type: "ucaas" as SolutionType,
   pf_ae_user_id: "",
   pf_sa_user_id: "",
@@ -72,7 +59,7 @@ export default function SolutionsPage() {
   const [crmTeam, setCrmTeam] = useState<CrmAccountTeam | null>(null);
   const [crmTeamLoading, setCrmTeamLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [vendorFilter, setVendorFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -130,7 +117,6 @@ export default function SolutionsPage() {
     try {
       const payload: Parameters<typeof api.createSolution>[0] = {
         customer_name: form.customer_name.trim(),
-        vendor: form.vendor,
         solution_type: form.solution_type,
       };
       if (form.dynamics_account_id) payload.dynamics_account_id = form.dynamics_account_id;
@@ -163,11 +149,10 @@ export default function SolutionsPage() {
   const pfSas = users.filter((u) => u.role === "pf_sa");
   const pfCsms = users.filter((u) => u.role === "pf_csm");
   const partnerAes = users.filter((u) => u.role === "partner_ae");
-  const availableTypes = VENDOR_TYPES[form.vendor];
 
   const filtered = solutions.filter((s) => {
     if (statusFilter !== "all" && s.status !== statusFilter) return false;
-    if (vendorFilter !== "all" && s.vendor !== vendorFilter) return false;
+    if (typeFilter !== "all" && s.solution_type !== typeFilter) return false;
     if (search) {
       const q = search.toLowerCase();
       if (!s.customer_name.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q)) return false;
@@ -203,10 +188,11 @@ export default function SolutionsPage() {
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>
-        <select className="ms-input" value={vendorFilter} onChange={(e) => setVendorFilter(e.target.value)} style={{ width: 160 }}>
-          <option value="all">All Vendors</option>
-          <option value="zoom">Zoom</option>
-          <option value="ringcentral">RingCentral</option>
+        <select className="ms-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 200 }}>
+          <option value="all">All Technology Types</option>
+          {(Object.keys(SOLUTION_TYPE_LABELS) as SolutionType[]).map((t) => (
+            <option key={t} value={t}>{SOLUTION_TYPE_LABELS[t]}</option>
+          ))}
         </select>
       </div>
 
@@ -216,9 +202,8 @@ export default function SolutionsPage() {
           <thead>
             <tr>
               <th>Customer / Solution</th>
-              <th>Type</th>
-              <th>Vendor</th>
-              <th>Status</th>
+              <th>Technology</th>
+              <th>Stage</th>
               <th>PF AE</th>
               <th>Partner AE</th>
               <th>Updated</th>
@@ -227,7 +212,7 @@ export default function SolutionsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "#94a3b8", padding: "28px 16px" }}>
+                <td colSpan={6} style={{ textAlign: "center", color: "#94a3b8", padding: "28px 16px" }}>
                   {solutions.length === 0 ? "No solutions yet — create one to get started." : "No solutions match your filters."}
                 </td>
               </tr>
@@ -244,12 +229,7 @@ export default function SolutionsPage() {
                   </td>
                   <td>
                     <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-                      {SOLUTION_TYPE_LABELS[s.solution_type]}
-                    </span>
-                  </td>
-                  <td>
-                    <span className="ms-badge" style={{ background: `${VENDOR_COLOR[s.vendor]}1a`, color: VENDOR_COLOR[s.vendor], border: `1px solid ${VENDOR_COLOR[s.vendor]}40` }}>
-                      {s.vendor === "zoom" ? "Zoom" : "RingCentral"}
+                      {SOLUTION_TYPE_LABELS[s.solution_type] ?? s.solution_type}
                     </span>
                   </td>
                   <td>
@@ -317,36 +297,11 @@ export default function SolutionsPage() {
                 )}
               </label>
 
-              {/* Vendor */}
+              {/* Technology Category */}
               <label className="ms-label">
-                <span>Vendor *</span>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {(["zoom", "ringcentral"] as SolutionVendor[]).map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => {
-                        const newTypes = VENDOR_TYPES[v];
-                        setForm((f) => ({ ...f, vendor: v, solution_type: newTypes[0] }));
-                      }}
-                      style={{
-                        flex: 1, padding: "9px 0", borderRadius: 4, border: `1px solid ${form.vendor === v ? VENDOR_COLOR[v] : "rgba(0,0,0,0.1)"}`,
-                        background: form.vendor === v ? `${VENDOR_COLOR[v]}18` : "transparent",
-                        color: form.vendor === v ? VENDOR_COLOR[v] : "#64748b",
-                        fontWeight: 600, fontSize: 14, cursor: "pointer",
-                      }}
-                    >
-                      {v === "zoom" ? "Zoom" : "RingCentral"}
-                    </button>
-                  ))}
-                </div>
-              </label>
-
-              {/* Solution Type */}
-              <label className="ms-label">
-                <span>Solution Type *</span>
+                <span>Technology *</span>
                 <select className="ms-input" value={form.solution_type} onChange={(e) => setForm((f) => ({ ...f, solution_type: e.target.value as SolutionType }))}>
-                  {availableTypes.map((t) => (
+                  {(Object.keys(SOLUTION_TYPE_LABELS) as SolutionType[]).map((t) => (
                     <option key={t} value={t}>{SOLUTION_TYPE_LABELS[t]}</option>
                   ))}
                 </select>

@@ -24,10 +24,8 @@ const SOLUTION_SELECT = `
 const SOLUTION_TYPE_LABELS: Record<string, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
-  zoom_ra: "Zoom Revenue Accelerator",
-  zoom_va: "Zoom Virtual Agent",
-  rc_ace: "RingCentral ACE",
-  rc_air: "RingCentral AIR",
+  ci: "Conversation Intelligence",
+  va: "AI Virtual Agent",
 };
 
 function accessClause(role: string, teamIds: string[]): { where: string; bindings: string[] } {
@@ -64,8 +62,8 @@ app.get("/", async (c) => {
 const createSolutionSchema = z.object({
   customer_name: z.string().min(1).max(500),
   dynamics_account_id: z.string().optional(),
-  vendor: z.enum(["zoom", "ringcentral"]),
-  solution_type: z.enum(["ucaas", "ccaas", "zoom_ra", "zoom_va", "rc_ace", "rc_air"]),
+  vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
+  solution_type: z.enum(["ucaas", "ccaas", "ci", "va"]),
   pf_ae_user_id: z.string().optional(),
   pf_sa_user_id: z.string().optional(),
   pf_csm_user_id: z.string().optional(),
@@ -82,10 +80,11 @@ app.post("/", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const {
-    customer_name, dynamics_account_id, vendor, solution_type,
+    customer_name, dynamics_account_id, solution_type,
     pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
   } = parsed.data;
+  const vendor = parsed.data.vendor ?? "tbd";
 
   const name = `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
   const id = crypto.randomUUID();
@@ -164,8 +163,8 @@ const updateSolutionSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   customer_name: z.string().min(1).max(500).optional(),
   dynamics_account_id: z.string().nullable().optional(),
-  vendor: z.enum(["zoom", "ringcentral"]).optional(),
-  solution_type: z.enum(["ucaas", "ccaas", "zoom_ra", "rc_ace"]).optional(),
+  vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
+  solution_type: z.enum(["ucaas", "ccaas", "ci", "va"]).optional(),
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   pf_ae_user_id: z.string().nullable().optional(),
   pf_sa_user_id: z.string().nullable().optional(),
