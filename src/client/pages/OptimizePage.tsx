@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount, type CrmAccountTeam } from "../lib/api";
+import { useNavigate, Link } from "react-router-dom";
+import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount, type CrmAccountTeam, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const STATUS_COLOR: Record<string, string> = {
@@ -26,6 +26,7 @@ const EMPTY_DIRECT = {
   csm_user_id: "",
   next_review_date: "",
   notes: "",
+  project_id: "",
 };
 
 export default function OptimizePage() {
@@ -45,12 +46,14 @@ export default function OptimizePage() {
   const [crmMode, setCrmMode] = useState<"search" | "manual">("search");
   const [crmTeam, setCrmTeam] = useState<CrmAccountTeam | null>(null);
   const [crmTeamLoading, setCrmTeamLoading] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
     load();
     api.users().then(setUsers).catch(() => {});
+    api.projects().then(setProjects).catch(() => {});
   }, []);
 
   async function load() {
@@ -132,6 +135,7 @@ export default function OptimizePage() {
         next_review_date: directForm.next_review_date || null,
         notes: directForm.notes.trim() || null,
         dynamics_account_id: directForm.dynamics_account_id || null,
+        project_id: directForm.project_id || null,
       });
       setAccounts((prev) => [created, ...prev]);
       resetDirectModal();
@@ -199,6 +203,7 @@ export default function OptimizePage() {
                 <th>Account</th>
                 <th>Graduated</th>
                 <th>Status</th>
+                <th>Solution</th>
                 <th>AE</th>
                 <th>SA</th>
                 <th>CSM</th>
@@ -228,6 +233,17 @@ export default function OptimizePage() {
                     <span className="ms-badge" style={{ background: (STATUS_COLOR[a.optimize_status] ?? "#94a3b8") + "1a", color: STATUS_COLOR[a.optimize_status] ?? "#94a3b8", border: `1px solid ${(STATUS_COLOR[a.optimize_status] ?? "#94a3b8")}40` }}>
                       {a.optimize_status}
                     </span>
+                  </td>
+                  <td style={{ fontSize: 12 }}>
+                    {a.solution_id ? (
+                      <Link
+                        to={`/solutions/${a.solution_id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ color: "#8764b8", textDecoration: "none", fontWeight: 500 }}
+                      >
+                        {a.linked_solution_name ?? a.solution_id}
+                      </Link>
+                    ) : "—"}
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.ae_name ?? "—"}</td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.sa_name ?? "—"}</td>
@@ -440,6 +456,23 @@ export default function OptimizePage() {
                   </label>
                 )}
               </div>
+              {projects.length > 0 && (
+                <label className="ms-label">
+                  <span>Link to Project (optional)</span>
+                  <select
+                    className="ms-input"
+                    value={directForm.project_id}
+                    onChange={(e) => setDirectForm({ ...directForm, project_id: e.target.value })}
+                  >
+                    <option value="">— None —</option>
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.customer_name ? ` — ${p.customer_name}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
               <label className="ms-label">
                 <span>Notes</span>
                 <textarea className="ms-input" rows={3} value={directForm.notes}

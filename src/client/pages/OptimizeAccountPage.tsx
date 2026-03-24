@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   api,
   type OptimizeAccount,
@@ -235,10 +235,38 @@ export default function OptimizeAccountPage() {
       <div style={{ marginBottom: 24 }}>
         <button
           onClick={() => navigate("/optimize")}
-          style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 12 }}
+          style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 8 }}
         >
           ← Optimize
         </button>
+        {/* Chain breadcrumb */}
+        {(account.solution_id || account.project_id) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginBottom: 10, flexWrap: "wrap" }}>
+            {account.solution_id && (
+              <>
+                <Link
+                  to={`/solutions/${account.solution_id}`}
+                  style={{ color: "#8764b8", textDecoration: "none", fontWeight: 500 }}
+                >
+                  ← {account.linked_solution_name ?? "Solution"}
+                </Link>
+                <span style={{ color: "#475569" }}>›</span>
+              </>
+            )}
+            {account.project_id && (
+              <>
+                <Link
+                  to={`/projects/${account.project_id}`}
+                  style={{ color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}
+                >
+                  ← {account.project_name ?? "Project"}
+                </Link>
+                <span style={{ color: "#475569" }}>›</span>
+              </>
+            )}
+            <span style={{ color: "#94a3b8" }}>Optimization (here)</span>
+          </div>
+        )}
         <div className="ms-page-header" style={{ marginBottom: 0 }}>
           <div>
             <h1 className="ms-page-title">{account.project_name}</h1>
