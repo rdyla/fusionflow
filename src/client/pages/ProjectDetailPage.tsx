@@ -1752,7 +1752,7 @@ export default function ProjectDetailPage() {
             <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
               <label className="ms-label">
                 <span>Role on Project</span>
-                <select className="ms-input" value={addStaffRole} onChange={(e) => setAddStaffRole(e.target.value)}>
+                <select className="ms-input" value={addStaffRole} onChange={(e) => { setAddStaffRole(e.target.value); setAddStaffUserId(""); }}>
                   <option value="">— Select role —</option>
                   {!project?.dynamics_account_id && <option value="ae">Account Executive</option>}
                   {!project?.dynamics_account_id && <option value="sa">Solution Architect</option>}
@@ -1768,7 +1768,14 @@ export default function ProjectDetailPage() {
                 <span>Team Member</span>
                 <select className="ms-input" value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
                   <option value="">— Select team member —</option>
-                  {users.map((u) => (
+                  {users.filter((u) => {
+                    if (addStaffRole === "pm") return u.role === "pm";
+                    if (addStaffRole === "engineer") return u.role === "pf_engineer";
+                    if (addStaffRole === "ae")  return u.role === "pf_ae";
+                    if (addStaffRole === "sa")  return u.role === "pf_sa";
+                    if (addStaffRole === "csm") return u.role === "pf_csm";
+                    return true;
+                  }).map((u) => (
                     <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
                   ))}
                 </select>
