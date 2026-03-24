@@ -415,27 +415,33 @@ export default function OptimizePage() {
                   <input type="date" className="ms-input" value={directForm.next_review_date}
                     onChange={(e) => setDirectForm({ ...directForm, next_review_date: e.target.value })} />
                 </label>
-                <label className="ms-label">
-                  <span>Account Executive</span>
-                  <select className="ms-input" value={directForm.ae_user_id} onChange={(e) => setDirectForm({ ...directForm, ae_user_id: e.target.value })}>
-                    <option value="">— None —</option>
-                    {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Solution Architect</span>
-                  <select className="ms-input" value={directForm.sa_user_id} onChange={(e) => setDirectForm({ ...directForm, sa_user_id: e.target.value })}>
-                    <option value="">— None —</option>
-                    {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Customer Success Manager</span>
-                  <select className="ms-input" value={directForm.csm_user_id} onChange={(e) => setDirectForm({ ...directForm, csm_user_id: e.target.value })}>
-                    <option value="">— None —</option>
-                    {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
+                {!crmTeam && (
+                  <label className="ms-label">
+                    <span>Account Executive</span>
+                    <select className="ms-input" value={directForm.ae_user_id} onChange={(e) => setDirectForm({ ...directForm, ae_user_id: e.target.value })}>
+                      <option value="">— None —</option>
+                      {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    </select>
+                  </label>
+                )}
+                {!crmTeam && (
+                  <label className="ms-label">
+                    <span>Solution Architect</span>
+                    <select className="ms-input" value={directForm.sa_user_id} onChange={(e) => setDirectForm({ ...directForm, sa_user_id: e.target.value })}>
+                      <option value="">— None —</option>
+                      {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    </select>
+                  </label>
+                )}
+                {!crmTeam && (
+                  <label className="ms-label">
+                    <span>Customer Success Manager</span>
+                    <select className="ms-input" value={directForm.csm_user_id} onChange={(e) => setDirectForm({ ...directForm, csm_user_id: e.target.value })}>
+                      <option value="">— None —</option>
+                      {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    </select>
+                  </label>
+                )}
               </div>
               <label className="ms-label">
                 <span>Notes</span>
