@@ -201,31 +201,55 @@ export type AccountTeam = {
 export async function getAccountTeam(env: Env, accountId: string): Promise<AccountTeam> {
   if (!isConfigured(env)) return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null };
 
-  const expand = [
-    "owninguser($select=systemuserid,internalemailaddress,fullname)",
-    "pfi_solutionarchitect($select=systemuserid,internalemailaddress,fullname)",
-    "territoryid($select=name,territoryid)",
-  ].join(",");
-  const path = `/accounts(${accountId})?$select=accountid&$expand=${expand}`;
+  // Step 1: fetch the account with annotated formatted values for the three lookup fields.
+  // Using $select with the _value convention plus annotation header gives us names without $expand.
+  const select = "_ownerid_value,_pfi_solutionarchitect_value,_territoryid_value";
+  const path = `/accounts(${accountId})?$select=${select}`;
 
-  type RawTeam = {
-    owninguser?: { systemuserid: string; internalemailaddress: string | null; fullname: string | null } | null;
-    pfi_solutionarchitect?: { systemuserid: string; internalemailaddress: string | null; fullname: string | null } | null;
-    territoryid?: { name: string | null } | null;
-  };
+  type RawAccount = { [key: string]: unknown };
+
+  let ae_name: string | null = null;
+  let ae_email: string | null = null;
+  let sa_name: string | null = null;
+  let sa_email: string | null = null;
+  let csm_name: string | null = null;
 
   try {
-    const data = await dynamicsGet<RawTeam>(env, path);
-    return {
-      ae_name: data.owninguser?.fullname ?? null,
-      ae_email: data.owninguser?.internalemailaddress ?? null,
-      sa_name: data.pfi_solutionarchitect?.fullname ?? null,
-      sa_email: data.pfi_solutionarchitect?.internalemailaddress ?? null,
-      csm_name: data.territoryid?.name ?? null,
-    };
+    const data = await dynamicsGetAnnotated<RawAccount>(env, path);
+
+    const aeId = data["_ownerid_value"] as string | null;
+    ae_name = (data["_ownerid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+
+    const saId = data["_pfi_solutionarchitect_value"] as string | null;
+    sa_name = (data["_pfi_solutionarchitect_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+
+    csm_name = (data["_territoryid_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+
+    // Step 2: fetch emails for AE and SA by their user GUIDs
+    if (aeId) {
+      try {
+        const u = await dynamicsGet<{ internalemailaddress: string | null }>(
+          env, `/systemusers(${aeId})?$select=internalemailaddress`
+        );
+        ae_email = u.internalemailaddress ?? null;
+      } catch { /* non-fatal */ }
+    }
+
+    if (saId && saId !== aeId) {
+      try {
+        const u = await dynamicsGet<{ internalemailaddress: string | null }>(
+          env, `/systemusers(${saId})?$select=internalemailaddress`
+        );
+        sa_email = u.internalemailaddress ?? null;
+      } catch { /* non-fatal */ }
+    } else if (saId && saId === aeId) {
+      sa_email = ae_email;
+    }
   } catch {
-    return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null };
+    // Return whatever we managed to collect
   }
+
+  return { ae_name, ae_email, sa_name, sa_email, csm_name };
 }
 
 export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {
