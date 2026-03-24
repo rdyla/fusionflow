@@ -136,6 +136,17 @@ app.post("/", async (c) => {
     )
     .run();
 
+  // Auto-populate solution_staff from CRM-resolved team members
+  const staffEntries: [string, string][] = [
+    ...(pf_ae_user_id  ? [[pf_ae_user_id,  "pf_ae"] as [string, string]]  : []),
+    ...(pf_sa_user_id  ? [[pf_sa_user_id,  "pf_sa"] as [string, string]]  : []),
+    ...(pf_csm_user_id ? [[pf_csm_user_id, "pf_csm"] as [string, string]] : []),
+  ];
+  for (const [userId, role] of staffEntries) {
+    await db.prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), id, userId, role).run();
+  }
+
   const created = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(id).first();
   return c.json(created, 201);
 });
