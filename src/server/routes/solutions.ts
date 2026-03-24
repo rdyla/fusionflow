@@ -353,6 +353,10 @@ app.post("/:id/link-project", async (c) => {
   const project = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(project_id).first();
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
+  // 1:1 enforcement — solution can only have one linked project
+  const existing = await db.prepare("SELECT id FROM projects WHERE solution_id = ? LIMIT 1").bind(solutionId).first();
+  if (existing) throw new HTTPException(409, { message: "This solution already has a linked project. Unlink it first." });
+
   await db.prepare("UPDATE projects SET solution_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .bind(solutionId, project_id).run();
 
@@ -394,6 +398,10 @@ app.post("/:id/create-project", async (c) => {
     }>();
 
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
+
+  // 1:1 enforcement — solution can only spawn one project
+  const existingProject = await db.prepare("SELECT id FROM projects WHERE solution_id = ? LIMIT 1").bind(solutionId).first();
+  if (existingProject) throw new HTTPException(409, { message: "This solution already has a linked project." });
 
   const VENDOR_LABELS: Record<string, string> = { zoom: "Zoom", ringcentral: "RingCentral" };
 

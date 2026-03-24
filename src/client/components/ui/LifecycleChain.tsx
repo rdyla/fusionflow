@@ -15,7 +15,6 @@ function Node({ mod, name, href, isHere }: { mod: Mod; name: string; href?: stri
   const base: React.CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
-    gap: 0,
     padding: "5px 13px",
     borderRadius: 20,
     fontSize: 12,
@@ -32,7 +31,7 @@ function Node({ mod, name, href, isHere }: { mod: Mod; name: string; href?: stri
     </span>
   );
 
-  // Current page — filled, no link
+  // Current page — filled border, dot indicator, no link
   if (isHere) {
     return (
       <span style={{ ...base, background: c.bg, border: `2px solid ${c.border}`, color: c.color, cursor: "default" }}>
@@ -67,19 +66,17 @@ function Arrow() {
   );
 }
 
-export type ChainProject = { id: string; name: string; has_optimization?: number | boolean | null };
-
 export type LifecycleChainProps = {
   current: Mod;
   currentLabel?: string;
   solution?: { id: string; name: string } | null;
-  projects?: ChainProject[] | null;
+  project?: { id: string; name: string } | null;
   optimization?: { project_id: string } | null;
   actions?: React.ReactNode;
 };
 
 export default function LifecycleChain({
-  current, currentLabel, solution, projects, optimization, actions,
+  current, currentLabel, solution, project, optimization, actions,
 }: LifecycleChainProps) {
   return (
     <div className="ms-card" style={{ padding: "14px 18px" }}>
@@ -100,36 +97,24 @@ export default function LifecycleChain({
 
         <Arrow />
 
-        {/* ── Project(s) ── */}
+        {/* ── Project ── */}
         {current === "project" ? (
           <Node mod="project" name={currentLabel ?? "Project"} isHere />
-        ) : projects && projects.length > 0 ? (
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-            {projects.map((p) => (
-              <span key={p.id} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-                <Node mod="project" name={p.name} href={`/projects/${p.id}`} />
-                {p.has_optimization ? (
-                  <span style={{ fontSize: 10, color: C.optimization.color, fontWeight: 600 }}>→ Opt</span>
-                ) : null}
-              </span>
-            ))}
-          </div>
+        ) : project ? (
+          <Node mod="project" name={project.name} href={`/projects/${project.id}`} />
         ) : (
           <Node mod="project" name="—" />
         )}
 
-        {/* ── Optimization — hidden on solution view since it branches per-project ── */}
-        {current !== "solution" && (
-          <>
-            <Arrow />
-            {current === "optimization" ? (
-              <Node mod="optimization" name="Optimization" isHere />
-            ) : optimization ? (
-              <Node mod="optimization" name="Optimization" href={`/optimize/${optimization.project_id}`} />
-            ) : (
-              <Node mod="optimization" name="—" />
-            )}
-          </>
+        <Arrow />
+
+        {/* ── Optimization ── */}
+        {current === "optimization" ? (
+          <Node mod="optimization" name="Optimization" isHere />
+        ) : optimization ? (
+          <Node mod="optimization" name="Optimization" href={`/optimize/${optimization.project_id}`} />
+        ) : (
+          <Node mod="optimization" name="—" />
         )}
 
       </div>

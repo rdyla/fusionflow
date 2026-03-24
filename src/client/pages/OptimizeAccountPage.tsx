@@ -286,7 +286,7 @@ export default function OptimizeAccountPage() {
       <LifecycleChain
         current="optimization"
         solution={account.solution_id ? { id: account.solution_id, name: account.linked_solution_name ?? "Solution" } : null}
-        projects={[{ id: account.project_id, name: account.project_name ?? "Project" }]}
+        project={{ id: account.project_id, name: account.project_name ?? "Project" }}
       />
 
       {/* Tabs */}

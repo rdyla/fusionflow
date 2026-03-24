@@ -90,8 +90,8 @@ export default function SolutionDetailPage() {
   const [crmSyncing, setCrmSyncing] = useState(false);
   const [solutionStaffPhotoMap, setSolutionStaffPhotoMap] = useState<Record<string, string | null>>({});
 
-  // Linked projects
-  const [linkedProjects, setLinkedProjects] = useState<Project[]>([]);
+  // Linked project (1:1)
+  const [linkedProject, setLinkedProject] = useState<Project | null>(null);
   const [showLinkProjectModal, setShowLinkProjectModal] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [linkingProjectId, setLinkingProjectId] = useState("");
@@ -133,7 +133,7 @@ export default function SolutionDetailPage() {
         api.staffPhotos(emails).then(setSolutionStaffPhotoMap).catch(() => {});
       }
     }).catch(() => {});
-    api.solutionProjects(id).then(setLinkedProjects).catch(() => {});
+    api.solutionProjects(id).then((ps) => setLinkedProject(ps[0] ?? null)).catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -462,19 +462,40 @@ export default function SolutionDetailPage() {
           <LifecycleChain
             current="solution"
             currentLabel={solution.name}
-            projects={linkedProjects}
+            project={linkedProject}
             actions={canEdit && (
-              <button
-                className="ms-btn-secondary"
-                style={{ fontSize: 12 }}
-                onClick={() => {
-                  setShowLinkProjectModal(true);
-                  setLinkingProjectId("");
-                  api.projects().then(setAllProjects).catch(() => {});
-                }}
-              >
-                + Link Existing Project
-              </button>
+              <>
+                {!linkedProject && (
+                  <button
+                    className="ms-btn-secondary"
+                    style={{ fontSize: 12 }}
+                    onClick={() => {
+                      setShowLinkProjectModal(true);
+                      setLinkingProjectId("");
+                      api.projects().then(setAllProjects).catch(() => {});
+                    }}
+                  >
+                    + Link Existing Project
+                  </button>
+                )}
+                {linkedProject && (
+                  <button
+                    className="ms-btn-ghost"
+                    style={{ fontSize: 12, color: "#94a3b8" }}
+                    onClick={async () => {
+                      try {
+                        await api.unlinkProjectFromSolution(id!, linkedProject.id);
+                        setLinkedProject(null);
+                        showToast("Project unlinked.", "success");
+                      } catch {
+                        showToast("Failed to unlink project", "error");
+                      }
+                    }}
+                  >
+                    Unlink Project
+                  </button>
+                )}
+              </>
             )}
           />
 
@@ -853,24 +874,12 @@ export default function SolutionDetailPage() {
             )}
           </div>
 
-          {/* Create Project */}
-          {(currentRole === "admin" || currentRole === "pm") && (
+          {/* Create Project — only show when no project linked yet */}
+          {(currentRole === "admin" || currentRole === "pm") && !linkedProject && (
             <div className="ms-card" style={{ border: "1px solid rgba(99,193,234,0.25)", background: "rgba(99,193,234,0.04)" }}>
               <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#63c1ea", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 Create Project
               </h3>
-              {linkedProjects.length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 8 }}>Existing projects from this solution:</div>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                    {linkedProjects.map((p) => (
-                      <Link key={p.id} to={`/projects/${p.id}`} style={{ display: "inline-block", padding: "5px 12px", background: "rgba(16,124,16,0.1)", border: "1px solid rgba(16,124,16,0.3)", borderRadius: 4, color: "#107c10", fontWeight: 600, fontSize: 12, textDecoration: "none" }}>
-                        {p.name} →
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
               <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: "0 0 16px" }}>
                 Create a new implementation project from this solution. It will be pre-populated with the solution data and the partner AE will automatically receive access.
               </p>
@@ -900,7 +909,7 @@ export default function SolutionDetailPage() {
                 <span>Project</span>
                 <select className="ms-input" value={linkingProjectId} onChange={(e) => setLinkingProjectId(e.target.value)}>
                   <option value="">— Select a project —</option>
-                  {allProjects.filter((p) => !linkedProjects.some((lp) => lp.id === p.id)).map((p) => (
+                  {allProjects.filter((p) => !p.solution_id).map((p) => (
                     <option key={p.id} value={p.id}>{p.name}{p.customer_name ? ` — ${p.customer_name}` : ""}</option>
                   ))}
                 </select>
@@ -917,7 +926,7 @@ export default function SolutionDetailPage() {
                   try {
                     await api.linkProjectToSolution(id, linkingProjectId);
                     const updated = await api.solutionProjects(id);
-                    setLinkedProjects(updated);
+                    setLinkedProject(updated[0] ?? null);
                     setShowLinkProjectModal(false);
                     showToast("Project linked.", "success");
                   } catch {
