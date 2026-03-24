@@ -246,10 +246,13 @@ export type DynamicsAccount = {
 export type CrmAccountTeam = {
   ae_name: string | null;
   ae_email: string | null;
+  ae_user_id: string | null;
   sa_name: string | null;
   sa_email: string | null;
+  sa_user_id: string | null;
   csm_name: string | null;
   csm_email: string | null;
+  csm_user_id: string | null;
 };
 
 export type DynamicsContact = {

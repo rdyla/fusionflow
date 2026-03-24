@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+type D1Database = Bindings["DB"];
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
 import { scoreAssessment } from "../lib/scoringEngine";
@@ -98,12 +99,35 @@ app.get("/crm/accounts", async (c) => {
   return c.json(results);
 });
 
-// ── CRM account team ──────────────────────────────────────────────────────────
+// ── Shared helper: find user by email or create from CRM data ─────────────────
+
+async function findOrCreatePfUser(db: D1Database, email: string | null, name: string | null, role: string): Promise<string | null> {
+  if (!email) return null;
+  const existing = await db
+    .prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) LIMIT 1")
+    .bind(email)
+    .first<{ id: string }>();
+  if (existing) return existing.id;
+  const newId = crypto.randomUUID();
+  await db
+    .prepare("INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, ?, 1)")
+    .bind(newId, email.toLowerCase(), name ?? null, role)
+    .run();
+  return newId;
+}
+
+// ── CRM account team (find-or-create users, return with IDs) ──────────────────
 
 app.get("/crm/accounts/:accountId/team", async (c) => {
   assertOptimizeAccess(c.get("auth").role);
+  const db = c.env.DB;
   const team = await getAccountTeam(c.env, c.req.param("accountId"));
-  return c.json(team);
+  const [ae_user_id, sa_user_id, csm_user_id] = await Promise.all([
+    findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+    findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+    findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
+  ]);
+  return c.json({ ...team, ae_user_id, sa_user_id, csm_user_id });
 });
 
 // ── CRM sync: refresh AE/SA/CSM from CRM account team ─────────────────────────
@@ -124,19 +148,10 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
 
   const team = await getAccountTeam(c.env, project.dynamics_account_id);
 
-  const matchByEmail = async (email: string | null): Promise<string | null> => {
-    if (!email) return null;
-    const user = await db
-      .prepare("SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND is_active = 1 LIMIT 1")
-      .bind(email)
-      .first<{ id: string }>();
-    return user?.id ?? null;
-  };
-
   const [ae_user_id, sa_user_id, csm_user_id] = await Promise.all([
-    matchByEmail(team.ae_email),
-    matchByEmail(team.sa_email),
-    matchByEmail(team.csm_email),
+    findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+    findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+    findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
   ]);
 
   await db.prepare(`

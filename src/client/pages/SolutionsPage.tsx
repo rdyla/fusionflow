@@ -97,13 +97,11 @@ export default function SolutionsPage() {
     api.optimizeCrmAccountTeam(account.id)
       .then((team) => {
         setCrmTeam(team);
-        const matchId = (email: string | null) =>
-          email ? (users.find((u) => u.email.toLowerCase() === email.toLowerCase())?.id ?? "") : "";
         setForm((f) => ({
           ...f,
-          pf_ae_user_id: matchId(team.ae_email),
-          pf_sa_user_id: matchId(team.sa_email),
-          pf_csm_user_id: matchId(team.csm_email),
+          pf_ae_user_id: team.ae_user_id ?? "",
+          pf_sa_user_id: team.sa_user_id ?? "",
+          pf_csm_user_id: team.csm_user_id ?? "",
         }));
       })
       .catch(() => setCrmTeam(null))

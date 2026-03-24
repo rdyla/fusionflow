@@ -99,14 +99,11 @@ export default function OptimizePage() {
     api.optimizeCrmAccountTeam(account.accountid)
       .then((team) => {
         setCrmTeam(team);
-        // Auto-match AE/SA/CSM by email
-        const matchId = (email: string | null) =>
-          email ? (users.find((u) => u.email.toLowerCase() === email.toLowerCase())?.id ?? "") : "";
         setDirectForm((f) => ({
           ...f,
-          ae_user_id: matchId(team.ae_email),
-          sa_user_id: matchId(team.sa_email),
-          csm_user_id: matchId(team.csm_email),
+          ae_user_id: team.ae_user_id ?? "",
+          sa_user_id: team.sa_user_id ?? "",
+          csm_user_id: team.csm_user_id ?? "",
         }));
       })
       .catch(() => setCrmTeam(null))
