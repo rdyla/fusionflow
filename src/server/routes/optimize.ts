@@ -141,7 +141,10 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
 
   await db.prepare(`
     UPDATE optimize_accounts
-    SET ae_user_id = ?, sa_user_id = ?, csm_user_id = ?, updated_at = CURRENT_TIMESTAMP
+    SET ae_user_id  = COALESCE(?, ae_user_id),
+        sa_user_id  = COALESCE(?, sa_user_id),
+        csm_user_id = COALESCE(?, csm_user_id),
+        updated_at  = CURRENT_TIMESTAMP
     WHERE project_id = ?
   `).bind(ae_user_id, sa_user_id, csm_user_id, projectId).run();
 
