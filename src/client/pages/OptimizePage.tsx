@@ -301,8 +301,8 @@ export default function OptimizePage() {
                               type="button"
                               key={a.accountid}
                               onClick={() => selectCrmAccount(a)}
-                              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", borderBottom: "1px solid #f1f5f9", cursor: "pointer", color: "#334155" }}
-                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.06)"; }}
+                              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "pointer", color: "rgba(255,255,255,0.85)" }}
+                              onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.1)"; }}
                               onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
                             >
                               <div style={{ fontWeight: 600, fontSize: 13 }}>{a.name}</div>

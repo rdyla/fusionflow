@@ -271,14 +271,14 @@ export default function SolutionsPage() {
                     required
                   />
                   {(crmSearching || crmResults.length > 0) && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(0,0,0,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
                       {crmSearching && <div style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 13 }}>Searching…</div>}
                       {crmResults.map((r) => (
                         <button
                           key={r.id}
                           type="button"
-                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "#334155", fontSize: 13, cursor: "pointer" }}
-                          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "#f1f5f9"; }}
+                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer" }}
+                          onMouseEnter={(e) => { (e.target as HTMLButtonElement).style.background = "rgba(99,193,234,0.1)"; }}
                           onMouseLeave={(e) => { (e.target as HTMLButtonElement).style.background = "none"; }}
                           onClick={() => selectCrmAccount(r)}
                         >
