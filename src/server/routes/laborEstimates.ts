@@ -173,7 +173,7 @@ interface LaborEstimateData {
   solutionTypeCategory: string;
   baseHours: Record<string, number>;
   driverAdjustments: DriverAdjustment[];
-  complexity: { score: number; band: string; multiplier: number };
+  complexity: { score: number; band: string; multiplier: number; factors: Array<{ label: string; points: number; detail?: string }> };
   preOverrideHours: Record<string, number>;
   finalHours: Record<string, number>;
   overrides: Record<string, number>;
