@@ -45,6 +45,19 @@ Critically, Optimize pulls **live utilization data** directly from the customer'
 
 ---
 
+## FusionFlow 360 — Lifecycle Chain
+
+All three modules are linked into a single customer journey chain: **Solution → Project → Optimization**.
+
+- A solution can spawn one or more projects. When a project is created from a solution, account info, CRM team assignments (AE, SA, CSM), technology, vendor, and partner AE are automatically inherited.
+- A project carries a link back to its originating solution and forward to its Optimize account once graduated.
+- Existing records can be retroactively linked without disrupting any existing data.
+- All links are optional — standalone solutions, projects, and Optimize accounts are fully supported.
+
+**Navigation:** every detail page surfaces the full chain. From an Optimize account page, a breadcrumb shows `← Solution › ← Project › Optimization (here)`, with each step linking directly to the corresponding record. Solutions and Projects list pages show badges indicating how many records are downstream (e.g. "2 Projects", "Has Optimization").
+
+---
+
 ## Live Platform Integrations
 
 ### RingCentral
