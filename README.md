@@ -269,28 +269,3 @@ FusionFlow is live at **[fusionflow360.com](https://fusionflow360.com)**, deploy
 | File Storage | Cloudflare R2 |
 | Email | Resend |
 | Validation | Zod |
-
----
-
-## Changelog
-
-### 2026-03-23 — FusionFlow 360 Lifecycle Chain
-
-**Solution → Project → Optimization** are now linked as a strict 1:1:1 chain.
-
-- **Database** — `solution_id` column added to `projects` table (`migrations/0026_project_solution_link.sql`); existing handoff-created projects backfilled automatically
-- **Backend** — `create-project` and `link-project` enforce one project per solution (409 if already linked); `projects` list and detail expose `solution_id`, `linked_solution_name`, `has_optimization`; new `GET /projects/:id/chain` endpoint returns `{ solution, optimizeAccount }`; Optimize accounts expose `solution_id` and `linked_solution_name` via project join
-- **Shared `LifecycleChain` component** — single component used on all three detail pages (Solution, Project, Optimize account); consistent pill design color-coded by module (purple = Solution, teal = Project, cyan = Optimization); `→` arrows between steps; filled pill = current page, outlined = linked, dashed = unlinked
-- **Solutions list** — "Projects" badge column showing linked project count
-- **Solution detail** — Lifecycle Chain card with link/unlink project actions; "Create Project" button hidden once a project exists; link modal filters to unlinked projects only
-- **Projects list** — "Chain" column with `← Solution` and `Optimize →` badges
-- **Project detail** — Lifecycle Chain card with link/unlink solution actions
-- **Optimize list** — "Solution" column linking back to originating solution
-- **Optimize account detail** — Lifecycle Chain card above tabs; optional "Link to Project" field in direct enroll modal
-- **Data inheritance** — creating a project from a solution copies account ID, vendor, solution type, and AE/SA/CSM staff assignments automatically
-
-### 2026-03-20 — SharePoint Integration (Microsoft Graph API)
-
-- Switched SharePoint file operations from REST API (`/_api`) to Microsoft Graph API
-- Added endpoint to enable SharePoint app-only auth
-- Fixed token cache clear to also remove SP REST token
