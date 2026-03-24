@@ -529,12 +529,15 @@ export type OptimizeAccount = {
   graduated_at: string;
   graduation_method: "auto" | "manual" | "direct";
   optimize_status: "active" | "paused" | "churned";
+  ae_user_id: string | null;
+  ae_name: string | null;
   sa_user_id: string | null;
   sa_name: string | null;
   csm_user_id: string | null;
   csm_name: string | null;
   next_review_date: string | null;
   notes: string | null;
+  dynamics_account_id: string | null;
   last_assessment_date: string | null;
   last_assessment_score: number | null;
 };
@@ -1186,6 +1189,7 @@ export const api = {
     vendor?: string | null;
     solution_type?: string | null;
     actual_go_live_date?: string | null;
+    ae_user_id?: string | null;
     sa_user_id?: string | null;
     csm_user_id?: string | null;
     next_review_date?: string | null;
@@ -1197,6 +1201,7 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   optimizeUpdateAccount: (projectId: string, payload: {
+    ae_user_id?: string | null;
     sa_user_id?: string | null;
     csm_user_id?: string | null;
     optimize_status?: "active" | "paused" | "churned";
@@ -1207,6 +1212,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+  optimizeCrmSync: (projectId: string) =>
+    request<{ account: OptimizeAccount; crm: { ae_name: string | null; sa_name: string | null; csm_name: string | null } }>(
+      `/optimize/accounts/${projectId}/crm-sync`, { method: "POST" }
+    ),
 
   optimizeDeleteAccount: (projectId: string) =>
     request<{ success: boolean }>(`/optimize/accounts/${projectId}`, { method: "DELETE" }),

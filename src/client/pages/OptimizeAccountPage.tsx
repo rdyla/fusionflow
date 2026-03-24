@@ -65,6 +65,7 @@ export default function OptimizeAccountPage() {
   const [utilization, setUtilization] = useState<UtilizationSnapshot[]>([]);
   const [zoomConfigured, setZoomConfigured] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [crmSyncing, setCrmSyncing] = useState(false);
 
   useEffect(() => {
     if (projectId) loadAll(projectId);
@@ -91,6 +92,25 @@ export default function OptimizeAccountPage() {
       showToast("Failed to load account data", "error");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleCrmSync() {
+    if (!projectId) return;
+    setCrmSyncing(true);
+    try {
+      const { account: updated, crm } = await api.optimizeCrmSync(projectId);
+      setAccount(updated);
+      const matched = [
+        crm.ae_name && updated.ae_name ? `AE: ${updated.ae_name}` : null,
+        crm.sa_name && updated.sa_name ? `SA: ${updated.sa_name}` : null,
+        crm.csm_name && updated.csm_name ? `CSM: ${updated.csm_name}` : null,
+      ].filter(Boolean);
+      showToast(matched.length ? `Synced from CRM — ${matched.join(", ")}` : "Synced from CRM (no matching users found)", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "CRM sync failed", "error");
+    } finally {
+      setCrmSyncing(false);
     }
   }
 
@@ -230,12 +250,23 @@ export default function OptimizeAccountPage() {
             <span className="ms-badge" style={{ background: account.optimize_status === "active" ? "#22c55e1a" : "#f59e0b1a", color: account.optimize_status === "active" ? "#22c55e" : "#f59e0b", border: `1px solid ${account.optimize_status === "active" ? "#22c55e40" : "#f59e0b40"}` }}>
               {account.optimize_status}
             </span>
+            {account.dynamics_account_id && (
+              <button
+                className="ms-btn-secondary"
+                onClick={handleCrmSync}
+                disabled={crmSyncing}
+                style={{ fontSize: 12 }}
+              >
+                {crmSyncing ? "Syncing…" : "Sync from CRM"}
+              </button>
+            )}
           </div>
         </div>
 
         {/* Meta row */}
         <div style={{ display: "flex", gap: 24, marginTop: 12, flexWrap: "wrap" }}>
           {[
+            { label: "AE", value: account.ae_name ?? "—" },
             { label: "SA", value: account.sa_name ?? "—" },
             { label: "CSM", value: account.csm_name ?? "—" },
             { label: "Graduated", value: account.graduated_at ? account.graduated_at.slice(0, 10) : "—" },

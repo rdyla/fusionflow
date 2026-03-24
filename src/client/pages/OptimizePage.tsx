@@ -21,6 +21,7 @@ const EMPTY_DIRECT = {
   vendor: "",
   solution_type: "",
   actual_go_live_date: "",
+  ae_user_id: "",
   sa_user_id: "",
   csm_user_id: "",
   next_review_date: "",
@@ -98,16 +99,15 @@ export default function OptimizePage() {
     api.optimizeCrmAccountTeam(account.accountid)
       .then((team) => {
         setCrmTeam(team);
-        // Auto-match SA by email
-        if (team.sa_email) {
-          const match = users.find((u) => u.email.toLowerCase() === team.sa_email!.toLowerCase());
-          if (match) setDirectForm((f) => ({ ...f, sa_user_id: match.id }));
-        }
-        // Auto-match CSM by email (territory manager email)
-        if (team.csm_email) {
-          const match = users.find((u) => u.email.toLowerCase() === team.csm_email!.toLowerCase());
-          if (match) setDirectForm((f) => ({ ...f, csm_user_id: match.id }));
-        }
+        // Auto-match AE/SA/CSM by email
+        const matchId = (email: string | null) =>
+          email ? (users.find((u) => u.email.toLowerCase() === email.toLowerCase())?.id ?? "") : "";
+        setDirectForm((f) => ({
+          ...f,
+          ae_user_id: matchId(team.ae_email),
+          sa_user_id: matchId(team.sa_email),
+          csm_user_id: matchId(team.csm_email),
+        }));
       })
       .catch(() => setCrmTeam(null))
       .finally(() => setCrmTeamLoading(false));
@@ -115,7 +115,7 @@ export default function OptimizePage() {
 
   function clearCrmSelection() {
     setSelectedCrm(null);
-    setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "", sa_user_id: "", csm_user_id: "" }));
+    setDirectForm((f) => ({ ...f, customer_name: "", dynamics_account_id: "", ae_user_id: "", sa_user_id: "", csm_user_id: "" }));
     setCrmTeam(null);
   }
 
@@ -129,10 +129,12 @@ export default function OptimizePage() {
         vendor: directForm.vendor.trim() || null,
         solution_type: directForm.solution_type.trim() || null,
         actual_go_live_date: directForm.actual_go_live_date || null,
+        ae_user_id: directForm.ae_user_id || null,
         sa_user_id: directForm.sa_user_id || null,
         csm_user_id: directForm.csm_user_id || null,
         next_review_date: directForm.next_review_date || null,
         notes: directForm.notes.trim() || null,
+        dynamics_account_id: directForm.dynamics_account_id || null,
       });
       setAccounts((prev) => [created, ...prev]);
       resetDirectModal();
@@ -200,6 +202,7 @@ export default function OptimizePage() {
                 <th>Account</th>
                 <th>Graduated</th>
                 <th>Status</th>
+                <th>AE</th>
                 <th>SA</th>
                 <th>CSM</th>
                 <th>Next Review</th>
@@ -229,6 +232,7 @@ export default function OptimizePage() {
                       {a.optimize_status}
                     </span>
                   </td>
+                  <td style={{ color: "#475569", fontSize: 13 }}>{a.ae_name ?? "—"}</td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.sa_name ?? "—"}</td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.csm_name ?? "—"}</td>
                   <td style={{ color: "#64748b", fontSize: 12 }}>{a.next_review_date ?? "—"}</td>
@@ -410,6 +414,13 @@ export default function OptimizePage() {
                   <span>Next Review Date</span>
                   <input type="date" className="ms-input" value={directForm.next_review_date}
                     onChange={(e) => setDirectForm({ ...directForm, next_review_date: e.target.value })} />
+                </label>
+                <label className="ms-label">
+                  <span>Account Executive</span>
+                  <select className="ms-input" value={directForm.ae_user_id} onChange={(e) => setDirectForm({ ...directForm, ae_user_id: e.target.value })}>
+                    <option value="">— None —</option>
+                    {users.filter((u) => u.role !== "client").map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                  </select>
                 </label>
                 <label className="ms-label">
                   <span>Solution Architect</span>
