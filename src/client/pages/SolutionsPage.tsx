@@ -383,17 +383,19 @@ export default function SolutionsPage() {
               )}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
-                {/* PF AE */}
-                <label className="ms-label">
-                  <span>PF Account Executive</span>
-                  <select className="ms-input" value={form.pf_ae_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_ae_user_id: e.target.value }))}>
-                    <option value="">— Unassigned —</option>
-                    {pfAes.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
+                {/* PF AE — hidden when CRM team is loaded */}
+                {!crmTeam && (
+                  <label className="ms-label">
+                    <span>PF Account Executive</span>
+                    <select className="ms-input" value={form.pf_ae_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_ae_user_id: e.target.value }))}>
+                      <option value="">— Unassigned —</option>
+                      {pfAes.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    </select>
+                  </label>
+                )}
 
-                {/* Partner AE mode toggle */}
-                <label className="ms-label">
+                {/* Partner AE mode toggle — always shown */}
+                <label className="ms-label" style={crmTeam ? { gridColumn: "1 / -1" } : {}}>
                   <span>Partner AE</span>
                   <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                     {(["existing", "new"] as const).map((mode) => (
@@ -423,23 +425,27 @@ export default function SolutionsPage() {
                   ) : null}
                 </label>
 
-                {/* SA */}
-                <label className="ms-label">
-                  <span>Solution Architect</span>
-                  <select className="ms-input" value={form.pf_sa_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_sa_user_id: e.target.value }))}>
-                    <option value="">— Unassigned —</option>
-                    {pfSas.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
+                {/* SA — hidden when CRM team is loaded */}
+                {!crmTeam && (
+                  <label className="ms-label">
+                    <span>Solution Architect</span>
+                    <select className="ms-input" value={form.pf_sa_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_sa_user_id: e.target.value }))}>
+                      <option value="">— Unassigned —</option>
+                      {pfSas.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    </select>
+                  </label>
+                )}
 
-                {/* CSM */}
-                <label className="ms-label">
-                  <span>Customer Success Manager</span>
-                  <select className="ms-input" value={form.pf_csm_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_csm_user_id: e.target.value }))}>
-                    <option value="">— Unassigned —</option>
-                    {pfCsms.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
+                {/* CSM — hidden when CRM team is loaded */}
+                {!crmTeam && (
+                  <label className="ms-label">
+                    <span>Customer Success Manager</span>
+                    <select className="ms-input" value={form.pf_csm_user_id} onChange={(e) => setForm((f) => ({ ...f, pf_csm_user_id: e.target.value }))}>
+                      <option value="">— Unassigned —</option>
+                      {pfCsms.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                    </select>
+                  </label>
+                )}
               </div>
 
               {/* New Partner AE fields */}
