@@ -95,6 +95,7 @@ export type Solution = {
   handoff_notes: string | null;
   gap_analysis: string | null;
   linked_project_id: string | null;
+  customer_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -105,6 +106,13 @@ export type Solution = {
   pf_csm_name: string | null;
   partner_ae_display_name: string | null;
   linked_project_count: number | null;
+  customer_pf_ae_name: string | null;
+  customer_pf_ae_email: string | null;
+  customer_pf_sa_name: string | null;
+  customer_pf_sa_email: string | null;
+  customer_pf_csm_name: string | null;
+  customer_pf_csm_email: string | null;
+  customer_sharepoint_url: string | null;
 };
 
 export type DashboardTask = Task & { project_name: string };
@@ -136,6 +144,7 @@ export type DashboardSummaryResponse = {
     openRisks: number;
   };
   projects: Project[];
+  projectPhases: { project_id: string; name: string; status: string; sort_order: number }[];
   openTasks: DashboardTask[];
   openRisks: DashboardRisk[];
   phaseDistribution: { phase_name: string; count: number }[];
@@ -163,17 +172,26 @@ export type Project = {
   partner_ae_names: string | null;
   csm_name: string | null;
   engineer_name: string | null;
+  customer_id: string | null;
   dynamics_account_id: string | null;
   asana_project_id: string | null;
   managed_in_asana: number | null;
   archived: number | null;
   solution_id: string | null;
+  customer_display_name: string | null;
   // Joined chain fields (detail + list)
   linked_solution_name: string | null;
   linked_solution_customer: string | null;
   linked_solution_status: string | null;
   linked_solution_type: string | null;
   has_optimization: number | null;
+  customer_pf_ae_name: string | null;
+  customer_pf_ae_email: string | null;
+  customer_pf_sa_name: string | null;
+  customer_pf_sa_email: string | null;
+  customer_pf_csm_name: string | null;
+  customer_pf_csm_email: string | null;
+  customer_sharepoint_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -290,6 +308,49 @@ export type DynamicsOpportunity = {
   name: string;
   estimatedclosedate: string | null;
   statecode: number;
+};
+
+export type Customer = {
+  id: string;
+  name: string;
+  crm_account_id: string;
+  sharepoint_url: string | null;
+  pf_ae_user_id: string | null;
+  pf_sa_user_id: string | null;
+  pf_csm_user_id: string | null;
+  address_city: string | null;
+  address_state: string | null;
+  created_at: string;
+  updated_at: string;
+  // Joined
+  pf_ae_name: string | null;
+  pf_ae_email: string | null;
+  pf_sa_name: string | null;
+  pf_sa_email: string | null;
+  pf_csm_name: string | null;
+  pf_csm_email: string | null;
+};
+
+export type CustomerContact = {
+  id: string;
+  customer_id: string;
+  dynamics_contact_id: string | null;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  job_title: string | null;
+  contact_role: string | null;
+  added_at: string;
+};
+
+export type CustomerProviderAe = {
+  id: string;
+  customer_id: string;
+  name: string;
+  company: string | null;
+  email: string | null;
+  phone: string | null;
+  added_at: string;
 };
 
 export type ProjectContact = {
@@ -557,11 +618,19 @@ export type OptimizeAccount = {
   csm_name: string | null;
   next_review_date: string | null;
   notes: string | null;
+  customer_id: string | null;
   dynamics_account_id: string | null;
   solution_id: string | null;
   linked_solution_name: string | null;
   last_assessment_date: string | null;
   last_assessment_score: number | null;
+  customer_pf_ae_name: string | null;
+  customer_pf_ae_email: string | null;
+  customer_pf_sa_name: string | null;
+  customer_pf_sa_email: string | null;
+  customer_pf_csm_name: string | null;
+  customer_pf_csm_email: string | null;
+  customer_sharepoint_url: string | null;
 };
 
 export type OptimizeEligible = {
@@ -772,6 +841,7 @@ export const api = {
   createProject: (payload: {
     name: string;
     customer_name?: string;
+    customer_id?: string | null;
     vendor?: string;
     solution_type?: string;
     kickoff_date?: string;
@@ -1114,6 +1184,7 @@ export const api = {
 
   createSolution: (payload: {
     customer_name: string;
+    customer_id?: string;
     dynamics_account_id?: string;
     vendor?: SolutionVendor;
     solution_type: SolutionType;
@@ -1446,5 +1517,39 @@ export const api = {
     }),
   deleteNotification: (id: string) =>
     request<{ ok: boolean }>(`/inbox/${id}`, { method: "DELETE" }),
+
+  // ── Customers ──────────────────────────────────────────────────────────────
+  customers: () =>
+    request<Customer[]>("/customers"),
+  customer: (id: string) =>
+    request<Customer>(`/customers/${id}`),
+  createCustomer: (data: { name: string; crm_account_id: string; sharepoint_url?: string | null; pf_ae_user_id?: string | null; pf_sa_user_id?: string | null; pf_csm_user_id?: string | null }) =>
+    request<Customer>("/customers", { method: "POST", body: JSON.stringify(data) }),
+  updateCustomer: (id: string, data: Partial<{ name: string; sharepoint_url: string | null; pf_ae_user_id: string | null; pf_sa_user_id: string | null; pf_csm_user_id: string | null }>) =>
+    request<Customer>(`/customers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCustomer: (id: string) =>
+    request<{ success: boolean }>(`/customers/${id}`, { method: "DELETE" }),
+  customerCrmSync: (id: string) =>
+    request<{ customer: Customer; crm: { ae_name: string | null; sa_name: string | null; csm_name: string | null } }>(`/customers/${id}/crm-sync`, { method: "POST" }),
+  customerContacts: (id: string) =>
+    request<CustomerContact[]>(`/customers/${id}/contacts`),
+  addCustomerContact: (id: string, data: { name: string; email?: string | null; phone?: string | null; job_title?: string | null; contact_role?: string | null; dynamics_contact_id?: string }) =>
+    request<CustomerContact>(`/customers/${id}/contacts`, { method: "POST", body: JSON.stringify(data) }),
+  deleteCustomerContact: (id: string, contactId: string) =>
+    request<{ success: boolean }>(`/customers/${id}/contacts/${contactId}`, { method: "DELETE" }),
+  customerProviderAes: (id: string) =>
+    request<CustomerProviderAe[]>(`/customers/${id}/provider-aes`),
+  addCustomerProviderAe: (id: string, data: { name: string; company?: string | null; email?: string | null; phone?: string | null }) =>
+    request<CustomerProviderAe>(`/customers/${id}/provider-aes`, { method: "POST", body: JSON.stringify(data) }),
+  updateCustomerProviderAe: (id: string, aeId: string, data: Partial<{ name: string; company: string | null; email: string | null; phone: string | null }>) =>
+    request<CustomerProviderAe>(`/customers/${id}/provider-aes/${aeId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCustomerProviderAe: (id: string, aeId: string) =>
+    request<{ success: boolean }>(`/customers/${id}/provider-aes/${aeId}`, { method: "DELETE" }),
+  customerSolutions: (id: string) =>
+    request<Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">[]>(`/customers/${id}/solutions`),
+  customerProjects: (id: string) =>
+    request<Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "solution_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
+  customerOptimizations: (id: string) =>
+    request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_type: string | null; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
 
 };

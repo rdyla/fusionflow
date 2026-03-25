@@ -154,15 +154,11 @@ export default function AppShell() {
       <nav style={{ flex: 1, paddingTop: 10, overflowY: "auto" }}>
         {!isClient && (
           <>
-            <NavSection label="Solutioning" />
-            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
+            <NavSection label="Customers" />
+            <SideLink to="/customers" onClick={() => setDrawerOpen(false)}>All Customers</SideLink>
             <Divider />
             <NavSection label="Implementation" />
             <SideLink to="/dashboard" end onClick={() => setDrawerOpen(false)}>Dashboard</SideLink>
-            <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
-            <Divider />
-            <NavSection label="Optimize" />
-            <SideLink to="/optimize" onClick={() => setDrawerOpen(false)}>Accounts</SideLink>
             <Divider />
           </>
         )}

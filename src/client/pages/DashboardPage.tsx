@@ -19,12 +19,6 @@ const SEVERITY_COLOR: Record<string, string> = {
   medium: "#ff8c00",
   low: "#94a3b8",
 };
-const STATUS_COLOR: Record<string, string> = {
-  completed: "#059669",
-  in_progress: "#0891b2",
-  not_started: "#94a3b8",
-  blocked: "#d13438",
-};
 const PHASE_COLORS = [
   "#0078d4", "#107c10", "#ff8c00", "#8764b8",
   "#00b7c3", "#e74856", "#ca5010", "#038387",
@@ -39,6 +33,8 @@ const VENDOR_COLORS: Record<string, string> = {
 const TYPE_LABELS: Record<string, string> = {
   ucaas:   "UCaaS",
   ccaas:   "CCaaS",
+  ci:      "Conv. Intelligence",
+  va:      "AI Virtual Agent",
   zoom_ra: "Zoom Rev. Accel.",
   zoom_va: "Zoom Virtual Agent",
   rc_ace:  "RC ACE",
@@ -49,6 +45,22 @@ const TYPE_COLORS = [
   "#0891b2", "#8764b8", "#059669", "#ff8c00",
   "#e74856", "#038387", "#94a3b8",
 ];
+
+const VENDOR_LABELS: Record<string, string> = {
+  zoom:        "Zoom",
+  ringcentral: "RingCentral",
+  cato:        "Cato Networks",
+  microsoft:   "Microsoft",
+  cisco:       "Cisco",
+  tbd:         "TBD",
+};
+
+const PHASE_STATUS_COLOR: Record<string, string> = {
+  completed:   "#059669",
+  in_progress: "#0891b2",
+  not_started: "#475569",
+  blocked:     "#d13438",
+};
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -138,6 +150,41 @@ function DonutChart({
   );
 }
 
+type PhaseEntry = { project_id: string; name: string; status: string; sort_order: number };
+
+function PhaseFlowIndicator({ phases }: { phases: PhaseEntry[] }) {
+  if (!phases || phases.length === 0) return <span style={{ color: "#64748b", fontSize: 11 }}>—</span>;
+  const sorted = [...phases].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  return (
+    <div style={{ display: "flex", alignItems: "center" }}>
+      {sorted.map((phase, i) => {
+        const status = phase.status || "not_started";
+        const color = PHASE_STATUS_COLOR[status] ?? "#475569";
+        const isActive = status === "in_progress";
+        const prevDone = i > 0 && sorted[i - 1].status === "completed";
+        return (
+          <div key={phase.name + i} style={{ display: "flex", alignItems: "center" }}>
+            {i > 0 && <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#475569", flexShrink: 0 }} />}
+            <div
+              title={`${phase.name} — ${status.replace(/_/g, " ")}`}
+              style={{
+                width: isActive ? 13 : 10,
+                height: isActive ? 13 : 10,
+                borderRadius: "50%",
+                background: status === "not_started" ? "#475569" : color,
+                border: `1.5px solid ${status === "not_started" ? "#64748b" : color}`,
+                boxShadow: isActive ? `0 0 0 2.5px ${color}55` : "none",
+                flexShrink: 0,
+                cursor: "default",
+              }}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function MetricCard({ title, value, accent }: { title: string; value: number; accent?: string }) {
   return (
     <div className="ms-metric-card">
@@ -167,7 +214,14 @@ export default function DashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
   }
 
-  const { user, summary, projects, openTasks, openRisks, phaseDistribution, vendorDistribution, typeDistribution } = data;
+  const { user, summary, projects, projectPhases, openTasks, openRisks, phaseDistribution, vendorDistribution, typeDistribution } = data;
+
+  // Build a map from project_id → sorted phases
+  const phasesByProject = projectPhases.reduce<Record<string, PhaseEntry[]>>((acc, ph) => {
+    if (!acc[ph.project_id]) acc[ph.project_id] = [];
+    acc[ph.project_id].push(ph);
+    return acc;
+  }, {});
 
   // Normalize vendor labels (DB stores "Zoom" / "RingCentral" from the VENDOR_LABELS map)
   const vendorData = vendorDistribution.map((d) => ({
@@ -238,7 +292,7 @@ export default function DashboardPage() {
         <table className="ms-table">
           <thead>
             <tr>
-              {["Project", "Customer", "Vendor", "Partner AE", "Status", "Health", "Target Go-Live"].map((h) => (
+              {["Project", "Customer", "Provider / Tech", "Phases", "Health"].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
@@ -246,39 +300,65 @@ export default function DashboardPage() {
           <tbody>
             {projects.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
+                <td colSpan={5} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
             )}
-            {projects.map((p) => (
-              <tr key={p.id}>
-                <td>
-                  <Link
-                    to={`/projects/${p.id}`}
-                    style={{ color: "#63c1ea", textDecoration: "none", fontWeight: 600 }}
-                  >
-                    {p.name}
-                  </Link>
-                </td>
-                <td style={{ color: "#475569" }}>{p.customer_name ?? "—"}</td>
-                <td style={{ color: "#475569" }}>{p.vendor ?? "—"}</td>
-                <td style={{ color: "#475569" }}>{p.partner_ae_names ?? "—"}</td>
-                <td>
-                  <Badge
-                    label={p.status?.replace("_", " ") ?? "—"}
-                    color={STATUS_COLOR[p.status ?? ""] ?? "#94a3b8"}
-                  />
-                </td>
-                <td>
-                  <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[p.health ?? ""] ?? "#94a3b8", flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: "#334155" }}>{healthLabel(p.health)}</span>
-                  </span>
-                </td>
-                <td style={{ color: "#475569" }}>{formatDate(p.target_go_live_date)}</td>
-              </tr>
-            ))}
+            {projects.map((p) => {
+              const isCompleted = p.status === "completed";
+              const isBlocked = p.status === "blocked";
+              const rowStyle: React.CSSProperties = isCompleted
+                ? { opacity: 0.5, background: "#f8fafc" }
+                : isBlocked
+                ? { background: "rgba(209,52,56,0.04)", borderLeft: "3px solid #d13438" }
+                : {};
+              const vendorLabel = VENDOR_LABELS[p.vendor ?? ""] ?? p.vendor ?? null;
+              const typeLabel = TYPE_LABELS[p.solution_type ?? ""] ?? p.solution_type ?? null;
+              const providerTech = [vendorLabel, typeLabel].filter(Boolean);
+              return (
+                <tr
+                  key={p.id}
+                  style={{ cursor: "pointer", ...rowStyle }}
+                  onClick={() => navigate(`/projects/${p.id}`)}
+                >
+                  <td>
+                    <div style={{ fontWeight: 600, color: isCompleted ? "#64748b" : "#1e293b", fontSize: 14 }}>{p.name}</div>
+                    {p.target_go_live_date && (
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                        Target Go-Live: {formatDate(p.target_go_live_date)}
+                      </div>
+                    )}
+                  </td>
+                  <td style={{ color: isCompleted ? "#94a3b8" : "#475569", fontSize: 13 }}>{p.customer_name ?? "—"}</td>
+                  <td>
+                    {providerTech.length > 0 ? (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                        {vendorLabel && vendorLabel !== "TBD" && (
+                          <span className="ms-badge" style={{ background: `${VENDOR_COLORS[vendorLabel] ?? "#94a3b8"}1a`, color: VENDOR_COLORS[vendorLabel] ?? "#94a3b8", border: `1px solid ${VENDOR_COLORS[vendorLabel] ?? "#94a3b8"}40`, fontSize: 11 }}>
+                            {vendorLabel}
+                          </span>
+                        )}
+                        {typeLabel && (
+                          <span className="ms-badge" style={{ background: "rgba(135,100,184,0.1)", color: "#8764b8", border: "1px solid rgba(135,100,184,0.25)", fontSize: 11 }}>
+                            {typeLabel}
+                          </span>
+                        )}
+                      </div>
+                    ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
+                  </td>
+                  <td>
+                    <PhaseFlowIndicator phases={phasesByProject[p.id] ?? []} />
+                  </td>
+                  <td>
+                    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[p.health ?? ""] ?? "#94a3b8", flexShrink: 0 }} />
+                      <span style={{ fontSize: 13, color: isCompleted ? "#94a3b8" : "#334155" }}>{healthLabel(p.health)}</span>
+                    </span>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -299,7 +379,7 @@ export default function DashboardPage() {
                   key={t.id}
                   style={{ padding: "11px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 10 }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: STATUS_COLOR[t.status ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: ({ completed: "#059669", in_progress: "#0891b2", blocked: "#d13438" } as Record<string,string>)[t.status ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <Link
                       to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}

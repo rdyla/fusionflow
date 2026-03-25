@@ -18,7 +18,7 @@ app.get("/", async (c) => {
   const db = c.env.DB;
 
   let sql = `
-    SELECT id, name, customer_name, vendor, solution_type, status, health,
+    SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
            managed_in_asana, asana_project_id, solution_id, created_at, updated_at,
@@ -71,7 +71,7 @@ app.get("/:id", async (c) => {
   const project = await db
     .prepare(
       `
-      SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_type, p.status, p.health,
+      SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_type, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.pm_name, p.ae_user_id, p.ae_name, p.sa_name, p.csm_name, p.engineer_name,
              p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id,
@@ -80,9 +80,18 @@ app.get("/:id", async (c) => {
              s.customer_name AS linked_solution_customer,
              s.status AS linked_solution_status,
              s.solution_type AS linked_solution_type,
+             c.name AS customer_display_name,
+             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
+             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
+             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+             c.sharepoint_url AS customer_sharepoint_url,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
       FROM projects p
       LEFT JOIN solutions s ON s.id = p.solution_id
+      LEFT JOIN customers c ON c.id = p.customer_id
+      LEFT JOIN users cpu1 ON cpu1.id = c.pf_ae_user_id
+      LEFT JOIN users cpu2 ON cpu2.id = c.pf_sa_user_id
+      LEFT JOIN users cpu3 ON cpu3.id = c.pf_csm_user_id
       WHERE p.id = ?
       LIMIT 1
       `
@@ -100,6 +109,7 @@ app.get("/:id", async (c) => {
 const createProjectSchema = z.object({
   name: z.string().min(1).max(500),
   customer_name: z.string().max(500).optional(),
+  customer_id: z.string().nullable().optional(),
   vendor: z.string().max(500).optional(),
   solution_type: z.string().max(500).optional(),
   kickoff_date: z.string().optional(),
@@ -125,17 +135,17 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id } = parsed.data;
+  const { name, customer_name, customer_id, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
   const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
 
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id)
-       VALUES (?, ?, ?, ?, ?, 'not_started', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null)
+    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null)
     .run();
 
   const created = await db

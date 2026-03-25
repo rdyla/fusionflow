@@ -17,6 +17,8 @@ import OptimizePage from "../pages/OptimizePage";
 import OptimizeAccountPage from "../pages/OptimizeAccountPage";
 import LoginPage from "../pages/LoginPage";
 import InboxPage from "../pages/InboxPage";
+import CustomersPage from "../pages/CustomersPage";
+import CustomerDetailPage from "../pages/CustomerDetailPage";
 
 
 export default function Router() {
@@ -38,6 +40,8 @@ export default function Router() {
           <Route path="/solutions/:id" element={<SolutionDetailPage />} />
           <Route path="/optimize" element={<OptimizePage />} />
           <Route path="/optimize/:projectId" element={<OptimizeAccountPage />} />
+          <Route path="/customers" element={<CustomersPage />} />
+          <Route path="/customers/:id" element={<CustomerDetailPage />} />
           <Route path="/inbox" element={<InboxPage />} />
 <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/access" element={<AdminAccessPage />} />

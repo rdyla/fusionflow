@@ -160,6 +160,7 @@ export default function ProjectDetailPage() {
   const [addingStaff, setAddingStaff] = useState(false);
   const [crmSyncing, setCrmSyncing] = useState(false);
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
+  const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
 
   // Lifecycle chain
   const [chain, setChain] = useState<ProjectChain | null>(null);
@@ -212,6 +213,11 @@ export default function ProjectDetailPage() {
         if (staffData.length > 0) {
           const emails = staffData.map((s: { email: string }) => s.email);
           api.staffPhotos(emails).then(setStaffPhotoMap).catch(() => {});
+        }
+        // Fetch photos for customer PF team
+        const customerEmails = [projectData.customer_pf_ae_email, projectData.customer_pf_sa_email, projectData.customer_pf_csm_email].filter(Boolean) as string[];
+        if (customerEmails.length > 0) {
+          api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
         }
         setPhases(phaseData);
         setMilestones(milestoneData);
@@ -643,19 +649,60 @@ export default function ProjectDetailPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      {/* Breadcrumb */}
-      <div style={{ marginBottom: 16 }}>
-        <Link to="/projects" style={{ color: "#63c1ea", textDecoration: "none", fontSize: 13, fontWeight: 500 }}>
-          ← Projects
+      {/* Back */}
+      <div style={{ marginBottom: 12 }}>
+        <Link to={project.customer_id ? `/customers/${project.customer_id}` : "/projects"} style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
+          ← {project.customer_id ? (project.customer_name ?? project.customer_display_name ?? "Customer") : "Projects"}
         </Link>
       </div>
 
+      {/* Customer Metadata Section */}
+      {project.customer_id && (
+        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
+              <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
+                {project.customer_name ?? project.customer_display_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+              </Link>
+            </div>
+            {project.customer_sharepoint_url && (
+              <a href={project.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                SharePoint ↗
+              </a>
+            )}
+          </div>
+          {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name) && (
+            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {[
+                { role: "Account Executive", name: project.customer_pf_ae_name, email: project.customer_pf_ae_email },
+                { role: "Solution Architect", name: project.customer_pf_sa_name, email: project.customer_pf_sa_email },
+                { role: "Client Success Manager", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email },
+              ].filter(m => m.name).map((m) => {
+                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
+                const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+                return (
+                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                    {photo
+                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                    }
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Project header card */}
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 8px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{project.name}</h1>
-        <div style={{ fontSize: 14, color: "#64748b", marginBottom: 14 }}>
-          {project.customer_name ?? "Unknown customer"}
-        </div>
+        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{project.name}</h1>
 
         {/* Vendor + solution type badges */}
         <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
@@ -801,8 +848,8 @@ export default function ProjectDetailPage() {
                   </div>
                 );
               })()}
-              {/* Additional PF staff (excludes partner AEs — shown in their own section below) */}
-              {projectStaff.filter(s => s.staff_role !== "partner_ae").map((s) => {
+              {/* Additional PF staff (excludes partner AEs and AE/SA/CSM — owned by customer) */}
+              {projectStaff.filter(s => s.staff_role !== "partner_ae" && !["ae", "sa", "csm"].includes(s.staff_role)).map((s) => {
                 const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
                 const roleLabel: Record<string, string> = { ae: "Account Executive", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer", pm: "Project Manager" };
                 const photo = staffPhotoMap[s.email] ?? s.avatar_url;
@@ -823,7 +870,7 @@ export default function ProjectDetailPage() {
                   </div>
                 );
               })}
-              {projectStaff.filter(s => s.staff_role !== "partner_ae").length === 0 && !project.pm_user_id && (
+              {projectStaff.filter(s => s.staff_role !== "partner_ae" && !["ae", "sa", "csm"].includes(s.staff_role)).length === 0 && !project.pm_user_id && (
                 <div style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic", gridColumn: "1 / -1" }}>No staff assigned.</div>
               )}
             </div>
@@ -1854,15 +1901,9 @@ export default function ProjectDetailPage() {
                 <span>Role on Project</span>
                 <select className="ms-input" value={addStaffRole} onChange={(e) => { setAddStaffRole(e.target.value); setAddStaffUserId(""); }}>
                   <option value="">— Select role —</option>
-                  {!project?.dynamics_account_id && <option value="ae">Account Executive</option>}
-                  {!project?.dynamics_account_id && <option value="sa">Solution Architect</option>}
-                  {!project?.dynamics_account_id && <option value="csm">Client Success Manager</option>}
                   <option value="engineer">Implementation Engineer</option>
                   <option value="pm">Project Manager</option>
                 </select>
-                {project?.dynamics_account_id && (
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>AE, SA, and CSM are managed via CRM sync.</div>
-                )}
               </label>
               <label className="ms-label">
                 <span>Team Member</span>

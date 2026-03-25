@@ -29,6 +29,7 @@ app.get("/accounts", async (c) => {
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
+      oa.customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
       ae.name AS ae_name, sa.name AS sa_name, csm.name AS csm_name,
@@ -74,20 +75,28 @@ app.get("/accounts/:projectId", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.notes,
       oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
-      oa.updated_at,
+      oa.customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
       p.pm_name, p.solution_id,
       sol.name AS linked_solution_name,
       ae.name  AS ae_name,  ae.email  AS ae_email,
       sa.name  AS sa_name,  sa.email  AS sa_email,
-      csm.name AS csm_name, csm.email AS csm_email
+      csm.name AS csm_name, csm.email AS csm_email,
+      cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
+      cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
+      cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+      cust.sharepoint_url AS customer_sharepoint_url
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
     LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
     LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
     LEFT JOIN users csm ON csm.id = oa.csm_user_id
     LEFT JOIN solutions sol ON sol.id = p.solution_id
+    LEFT JOIN customers cust ON cust.id = oa.customer_id
+    LEFT JOIN users cpu1 ON cpu1.id = cust.pf_ae_user_id
+    LEFT JOIN users cpu2 ON cpu2.id = cust.pf_sa_user_id
+    LEFT JOIN users cpu3 ON cpu3.id = cust.pf_csm_user_id
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });

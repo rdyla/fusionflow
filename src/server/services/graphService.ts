@@ -210,18 +210,34 @@ async function buildAbsoluteUrl(
 }
 
 export async function getSharePointLocations(env: GraphEnv, recordId: string): Promise<SPLocation[]> {
-  const token = await getDynamicsToken(env);
+  let token: string;
+  try {
+    token = await getDynamicsToken(env);
+  } catch (err) {
+    console.error("getSharePointLocations: token error", err instanceof Error ? err.message : err);
+    return [];
+  }
 
-  const res = await dynamicsGet<{ value: DynSPLocation[] }>(
-    token,
-    `/sharepointdocumentlocations?$filter=_regardingobjectid_value eq ${recordId} and servicetype eq 0&$select=sharepointdocumentlocationid,name,relativeurl,absoluteurl,_parentsiteorlocation_value&$orderby=name asc`
-  );
+  let res: { value: DynSPLocation[] };
+  try {
+    res = await dynamicsGet<{ value: DynSPLocation[] }>(
+      token,
+      `/sharepointdocumentlocations?$filter=_regardingobjectid_value eq ${recordId}&$select=sharepointdocumentlocationid,name,relativeurl,absoluteurl,_parentsiteorlocation_value&$orderby=name asc`
+    );
+  } catch (err) {
+    console.error("getSharePointLocations: Dynamics query error for", recordId, err instanceof Error ? err.message : err);
+    return [];
+  }
 
   const locations: SPLocation[] = [];
   for (const loc of res.value) {
-    const absoluteUrl = await buildAbsoluteUrl(token, loc);
-    if (absoluteUrl) {
-      locations.push({ id: loc.sharepointdocumentlocationid, name: loc.name, absoluteUrl });
+    try {
+      const absoluteUrl = await buildAbsoluteUrl(token, loc);
+      if (absoluteUrl) {
+        locations.push({ id: loc.sharepointdocumentlocationid, name: loc.name, absoluteUrl });
+      }
+    } catch (err) {
+      console.error("getSharePointLocations: buildAbsoluteUrl error for", loc.name, err instanceof Error ? err.message : err);
     }
   }
   return locations;

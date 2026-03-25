@@ -81,17 +81,29 @@ app.get("/summary", async (c) => {
   // Full project list
   const projects = await db
     .prepare(
-      `SELECT id, name, customer_name, vendor, solution_type, status, health,
-              kickoff_date, target_go_live_date, actual_go_live_date,
-              pm_user_id, ae_user_id,
-              (SELECT GROUP_CONCAT(u.name, ', ')
-               FROM project_staff ps JOIN users u ON u.id = ps.user_id
-               WHERE ps.project_id = projects.id AND ps.staff_role = 'partner_ae') AS partner_ae_names
+      `SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
+              kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, ae_user_id
        FROM projects ${projectFilter}
-       ORDER BY updated_at DESC`
+       ORDER BY
+         CASE status WHEN 'completed' THEN 1 ELSE 0 END,
+         updated_at DESC`
     )
     .bind(...filterBindings)
     .all();
+
+  // Per-project phase summary for phase flow indicator
+  const projectPhases = await db
+    .prepare(
+      `SELECT ph.project_id, ph.name, ph.status, ph.sort_order
+       FROM (
+         SELECT project_id, name, status, sort_order
+         FROM phases
+         WHERE project_id IN (${projectSubquery})
+         ORDER BY sort_order
+       ) ph`
+    )
+    .bind(...filterBindings)
+    .all<{ project_id: string; name: string; status: string; sort_order: number }>();
 
   // Open tasks (not completed) with project name, most urgent first
   const openTasks = await db
@@ -184,6 +196,7 @@ app.get("/summary", async (c) => {
       openRisks: openRisksCount?.count ?? 0,
     },
     projects: projects.results ?? [],
+    projectPhases: projectPhases.results ?? [],
     openTasks: openTasks.results ?? [],
     openRisks: openRisks.results ?? [],
     phaseDistribution: phaseDistribution.results ?? [],

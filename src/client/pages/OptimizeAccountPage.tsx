@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import LifecycleChain from "../components/ui/LifecycleChain";
 import {
   api,
@@ -44,6 +44,7 @@ export default function OptimizeAccountPage() {
   const [account, setAccount] = useState<OptimizeAccount | null>(null);
   const [tab, setTab] = useState<Tab>("assessments");
   const [loading, setLoading] = useState(true);
+  const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
 
   // Assessments
   const [assessments, setAssessments] = useState<ImpactAssessment[]>([]);
@@ -89,6 +90,11 @@ export default function OptimizeAccountPage() {
       setRoadmap(road);
       setUtilization(util);
       setZoomConfigured(zoomCfg.configured);
+      // Fetch photos for customer PF team
+      const customerEmails = [acc.customer_pf_ae_email, acc.customer_pf_sa_email, acc.customer_pf_csm_email].filter(Boolean) as string[];
+      if (customerEmails.length > 0) {
+        api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
+      }
     } catch {
       showToast("Failed to load account data", "error");
     } finally {
@@ -232,44 +238,81 @@ export default function OptimizeAccountPage() {
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ marginBottom: 24 }}>
+      {/* Back */}
+      <div style={{ marginBottom: 12 }}>
         <button
-          onClick={() => navigate("/optimize")}
-          style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 0, marginBottom: 12 }}
+          onClick={() => navigate(account.customer_id ? `/customers/${account.customer_id}` : "/optimize")}
+          style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 0 }}
         >
-          ← Optimize
+          ← {account.customer_id ? account.customer_name : "Optimize"}
         </button>
+      </div>
+
+      {/* Customer Metadata Section */}
+      {account.customer_id && (
+        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
+              <Link to={`/customers/${account.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
+                {account.customer_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+              </Link>
+            </div>
+            {account.customer_sharepoint_url && (
+              <a href={account.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                SharePoint ↗
+              </a>
+            )}
+          </div>
+          {(account.customer_pf_ae_name || account.customer_pf_sa_name || account.customer_pf_csm_name) && (
+            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {[
+                { role: "Account Executive", name: account.customer_pf_ae_name, email: account.customer_pf_ae_email },
+                { role: "Solution Architect", name: account.customer_pf_sa_name, email: account.customer_pf_sa_email },
+                { role: "Client Success Manager", name: account.customer_pf_csm_name, email: account.customer_pf_csm_email },
+              ].filter(m => m.name).map((m) => {
+                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
+                const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+                return (
+                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                    {photo
+                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                    }
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Content header */}
+      <div style={{ marginBottom: 24 }}>
         <div className="ms-page-header" style={{ marginBottom: 0 }}>
           <div>
             <h1 className="ms-page-title">{account.project_name}</h1>
-            {account.customer_name && (
-              <div style={{ color: "#64748b", fontSize: 13, marginTop: 2 }}>{account.customer_name}</div>
-            )}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <span className="ms-badge" style={{ background: account.optimize_status === "active" ? "#22c55e1a" : "#f59e0b1a", color: account.optimize_status === "active" ? "#22c55e" : "#f59e0b", border: `1px solid ${account.optimize_status === "active" ? "#22c55e40" : "#f59e0b40"}` }}>
               {account.optimize_status}
             </span>
             {account.dynamics_account_id && (
-              <button
-                className="ms-btn-secondary"
-                onClick={handleCrmSync}
-                disabled={crmSyncing}
-                style={{ fontSize: 12 }}
-              >
+              <button className="ms-btn-secondary" onClick={handleCrmSync} disabled={crmSyncing} style={{ fontSize: 12 }}>
                 {crmSyncing ? "Syncing…" : "Sync from CRM"}
               </button>
             )}
           </div>
         </div>
 
-        {/* Meta row */}
+        {/* Meta row — milestone stats */}
         <div style={{ display: "flex", gap: 24, marginTop: 12, flexWrap: "wrap" }}>
           {[
-            { label: "AE", value: account.ae_name ?? "—" },
-            { label: "SA", value: account.sa_name ?? "—" },
-            { label: "CSM", value: account.csm_name ?? "—" },
             { label: "Graduated", value: account.graduated_at ? account.graduated_at.slice(0, 10) : "—" },
             { label: "Next Review", value: account.next_review_date ?? "—" },
             { label: "Last Score", value: account.last_assessment_score != null ? `${account.last_assessment_score}` : "—", scoreColor: account.last_assessment_score != null ? (account.last_assessment_score >= 80 ? "#22c55e" : account.last_assessment_score >= 60 ? "#0b9aad" : account.last_assessment_score >= 40 ? "#f59e0b" : "#d13438") : undefined },

@@ -197,14 +197,16 @@ export type AccountTeam = {
   sa_email: string | null;
   csm_name: string | null;
   csm_email: string | null;
+  address_city: string | null;
+  address_state: string | null;
 };
 
 export async function getAccountTeam(env: Env, accountId: string): Promise<AccountTeam> {
-  if (!isConfigured(env)) return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null, csm_email: null };
+  if (!isConfigured(env)) return { ae_name: null, ae_email: null, sa_name: null, sa_email: null, csm_name: null, csm_email: null, address_city: null, address_state: null };
 
   // Step 1: fetch the account with annotated formatted values for the three lookup fields.
   // Using $select with the _value convention plus annotation header gives us names without $expand.
-  const select = "_ownerid_value,_pfi_solutionarchitect_value,_territoryid_value";
+  const select = "_ownerid_value,_pfi_solutionarchitect_value,_territoryid_value,address1_city,address1_stateorprovince";
   const path = `/accounts(${accountId})?$select=${select}`;
 
   type RawAccount = { [key: string]: unknown };
@@ -215,6 +217,8 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
   let sa_email: string | null = null;
   let csm_name: string | null = null;
   let csm_email: string | null = null;
+  let address_city: string | null = null;
+  let address_state: string | null = null;
 
   try {
     const data = await dynamicsGetAnnotated<RawAccount>(env, path);
@@ -226,6 +230,8 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
     sa_name = (data["_pfi_solutionarchitect_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
 
     const territoryId = data["_territoryid_value"] as string | null;
+    address_city = (data["address1_city"] as string | null) ?? null;
+    address_state = (data["address1_stateorprovince"] as string | null) ?? null;
 
     // Step 2: fetch emails for AE and SA, and resolve CSM via territory manager
     const userFetch = async (id: string) => {
@@ -262,7 +268,7 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
     // Return whatever we managed to collect
   }
 
-  return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email };
+  return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email, address_city, address_state };
 }
 
 export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {

@@ -16,12 +16,20 @@ const SOLUTION_SELECT = `
     u2.name as partner_ae_display_name,
     u3.name as pf_sa_name,
     u4.name as pf_csm_name,
+    cu1.name as customer_pf_ae_name, cu1.email as customer_pf_ae_email,
+    cu2.name as customer_pf_sa_name, cu2.email as customer_pf_sa_email,
+    cu3.name as customer_pf_csm_name, cu3.email as customer_pf_csm_email,
+    cust.sharepoint_url as customer_sharepoint_url,
     (SELECT COUNT(*) FROM projects p WHERE p.solution_id = s.id) AS linked_project_count
   FROM solutions s
   LEFT JOIN users u1 ON u1.id = s.pf_ae_user_id
   LEFT JOIN users u2 ON u2.id = s.partner_ae_user_id
   LEFT JOIN users u3 ON u3.id = s.pf_sa_user_id
   LEFT JOIN users u4 ON u4.id = s.pf_csm_user_id
+  LEFT JOIN customers cust ON cust.id = s.customer_id
+  LEFT JOIN users cu1 ON cu1.id = cust.pf_ae_user_id
+  LEFT JOIN users cu2 ON cu2.id = cust.pf_sa_user_id
+  LEFT JOIN users cu3 ON cu3.id = cust.pf_csm_user_id
 `;
 
 const SOLUTION_TYPE_LABELS: Record<string, string> = {
@@ -64,6 +72,7 @@ app.get("/", async (c) => {
 
 const createSolutionSchema = z.object({
   customer_name: z.string().min(1).max(500),
+  customer_id: z.string().optional(),
   dynamics_account_id: z.string().optional(),
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
   solution_type: z.enum(["ucaas", "ccaas", "ci", "va"]),
@@ -83,7 +92,7 @@ app.post("/", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const {
-    customer_name, dynamics_account_id, solution_type,
+    customer_name, customer_id, dynamics_account_id, solution_type,
     pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
   } = parsed.data;
@@ -127,13 +136,13 @@ app.post("/", async (c) => {
   await db
     .prepare(
       `INSERT INTO solutions
-         (id, name, customer_name, dynamics_account_id, vendor, solution_type,
+         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type,
           pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
           partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      id, name, customer_name, dynamics_account_id ?? null, vendor, solution_type,
+      id, name, customer_name, customer_id ?? null, dynamics_account_id ?? null, vendor, solution_type,
       pf_ae_user_id ?? null, pf_sa_user_id ?? null, pf_csm_user_id ?? null,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )

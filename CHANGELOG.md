@@ -4,6 +4,58 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 2026-03-24
+
+### Customer-Centric Journey — Full End-to-End Flow
+
+Major session focused on making customers the primary entry point for all work in FusionFlow.
+
+**New Customer Onboarding**
+- "+" New Customer" button on the Customers list page opens a CRM search modal
+- Searches Dynamics 365 accounts in real time (debounced); shows name + city/state from CRM
+- On selection: creates the customer record and immediately fires a CRM sync to populate AE/SA/CSM team and address
+- Navigates directly to the new customer's detail page on creation
+
+**Starting Journeys from the Customer Page**
+- Solutions tab: "+ New Solution" button — picks technology (UCaaS/CCaaS/CI/VA) and vendor; auto-names the solution and pre-populates PF team from the customer record; navigates to solution detail
+- Implementations tab: "+ New Implementation" button — picks name, technology, provider, and target go-live date; navigates to project detail
+- Optimizations flow naturally from completed projects; the customer's optimization tab populates automatically
+
+**Customer Detail Page — PF Team Upgrade**
+- PF Team card in Overview tab now shows photo cards with MS Graph headshots (or initials avatar)
+- Each card shows role label, name, and email
+- Photos refresh automatically after a CRM sync
+- SharePoint URL replaced with a styled "Open SharePoint ↗" button
+
+**Customer Detail Page — Documents Tab**
+- New "Documents" tab (shown when a CRM account ID exists) renders the full SharePointDocs file browser — same widget used on solutions and opportunities
+- Falls back to a direct "Open SharePoint ↗" link if no Dynamics document locations are configured for the record
+
+**Dashboard — Projects List Redesign**
+- Removed "Status", "Partner AE", and separate "Vendor" / "Target Go-Live" columns
+- New columns: Project (with Target Go-Live as a subtitle line), Customer, Provider / Tech, Phases, Health
+- Provider / Tech: vendor and technology rendered as color-coded badges side by side
+- Phases: phase-flow bubble indicator (green = completed, blue pulsing = in progress, gray = not started) with connecting lines — same as the Projects list page
+- Completed projects: muted (50% opacity + gray background), sorted to the bottom
+- Blocked projects: subtle red left border + faint red background
+- Rows are now fully clickable (navigate to project)
+- New projects now default to `in_progress` status instead of `not_started`
+
+**Vendor Standardization**
+- New Implementation modal uses a dropdown (Zoom, RingCentral, Cato Networks, Microsoft, Cisco, TBD) instead of free text
+- `createProject` backend now accepts and stores `customer_id`; `createSolution` backend accepts and stores `customer_id`
+
+**Database**
+- No new migrations (customer_id columns were added in 0027)
+- Backend routes updated to pass `customer_id` through on creation for both solutions and projects
+
+**SharePoint Resilience**
+- `getSharePointLocations` no longer throws on Dynamics API failures — each step individually try/caught, errors logged server-side, empty array returned to client
+- Removed `servicetype eq 0` filter from Dynamics document location query (was causing 500 errors for some account records)
+- `SharePointDocs` component: merged error and empty-locations states into a single graceful fallback; shows "Open SharePoint ↗" button when a `sharepointUrl` prop is provided
+
+---
+
 ## 2026-03-23
 
 ### FusionFlow 360 — Lifecycle Chain (Solutions → Projects → Optimizations)

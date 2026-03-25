@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type SolutionStaffMember, type NeedsAssessment, type LaborEstimate, type Project } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import LifecycleChain from "../components/ui/LifecycleChain";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
@@ -34,7 +34,7 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
   lost: "#d13438",
 };
 
-const STATUS_FLOW: SolutionStatus[] = ["draft", "assessment", "requirements", "scope", "handoff"];
+const STATUS_FLOW: SolutionStatus[] = ["draft", "assessment", "scope", "handoff"];
 
 const TYPE_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
@@ -81,14 +81,12 @@ export default function SolutionDetailPage() {
   // Labor Estimate
   const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
 
-  // Solution staff
-  const [solutionStaff, setSolutionStaff] = useState<SolutionStaffMember[]>([]);
+  // Solution staff (kept for modal state only)
   const [showSolutionStaffModal, setShowSolutionStaffModal] = useState(false);
   const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
   const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("");
   const [addingSolutionStaff, setAddingSolutionStaff] = useState(false);
-  const [crmSyncing, setCrmSyncing] = useState(false);
-  const [solutionStaffPhotoMap, setSolutionStaffPhotoMap] = useState<Record<string, string | null>>({});
+  const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
 
   // Linked project (1:1)
   const [linkedProject, setLinkedProject] = useState<Project | null>(null);
@@ -99,6 +97,7 @@ export default function SolutionDetailPage() {
 
   const load = useCallback(async () => {
     if (!id) return;
+    setNaView("sor"); // reset on every solution load so stale wizard state doesn't carry over
     const [s, u, me] = await Promise.all([api.solution(id), api.users(), api.me()]);
     setSolution(s);
     setUsers(u);
@@ -126,13 +125,11 @@ export default function SolutionDetailPage() {
       api.getDynamicsContacts(s.dynamics_account_id).then(setCrmContacts).catch(() => {});
     }
     api.solutionContacts(id).then(setSolutionContacts).catch(() => {});
-    api.solutionStaff(id).then((staff) => {
-      setSolutionStaff(staff);
-      if (staff.length > 0) {
-        const emails = staff.map((s) => s.email);
-        api.staffPhotos(emails).then(setSolutionStaffPhotoMap).catch(() => {});
-      }
-    }).catch(() => {});
+    // Fetch photos for customer PF team
+    const customerEmails = [s.customer_pf_ae_email, s.customer_pf_sa_email, s.customer_pf_csm_email].filter(Boolean) as string[];
+    if (customerEmails.length > 0) {
+      api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
+    }
     api.solutionProjects(id).then((ps) => setLinkedProject(ps[0] ?? null)).catch(() => {});
   }, [id]);
 
@@ -170,8 +167,7 @@ export default function SolutionDetailPage() {
     if (!addSolutionStaffUser || !addSolutionStaffRole || !id) return;
     setAddingSolutionStaff(true);
     try {
-      const added = await api.addSolutionStaff(id, { user_id: addSolutionStaffUser, staff_role: addSolutionStaffRole });
-      setSolutionStaff((prev) => [...prev, added]);
+      await api.addSolutionStaff(id, { user_id: addSolutionStaffUser, staff_role: addSolutionStaffRole });
       setAddSolutionStaffUser("");
       setAddSolutionStaffRole("");
       setShowSolutionStaffModal(false);
@@ -180,36 +176,6 @@ export default function SolutionDetailPage() {
       showToast("Failed to add staff member", "error");
     } finally {
       setAddingSolutionStaff(false);
-    }
-  }
-
-  async function handleCrmSync() {
-    if (!id) return;
-    setCrmSyncing(true);
-    try {
-      const { staff, crm } = await api.solutionCrmSync(id);
-      setSolutionStaff(staff);
-      const matched = [
-        crm.ae_name  ? `AE: ${crm.ae_name}`  : null,
-        crm.sa_name  ? `SA: ${crm.sa_name}`  : null,
-        crm.csm_name ? `CSM: ${crm.csm_name}` : null,
-      ].filter(Boolean);
-      showToast(matched.length ? `Synced from CRM — ${matched.join(", ")}` : "Synced from CRM (no team found)", "success");
-    } catch {
-      showToast("CRM sync failed", "error");
-    } finally {
-      setCrmSyncing(false);
-    }
-  }
-
-  async function handleRemoveSolutionStaff(staffId: string) {
-    if (!id) return;
-    try {
-      await api.removeSolutionStaff(id, staffId);
-      setSolutionStaff((prev) => prev.filter((s) => s.id !== staffId));
-      showToast("Staff member removed.", "success");
-    } catch {
-      showToast("Failed to remove staff member", "error");
     }
   }
 
@@ -228,14 +194,12 @@ export default function SolutionDetailPage() {
   }
 
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae";
-  const partnerAes = users.filter((u) => u.role === "partner_ae");
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
 
   const statusIdx = STATUS_FLOW.indexOf(solution.status);
   const canAdvance = canEdit && statusIdx >= 0 && statusIdx < STATUS_FLOW.length - 1;
-  const isTerminal = solution.status === "won" || solution.status === "lost";
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview",    label: "Overview"         },
@@ -249,15 +213,60 @@ export default function SolutionDetailPage() {
   return (
     <div style={{ maxWidth: 960, margin: "0 auto" }}>
       {/* Back */}
-      <Link to="/solutions" style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, marginBottom: 20 }}>
-        ← Solutions
-      </Link>
+      <div style={{ marginBottom: 12 }}>
+        <Link to={solution.customer_id ? `/customers/${solution.customer_id}` : "/solutions"} style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
+          ← {solution.customer_id ? solution.customer_name : "Solutions"}
+        </Link>
+      </div>
+
+      {/* Customer Metadata Section */}
+      {solution.customer_id && (
+        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
+              <Link to={`/customers/${solution.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
+                {solution.customer_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+              </Link>
+            </div>
+            {solution.customer_sharepoint_url && (
+              <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                SharePoint ↗
+              </a>
+            )}
+          </div>
+          {(solution.customer_pf_ae_name || solution.customer_pf_sa_name || solution.customer_pf_csm_name) && (
+            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
+              {[
+                { role: "Account Executive", name: solution.customer_pf_ae_name, email: solution.customer_pf_ae_email },
+                { role: "Solution Architect", name: solution.customer_pf_sa_name, email: solution.customer_pf_sa_email },
+                { role: "Client Success Manager", name: solution.customer_pf_csm_name, email: solution.customer_pf_csm_email },
+              ].filter(m => m.name).map((m) => {
+                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
+                const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+                return (
+                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                    {photo
+                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                    }
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.customer_name}</h1>
-          <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 4 }}>{solution.name}</div>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.name}</h1>
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
               {TYPE_LABELS[solution.solution_type]}
@@ -269,20 +278,29 @@ export default function SolutionDetailPage() {
         </div>
 
         {/* Status actions */}
-        {canEdit && !isTerminal && (
+        {canEdit && (
           <div style={{ display: "flex", gap: 8 }}>
             {canAdvance && (
               <button className="ms-btn-primary" onClick={advanceStatus} disabled={saving}>
                 Advance → {STATUS_LABELS[STATUS_FLOW[statusIdx + 1]]}
               </button>
             )}
-            {solution.status !== "lost" && (
+            {solution.status !== "lost" && solution.status !== "won" && (
               <button
                 className="ms-btn-ghost"
                 onClick={markLost}
                 style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
               >
                 Mark Lost
+              </button>
+            )}
+            {solution.status === "lost" && (
+              <button
+                className="ms-btn-ghost"
+                onClick={() => save({ status: "draft" })}
+                disabled={saving}
+              >
+                Reopen (move to Draft)
               </button>
             )}
           </div>
@@ -342,14 +360,6 @@ export default function SolutionDetailPage() {
                 )}
               </label>
               <label className="ms-label">
-                <span>Customer Name</span>
-                {canEdit ? (
-                  <input className="ms-input" value={overview.customer_name} onChange={(e) => setOverview((o) => ({ ...o, customer_name: e.target.value }))} />
-                ) : (
-                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.customer_name}</div>
-                )}
-              </label>
-              <label className="ms-label">
                 <span>Vendor</span>
                 {canEdit ? (
                   <select className="ms-input" value={overview.vendor ?? "tbd"} onChange={(e) => setOverview((o) => ({ ...o, vendor: e.target.value as typeof overview.vendor }))}>
@@ -376,86 +386,13 @@ export default function SolutionDetailPage() {
                   <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type] ?? solution.solution_type}</div>
                 )}
               </label>
-              {solution.dynamics_account_id && (
-                <label className="ms-label">
-                  <span>CRM Account</span>
-                  <div style={{ fontSize: 13, color: "#63c1ea", padding: "8px 0" }}>✓ Linked to Dynamics CRM</div>
-                </label>
-              )}
             </div>
             {canEdit && (
               <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
-                onClick={() => save({ name: overview.name, customer_name: overview.customer_name, vendor: overview.vendor, solution_type: overview.solution_type })}>
+                onClick={() => save({ name: overview.name, vendor: overview.vendor, solution_type: overview.solution_type })}>
                 {saving ? "Saving…" : "Save Changes"}
               </button>
             )}
-          </div>
-
-          <div className="ms-card">
-            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>PF Team</h3>
-
-            {/* Staff list */}
-            {solutionStaff.length > 0 && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 10, marginBottom: 16 }}>
-                {solutionStaff.map((s) => {
-                  const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                  const roleLabel: Record<string, string> = { pf_ae: "Account Executive", pf_sa: "Solution Architect", pf_csm: "Client Success Manager", pf_engineer: "Implementation Engineer", pm: "Project Manager" };
-                  const photo = solutionStaffPhotoMap[s.email] ?? s.avatar_url;
-                  return (
-                    <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "10px 12px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)", position: "relative" }}>
-                      {photo
-                        ? <img src={photo} alt={s.name ?? s.email} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                        : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                      }
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
-                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name ?? s.email}</div>
-                      </div>
-                      {canEdit && (
-                        <button onClick={() => handleRemoveSolutionStaff(s.id)} style={{ position: "absolute", top: 6, right: 6, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            {solutionStaff.length === 0 && (
-              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginBottom: 16 }}>No PF staff assigned yet.</div>
-            )}
-
-            {canEdit && (
-              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9", marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {solution.dynamics_account_id && (
-                  <button className="ms-btn-secondary" style={{ fontSize: 12 }} disabled={crmSyncing} onClick={handleCrmSync}>
-                    {crmSyncing ? "Syncing…" : "Sync from CRM"}
-                  </button>
-                )}
-                <button className="ms-btn-secondary" onClick={() => { setShowSolutionStaffModal(true); setAddSolutionStaffUser(""); setAddSolutionStaffRole(""); }}>
-                  + Add Staff Member
-                </button>
-              </div>
-            )}
-
-            {/* Partner AE - unchanged */}
-            <div style={{ borderTop: "1px solid #f1f5f9", paddingTop: 14 }}>
-              <label className="ms-label">
-                <span>Partner AE</span>
-                {canEdit ? (
-                  <select className="ms-input" value={overview.partner_ae_user_id} onChange={(e) => setOverview((o) => ({ ...o, partner_ae_user_id: e.target.value }))}>
-                    <option value="">— None —</option>
-                    {partnerAes.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>)}
-                  </select>
-                ) : (
-                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"}</div>
-                )}
-              </label>
-              {canEdit && (
-                <button className="ms-btn-primary" style={{ marginTop: 12 }} disabled={saving}
-                  onClick={() => save({ partner_ae_user_id: overview.partner_ae_user_id || null })}>
-                  {saving ? "Saving…" : "Save Partner AE"}
-                </button>
-              )}
-            </div>
           </div>
 
           {/* ── Lifecycle Chain ── */}
@@ -577,15 +514,9 @@ export default function SolutionDetailPage() {
                 <span>Role on Solution</span>
                 <select className="ms-input" value={addSolutionStaffRole} onChange={(e) => { setAddSolutionStaffRole(e.target.value); setAddSolutionStaffUser(""); }}>
                   <option value="">— Select role —</option>
-                  {!solution.dynamics_account_id && <option value="pf_ae">Account Executive</option>}
-                  {!solution.dynamics_account_id && <option value="pf_sa">Solution Architect</option>}
-                  {!solution.dynamics_account_id && <option value="pf_csm">Client Success Manager</option>}
                   <option value="pf_engineer">Implementation Engineer</option>
                   <option value="pm">Project Manager</option>
                 </select>
-                {solution.dynamics_account_id && (
-                  <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>AE, SA, and CSM are managed via CRM sync.</div>
-                )}
               </label>
               <label className="ms-label">
                 <span>Team Member</span>
@@ -724,13 +655,14 @@ export default function SolutionDetailPage() {
             const solutionTypeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
             return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
+                key={needsAssessment?.id ?? "new"}
                 solutionId={solution.id}
                 customerName={solution.customer_name}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
                 initialAnswers={needsAssessment?.answers as Record<string, unknown> | undefined}
                 onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
-                onCancel={() => { if (needsAssessment) setNaView("sor"); }}
+                onCancel={() => { if (needsAssessment) setNaView("sor"); else setNaView("sor"); }}
               />
             ) : needsAssessment !== null && naView === "sor" ? (
               <NeedsAssessmentSOR
@@ -805,7 +737,6 @@ export default function SolutionDetailPage() {
                   ["Customer", solution.customer_name],
                   ["Vendor", solution.vendor === "zoom" ? "Zoom" : solution.vendor === "ringcentral" ? "RingCentral" : "— Not yet assigned —"],
                   ["Technology", TYPE_LABELS[solution.solution_type] ?? solution.solution_type],
-                  ["PF Account Executive", solution.pf_ae_name ?? "—"],
                   ["Partner AE", solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"],
                   ["Status", STATUS_LABELS[solution.status]],
                 ].map(([label, value]) => (

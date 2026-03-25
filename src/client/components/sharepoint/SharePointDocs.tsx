@@ -4,6 +4,7 @@ import { useToast } from "../ui/ToastProvider";
 
 type Props = {
   recordId: string;
+  sharepointUrl?: string | null;
 };
 
 const MIME_ICONS: Record<string, string> = {
@@ -40,7 +41,7 @@ function formatDate(iso: string | null) {
   return iso.slice(0, 10);
 }
 
-export default function SharePointDocs({ recordId }: Props) {
+export default function SharePointDocs({ recordId, sharepointUrl }: Props) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -149,21 +150,29 @@ export default function SharePointDocs({ recordId }: Props) {
     );
   }
 
-  if (locError) {
-    return (
-      <div className="ms-section-card">
-        <div style={{ color: "#d13438", fontSize: 14 }}>Error: {locError}</div>
-      </div>
-    );
-  }
-
-  if (locations.length === 0) {
+  if (locError || locations.length === 0) {
     return (
       <div className="ms-section-card">
         <div className="ms-section-title">SharePoint Documents</div>
-        <div style={{ color: "#a19f9d", fontSize: 14 }}>
-          No SharePoint document locations linked to this record in Dynamics CRM.
-        </div>
+        {sharepointUrl ? (
+          <div>
+            <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
+              No document library linked in Dynamics CRM for this record. Use the SharePoint link directly:
+            </div>
+            <a
+              href={sharepointUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600, background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 6, padding: "8px 14px" }}
+            >
+              Open SharePoint ↗
+            </a>
+          </div>
+        ) : (
+          <div style={{ color: "#a19f9d", fontSize: 14 }}>
+            No SharePoint document locations linked to this record in Dynamics CRM.
+          </div>
+        )}
       </div>
     );
   }
