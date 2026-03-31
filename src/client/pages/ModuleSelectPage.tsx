@@ -111,7 +111,9 @@ export default function ModuleSelectPage() {
 
   // Clients only see the modules relevant to them
   const visibleModules = isClient
-    ? MODULES.filter((m) => m.route === "/dashboard").map((m) => ({ ...m, route: "/projects" }))
+    ? MODULES.filter((m) => m.route === "/dashboard" || m.route === "/solutions").map((m) =>
+        m.route === "/dashboard" ? { ...m, route: "/projects" } : m
+      )
     : MODULES;
 
   function handleCardClick(mod: Module) {
