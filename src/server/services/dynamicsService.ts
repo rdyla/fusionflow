@@ -190,6 +190,15 @@ export type DynamicsOpportunity = {
   statecode: number;
 };
 
+export type DynamicsQuote = {
+  quoteid: string;
+  name: string;
+  statecode: number;
+  stateLabel: string;
+  am_sow: number | null;
+  opportunityId: string | null;
+};
+
 export type AccountTeam = {
   ae_name: string | null;
   ae_email: string | null;
@@ -280,6 +289,44 @@ export async function getAccountOpportunities(env: Env, accountId: string): Prom
 
   const data = await dynamicsGet<{ value: DynamicsOpportunity[] }>(env, path);
   return data.value ?? [];
+}
+
+const QUOTE_STATE: Record<number, string> = { 0: "Draft", 1: "Active", 2: "Won", 4: "Closed" };
+
+export async function getOpportunityQuotes(env: Env, opportunityId: string): Promise<DynamicsQuote[]> {
+  if (!isConfigured(env)) return [];
+  const select = "quoteid,name,statecode,am_sow,_opportunityid_value";
+  const filter = `_opportunityid_value eq ${opportunityId}`;
+  const path = `/quotes?$select=${select}&$filter=${filter}&$top=20&$orderby=createdon desc`;
+  try {
+    const data = await dynamicsGet<{ value: Array<{
+      quoteid: string; name: string; statecode: number; am_sow: number | null; _opportunityid_value: string | null;
+    }> }>(env, path);
+    return (data.value ?? []).map((q) => ({
+      quoteid: q.quoteid,
+      name: q.name,
+      statecode: q.statecode,
+      stateLabel: QUOTE_STATE[q.statecode] ?? String(q.statecode),
+      am_sow: q.am_sow,
+      opportunityId: q._opportunityid_value,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function getCaseByTicketNumber(env: Env, ticketNumber: string): Promise<SupportCase | null> {
+  if (!isConfigured(env)) return null;
+  const escaped = ticketNumber.replace(/'/g, "''");
+  const select = "incidentid,title,description,ticketnumber,statecode,statuscode,prioritycode,casetypecode,createdon,modifiedon,_customerid_value,_ownerid_value";
+  const path = `/incidents?$select=${select}&$filter=ticketnumber eq '${escaped}'&$top=1`;
+  try {
+    const data = await dynamicsGetAnnotated<{ value: RawCase[] }>(env, path);
+    const raw = data.value?.[0];
+    return raw ? mapCase(raw) : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function getPacketFusionEngineers(env: Env): Promise<DynamicsUser[]> {
@@ -548,6 +595,167 @@ export async function addCaseAttachment(env: Env, caseId: string, payload: {
   };
   const raw = await dynamicsPost<RawAnnotation>(env, "/annotations", body, { prefer: "return=representation" });
   return mapAnnotation(raw);
+}
+
+// ── Case Time Entries ─────────────────────────────────────────────────────────
+
+export type CaseTimeEntry = {
+  id: string;
+  description: string | null;
+  date: string | null;
+  durationMinutes: number | null;
+  durationHours: number | null;
+  resourceName: string | null;
+  entryStatus: string | null;
+  createdOn: string;
+};
+
+type RawTimeEntry = {
+  msdyn_timeentryid: string;
+  msdyn_description: string | null;
+  msdyn_date: string | null;
+  msdyn_duration: number | null; // minutes
+  msdyn_entrystatus: number | null; // 192350000=Draft, 192350001=Returned, 192350002=Approved, 192350003=Submitted
+  createdon: string;
+  [key: string]: unknown;
+};
+
+const TIME_ENTRY_STATUS: Record<number, string> = {
+  192350000: "Draft",
+  192350001: "Returned",
+  192350002: "Approved",
+  192350003: "Submitted",
+};
+
+function mapTimeEntry(raw: RawTimeEntry): CaseTimeEntry {
+  const mins = raw.msdyn_duration ?? null;
+  return {
+    id: raw.msdyn_timeentryid,
+    description: raw.msdyn_description,
+    date: raw.msdyn_date ? raw.msdyn_date.split("T")[0] : null,
+    durationMinutes: mins,
+    durationHours: mins != null ? Math.round((mins / 60) * 100) / 100 : null,
+    resourceName: (raw["_msdyn_bookableresource_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
+    entryStatus: raw.msdyn_entrystatus != null ? (TIME_ENTRY_STATUS[raw.msdyn_entrystatus] ?? String(raw.msdyn_entrystatus)) : null,
+    createdOn: raw.createdon,
+  };
+}
+
+type RawAmcTimeEntry = {
+  activityid: string;
+  subject: string | null;
+  amc_durationhours: number | null;
+  scheduledstart: string | null;
+  amc_notes: string | null;
+  statuscode: number | null;
+  amc_dayofweek: string | null;
+  createdon: string;
+  [key: string]: unknown;
+};
+
+const AMC_STATUS: Record<number, string> = {
+  1: "Open", 2: "Completed", 3: "Cancelled",
+};
+
+export async function getCaseTimeEntries(env: Env, caseId: string): Promise<CaseTimeEntry[]> {
+  if (!isConfigured(env)) return [];
+  const select = [
+    "activityid",
+    "subject",
+    "amc_durationhours",
+    "scheduledstart",
+    "amc_notes",
+    "statuscode",
+    "amc_dayofweek",
+    "createdon",
+    "_amc_member_value",
+    "_amc_costcode_value",
+  ].join(",");
+  const path = `/amc_timeentries?$select=${select}&$filter=_amc_case_value eq ${caseId}&$orderby=scheduledstart desc&$top=500`;
+  try {
+    const data = await dynamicsGetAnnotated<{ value: RawAmcTimeEntry[] }>(env, path);
+    return (data.value ?? []).map((raw): CaseTimeEntry => {
+      const hours = raw.amc_durationhours ?? null;
+      const costCode = (raw["_amc_costcode_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+      const member = (raw["_amc_member_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null;
+      const notes = raw.amc_notes ?? raw.subject ?? null;
+      return {
+        id: raw.activityid,
+        description: notes ? `${notes}${costCode ? ` · ${costCode}` : ""}` : (costCode ?? null),
+        date: raw.scheduledstart ? raw.scheduledstart.split("T")[0] : raw.createdon.split("T")[0],
+        durationMinutes: hours != null ? Math.round(hours * 60) : null,
+        durationHours: hours,
+        resourceName: member,
+        entryStatus: raw.statuscode != null ? (AMC_STATUS[raw.statuscode] ?? String(raw.statuscode)) : null,
+        createdOn: raw.createdon,
+      };
+    });
+  } catch (e) {
+    console.error("getCaseTimeEntries error:", e);
+    return [];
+  }
+}
+
+// Fetch a single amc_timeentry record by its GUID to inspect available fields.
+// Call GET /api/dynamics/time-entries/:id/inspect
+export async function inspectTimeEntry(env: Env, entryId: string): Promise<unknown> {
+  if (!isConfigured(env)) return { error: "not configured" };
+  try {
+    return await dynamicsGetAnnotated<unknown>(env, `/amc_timeentries(${entryId})`);
+  } catch (e) {
+    return { error: String(e) };
+  }
+}
+
+// Diagnostic: probe multiple possible time-tracking entities for a case.
+// Call GET /api/dynamics/cases/:id/diagnose to see what's actually in the org.
+export async function diagnoseCaseTimeEntries(env: Env, caseId: string): Promise<Record<string, unknown>> {
+  if (!isConfigured(env)) return { error: "Dynamics not configured" };
+
+  async function probe(path: string) {
+    try {
+      const data = await dynamicsGetAnnotated<{ value: unknown[] }>(env, path);
+      return { count: (data.value ?? []).length, sample: (data.value ?? []).slice(0, 3), error: null };
+    } catch (e) {
+      return { count: 0, sample: [], error: String(e) };
+    }
+  }
+
+  // Discover all entity definitions whose logical name contains "time"
+  async function discoverTimeEntities() {
+    try {
+      const data = await dynamicsGet<{ value: Array<{ LogicalName: string; EntitySetName: string }> }>(
+        env,
+        `/EntityDefinitions?$select=LogicalName,EntitySetName&$filter=contains(LogicalName,'time')&$top=50`
+      );
+      return (data.value ?? []).map((e) => ({ logicalName: e.LogicalName, entitySetName: e.EntitySetName }));
+    } catch (e) {
+      return { error: String(e) };
+    }
+  }
+
+  const [
+    timeEntityDefs,
+    activityPointers,
+    phoneCalls,
+    tasks,
+    annotations,
+  ] = await Promise.all([
+    discoverTimeEntities(),
+    probe(`/activitypointers?$select=activityid,subject,actualdurationminutes,actualstart,activitytypecode,createdon,_createdby_value&$filter=_regardingobjectid_value eq ${caseId}&$top=10`),
+    probe(`/phonecalls?$select=activityid,subject,actualdurationminutes,actualstart,createdon,_createdby_value&$filter=_regardingobjectid_value eq ${caseId}&$top=10`),
+    probe(`/tasks?$select=activityid,subject,actualdurationminutes,actualstart,createdon,_createdby_value&$filter=_regardingobjectid_value eq ${caseId}&$top=10`),
+    probe(`/annotations?$select=annotationid,subject,notetext,createdon,_createdby_value&$filter=_objectid_value eq ${caseId}&$top=5`),
+  ]);
+
+  return {
+    caseId,
+    "entity_definitions_with_time_in_name": timeEntityDefs,
+    "activitypointers": activityPointers,
+    "phonecalls": phoneCalls,
+    "tasks": tasks,
+    "annotations_count": annotations,
+  };
 }
 
 // ── Portal Contact Auth ───────────────────────────────────────────────────────

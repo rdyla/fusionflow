@@ -8,7 +8,7 @@ import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { sendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
-import { getAccountTeam } from "../services/dynamicsService";
+import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -21,7 +21,7 @@ app.get("/", async (c) => {
     SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
-           managed_in_asana, asana_project_id, solution_id, created_at, updated_at,
+           managed_in_asana, asana_project_id, solution_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
     FROM projects
     WHERE (archived = 0 OR archived IS NULL)
@@ -74,7 +74,7 @@ app.get("/:id", async (c) => {
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_type, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.pm_name, p.ae_user_id, p.ae_name, p.sa_name, p.csm_name, p.engineer_name,
-             p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id,
+             p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id, p.crm_case_id, p.crm_opportunity_id,
              p.created_at, p.updated_at,
              s.name AS linked_solution_name,
              s.customer_name AS linked_solution_customer,
@@ -123,6 +123,8 @@ const createProjectSchema = z.object({
   engineer_name: z.string().max(500).nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
   solution_id: z.string().nullable().optional(),
+  crm_case_id: z.string().nullable().optional(),
+  crm_opportunity_id: z.string().nullable().optional(),
 });
 
 app.post("/", requireRole("admin", "pm"), async (c) => {
@@ -135,17 +137,17 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, customer_id, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id } = parsed.data;
+  const { name, customer_name, customer_id, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
   const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
 
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id)
-       VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null)
+    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null, crm_case_id ?? null)
     .run();
 
   const created = await db
@@ -179,6 +181,8 @@ const updateProjectSchema = z.object({
   asana_project_id: z.string().nullable().optional(),
   managed_in_asana: z.number().int().min(0).max(1).optional(),
   solution_id: z.string().nullable().optional(),
+  crm_case_id: z.string().nullable().optional(),
+  crm_opportunity_id: z.string().nullable().optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm"), async (c) => {
@@ -334,6 +338,72 @@ app.get("/:id/chain", async (c) => {
   ]);
 
   return c.json({ solution, optimizeAccount });
+});
+
+// ── CRM Case + Hours Compliance ──────────────────────────────────────────────
+
+app.get("/:id/case", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const project = await db
+    .prepare("SELECT crm_case_id, crm_opportunity_id, solution_id, customer_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ crm_case_id: string | null; crm_opportunity_id: string | null; solution_id: string | null; customer_id: string | null }>();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+
+  if (!project.crm_case_id) {
+    return c.json({ case: null, timeEntries: [], quotedHours: null, sowQuote: null, accountOpportunities: [] });
+  }
+
+  // Fetch case and time entries in parallel
+  const [caseData, timeEntries] = await Promise.all([
+    getCase(c.env, project.crm_case_id),
+    getCaseTimeEntries(c.env, project.crm_case_id),
+  ]);
+
+  // Quoted hours from labor estimate via linked solution
+  let quotedHours: { total_low: number | null; total_expected: number | null; total_high: number | null; final_hours: Record<string, number> } | null = null;
+  if (project.solution_id) {
+    const le = await db
+      .prepare("SELECT total_low, total_expected, total_high, final_hours FROM labor_estimates WHERE solution_id = ? LIMIT 1")
+      .bind(project.solution_id)
+      .first<{ total_low: number | null; total_expected: number | null; total_high: number | null; final_hours: string }>();
+    if (le) {
+      let parsed: Record<string, number> = {};
+      try { parsed = JSON.parse(le.final_hours ?? "{}"); } catch { /* use empty */ }
+      quotedHours = { total_low: le.total_low, total_expected: le.total_expected, total_high: le.total_high, final_hours: parsed };
+    }
+  }
+
+  // SOW hours: use pinned opportunity if set, otherwise return account opps for the PM to pick
+  let sowQuote: import("../services/dynamicsService").DynamicsQuote | null = null;
+  let accountOpportunities: import("../services/dynamicsService").DynamicsOpportunity[] = [];
+
+  if (project.customer_id) {
+    const customer = await db
+      .prepare("SELECT crm_account_id FROM customers WHERE id = ? LIMIT 1")
+      .bind(project.customer_id)
+      .first<{ crm_account_id: string }>();
+    if (customer?.crm_account_id) {
+      // Always fetch account opps so the UI can display the linked opportunity's name
+      accountOpportunities = await getAccountOpportunities(c.env, customer.crm_account_id).catch(() => []);
+      if (project.crm_opportunity_id) {
+        // Opportunity is pinned — fetch its quotes directly
+        const quotes = await getOpportunityQuotes(c.env, project.crm_opportunity_id).catch(() => []);
+        const withSow = quotes.filter((q) => q.am_sow != null);
+        const priority = (q: { statecode: number }) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
+        withSow.sort((a, b) => priority(a) - priority(b));
+        sowQuote = withSow[0] ?? null;
+      }
+    }
+  }
+
+  return c.json({ case: caseData, timeEntries, quotedHours, sowQuote, accountOpportunities });
 });
 
 // ── Project Contacts ──────────────────────────────────────────────────────────

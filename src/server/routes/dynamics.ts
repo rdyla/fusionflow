@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers } from "../services/dynamicsService";
+import { searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -57,6 +57,32 @@ app.get("/accounts/:id/opportunities", async (c) => {
   }
 });
 
+// GET /api/dynamics/cases/search?accountId=&q=
+// Returns cases for an account, optionally filtered by ticket number substring.
+// Used by PMs to find and link an implementation case to a project.
+app.get("/cases/search", async (c) => {
+  const accountId = c.req.query("accountId") ?? "";
+  const q = c.req.query("q") ?? "";
+  try {
+    // If q looks like a ticket number, look it up directly
+    if (q.toUpperCase().startsWith("CAS-")) {
+      const found = await getCaseByTicketNumber(c.env, q.trim());
+      return c.json(found ? [found] : []);
+    }
+    const cases = await getCases(c.env, accountId || undefined);
+    const filtered = q
+      ? cases.filter((cs) =>
+          cs.ticketNumber?.toLowerCase().includes(q.toLowerCase()) ||
+          cs.title.toLowerCase().includes(q.toLowerCase())
+        )
+      : cases;
+    return c.json(filtered.slice(0, 50));
+  } catch (err) {
+    console.error("Dynamics case search error:", err);
+    return c.json([]);
+  }
+});
+
 // GET /api/dynamics/staff/project-managers
 app.get("/staff/project-managers", async (c) => {
   try {
@@ -106,6 +132,29 @@ app.get("/staff/engineers", async (c) => {
   } catch (err) {
     console.error("Dynamics engineer fetch error:", err);
     return c.json([]);
+  }
+});
+
+// GET /api/dynamics/time-entries/:id/inspect  (admin only — dumps all fields on a single amc_timeentry record)
+app.get("/time-entries/:id/inspect", async (c) => {
+  const auth = c.get("auth");
+  if (!auth || auth.role !== "admin") return c.json({ error: "Admin only" }, 403);
+  const result = await inspectTimeEntry(c.env, c.req.param("id"));
+  return c.json(result);
+});
+
+// GET /api/dynamics/cases/:id/diagnose  (admin only — returns raw probe data)
+app.get("/cases/:id/diagnose", async (c) => {
+  const auth = c.get("auth");
+  if (!auth || auth.role !== "admin") {
+    return c.json({ error: "Admin only" }, 403);
+  }
+  const caseId = c.req.param("id");
+  try {
+    const result = await diagnoseCaseTimeEntries(c.env, caseId);
+    return c.json(result);
+  } catch (err) {
+    return c.json({ error: String(err) }, 500);
   }
 });
 

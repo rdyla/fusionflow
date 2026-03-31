@@ -178,6 +178,8 @@ export type Project = {
   managed_in_asana: number | null;
   archived: number | null;
   solution_id: string | null;
+  crm_case_id: string | null;
+  crm_opportunity_id: string | null;
   customer_display_name: string | null;
   // Joined chain fields (detail + list)
   linked_solution_name: string | null;
@@ -308,6 +310,59 @@ export type DynamicsOpportunity = {
   name: string;
   estimatedclosedate: string | null;
   statecode: number;
+  pfi_sowhours: number | null;
+};
+
+export type SupportCase = {
+  id: string;
+  ticketNumber: string | null;
+  title: string;
+  description: string | null;
+  statecode: number;
+  statuscode: number;
+  status: string;
+  prioritycode: number;
+  priority: string;
+  casetypecode: number | null;
+  caseType: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  ownerName: string | null;
+  createdOn: string;
+  modifiedOn: string;
+};
+
+export type CaseTimeEntry = {
+  id: string;
+  description: string | null;
+  date: string | null;
+  durationMinutes: number | null;
+  durationHours: number | null;
+  resourceName: string | null;
+  entryStatus: string | null;
+  createdOn: string;
+};
+
+export type DynamicsQuote = {
+  quoteid: string;
+  name: string;
+  statecode: number;
+  stateLabel: string;
+  am_sow: number | null;
+  opportunityId: string | null;
+};
+
+export type CaseComplianceData = {
+  case: SupportCase | null;
+  timeEntries: CaseTimeEntry[];
+  quotedHours: {
+    total_low: number | null;
+    total_expected: number | null;
+    total_high: number | null;
+    final_hours: Record<string, number>;
+  } | null;
+  sowQuote: DynamicsQuote | null;
+  accountOpportunities: DynamicsOpportunity[];
 };
 
 export type Customer = {
@@ -838,6 +893,16 @@ export const api = {
   getDynamicsOpportunities: (accountId: string) =>
     request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities`),
 
+  searchDynamicsCases: (params: { accountId?: string; q?: string }) => {
+    const qs = new URLSearchParams();
+    if (params.accountId) qs.set("accountId", params.accountId);
+    if (params.q) qs.set("q", params.q);
+    return request<SupportCase[]>(`/dynamics/cases/search?${qs.toString()}`);
+  },
+
+  projectCaseCompliance: (projectId: string) =>
+    request<CaseComplianceData>(`/projects/${projectId}/case`),
+
   createProject: (payload: {
     name: string;
     customer_name?: string;
@@ -865,6 +930,8 @@ export const api = {
       actual_go_live_date?: string;
       pm_user_id?: string | null;
       solution_id?: string | null;
+      crm_case_id?: string | null;
+      crm_opportunity_id?: string | null;
     }
   ) =>
     request<Project>(`/projects/${id}`, {

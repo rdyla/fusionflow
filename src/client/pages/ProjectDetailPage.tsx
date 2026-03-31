@@ -5,6 +5,7 @@ import {
   type AsanaProjectSummary,
   type AsanaSectionSummary,
   type AsanaWorkspace,
+  type CaseComplianceData,
   type Document,
   type DynamicsContact,
   type Milestone,
@@ -15,6 +16,7 @@ import {
   type ProjectContact,
   type ProjectStaffMember,
   type Risk,
+  type SupportCase,
   type Task,
   type TaskComment,
   type User,
@@ -28,7 +30,7 @@ import AsanaProjectView from "../components/asana/AsanaProjectView";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "asana";
+type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "asana" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -162,6 +164,14 @@ export default function ProjectDetailPage() {
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
   const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
 
+  // CRM case compliance
+  const [caseCompliance, setCaseCompliance] = useState<CaseComplianceData | null>(null);
+  const [caseComplianceLoading, setCaseComplianceLoading] = useState(false);
+  const [caseSearchQuery, setCaseSearchQuery] = useState("");
+  const [caseSearchResults, setCaseSearchResults] = useState<SupportCase[]>([]);
+  const [caseSearching, setCaseSearching] = useState(false);
+  const [savingCaseLink, setSavingCaseLink] = useState(false);
+
   // Lifecycle chain
   const [chain, setChain] = useState<ProjectChain | null>(null);
   const [showLinkSolutionModal, setShowLinkSolutionModal] = useState(false);
@@ -250,6 +260,16 @@ export default function ProjectDetailPage() {
   useEffect(() => {
     api.adminTemplates().then(setTemplateList).catch(() => {});
   }, []);
+
+  // Load case compliance data when the case tab is opened
+  useEffect(() => {
+    if (tab !== "case" || !project?.id) return;
+    setCaseComplianceLoading(true);
+    api.projectCaseCompliance(project.id)
+      .then(setCaseCompliance)
+      .catch(() => setCaseCompliance(null))
+      .finally(() => setCaseComplianceLoading(false));
+  }, [tab, project?.id]);
 
   // Must be before early returns — hooks must always run in the same order
   useEffect(() => {
@@ -766,8 +786,8 @@ export default function ProjectDetailPage() {
         const managedInAsana = !!project.managed_in_asana;
         const hasCrm = !!project.dynamics_account_id;
         const visibleTabs: DetailTab[] = managedInAsana
-          ? ["overview", "asana", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "zoom"]
-          : ["overview", "timeline", "tasks", "risks", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "zoom"];
+          ? ["overview", "asana", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"]
+          : ["overview", "timeline", "tasks", "risks", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -776,7 +796,7 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "asana" ? "Asana" : t === "sharepoint" ? "SharePoint" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "asana" ? "Asana" : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -1424,6 +1444,370 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </div>
+          </div>
+        );
+      })()}
+
+      {/* ── CRM Case ──────────────────────────────────────────────────────── */}
+      {tab === "case" && (() => {
+        const caseStateColor: Record<number, string> = { 0: "#0891b2", 1: "#059669", 2: "#94a3b8" };
+
+        async function handleCaseSearch() {
+          if (!caseSearchQuery.trim()) return;
+          setCaseSearching(true);
+          setCaseSearchResults([]);
+          try {
+            const accountId = project.customer_id
+              ? (caseCompliance as any)?._accountId ?? undefined
+              : undefined;
+            const results = await api.searchDynamicsCases({ q: caseSearchQuery.trim(), accountId });
+            setCaseSearchResults(results);
+          } catch {
+            showToast("Failed to search cases", "error");
+          } finally {
+            setCaseSearching(false);
+          }
+        }
+
+        async function handleLinkCase(caseId: string, ticketNumber: string | null) {
+          setSavingCaseLink(true);
+          try {
+            const updated = await api.updateProject(project.id, { crm_case_id: caseId });
+            setProject(updated);
+            setCaseSearchResults([]);
+            setCaseSearchQuery("");
+            // Reload compliance data
+            setCaseComplianceLoading(true);
+            api.projectCaseCompliance(project.id)
+              .then(setCaseCompliance)
+              .catch(() => {})
+              .finally(() => setCaseComplianceLoading(false));
+            showToast(`Linked to case ${ticketNumber ?? caseId}`, "success");
+          } catch {
+            showToast("Failed to link case", "error");
+          } finally {
+            setSavingCaseLink(false);
+          }
+        }
+
+        async function handleUnlinkCase() {
+          if (!window.confirm("Unlink this case from the project?")) return;
+          setSavingCaseLink(true);
+          try {
+            const updated = await api.updateProject(project.id, { crm_case_id: null });
+            setProject(updated);
+            setCaseCompliance(null);
+            showToast("Case unlinked.", "success");
+          } catch {
+            showToast("Failed to unlink case", "error");
+          } finally {
+            setSavingCaseLink(false);
+          }
+        }
+
+        async function handleLinkOpportunity(opportunityId: string, opportunityName: string) {
+          setSavingCaseLink(true);
+          try {
+            const updated = await api.updateProject(project.id, { crm_opportunity_id: opportunityId });
+            setProject(updated);
+            setCaseComplianceLoading(true);
+            api.projectCaseCompliance(project.id)
+              .then(setCaseCompliance)
+              .catch(() => {})
+              .finally(() => setCaseComplianceLoading(false));
+            showToast(`Linked to opportunity: ${opportunityName}`, "success");
+          } catch {
+            showToast("Failed to link opportunity", "error");
+          } finally {
+            setSavingCaseLink(false);
+          }
+        }
+
+        async function handleUnlinkOpportunity() {
+          if (!window.confirm("Unlink this opportunity?")) return;
+          setSavingCaseLink(true);
+          try {
+            const updated = await api.updateProject(project.id, { crm_opportunity_id: null });
+            setProject(updated);
+            setCaseComplianceLoading(true);
+            api.projectCaseCompliance(project.id)
+              .then(setCaseCompliance)
+              .catch(() => {})
+              .finally(() => setCaseComplianceLoading(false));
+            showToast("Opportunity unlinked.", "success");
+          } catch {
+            showToast("Failed to unlink opportunity", "error");
+          } finally {
+            setSavingCaseLink(false);
+          }
+        }
+
+        // Compute hours totals
+        const actualHours = (caseCompliance?.timeEntries ?? []).reduce((sum, e) => sum + (e.durationHours ?? 0), 0);
+        const quotedExpected = caseCompliance?.quotedHours?.total_expected ?? null;
+        // SOW hours: from the linked quote's am_sow field
+        const sowQuote = caseCompliance?.sowQuote ?? null;
+        const sowHours = sowQuote?.am_sow ?? null;
+        const referenceHours = sowHours ?? quotedExpected;
+        const pctUsed = referenceHours && referenceHours > 0 ? Math.round((actualHours / referenceHours) * 100) : null;
+        const complianceColor = pctUsed == null ? "#94a3b8" : pctUsed > 110 ? "#d13438" : pctUsed > 90 ? "#ff8c00" : "#059669";
+
+        return (
+          <div style={{ display: "grid", gap: 16 }}>
+
+            {/* ── CRM Links ── */}
+            <div className="ms-section-card" style={{ padding: "16px 20px" }}>
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>CRM Links</div>
+
+              {(() => {
+                const lbl = (text: string) => (
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 3 }}>{text}</div>
+                );
+                // All cells are fixed-width — no stretching, no holes
+                const cell = (label: string, value: React.ReactNode, width: number, opts: { mono?: boolean } = {}) => (
+                  <div style={{ width, flexShrink: 0, paddingRight: 16, overflow: "hidden" }}>
+                    {lbl(label)}
+                    <div style={{ fontSize: 13, color: "#1e293b", fontFamily: opts.mono ? "monospace" : undefined, fontWeight: opts.mono ? 700 : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {value}
+                    </div>
+                  </div>
+                );
+                const badgeCell = (label: string, badge: React.ReactNode, width: number) => (
+                  <div style={{ width, flexShrink: 0, paddingRight: 16 }}>
+                    {lbl(label)}
+                    {badge}
+                  </div>
+                );
+                const unlinkBtn = (onClick: () => void) => canEdit ? (
+                  <button className="ms-btn-ghost" style={{ fontSize: 12, color: "#94a3b8", padding: "2px 8px", flexShrink: 0 }} disabled={savingCaseLink} onClick={onClick}>Unlink</button>
+                ) : null;
+                const rowStyle = (border: boolean): React.CSSProperties => ({
+                  display: "flex", alignItems: "center", padding: "10px 0",
+                  borderBottom: border ? "1px solid rgba(0,0,0,0.06)" : "none",
+                });
+
+                return (
+                  <>
+                    {/* Case row */}
+                    {caseComplianceLoading ? (
+                      <div style={rowStyle(true)}><span style={{ fontSize: 13, color: "#94a3b8" }}>Loading…</span></div>
+                    ) : caseCompliance?.case ? (
+                      <div style={rowStyle(true)}>
+                        {cell("Case", caseCompliance.case.ticketNumber ?? "—", 175, { mono: true })}
+                        {cell("Title", caseCompliance.case.title, 260)}
+                        {cell("Owner", caseCompliance.case.ownerName ?? "—", 160)}
+                        {badgeCell("Status",
+                          <span className="ms-badge" style={{ fontSize: 11, background: caseStateColor[caseCompliance.case.statecode] + "1a", color: caseStateColor[caseCompliance.case.statecode], border: `1px solid ${caseStateColor[caseCompliance.case.statecode]}40` }}>
+                            {caseCompliance.case.status}
+                          </span>, 120)}
+                        {unlinkBtn(handleUnlinkCase)}
+                      </div>
+                    ) : (
+                      <>
+                        <div style={rowStyle(false)}>
+                          <div style={{ width: 175, flexShrink: 0 }}>
+                            {lbl("Case")}
+                            <span style={{ fontSize: 13, color: "#94a3b8" }}>Not linked</span>
+                          </div>
+                        </div>
+                        {canEdit && (
+                          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                            <input
+                              className="ms-input"
+                              style={{ flex: "1 1 260px", maxWidth: 340 }}
+                              placeholder="Search by case # or keyword…"
+                              value={caseSearchQuery}
+                              onChange={(e) => setCaseSearchQuery(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") handleCaseSearch(); }}
+                            />
+                            <button className="ms-btn-secondary" disabled={caseSearching || !caseSearchQuery.trim()} onClick={handleCaseSearch}>
+                              {caseSearching ? "Searching…" : "Search"}
+                            </button>
+                          </div>
+                        )}
+                        {caseSearchResults.length > 0 && (
+                          <div style={{ marginTop: 8, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, overflow: "hidden" }}>
+                            {caseSearchResults.map((cs) => (
+                              <div key={cs.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
+                                <div>
+                                  <span style={{ fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#0891b2", marginRight: 10 }}>{cs.ticketNumber}</span>
+                                  <span style={{ fontSize: 13, color: "#1e293b" }}>{cs.title}</span>
+                                  <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 8 }}>{cs.status}</span>
+                                </div>
+                                <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} disabled={savingCaseLink} onClick={() => handleLinkCase(cs.id, cs.ticketNumber)}>Link</button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* Opportunity row */}
+                    {caseCompliance?.case && (
+                      project.crm_opportunity_id && sowQuote ? (
+                        <div style={rowStyle(false)}>
+                          {cell("Opportunity", (caseCompliance.accountOpportunities.find(o => o.opportunityid === project.crm_opportunity_id)?.name) ?? "—", 300)}
+                          {badgeCell("Status",
+                            <span className="ms-badge" style={{ fontSize: 11, background: sowQuote.statecode === 2 ? "#05966926" : "rgba(0,0,0,0.06)", color: sowQuote.statecode === 2 ? "#059669" : "#64748b", border: "none" }}>
+                              {sowQuote.stateLabel}
+                            </span>, 110)}
+                          {cell("SOW Hours", sowQuote.am_sow != null ? String(sowQuote.am_sow) : "—", 110)}
+                          {unlinkBtn(handleUnlinkOpportunity)}
+                        </div>
+                      ) : project.crm_opportunity_id && !sowQuote ? (
+                        <div style={rowStyle(false)}>
+                          <div style={{ paddingRight: 16 }}>
+                            {lbl("Opportunity")}
+                            <span style={{ fontSize: 13, color: "#64748b" }}>Linked — no quote with SOW hours found.</span>
+                          </div>
+                          {unlinkBtn(handleUnlinkOpportunity)}
+                        </div>
+                      ) : (caseCompliance.accountOpportunities ?? []).length > 0 ? (
+                        <div style={{ marginTop: 10 }}>
+                          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Select the opportunity this project was sold under:</div>
+                          <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, overflow: "hidden" }}>
+                            {caseCompliance.accountOpportunities.map((opp) => (
+                              <div key={opp.opportunityid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
+                                <div>
+                                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{opp.name}</div>
+                                  {opp.estimatedclosedate && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Close: {formatDate(opp.estimatedclosedate)}</div>}
+                                </div>
+                                {canEdit && (
+                                  <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} disabled={savingCaseLink} onClick={() => handleLinkOpportunity(opp.opportunityid, opp.name)}>Link</button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={rowStyle(false)}>
+                          <div style={{ width: 300, flexShrink: 0 }}>
+                            {lbl("Opportunity")}
+                            <span style={{ fontSize: 13, color: "#94a3b8" }}>No opportunities found for this account.</span>
+                          </div>
+                        </div>
+                      )
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* ── Hours Compliance ── */}
+            {(referenceHours != null || actualHours > 0) && (
+              <div className="ms-section-card">
+                <div className="ms-section-title">Hours Compliance</div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 16 }}>
+                  {quotedExpected != null && (
+                    <div className="ms-info-item">
+                      <div className="ms-info-label">Estimated Hours (Labor Model)</div>
+                      <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                        <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{quotedExpected}</div>
+                        {caseCompliance?.quotedHours?.total_low != null && caseCompliance?.quotedHours?.total_high != null && (
+                          <div style={{ fontSize: 11, color: "#94a3b8" }}>({caseCompliance.quotedHours.total_low}–{caseCompliance.quotedHours.total_high})</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className="ms-info-item">
+                    <div className="ms-info-label">Hours Logged (CRM)</div>
+                    <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{actualHours.toFixed(1)}</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{(caseCompliance?.timeEntries ?? []).length} entries</div>
+                  </div>
+                  {pctUsed != null && (
+                    <div className="ms-info-item">
+                      <div className="ms-info-label">% of {sowHours != null ? "SOW" : "Estimate"} Used</div>
+                      <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: complianceColor }}>{pctUsed}%</div>
+                      <div style={{ fontSize: 11, color: complianceColor, marginTop: 2 }}>
+                        {pctUsed > 110 ? "Over budget" : pctUsed > 90 ? "Approaching limit" : "On track"}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Progress bar */}
+                {pctUsed != null && (
+                  <div style={{ marginBottom: 4 }}>
+                    <div style={{ height: 8, background: "rgba(0,0,0,0.06)", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${Math.min(pctUsed, 100)}%`, background: complianceColor, borderRadius: 4, transition: "width 0.3s" }} />
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                      <span>0h</span>
+                      <span>{referenceHours}h</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Workstream breakdown if labor model is available */}
+                {quotedExpected != null && Object.keys(caseCompliance?.quotedHours?.final_hours ?? {}).length > 0 && (
+                  <details style={{ marginTop: 12 }}>
+                    <summary style={{ fontSize: 12, color: "#64748b", cursor: "pointer", userSelect: "none" }}>Labor model breakdown by workstream</summary>
+                    <div style={{ marginTop: 10, display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 6 }}>
+                      {Object.entries(caseCompliance!.quotedHours!.final_hours).map(([ws, hrs]) => (
+                        <div key={ws} style={{ display: "flex", justifyContent: "space-between", padding: "6px 10px", background: "#f8fafc", borderRadius: 6, fontSize: 12 }}>
+                          <span style={{ color: "#475569" }}>{ws.replace(/_/g, " ")}</span>
+                          <span style={{ fontWeight: 600, color: "#1e293b" }}>{hrs}h</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+              </div>
+            )}
+
+            {/* ── Time Entries ── */}
+            {caseCompliance?.case && (
+              <div className="ms-section-card">
+                <div className="ms-section-title">
+                  Time Entries
+                  <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries</span>
+                </div>
+                {(caseCompliance.timeEntries ?? []).length === 0 ? (
+                  <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
+                    No time entries found on this case in Dynamics 365.
+                  </p>
+                ) : (
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
+                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Date</th>
+                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resource</th>
+                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Description / Cost Code</th>
+                          <th style={{ textAlign: "right", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Hours</th>
+                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {caseCompliance.timeEntries.map((entry) => (
+                          <tr key={entry.id} style={{ borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+                            <td style={{ padding: "8px 10px", color: "#475569", whiteSpace: "nowrap" }}>{entry.date ? formatDate(entry.date) : "—"}</td>
+                            <td style={{ padding: "8px 10px", color: "#1e293b", fontWeight: 500, whiteSpace: "nowrap" }}>{entry.resourceName ?? "—"}</td>
+                            <td style={{ padding: "8px 10px", color: "#64748b", maxWidth: 380 }}>{entry.description ?? "—"}</td>
+                            <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{entry.durationHours?.toFixed(2) ?? "—"}</td>
+                            <td style={{ padding: "8px 10px" }}>
+                              {entry.entryStatus && (
+                                <span className="ms-badge" style={{ fontSize: 11, background: entry.entryStatus === "Completed" ? "#05966926" : "rgba(0,0,0,0.06)", color: entry.entryStatus === "Completed" ? "#059669" : "#64748b", border: "none" }}>
+                                  {entry.entryStatus}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr style={{ borderTop: "2px solid rgba(0,0,0,0.08)" }}>
+                          <td colSpan={3} style={{ padding: "8px 10px", fontSize: 12, color: "#94a3b8" }}>Total logged</td>
+                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{actualHours.toFixed(2)}h</td>
+                          <td />
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
           </div>
         );
       })()}
