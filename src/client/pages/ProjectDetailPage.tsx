@@ -1450,6 +1450,8 @@ export default function ProjectDetailPage() {
 
       {/* ── CRM Case ──────────────────────────────────────────────────────── */}
       {tab === "case" && (() => {
+        if (!project) return null;
+        const p = project;
         const caseStateColor: Record<number, string> = { 0: "#0891b2", 1: "#059669", 2: "#94a3b8" };
 
         async function handleCaseSearch() {
@@ -1457,7 +1459,7 @@ export default function ProjectDetailPage() {
           setCaseSearching(true);
           setCaseSearchResults([]);
           try {
-            const accountId = project.customer_id
+            const accountId = p.customer_id
               ? (caseCompliance as any)?._accountId ?? undefined
               : undefined;
             const results = await api.searchDynamicsCases({ q: caseSearchQuery.trim(), accountId });
@@ -1472,13 +1474,13 @@ export default function ProjectDetailPage() {
         async function handleLinkCase(caseId: string, ticketNumber: string | null) {
           setSavingCaseLink(true);
           try {
-            const updated = await api.updateProject(project.id, { crm_case_id: caseId });
+            const updated = await api.updateProject(p.id, { crm_case_id: caseId });
             setProject(updated);
             setCaseSearchResults([]);
             setCaseSearchQuery("");
             // Reload compliance data
             setCaseComplianceLoading(true);
-            api.projectCaseCompliance(project.id)
+            api.projectCaseCompliance(p.id)
               .then(setCaseCompliance)
               .catch(() => {})
               .finally(() => setCaseComplianceLoading(false));
@@ -1494,7 +1496,7 @@ export default function ProjectDetailPage() {
           if (!window.confirm("Unlink this case from the project?")) return;
           setSavingCaseLink(true);
           try {
-            const updated = await api.updateProject(project.id, { crm_case_id: null });
+            const updated = await api.updateProject(p.id, { crm_case_id: null });
             setProject(updated);
             setCaseCompliance(null);
             showToast("Case unlinked.", "success");
@@ -1508,10 +1510,10 @@ export default function ProjectDetailPage() {
         async function handleLinkOpportunity(opportunityId: string, opportunityName: string) {
           setSavingCaseLink(true);
           try {
-            const updated = await api.updateProject(project.id, { crm_opportunity_id: opportunityId });
+            const updated = await api.updateProject(p.id, { crm_opportunity_id: opportunityId });
             setProject(updated);
             setCaseComplianceLoading(true);
-            api.projectCaseCompliance(project.id)
+            api.projectCaseCompliance(p.id)
               .then(setCaseCompliance)
               .catch(() => {})
               .finally(() => setCaseComplianceLoading(false));
@@ -1527,10 +1529,10 @@ export default function ProjectDetailPage() {
           if (!window.confirm("Unlink this opportunity?")) return;
           setSavingCaseLink(true);
           try {
-            const updated = await api.updateProject(project.id, { crm_opportunity_id: null });
+            const updated = await api.updateProject(p.id, { crm_opportunity_id: null });
             setProject(updated);
             setCaseComplianceLoading(true);
-            api.projectCaseCompliance(project.id)
+            api.projectCaseCompliance(p.id)
               .then(setCaseCompliance)
               .catch(() => {})
               .finally(() => setCaseComplianceLoading(false));

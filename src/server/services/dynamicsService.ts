@@ -610,37 +610,6 @@ export type CaseTimeEntry = {
   createdOn: string;
 };
 
-type RawTimeEntry = {
-  msdyn_timeentryid: string;
-  msdyn_description: string | null;
-  msdyn_date: string | null;
-  msdyn_duration: number | null; // minutes
-  msdyn_entrystatus: number | null; // 192350000=Draft, 192350001=Returned, 192350002=Approved, 192350003=Submitted
-  createdon: string;
-  [key: string]: unknown;
-};
-
-const TIME_ENTRY_STATUS: Record<number, string> = {
-  192350000: "Draft",
-  192350001: "Returned",
-  192350002: "Approved",
-  192350003: "Submitted",
-};
-
-function mapTimeEntry(raw: RawTimeEntry): CaseTimeEntry {
-  const mins = raw.msdyn_duration ?? null;
-  return {
-    id: raw.msdyn_timeentryid,
-    description: raw.msdyn_description,
-    date: raw.msdyn_date ? raw.msdyn_date.split("T")[0] : null,
-    durationMinutes: mins,
-    durationHours: mins != null ? Math.round((mins / 60) * 100) / 100 : null,
-    resourceName: (raw["_msdyn_bookableresource_value@OData.Community.Display.V1.FormattedValue"] as string | null) ?? null,
-    entryStatus: raw.msdyn_entrystatus != null ? (TIME_ENTRY_STATUS[raw.msdyn_entrystatus] ?? String(raw.msdyn_entrystatus)) : null,
-    createdOn: raw.createdon,
-  };
-}
-
 type RawAmcTimeEntry = {
   activityid: string;
   subject: string | null;
