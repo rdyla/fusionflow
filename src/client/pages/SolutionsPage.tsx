@@ -61,10 +61,12 @@ export default function SolutionsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
+  const [currentRole, setCurrentRole] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
 
   useEffect(() => {
+    api.me().then((me) => setCurrentRole(me.role)).catch(() => {});
     Promise.all([api.solutions(), api.users()])
       .then(([s, u]) => {
         setSolutions(s);
@@ -168,7 +170,9 @@ export default function SolutionsPage() {
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <div className="ms-page-header">
         <h1 className="ms-page-title">Solutions</h1>
-        <button className="ms-btn-primary" onClick={() => setShowCreate(true)}>+ New Solution</button>
+        {currentRole !== "client" && (
+          <button className="ms-btn-primary" onClick={() => setShowCreate(true)}>+ New Solution</button>
+        )}
       </div>
 
       {/* Filters */}

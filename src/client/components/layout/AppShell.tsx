@@ -167,6 +167,9 @@ export default function AppShell() {
             <NavSection label="Projects" />
             <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>My Projects</SideLink>
             <Divider />
+            <NavSection label="Solutions" />
+            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>My Solutions</SideLink>
+            <Divider />
           </>
         )}
         {!isClient && (

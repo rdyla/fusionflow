@@ -436,6 +436,7 @@ type Props = {
   surveyJson: SurveyJson;
   onBack: () => void;
   onDelete: () => void;
+  canDelete?: boolean;
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
@@ -447,6 +448,7 @@ export default function NeedsAssessmentSOR({
   surveyJson,
   onBack,
   onDelete,
+  canDelete = true,
 }: Props) {
   // Build field map and SOR sections from surveyJson
   const allFields = (surveyJson.sections as SectionDef[]).flatMap((s) => s.fields);
@@ -486,13 +488,15 @@ export default function NeedsAssessmentSOR({
         >
           Export / Print SOR
         </button>
-        <button
-          className="ms-btn-secondary"
-          onClick={onDelete}
-          style={{ marginLeft: "auto", color: "#d13438", borderColor: "#d13438" }}
-        >
-          Delete Assessment
-        </button>
+        {canDelete && (
+          <button
+            className="ms-btn-secondary"
+            onClick={onDelete}
+            style={{ marginLeft: "auto", color: "#d13438", borderColor: "#d13438" }}
+          >
+            Delete Assessment
+          </button>
+        )}
       </div>
 
       {/* Readiness banner */}

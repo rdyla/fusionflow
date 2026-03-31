@@ -193,7 +193,9 @@ export default function SolutionDetailPage() {
     }
   }
 
+  const isClient = currentRole === "client";
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae";
+  const canEditNA = canEdit || isClient;
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
@@ -205,8 +207,8 @@ export default function SolutionDetailPage() {
     { key: "overview",    label: "Overview"         },
     { key: "assessment",  label: "Needs Assessment" },
     { key: "scope",       label: "Scope of Work"    },
-    { key: "handoff",     label: "Handoff"          },
-    { key: "labor",       label: "Labor Estimate"   },
+    ...(!isClient ? [{ key: "handoff" as const, label: "Handoff" }] : []),
+    ...(!isClient ? [{ key: "labor" as const, label: "Labor Estimate" }] : []),
     ...(solution?.dynamics_account_id ? [{ key: "sharepoint" as const, label: "SharePoint" }] : []),
   ];
 
@@ -214,8 +216,8 @@ export default function SolutionDetailPage() {
     <div style={{ maxWidth: 960, margin: "0 auto" }}>
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
-        <Link to={solution.customer_id ? `/customers/${solution.customer_id}` : "/solutions"} style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
-          ← {solution.customer_id ? solution.customer_name : "Solutions"}
+        <Link to={(!isClient && solution.customer_id) ? `/customers/${solution.customer_id}` : "/solutions"} style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
+          ← {(!isClient && solution.customer_id) ? solution.customer_name : "Solutions"}
         </Link>
       </div>
 
@@ -671,7 +673,8 @@ export default function SolutionDetailPage() {
                 solutionType={solutionTypeLabel}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
-                onBack={() => setNaView("wizard")}
+                onBack={canEditNA ? () => setNaView("wizard") : () => {}}
+                canDelete={!isClient}
                 onDelete={async () => {
                   try {
                     await api.deleteNeedsAssessment(solution.id);

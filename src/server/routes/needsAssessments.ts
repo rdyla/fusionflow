@@ -406,7 +406,8 @@ const EDIT_ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "p
 app.put("/:id/needs-assessment", async (c) => {
   const auth = c.get("auth");
   if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
-  if (!EDIT_ROLES.includes(auth.role as typeof EDIT_ROLES[number])) {
+  const isClient = auth.role === "client";
+  if (!isClient && !EDIT_ROLES.includes(auth.role as typeof EDIT_ROLES[number])) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
@@ -414,11 +415,16 @@ app.put("/:id/needs-assessment", async (c) => {
 
   // Verify solution exists and get solution_type
   const solution = await c.env.DB.prepare(
-    "SELECT id, solution_type FROM solutions WHERE id = ? LIMIT 1"
+    "SELECT id, solution_type, dynamics_account_id FROM solutions WHERE id = ? LIMIT 1"
   )
     .bind(solutionId)
-    .first() as { id: string; solution_type: string } | null;
+    .first() as { id: string; solution_type: string; dynamics_account_id: string | null } | null;
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
+
+  // Clients can only update assessments for their own account's solutions
+  if (isClient && solution.dynamics_account_id !== auth.user.dynamics_account_id) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
 
   const parsed = upsertSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });

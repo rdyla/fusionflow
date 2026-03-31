@@ -39,7 +39,7 @@ const SOLUTION_TYPE_LABELS: Record<string, string> = {
   va: "AI Virtual Agent",
 };
 
-function accessClause(role: string, teamIds: string[]): { where: string; bindings: string[] } {
+function accessClause(role: string, teamIds: string[], accountId?: string | null): { where: string; bindings: string[] } {
   if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
   if (role === "pf_ae") {
     const ph = inPlaceholders(teamIds);
@@ -47,6 +47,10 @@ function accessClause(role: string, teamIds: string[]): { where: string; binding
       where: `(s.pf_ae_user_id IN (${ph}) OR s.created_by IN (${ph}) OR s.id IN (SELECT solution_id FROM solution_staff WHERE user_id IN (${ph}) AND staff_role = 'pf_ae'))`,
       bindings: [...teamIds, ...teamIds, ...teamIds],
     };
+  }
+  if (role === "client") {
+    if (!accountId) return { where: "1=0", bindings: [] };
+    return { where: "s.dynamics_account_id = ?", bindings: [accountId] };
   }
   // partner_ae
   const ph = inPlaceholders(teamIds);
@@ -60,7 +64,7 @@ app.get("/", async (c) => {
   const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
     ? await getTeamUserIds(auth.user.id, c.env.DB)
     : [auth.user.id];
-  const { where, bindings } = accessClause(auth.role, teamIds);
+  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
   const rows = await c.env.DB
     .prepare(`${SOLUTION_SELECT} WHERE ${where} ORDER BY s.updated_at DESC`)
     .bind(...bindings)
@@ -171,7 +175,7 @@ app.get("/:id", async (c) => {
   const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
     ? await getTeamUserIds(auth.user.id, db)
     : [auth.user.id];
-  const { where, bindings } = accessClause(auth.role, teamIds);
+  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
   const solution = await db
     .prepare(`${SOLUTION_SELECT} WHERE s.id = ? AND (${where}) LIMIT 1`)
     .bind(c.req.param("id"), ...bindings)
@@ -323,7 +327,7 @@ app.get("/:id/projects", async (c) => {
   const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
     ? await getTeamUserIds(auth.user.id, db)
     : [auth.user.id];
-  const { where, bindings } = accessClause(auth.role, teamIds);
+  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
   const solution = await db
     .prepare(`SELECT s.id FROM solutions s WHERE s.id = ? AND (${where}) LIMIT 1`)
     .bind(solutionId, ...bindings)
