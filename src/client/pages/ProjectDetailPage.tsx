@@ -1560,139 +1560,115 @@ export default function ProjectDetailPage() {
             {/* ── CRM Links ── */}
             <div className="ms-section-card" style={{ padding: "16px 20px" }}>
               <div className="ms-section-title" style={{ marginBottom: 12 }}>CRM Links</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
 
-              {(() => {
-                const lbl = (text: string) => (
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 3 }}>{text}</div>
-                );
-                // All cells are fixed-width — no stretching, no holes
-                const cell = (label: string, value: React.ReactNode, width: number, opts: { mono?: boolean } = {}) => (
-                  <div style={{ width, flexShrink: 0, paddingRight: 16, overflow: "hidden" }}>
-                    {lbl(label)}
-                    <div style={{ fontSize: 13, color: "#1e293b", fontFamily: opts.mono ? "monospace" : undefined, fontWeight: opts.mono ? 700 : undefined, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {value}
+                {/* Case tile */}
+                <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px 12px", background: "#f8fafc" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Case</span>
+                    {caseCompliance?.case && canEdit && (
+                      <button className="ms-btn-ghost" style={{ fontSize: 11, color: "#94a3b8", padding: "1px 7px" }} disabled={savingCaseLink} onClick={handleUnlinkCase}>Unlink</button>
+                    )}
+                  </div>
+                  {caseComplianceLoading ? (
+                    <span style={{ fontSize: 13, color: "#94a3b8" }}>Loading…</span>
+                  ) : caseCompliance?.case ? (
+                    <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 10, rowGap: 5, alignItems: "baseline" }}>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>Number</span>
+                      <span style={{ fontSize: 13, fontFamily: "monospace", fontWeight: 700, color: "#0891b2" }}>{caseCompliance.case.ticketNumber ?? "—"}</span>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>Title</span>
+                      <span style={{ fontSize: 13, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{caseCompliance.case.title}</span>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>Owner</span>
+                      <span style={{ fontSize: 13, color: "#1e293b" }}>{caseCompliance.case.ownerName ?? "—"}</span>
+                      <span style={{ fontSize: 11, color: "#94a3b8" }}>Status</span>
+                      <span className="ms-badge" style={{ fontSize: 11, width: "fit-content", background: caseStateColor[caseCompliance.case.statecode] + "1a", color: caseStateColor[caseCompliance.case.statecode], border: `1px solid ${caseStateColor[caseCompliance.case.statecode]}40` }}>
+                        {caseCompliance.case.status}
+                      </span>
                     </div>
-                  </div>
-                );
-                const badgeCell = (label: string, badge: React.ReactNode, width: number) => (
-                  <div style={{ width, flexShrink: 0, paddingRight: 16 }}>
-                    {lbl(label)}
-                    {badge}
-                  </div>
-                );
-                const unlinkBtn = (onClick: () => void) => canEdit ? (
-                  <button className="ms-btn-ghost" style={{ fontSize: 12, color: "#94a3b8", padding: "2px 8px", flexShrink: 0 }} disabled={savingCaseLink} onClick={onClick}>Unlink</button>
-                ) : null;
-                const rowStyle = (border: boolean): React.CSSProperties => ({
-                  display: "flex", alignItems: "center", padding: "10px 0",
-                  borderBottom: border ? "1px solid rgba(0,0,0,0.06)" : "none",
-                });
+                  ) : (
+                    <>
+                      <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: canEdit ? 10 : 0 }}>Not linked</div>
+                      {canEdit && (
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                          <input
+                            className="ms-input"
+                            style={{ flex: "1 1 180px", minWidth: 0 }}
+                            placeholder="Search by case # or keyword…"
+                            value={caseSearchQuery}
+                            onChange={(e) => setCaseSearchQuery(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleCaseSearch(); }}
+                          />
+                          <button className="ms-btn-secondary" disabled={caseSearching || !caseSearchQuery.trim()} onClick={handleCaseSearch}>
+                            {caseSearching ? "Searching…" : "Search"}
+                          </button>
+                        </div>
+                      )}
+                      {caseSearchResults.length > 0 && (
+                        <div style={{ marginTop: 8, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden" }}>
+                          {caseSearchResults.map((cs) => (
+                            <div key={cs.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
+                              <div style={{ overflow: "hidden" }}>
+                                <span style={{ fontWeight: 700, fontFamily: "monospace", fontSize: 12, color: "#0891b2", marginRight: 8 }}>{cs.ticketNumber}</span>
+                                <span style={{ fontSize: 12, color: "#1e293b" }}>{cs.title}</span>
+                                <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 6 }}>{cs.status}</span>
+                              </div>
+                              <button className="ms-btn-primary" style={{ fontSize: 11, padding: "3px 10px", flexShrink: 0, marginLeft: 8 }} disabled={savingCaseLink} onClick={() => handleLinkCase(cs.id, cs.ticketNumber)}>Link</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
 
-                return (
-                  <>
-                    {/* Case row */}
-                    {caseComplianceLoading ? (
-                      <div style={rowStyle(true)}><span style={{ fontSize: 13, color: "#94a3b8" }}>Loading…</span></div>
-                    ) : caseCompliance?.case ? (
-                      <div style={rowStyle(true)}>
-                        {cell("Case", caseCompliance.case.ticketNumber ?? "—", 175, { mono: true })}
-                        {cell("Title", caseCompliance.case.title, 260)}
-                        {cell("Owner", caseCompliance.case.ownerName ?? "—", 160)}
-                        {badgeCell("Status",
-                          <span className="ms-badge" style={{ fontSize: 11, background: caseStateColor[caseCompliance.case.statecode] + "1a", color: caseStateColor[caseCompliance.case.statecode], border: `1px solid ${caseStateColor[caseCompliance.case.statecode]}40` }}>
-                            {caseCompliance.case.status}
-                          </span>, 120)}
-                        {unlinkBtn(handleUnlinkCase)}
+                {/* Opportunity tile — only visible once a case is linked */}
+                {caseCompliance?.case && (
+                  <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px 12px", background: "#f8fafc" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Opportunity</span>
+                      {p.crm_opportunity_id && canEdit && (
+                        <button className="ms-btn-ghost" style={{ fontSize: 11, color: "#94a3b8", padding: "1px 7px" }} disabled={savingCaseLink} onClick={handleUnlinkOpportunity}>Unlink</button>
+                      )}
+                    </div>
+                    {p.crm_opportunity_id && sowQuote ? (
+                      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 10, rowGap: 5, alignItems: "baseline" }}>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>Name</span>
+                        <span style={{ fontSize: 13, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {(caseCompliance.accountOpportunities.find(o => o.opportunityid === p.crm_opportunity_id)?.name) ?? "—"}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>Status</span>
+                        <span className="ms-badge" style={{ fontSize: 11, width: "fit-content", background: sowQuote.statecode === 2 ? "#05966926" : "rgba(0,0,0,0.06)", color: sowQuote.statecode === 2 ? "#059669" : "#64748b", border: "none" }}>
+                          {sowQuote.stateLabel}
+                        </span>
+                        <span style={{ fontSize: 11, color: "#94a3b8" }}>SOW Hrs</span>
+                        <span style={{ fontSize: 13, color: "#1e293b" }}>{sowQuote.am_sow != null ? String(sowQuote.am_sow) : "—"}</span>
                       </div>
-                    ) : (
+                    ) : p.crm_opportunity_id && !sowQuote ? (
+                      <div style={{ fontSize: 13, color: "#64748b" }}>Linked — no quote with SOW hours found.</div>
+                    ) : (caseCompliance.accountOpportunities ?? []).length > 0 ? (
                       <>
-                        <div style={rowStyle(false)}>
-                          <div style={{ width: 175, flexShrink: 0 }}>
-                            {lbl("Case")}
-                            <span style={{ fontSize: 13, color: "#94a3b8" }}>Not linked</span>
-                          </div>
-                        </div>
-                        {canEdit && (
-                          <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                            <input
-                              className="ms-input"
-                              style={{ flex: "1 1 260px", maxWidth: 340 }}
-                              placeholder="Search by case # or keyword…"
-                              value={caseSearchQuery}
-                              onChange={(e) => setCaseSearchQuery(e.target.value)}
-                              onKeyDown={(e) => { if (e.key === "Enter") handleCaseSearch(); }}
-                            />
-                            <button className="ms-btn-secondary" disabled={caseSearching || !caseSearchQuery.trim()} onClick={handleCaseSearch}>
-                              {caseSearching ? "Searching…" : "Search"}
-                            </button>
-                          </div>
-                        )}
-                        {caseSearchResults.length > 0 && (
-                          <div style={{ marginTop: 8, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, overflow: "hidden" }}>
-                            {caseSearchResults.map((cs) => (
-                              <div key={cs.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
-                                <div>
-                                  <span style={{ fontWeight: 700, fontFamily: "monospace", fontSize: 13, color: "#0891b2", marginRight: 10 }}>{cs.ticketNumber}</span>
-                                  <span style={{ fontSize: 13, color: "#1e293b" }}>{cs.title}</span>
-                                  <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: 8 }}>{cs.status}</span>
-                                </div>
-                                <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} disabled={savingCaseLink} onClick={() => handleLinkCase(cs.id, cs.ticketNumber)}>Link</button>
+                        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Select the opportunity this project was sold under:</div>
+                        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden" }}>
+                          {caseCompliance.accountOpportunities.map((opp) => (
+                            <div key={opp.opportunityid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
+                              <div style={{ overflow: "hidden" }}>
+                                <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opp.name}</div>
+                                {opp.estimatedclosedate && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>Close: {formatDate(opp.estimatedclosedate)}</div>}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              {canEdit && (
+                                <button className="ms-btn-primary" style={{ fontSize: 11, padding: "3px 10px", flexShrink: 0, marginLeft: 8 }} disabled={savingCaseLink} onClick={() => handleLinkOpportunity(opp.opportunityid, opp.name)}>Link</button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </>
+                    ) : (
+                      <div style={{ fontSize: 13, color: "#94a3b8" }}>No opportunities found for this account.</div>
                     )}
+                  </div>
+                )}
 
-                    {/* Opportunity row */}
-                    {caseCompliance?.case && (
-                      project.crm_opportunity_id && sowQuote ? (
-                        <div style={rowStyle(false)}>
-                          {cell("Opportunity", (caseCompliance.accountOpportunities.find(o => o.opportunityid === project.crm_opportunity_id)?.name) ?? "—", 300)}
-                          {badgeCell("Status",
-                            <span className="ms-badge" style={{ fontSize: 11, background: sowQuote.statecode === 2 ? "#05966926" : "rgba(0,0,0,0.06)", color: sowQuote.statecode === 2 ? "#059669" : "#64748b", border: "none" }}>
-                              {sowQuote.stateLabel}
-                            </span>, 110)}
-                          {cell("SOW Hours", sowQuote.am_sow != null ? String(sowQuote.am_sow) : "—", 110)}
-                          {unlinkBtn(handleUnlinkOpportunity)}
-                        </div>
-                      ) : project.crm_opportunity_id && !sowQuote ? (
-                        <div style={rowStyle(false)}>
-                          <div style={{ paddingRight: 16 }}>
-                            {lbl("Opportunity")}
-                            <span style={{ fontSize: 13, color: "#64748b" }}>Linked — no quote with SOW hours found.</span>
-                          </div>
-                          {unlinkBtn(handleUnlinkOpportunity)}
-                        </div>
-                      ) : (caseCompliance.accountOpportunities ?? []).length > 0 ? (
-                        <div style={{ marginTop: 10 }}>
-                          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Select the opportunity this project was sold under:</div>
-                          <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, overflow: "hidden" }}>
-                            {caseCompliance.accountOpportunities.map((opp) => (
-                              <div key={opp.opportunityid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 14px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
-                                <div>
-                                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{opp.name}</div>
-                                  {opp.estimatedclosedate && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>Close: {formatDate(opp.estimatedclosedate)}</div>}
-                                </div>
-                                {canEdit && (
-                                  <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} disabled={savingCaseLink} onClick={() => handleLinkOpportunity(opp.opportunityid, opp.name)}>Link</button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ) : (
-                        <div style={rowStyle(false)}>
-                          <div style={{ width: 300, flexShrink: 0 }}>
-                            {lbl("Opportunity")}
-                            <span style={{ fontSize: 13, color: "#94a3b8" }}>No opportunities found for this account.</span>
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </>
-                );
-              })()}
+              </div>
             </div>
 
             {/* ── Hours Compliance ── */}
