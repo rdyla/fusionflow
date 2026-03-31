@@ -223,17 +223,28 @@ export default function DashboardPage() {
     return acc;
   }, {});
 
-  // Normalize vendor labels (DB stores "Zoom" / "RingCentral" from the VENDOR_LABELS map)
-  const vendorData = vendorDistribution.map((d) => ({
-    label: d.label === "zoom" ? "Zoom" : d.label === "ringcentral" ? "RingCentral" : d.label,
-    count: d.count,
-  }));
+  // Normalize + merge vendor labels (DB may store "zoom", "Zoom", "RingCentral", "ringcentral", etc.)
+  const vendorData = Object.values(
+    vendorDistribution.reduce<Record<string, { label: string; count: number }>>((acc, d) => {
+      const key = d.label?.toLowerCase() ?? "unknown";
+      const label = VENDOR_LABELS[key] ?? VENDOR_LABELS[d.label ?? ""] ?? d.label ?? "Unknown";
+      acc[label] = { label, count: (acc[label]?.count ?? 0) + d.count };
+      return acc;
+    }, {})
+  );
 
-  // Map raw solution_type keys to display labels
-  const typeData = typeDistribution.map((d) => ({
-    label: TYPE_LABELS[d.label] ?? d.label,
-    count: d.count,
-  }));
+  // Normalize + merge solution type labels (DB may store raw keys like "ucaas" or display values like "UCaaS")
+  const REVERSE_TYPE: Record<string, string> = Object.fromEntries(
+    Object.entries(TYPE_LABELS).map(([, v]) => [v.toLowerCase(), v])
+  );
+  const typeData = Object.values(
+    typeDistribution.reduce<Record<string, { label: string; count: number }>>((acc, d) => {
+      const raw = d.label ?? "";
+      const label = TYPE_LABELS[raw] ?? REVERSE_TYPE[raw.toLowerCase()] ?? raw;
+      acc[label] = { label, count: (acc[label]?.count ?? 0) + d.count };
+      return acc;
+    }, {})
+  );
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
