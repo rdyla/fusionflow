@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
-import { enrichOrganization, searchContacts, detectProviders, scoreProspect } from "../services/apolloService";
+import { enrichOrganizationWithError, searchContacts, detectProviders, scoreProspect } from "../services/apolloService";
 import { generateProspectContent } from "../services/aiProspectingService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
