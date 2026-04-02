@@ -36,15 +36,17 @@ async function enrichListInBackground(
 
   for (const prospect of prospects) {
     try {
-      const org = await enrichOrganization(prospect.domain, apolloKey);
+      const enrichResult = await enrichOrganizationWithError(prospect.domain, apolloKey);
 
-      if (!org) {
+      if (!enrichResult.org) {
         await db
-          .prepare(`UPDATE prospects SET enrichment_status = 'failed', updated_at = datetime('now') WHERE id = ?`)
-          .bind(prospect.id)
+          .prepare(`UPDATE prospects SET enrichment_status = 'failed', notes = ?, updated_at = datetime('now') WHERE id = ?`)
+          .bind(enrichResult.error ?? "Apollo returned no data", prospect.id)
           .run();
         continue;
       }
+
+      const org = enrichResult.org;
 
       const { ucProvider, ccProvider } = detectProviders(org.technologies);
       const { score, tier } = scoreProspect({
@@ -115,6 +117,30 @@ async function enrichListInBackground(
     .bind(listId)
     .run();
 }
+
+// ── Debug ──────────────────────────────────────────────────────────────────
+
+// GET /debug/apollo?domain=xxx  (admin only — returns raw Apollo response)
+app.get("/debug/apollo", async (c) => {
+  const { role } = c.get("auth");
+  if (role !== "admin") throw new HTTPException(403, { message: "Admin only" });
+
+  const domain = c.req.query("domain");
+  if (!domain) throw new HTTPException(400, { message: "domain param required" });
+
+  const apiKey = c.env.APOLLO_API_KEY;
+  if (!apiKey) return c.json({ error: "APOLLO_API_KEY not set" }, 503);
+
+  const url = `https://api.apollo.io/api/v1/organizations/enrich?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(apiKey)}`;
+
+  try {
+    const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+    const body = await res.json();
+    return c.json({ status: res.status, ok: res.ok, url, body });
+  } catch (e) {
+    return c.json({ error: String(e), url });
+  }
+});
 
 // ── Routes ─────────────────────────────────────────────────────────────────
 

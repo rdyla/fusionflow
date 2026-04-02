@@ -56,13 +56,20 @@ export function detectProviders(technologies: string[]): { ucProvider: string | 
 
 // ── Scoring ────────────────────────────────────────────────────────────────
 
+// Apollo returns industries as human-readable strings like "information technology & services"
+// Normalize by lowercasing and stripping punctuation/spaces for matching
+function normalizeIndustry(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+}
+
 const HIGH_VALUE_INDUSTRIES = new Set([
+  // Apollo exact-normalized forms
+  "information_technology_services", "information_technology__services",
+  "computer_software", "internet", "telecommunications", "wireless", "computer_networking",
   "finance", "financial_services", "banking", "insurance", "capital_markets",
   "accounting", "investment_management", "venture_capital_private_equity",
   "healthcare", "hospital_health_care", "medical_devices", "pharmaceuticals",
   "health_wellness_and_fitness",
-  "information_technology_and_services", "computer_software", "internet",
-  "telecommunications", "wireless", "computer_networking",
   "retail", "consumer_goods", "supermarkets",
   "education_management", "higher_education", "e_learning",
   "government_administration", "law_enforcement", "defense_space",
@@ -80,24 +87,14 @@ export function scoreProspect(params: {
   hasDescription: boolean;
 }): { score: number; tier: "hot" | "warm" | "cold" } {
   let score = 0;
-
-  // Employee count: sweet spot for UCaaS/CCaaS is 100-5000
   const emp = params.employeeCount ?? 0;
   if (emp >= 100 && emp <= 5000) score += 25;
   else if ((emp >= 50 && emp < 100) || (emp > 5000 && emp <= 20000)) score += 15;
   else if (emp > 0) score += 5;
-
-  // Industry relevance
-  const industry = (params.industry ?? "").toLowerCase().replace(/[\s-]+/g, "_");
-  if (HIGH_VALUE_INDUSTRIES.has(industry)) score += 20;
-
-  // Existing UC tech = migration opportunity
+  if (HIGH_VALUE_INDUSTRIES.has(normalizeIndustry(params.industry ?? ""))) score += 20;
   if (params.ucProvider) score += 30;
   if (params.ccProvider) score += 20;
-
-  // Has description (data quality indicator)
   if (params.hasDescription) score += 5;
-
   score = Math.min(score, 100);
   const tier: "hot" | "warm" | "cold" = score >= 70 ? "hot" : score >= 45 ? "warm" : "cold";
   return { score, tier };
@@ -136,39 +133,53 @@ export interface ApolloContact {
 
 // ── API calls ──────────────────────────────────────────────────────────────
 
-export async function enrichOrganization(domain: string, apiKey: string): Promise<ApolloOrg | null> {
+export async function enrichOrganizationWithError(
+  domain: string,
+  apiKey: string
+): Promise<{ org: ApolloOrg | null; error: string | null }> {
   try {
     const url = `${APOLLO_BASE}/organizations/enrich?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(apiKey)}`;
     const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
-    if (!res.ok) return null;
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { org: null, error: `HTTP ${res.status}: ${body.slice(0, 300)}` };
+    }
 
     const data = await res.json() as { organization?: Record<string, unknown> };
     const org = data.organization;
-    if (!org) return null;
+    if (!org) return { org: null, error: "Apollo returned no organization data for this domain" };
 
     const primaryPhone = (org.primary_phone as { number?: string } | null)?.number ?? null;
     const technologies: string[] = Array.isArray(org.technology_names) ? (org.technology_names as string[]) : [];
 
     return {
-      id: (org.id as string) || null,
-      name: (org.name as string) || null,
-      industry: (org.industry as string) || null,
-      employeeCount: typeof org.num_employees === "number" ? org.num_employees : null,
-      annualRevenuePrinted: (org.revenue_range as string) || null,
-      description: (org.short_description as string) || null,
-      city: (org.city as string) || null,
-      state: (org.state as string) || null,
-      country: (org.country as string) || null,
-      foundedYear: typeof org.founded_year === "number" ? org.founded_year : null,
-      websiteUrl: (org.website_url as string) || null,
-      linkedinUrl: (org.linkedin_url as string) || null,
-      logoUrl: (org.logo_url as string) || null,
-      technologies,
-      phone: primaryPhone,
+      org: {
+        id: (org.id as string) || null,
+        name: (org.name as string) || null,
+        industry: (org.industry as string) || null,
+        employeeCount: typeof org.estimated_num_employees === "number" ? org.estimated_num_employees : null,
+        annualRevenuePrinted: (org.annual_revenue_printed as string) || null,
+        description: (org.short_description as string) || null,
+        city: (org.city as string) || null,
+        state: (org.state as string) || null,
+        country: (org.country as string) || null,
+        foundedYear: typeof org.founded_year === "number" ? org.founded_year : null,
+        websiteUrl: (org.website_url as string) || null,
+        linkedinUrl: (org.linkedin_url as string) || null,
+        logoUrl: (org.logo_url as string) || null,
+        technologies,
+        phone: primaryPhone,
+      },
+      error: null,
     };
-  } catch {
-    return null;
+  } catch (e) {
+    return { org: null, error: String(e) };
   }
+}
+
+export async function enrichOrganization(domain: string, apiKey: string): Promise<ApolloOrg | null> {
+  return (await enrichOrganizationWithError(domain, apiKey)).org;
 }
 
 const TOP_SENIORITIES = new Set(["c_suite", "vp", "director"]);
@@ -191,7 +202,6 @@ export async function searchContacts(domain: string, apiKey: string): Promise<Ap
     const data = await res.json() as { people?: Array<Record<string, unknown>> };
     const people = data.people ?? [];
 
-    // Sort: c_suite/vp first
     people.sort((a, b) => {
       const aTop = TOP_SENIORITIES.has((a.seniority as string) ?? "");
       const bTop = TOP_SENIORITIES.has((b.seniority as string) ?? "");
