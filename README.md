@@ -54,6 +54,7 @@ Pre-sales domain research and AI-powered sales intelligence.
 - Key contacts (decision-makers, champions) pulled from Apollo people search
 - Sales leaders can create lists and assign them to managed AEs
 - Role-gated: admins see all lists; executives and managers see team lists; AEs see their own
+- Module card visible on the home screen to admin, executive, pf_ae, and partner_ae roles
 
 ### Optimize
 Post-go-live account management and customer success tracking.

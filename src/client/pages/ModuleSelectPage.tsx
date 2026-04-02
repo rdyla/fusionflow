@@ -17,6 +17,7 @@ type Module = {
   glow: string;
   route: string | null;
   icon: React.ReactNode;
+  visibleTo?: string[]; // if set, only these roles can see this card
 };
 
 const MODULES: Module[] = [
@@ -50,6 +51,23 @@ const MODULES: Module[] = [
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
         <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/>
         <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    ),
+  },
+  {
+    num: "00",
+    tag: "Pre-Sales",
+    title: "Prospecting",
+    subtitle: "AI Sales Intelligence",
+    desc: "Upload domain lists and generate AI-powered sales intelligence — company context, decision-maker contacts, and ready-to-send outreach.",
+    features: ["Apollo.io org & contact enrichment", "CTO / CIO / CX decision-maker targeting", "AI-generated Why Now & email sequences", "Hot / Warm / Cold prospect tiering"],
+    accent: "#7c3aed",
+    glow: "rgba(124,58,237,0.22)",
+    route: "/prospecting",
+    visibleTo: ["admin", "executive", "pf_ae", "partner_ae"],
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/>
       </svg>
     ),
   },
@@ -92,13 +110,13 @@ export default function ModuleSelectPage() {
   }, []);
 
   const isClient = user?.role === "client";
+  const userRole = user?.role ?? "";
 
-  // Clients only see the modules relevant to them
   const visibleModules = isClient
     ? MODULES.filter((m) => m.route === "/dashboard" || m.route === "/solutions").map((m) =>
         m.route === "/dashboard" ? { ...m, route: "/projects" } : m
       )
-    : MODULES;
+    : MODULES.filter((m) => !m.visibleTo || m.visibleTo.includes(userRole));
 
   function handleCardClick(mod: Module) {
     if (mod.route) {

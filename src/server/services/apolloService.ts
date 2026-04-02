@@ -182,15 +182,45 @@ export async function enrichOrganization(domain: string, apiKey: string): Promis
   return (await enrichOrganizationWithError(domain, apiKey)).org;
 }
 
-const TOP_SENIORITIES = new Set(["c_suite", "vp", "director"]);
+// Score a contact title by relevance to technology/CX buying decisions.
+// Higher = more relevant. Used to sort contacts before storing so the top 3 are the right ones.
+export function scoreTitleRelevance(title: string | null): number {
+  if (!title) return 0;
+  const t = title.toLowerCase();
+
+  // Tier 1 — primary technology decision makers
+  if (/\b(cto|chief technology officer)\b/.test(t)) return 100;
+  if (/\b(cio|chief information officer)\b/.test(t)) return 98;
+  if (/\b(chief digital officer|cdo)\b/.test(t)) return 95;
+  if (/\b(vp|vice president|director).{0,30}(information technology|it\b|technology|tech\b)/.test(t)) return 90;
+  if (/\b(head of|svp).{0,30}(information technology|it\b|technology|tech\b)/.test(t)) return 88;
+
+  // Tier 2 — CX / contact center / communications decision makers
+  if (/\b(vp|vice president|director|head of|svp).{0,30}(customer experience|cx\b|contact center|call center)/.test(t)) return 85;
+  if (/\b(chief customer officer|cco)\b/.test(t)) return 83;
+  if (/\b(vp|vice president|director|head of|svp).{0,30}(unified communications|communications|digital|cloud)/.test(t)) return 80;
+
+  // Tier 3 — operations / general leadership (relevant but secondary)
+  if (/\b(coo|chief operating officer)\b/.test(t)) return 70;
+  if (/\b(vp|vice president|director).{0,30}(operations|infrastructure|systems)/.test(t)) return 65;
+  if (/\b(ceo|chief executive officer|president)\b/.test(t)) return 60;
+
+  // Tier 4 — other senior titles
+  if (/\b(vp|vice president)\b/.test(t)) return 40;
+  if (/\bdirector\b/.test(t)) return 30;
+  if (/\b(svp|evp|managing director)\b/.test(t)) return 35;
+  if (/\bmanager\b/.test(t)) return 10;
+
+  return 5;
+}
 
 export async function searchContacts(domain: string, apiKey: string): Promise<ApolloContact[]> {
   try {
-    const res = await fetch(`${APOLLO_BASE}/mixed_people/search`, {
+    const res = await fetch(`${APOLLO_BASE}/mixed_people/api_search`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Api-Key": apiKey, "Cache-Control": "no-cache" },
       body: JSON.stringify({
-        organization_domains: [domain],
+        q_organization_domains: domain,
         person_seniorities: ["c_suite", "vp", "director", "manager"],
         per_page: 10,
         page: 1,
@@ -201,16 +231,12 @@ export async function searchContacts(domain: string, apiKey: string): Promise<Ap
     const data = await res.json() as { people?: Array<Record<string, unknown>> };
     const people = data.people ?? [];
 
-    people.sort((a, b) => {
-      const aTop = TOP_SENIORITIES.has((a.seniority as string) ?? "");
-      const bTop = TOP_SENIORITIES.has((b.seniority as string) ?? "");
-      return aTop === bTop ? 0 : aTop ? -1 : 1;
-    });
-
+    // api_search returns last_name_obfuscated (e.g. "Si***h"), not last_name
+    // seniority, email, phone, linkedin_url are not included unless credits are spent
     return people.map((p) => ({
       id: (p.id as string) || null,
       firstName: (p.first_name as string) || null,
-      lastName: (p.last_name as string) || null,
+      lastName: (p.last_name_obfuscated as string) || (p.last_name as string) || null,
       title: (p.title as string) || null,
       email: (p.email as string) || null,
       phone: (p.sanitized_phone as string) || (p.direct_dial_number as string) || null,

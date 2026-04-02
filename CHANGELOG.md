@@ -4,6 +4,18 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 2026-04-02 (continued)
+
+### Prospecting — Contact Targeting & Apollo API Fixes
+
+- **Title-based contact scoring** — contacts are now ranked by relevance to technology/CX buying decisions before the top 3 are selected. Priority: CTO/CIO/CDO → VP/Director of IT or Technology → VP/Director of CX, Contact Center, or Communications → COO/VP Operations → CEO/President
+- **Apollo `mixed_people/api_search` migration** — switched from the deprecated `mixed_people/search` endpoint (which was silently returning no contacts for all domains) to the new `mixed_people/api_search` endpoint with corrected `q_organization_domains` filter parameter
+- **Last name mapping** — updated field mapping from `last_name` to `last_name_obfuscated` to match the new endpoint's response shape
+- **Prospecting landing page card** — added module card on the home screen, visible to admin, executive, pf_ae, and partner_ae roles; hidden from client and other internal roles
+- **Debug endpoint** — added `/api/prospecting/debug/apollo-people?domain=xxx` (admin only) for testing Apollo people search responses directly
+
+---
+
 ## 2026-04-02
 
 ### Prospecting Module

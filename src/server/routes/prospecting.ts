@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
-import { enrichOrganizationWithError, searchContacts, detectProviders, scoreProspect } from "../services/apolloService";
+import { enrichOrganizationWithError, searchContacts, detectProviders, scoreProspect, scoreTitleRelevance } from "../services/apolloService";
 import { generateProspectContent } from "../services/aiProspectingService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -81,12 +81,12 @@ async function enrichListInBackground(
         )
         .run();
 
-      // Fetch and store contacts
+      // Fetch and store contacts, sorted by title relevance so top 3 are the right buyers
       const contacts = await searchContacts(prospect.domain, apolloKey);
+      contacts.sort((a, b) => scoreTitleRelevance(b.title) - scoreTitleRelevance(a.title));
       for (let i = 0; i < contacts.length; i++) {
         const c = contacts[i];
-        const seniority = c.seniority ?? "";
-        const isTop = i < 3 || ["c_suite", "vp", "director"].includes(seniority) ? 1 : 0;
+        const isTop = i < 3 ? 1 : 0;
         await db
           .prepare(`
             INSERT OR IGNORE INTO prospect_contacts
@@ -143,6 +143,38 @@ app.get("/debug/apollo", async (c) => {
 });
 
 // ── Routes ─────────────────────────────────────────────────────────────────
+
+// GET /debug/apollo-people?domain=xxx  (admin only — returns raw Apollo people search response)
+app.get("/debug/apollo-people", async (c) => {
+  const { role } = c.get("auth");
+  if (role !== "admin") throw new HTTPException(403, { message: "Admin only" });
+
+  const domain = c.req.query("domain");
+  if (!domain) throw new HTTPException(400, { message: "domain param required" });
+
+  const apiKey = c.env.APOLLO_API_KEY;
+  if (!apiKey) return c.json({ error: "APOLLO_API_KEY not set" }, 503);
+
+  const url = `https://api.apollo.io/api/v1/mixed_people/api_search`;
+  const body = {
+    q_organization_domains: domain,
+    person_seniorities: ["c_suite", "vp", "director", "manager"],
+    per_page: 10,
+    page: 1,
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Api-Key": apiKey, "Cache-Control": "no-cache" },
+      body: JSON.stringify(body),
+    });
+    const responseBody = await res.json();
+    return c.json({ status: res.status, ok: res.ok, request_body: body, body: responseBody });
+  } catch (e) {
+    return c.json({ error: String(e), url });
+  }
+});
 
 // GET /lists
 app.get("/lists", async (c) => {
