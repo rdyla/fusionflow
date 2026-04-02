@@ -41,6 +41,7 @@ function notifTimeAgo(iso: string): string {
 export default function AppShell() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [canProspect, setCanProspect] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [sysStatus, setSysStatus] = useState<SystemStatusResponse | null>(null);
@@ -76,6 +77,7 @@ export default function AppShell() {
         setCurrentUser(res.user);
         setIsAdmin(res.role === "admin" && !imp);
         setIsClient(res.role === "client");
+        setCanProspect(["admin", "executive", "pf_ae", "partner_ae"].includes(res.role));
       })
       .catch(() => {});
   }, []);
@@ -173,6 +175,13 @@ export default function AppShell() {
             <NavSection label="Solutions" />
             <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>My Solutions</SideLink>
             <Divider />
+          </>
+        )}
+        {canProspect && (
+          <>
+            <Divider />
+            <NavSection label="Prospecting" />
+            <SideLink to="/prospecting" onClick={() => setDrawerOpen(false)}>Prospect Lists</SideLink>
           </>
         )}
         {!isClient && (

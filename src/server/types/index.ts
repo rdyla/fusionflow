@@ -39,6 +39,10 @@ export type Bindings = {
   ASANA_CLIENT_SECRET?: string;
   // Email (set via wrangler secret put RESEND_API_KEY)
   RESEND_API_KEY?: string;
+  // Apollo.io prospecting API key
+  APOLLO_API_KEY?: string;
+  // Anthropic API key for AI content generation
+  ANTHROPIC_API_KEY?: string;
   // App base URL for email links (set in wrangler.json vars)
   APP_URL?: string;
   // Dev override: when set, ALL outbound emails are redirected to this address

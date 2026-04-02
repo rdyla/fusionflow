@@ -27,6 +27,7 @@ import sharepointRoutes from "./routes/sharepoint";
 import authPublicRoutes from "./routes/authPublic";
 import inboxRoutes from "./routes/inbox";
 import customerRoutes from "./routes/customers";
+import prospectingRoutes from "./routes/prospecting";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder, milestoneOverdue } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -113,6 +114,7 @@ app.route("/api/asana", asanaRoutes);
 app.route("/api/sharepoint", sharepointRoutes);
 app.route("/api/inbox", inboxRoutes);
 app.route("/api/customers", customerRoutes);
+app.route("/api/prospecting", prospectingRoutes);
 app.route("/api/admin", templateRoutes);
 app.route("/api/projects", templateRoutes);
 

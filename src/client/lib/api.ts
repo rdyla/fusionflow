@@ -366,6 +366,75 @@ export type CaseComplianceData = {
   accountOpportunities: DynamicsOpportunity[];
 };
 
+// ── Prospecting ────────────────────────────────────────────────────────────
+
+export type ProspectList = {
+  id: string;
+  name: string;
+  owner_id: string;
+  owner_name: string | null;
+  owner_email: string | null;
+  owner_org: string | null;
+  created_by_id: string;
+  created_by_name: string | null;
+  domain_count: number;
+  enriched_count: number;
+  status: "pending" | "enriching" | "ready";
+  created_at: string;
+  updated_at: string;
+};
+
+export type Prospect = {
+  id: string;
+  list_id: string;
+  domain: string;
+  company_name: string | null;
+  industry: string | null;
+  employee_count: number | null;
+  annual_revenue_printed: string | null;
+  description: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+  founded_year: number | null;
+  website_url: string | null;
+  linkedin_url: string | null;
+  logo_url: string | null;
+  technologies: string[];
+  uc_provider: string | null;
+  cc_provider: string | null;
+  score: number | null;
+  tier: "hot" | "warm" | "cold" | null;
+  apollo_org_id: string | null;
+  why_now: string | null;
+  company_challenges: string | null;
+  proposed_solution: string | null;
+  store_rationale: string | null;
+  email_sequence: string | null;
+  talk_track: string | null;
+  linkedin_inmail: string | null;
+  enrichment_status: "pending" | "enriched" | "failed";
+  ai_status: "none" | "generating" | "ready" | "failed";
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ProspectContact = {
+  id: string;
+  prospect_id: string;
+  apollo_id: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  title: string | null;
+  email: string | null;
+  phone: string | null;
+  linkedin_url: string | null;
+  seniority: string | null;
+  is_top_contact: number;
+  created_at: string;
+};
+
 export type Customer = {
   id: string;
   name: string;
@@ -1620,5 +1689,25 @@ export const api = {
     request<Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "solution_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
   customerOptimizations: (id: string) =>
     request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_type: string | null; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
+
+  // ── Prospecting ──────────────────────────────────────────────────────────
+  prospectingLists: () =>
+    request<ProspectList[]>("/prospecting/lists"),
+  prospectingList: (id: string) =>
+    request<{ list: ProspectList; prospects: Prospect[] }>(`/prospecting/lists/${id}`),
+  createProspectingList: (data: { name: string; owner_id?: string; domains: string[] }) =>
+    request<ProspectList>("/prospecting/lists", { method: "POST", body: JSON.stringify(data) }),
+  deleteProspectingList: (id: string) =>
+    request<{ ok: boolean }>(`/prospecting/lists/${id}`, { method: "DELETE" }),
+  prospectingProspect: (id: string) =>
+    request<Prospect>(`/prospecting/prospects/${id}`),
+  prospectContacts: (prospectId: string) =>
+    request<ProspectContact[]>(`/prospecting/prospects/${prospectId}/contacts`),
+  generateProspectAI: (prospectId: string) =>
+    request<{ ok: boolean; status: string }>(`/prospecting/prospects/${prospectId}/generate`, { method: "POST" }),
+  patchProspect: (id: string, data: { notes?: string; tier?: "hot" | "warm" | "cold" }) =>
+    request<{ ok: boolean }>(`/prospecting/prospects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  prospectingAssignableUsers: () =>
+    request<Array<{ id: string; name: string | null; email: string; organization_name: string | null }>>("/prospecting/assignable-users"),
 
 };
