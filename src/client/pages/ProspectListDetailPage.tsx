@@ -121,7 +121,7 @@ interface ExpandedPanelProps {
 function ExpandedPanel({ prospect, contacts, loadingContacts, onGenerateAI, generatingAI, onTierChange }: ExpandedPanelProps) {
   const topContacts = contacts.filter(c => c.is_top_contact);
   const aiReady = prospect.ai_status === "ready";
-  const aiGenerating = generatingAI || prospect.ai_status === "generating";
+  const aiGenerating = (generatingAI || prospect.ai_status === "generating") && prospect.ai_status !== "failed";
 
   return (
     <div style={{ padding: "20px 24px", background: "#fafbfc", borderTop: "1px solid #e2e8f0" }}>
@@ -293,6 +293,15 @@ export default function ProspectListDetailPage() {
     const data = await api.prospectingList(id);
     setList(data.list);
     setProspects(data.prospects);
+    // Clear generatingIds for any prospect that has reached a terminal AI state
+    setGeneratingIds(prev => {
+      if (prev.size === 0) return prev;
+      const next = new Set(prev);
+      for (const p of data.prospects) {
+        if (next.has(p.id) && p.ai_status !== "generating") next.delete(p.id);
+      }
+      return next.size === prev.size ? prev : next;
+    });
   }
 
   useEffect(() => {
