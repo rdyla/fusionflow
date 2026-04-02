@@ -239,7 +239,7 @@ const updateSolutionSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   customer_name: z.string().min(1).max(500).optional(),
   dynamics_account_id: z.string().nullable().optional(),
-  vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
+  vendor: z.string().optional(),
   solution_type: z.string().optional(),
   journeys: z.array(z.string()).nullable().optional(),
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),

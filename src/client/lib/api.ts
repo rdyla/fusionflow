@@ -73,7 +73,7 @@ export type RiskItem = {
 
 export type GapAnalysis = { gaps: GapItem[]; risks: RiskItem[] };
 export type SolutionStatus = "draft" | "assessment" | "requirements" | "scope" | "handoff" | "won" | "lost";
-export type SolutionVendor = "zoom" | "ringcentral" | "tbd";
+export type SolutionVendor = "zoom" | "ringcentral" | "tbd" | (string & {});
 
 export type Solution = {
   id: string;

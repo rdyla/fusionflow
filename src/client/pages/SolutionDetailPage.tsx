@@ -393,12 +393,64 @@ export default function SolutionDetailPage() {
                 {canEdit ? (
                   <select className="ms-input" value={overview.vendor ?? "tbd"} onChange={(e) => setOverview((o) => ({ ...o, vendor: e.target.value as typeof overview.vendor }))}>
                     <option value="tbd">— Not yet assigned —</option>
-                    <option value="zoom">Zoom</option>
-                    <option value="ringcentral">RingCentral</option>
+                    <optgroup label="UCaaS / CCaaS">
+                      <option value="zoom">Zoom</option>
+                      <option value="ringcentral">RingCentral</option>
+                      <option value="microsoft_teams">Microsoft Teams</option>
+                      <option value="webex">Webex (Cisco)</option>
+                      <option value="8x8">8x8</option>
+                      <option value="dialpad">Dialpad</option>
+                      <option value="vonage">Vonage / Ericsson</option>
+                    </optgroup>
+                    <optgroup label="Connectivity / SD-WAN">
+                      <option value="att">AT&amp;T</option>
+                      <option value="comcast">Comcast Business</option>
+                      <option value="verizon">Verizon</option>
+                      <option value="lumen">Lumen / CenturyLink</option>
+                      <option value="spectrum">Spectrum Business</option>
+                      <option value="cox">Cox Business</option>
+                      <option value="meraki">Cisco Meraki</option>
+                      <option value="fortinet_sdwan">Fortinet SD-WAN</option>
+                      <option value="cato">Cato Networks</option>
+                    </optgroup>
+                    <optgroup label="Cyber Security">
+                      <option value="crowdstrike">CrowdStrike</option>
+                      <option value="palo_alto">Palo Alto Networks</option>
+                      <option value="sentinelone">SentinelOne</option>
+                      <option value="fortinet_sec">Fortinet Security</option>
+                      <option value="cisco_sec">Cisco Security</option>
+                      <option value="ms_defender">Microsoft Defender</option>
+                    </optgroup>
+                    <optgroup label="Backup &amp; DR">
+                      <option value="veeam">Veeam</option>
+                      <option value="acronis">Acronis</option>
+                      <option value="datto">Datto / Kaseya</option>
+                      <option value="zerto">Zerto</option>
+                      <option value="commvault">Commvault</option>
+                      <option value="rubrik">Rubrik</option>
+                    </optgroup>
+                    <optgroup label="Cloud / IaaS">
+                      <option value="aws">AWS</option>
+                      <option value="azure">Microsoft Azure</option>
+                      <option value="gcp">Google Cloud</option>
+                      <option value="oracle_cloud">Oracle Cloud</option>
+                    </optgroup>
+                    <optgroup label="TEM">
+                      <option value="tangoe">Tangoe</option>
+                      <option value="brightfin">Brightfin</option>
+                      <option value="calero">Calero</option>
+                      <option value="genuity">Genuity</option>
+                    </optgroup>
+                    <optgroup label="Mobility">
+                      <option value="att_mob">AT&amp;T Mobility</option>
+                      <option value="verizon_mob">Verizon Wireless</option>
+                      <option value="tmobile">T-Mobile</option>
+                    </optgroup>
+                    <option value="other">Other</option>
                   </select>
                 ) : (
                   <div style={{ fontSize: 14, color: solution.vendor === "tbd" ? "#94a3b8" : "#334155", padding: "8px 0" }}>
-                    {solution.vendor === "zoom" ? "Zoom" : solution.vendor === "ringcentral" ? "RingCentral" : "— Not yet assigned —"}
+                    {solution.vendor === "tbd" ? "— Not yet assigned —" : solution.vendor}
                   </div>
                 )}
               </label>
@@ -406,10 +458,27 @@ export default function SolutionDetailPage() {
                 <span>Technology</span>
                 {canEdit ? (
                   <select className="ms-input" value={overview.solution_type ?? solution.solution_type} onChange={(e) => setOverview((o) => ({ ...o, solution_type: e.target.value as typeof overview.solution_type }))}>
-                    <option value="ucaas">UCaaS</option>
-                    <option value="ccaas">CCaaS</option>
-                    <option value="ci">Conversation Intelligence</option>
-                    <option value="va">AI Virtual Agent</option>
+                    <optgroup label="UCaaS / CCaaS">
+                      <option value="ucaas">UCaaS</option>
+                      <option value="ccaas">CCaaS</option>
+                      <option value="ci">Conversation Intelligence</option>
+                      <option value="va">AI Virtual Agent</option>
+                    </optgroup>
+                    <optgroup label="Other Technology">
+                      <option value="bdr">Backup &amp; Disaster Recovery</option>
+                      <option value="connectivity">Connectivity</option>
+                      <option value="colocation">Colocation</option>
+                      <option value="cyber_security">Cyber Security</option>
+                      <option value="daas">Desktop as a Service</option>
+                      <option value="help_desk">Help Desk</option>
+                      <option value="iaas">Infrastructure as a Service</option>
+                      <option value="mobility">Mobility (Corporate Cellular)</option>
+                      <option value="managed_services">Managed Services</option>
+                      <option value="managed_cloud">Managed Public Cloud</option>
+                      <option value="sdwan">SD-WAN / SASE / Aggregation</option>
+                      <option value="tem">Technology Expense Management</option>
+                      <option value="other">Other Technology Discovery</option>
+                    </optgroup>
                   </select>
                 ) : (
                   <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type] ?? solution.solution_type}</div>
