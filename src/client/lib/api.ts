@@ -46,7 +46,7 @@ export type User = {
   can_open_cases?: boolean;
 };
 
-export type SolutionType = "ucaas" | "ccaas" | "ci" | "va";
+export type SolutionType = "ucaas" | "ccaas" | "ci" | "va" | (string & {});
 
 export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
 export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
@@ -113,6 +113,7 @@ export type Solution = {
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
   customer_sharepoint_url: string | null;
+  journeys: string | null; // JSON array of journey keys
 };
 
 export type DashboardTask = Task & { project_name: string };
@@ -1254,7 +1255,8 @@ export const api = {
     customer_id?: string;
     dynamics_account_id?: string;
     vendor?: SolutionVendor;
-    solution_type: SolutionType;
+    solution_type?: SolutionType;
+    journeys?: string[];
     pf_ae_user_id?: string;
     pf_sa_user_id?: string;
     pf_csm_user_id?: string;

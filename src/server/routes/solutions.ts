@@ -39,6 +39,44 @@ const SOLUTION_TYPE_LABELS: Record<string, string> = {
   va: "AI Virtual Agent",
 };
 
+const JOURNEY_LABELS: Record<string, string> = {
+  zoom_ucaas: "UCaaS", zoom_ccaas: "CCaaS", zoom_rooms: "Zoom Rooms",
+  zoom_zva: "ZVA", zoom_zra: "ZRA", zoom_qm: "QM", zoom_wfm: "WFM",
+  zoom_ai_expert_assist: "AI Expert Assist", zoom_workvivo: "Workvivo",
+  zoom_integrations: "Integrations / API",
+  rc_ucaas: "UCaaS", rc_ccaas: "CCaaS", rc_air: "AIR", rc_ava: "AVA", rc_ace: "ACE",
+  agnostic_ucaas: "UCaaS", agnostic_ccaas: "CCaaS",
+  bdr: "Backup & Disaster Recovery", connectivity: "Connectivity",
+  colocation: "Colocation", cyber_security: "Cyber Security",
+  daas: "Desktop as a Service", help_desk: "Help Desk",
+  iaas: "Infrastructure as a Service", mobility: "Mobility (Corporate Cellular)",
+  managed_services: "Managed Services", managed_cloud: "Managed Public Cloud",
+  sdwan: "SD-WAN / SASE / Aggregation", tem: "Technology Expense Management (TEM)",
+  other: "Other Technology Discovery",
+};
+
+function deriveVendorFromJourneys(journeys: string[]): "zoom" | "ringcentral" | "tbd" {
+  if (journeys.some(j => j.startsWith("zoom_"))) return "zoom";
+  if (journeys.some(j => j.startsWith("rc_"))) return "ringcentral";
+  return "tbd";
+}
+
+function deriveSolutionTypeFromJourneys(journeys: string[]): string {
+  if (journeys.some(j => ["zoom_ccaas", "rc_ccaas", "agnostic_ccaas"].includes(j))) return "ccaas";
+  if (journeys.some(j => ["zoom_ucaas", "rc_ucaas", "agnostic_ucaas"].includes(j))) return "ucaas";
+  if (journeys.some(j => ["zoom_zra", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist", "rc_ace", "rc_ava"].includes(j))) return "ci";
+  if (journeys.some(j => ["zoom_zva", "rc_air"].includes(j))) return "va";
+  return journeys[0] ?? "other";
+}
+
+function nameFromJourneys(customerName: string, journeys: string[], vendor: string): string {
+  if (!journeys.length) return customerName;
+  const vendorPrefix = vendor === "zoom" ? "Zoom" : vendor === "ringcentral" ? "RingCentral" : null;
+  const labels = journeys.map(j => JOURNEY_LABELS[j] ?? j);
+  const suffix = vendorPrefix ? `${vendorPrefix} ${labels.join(" · ")}` : labels.join(" · ");
+  return `${customerName} — ${suffix}`;
+}
+
 function accessClause(role: string, teamIds: string[], accountId?: string | null): { where: string; bindings: string[] } {
   if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
   if (role === "pf_ae") {
@@ -79,7 +117,8 @@ const createSolutionSchema = z.object({
   customer_id: z.string().optional(),
   dynamics_account_id: z.string().optional(),
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
-  solution_type: z.enum(["ucaas", "ccaas", "ci", "va"]),
+  solution_type: z.string().optional(),
+  journeys: z.array(z.string()).optional(),
   pf_ae_user_id: z.string().optional(),
   pf_sa_user_id: z.string().optional(),
   pf_csm_user_id: z.string().optional(),
@@ -96,13 +135,23 @@ app.post("/", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const {
-    customer_name, customer_id, dynamics_account_id, solution_type,
+    customer_name, customer_id, dynamics_account_id,
     pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
   } = parsed.data;
-  const vendor = parsed.data.vendor ?? "tbd";
 
-  const name = `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
+  const journeys = parsed.data.journeys ?? [];
+  const journeysJson = journeys.length > 0 ? JSON.stringify(journeys) : null;
+  const vendor = journeys.length > 0
+    ? deriveVendorFromJourneys(journeys)
+    : (parsed.data.vendor ?? "tbd");
+  const solution_type = journeys.length > 0
+    ? deriveSolutionTypeFromJourneys(journeys)
+    : (parsed.data.solution_type ?? "ucaas");
+
+  const name = journeys.length > 0
+    ? nameFromJourneys(customer_name, journeys, vendor)
+    : `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
   const id = crypto.randomUUID();
 
   // Resolve partner AE: use existing user, find by email, or create + invite
@@ -140,13 +189,13 @@ app.post("/", async (c) => {
   await db
     .prepare(
       `INSERT INTO solutions
-         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type,
+         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type, journeys,
           pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
           partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      id, name, customer_name, customer_id ?? null, dynamics_account_id ?? null, vendor, solution_type,
+      id, name, customer_name, customer_id ?? null, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
       pf_ae_user_id ?? null, pf_sa_user_id ?? null, pf_csm_user_id ?? null,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
@@ -191,7 +240,8 @@ const updateSolutionSchema = z.object({
   customer_name: z.string().min(1).max(500).optional(),
   dynamics_account_id: z.string().nullable().optional(),
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
-  solution_type: z.enum(["ucaas", "ccaas", "ci", "va"]).optional(),
+  solution_type: z.string().optional(),
+  journeys: z.array(z.string()).nullable().optional(),
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   pf_ae_user_id: z.string().nullable().optional(),
   pf_sa_user_id: z.string().nullable().optional(),
@@ -223,8 +273,13 @@ app.patch("/:id", async (c) => {
 
   for (const [key, value] of Object.entries(updates)) {
     if (value !== undefined) {
-      fields.push(`${key} = ?`);
-      values.push(value);
+      if (key === "journeys") {
+        fields.push("journeys = ?");
+        values.push(value === null ? null : JSON.stringify(value));
+      } else {
+        fields.push(`${key} = ?`);
+        values.push(value);
+      }
     }
   }
 

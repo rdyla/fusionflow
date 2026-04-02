@@ -1,16 +1,104 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  api, type Solution, type SolutionType, type SolutionStatus, type User, type CrmAccountTeam,
+  api, type Solution, type SolutionStatus, type User, type CrmAccountTeam,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
-const SOLUTION_TYPE_LABELS: Record<SolutionType, string> = {
-  ucaas: "UCaaS",
-  ccaas: "CCaaS",
-  ci: "Conversation Intelligence",
-  va: "AI Virtual Agent",
+// ── Journey data ──────────────────────────────────────────────────────────────
+
+const JOURNEY_LABELS: Record<string, string> = {
+  zoom_ucaas: "UCaaS", zoom_ccaas: "CCaaS", zoom_rooms: "Zoom Rooms",
+  zoom_zva: "ZVA", zoom_zra: "ZRA", zoom_qm: "QM", zoom_wfm: "WFM",
+  zoom_ai_expert_assist: "AI Expert Assist", zoom_workvivo: "Workvivo",
+  zoom_integrations: "Integrations / API",
+  rc_ucaas: "UCaaS", rc_ccaas: "CCaaS", rc_air: "AIR", rc_ava: "AVA", rc_ace: "ACE",
+  agnostic_ucaas: "UCaaS", agnostic_ccaas: "CCaaS",
+  bdr: "Backup & Disaster Recovery", connectivity: "Connectivity",
+  colocation: "Colocation", cyber_security: "Cyber Security",
+  daas: "Desktop as a Service", help_desk: "Help Desk",
+  iaas: "Infrastructure as a Service", mobility: "Mobility (Corporate Cellular)",
+  managed_services: "Managed Services", managed_cloud: "Managed Public Cloud",
+  sdwan: "SD-WAN / SASE / Aggregation", tem: "Technology Expense Management (TEM)",
+  other: "Other Technology Discovery",
 };
+
+// Maps each journey key to a filter category value
+const JOURNEY_FILTER_CATEGORY: Record<string, string> = {
+  zoom_ucaas: "ucaas_ccaas", zoom_ccaas: "ucaas_ccaas", zoom_rooms: "ucaas_ccaas",
+  zoom_workvivo: "ucaas_ccaas", zoom_integrations: "ucaas_ccaas",
+  zoom_zra: "ci", zoom_qm: "ci", zoom_wfm: "ci", zoom_ai_expert_assist: "ci",
+  zoom_zva: "va",
+  rc_ucaas: "ucaas_ccaas", rc_ccaas: "ucaas_ccaas",
+  rc_ace: "ci", rc_ava: "ci",
+  rc_air: "va",
+  agnostic_ucaas: "ucaas_ccaas", agnostic_ccaas: "ucaas_ccaas",
+  bdr: "bdr", connectivity: "connectivity", colocation: "colocation",
+  cyber_security: "cyber_security", daas: "daas", help_desk: "help_desk",
+  iaas: "iaas", mobility: "mobility", managed_services: "managed_services",
+  managed_cloud: "managed_cloud", sdwan: "sdwan", tem: "tem", other: "other",
+};
+
+const FILTER_CATEGORIES = [
+  { value: "all", label: "All Technology Types" },
+  { value: "ucaas_ccaas", label: "UCaaS / CCaaS" },
+  { value: "ci", label: "Conversation Intelligence" },
+  { value: "va", label: "AI Virtual Agent" },
+  { value: "bdr", label: "Backup & Disaster Recovery" },
+  { value: "connectivity", label: "Connectivity" },
+  { value: "colocation", label: "Colocation" },
+  { value: "cyber_security", label: "Cyber Security" },
+  { value: "daas", label: "Desktop as a Service" },
+  { value: "help_desk", label: "Help Desk" },
+  { value: "iaas", label: "Infrastructure as a Service" },
+  { value: "mobility", label: "Mobility" },
+  { value: "managed_services", label: "Managed Services" },
+  { value: "managed_cloud", label: "Managed Public Cloud" },
+  { value: "sdwan", label: "SD-WAN / SASE / Aggregation" },
+  { value: "tem", label: "Technology Expense Management" },
+  { value: "other", label: "Other Technology" },
+];
+
+// UCaaS/CCaaS vendor sub-types
+const VENDOR_JOURNEYS: Record<string, string[]> = {
+  zoom: ["zoom_ucaas", "zoom_ccaas", "zoom_rooms", "zoom_zva", "zoom_zra", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist", "zoom_workvivo", "zoom_integrations"],
+  ringcentral: ["rc_ucaas", "rc_ccaas", "rc_air", "rc_ava", "rc_ace"],
+  agnostic: ["agnostic_ucaas", "agnostic_ccaas"],
+};
+
+const STANDALONE_JOURNEYS = [
+  "bdr", "connectivity", "colocation", "cyber_security", "daas",
+  "help_desk", "iaas", "mobility", "managed_services", "managed_cloud",
+  "sdwan", "tem", "other",
+];
+
+function parseJourneys(s: Solution): string[] {
+  if (!s.journeys) return [];
+  try { return JSON.parse(s.journeys); } catch { return []; }
+}
+
+function journeyFilterMatch(s: Solution, category: string): boolean {
+  if (category === "all") return true;
+  const journeys = parseJourneys(s);
+  if (journeys.length > 0) {
+    return journeys.some(j => (JOURNEY_FILTER_CATEGORY[j] ?? j) === category);
+  }
+  // Fallback for legacy solutions without journeys
+  const legacyMap: Record<string, string> = { ucaas: "ucaas_ccaas", ccaas: "ucaas_ccaas", ci: "ci", va: "va" };
+  return (legacyMap[s.solution_type] ?? s.solution_type) === category;
+}
+
+function journeyBadgeText(s: Solution): string {
+  const journeys = parseJourneys(s);
+  if (!journeys.length) {
+    const fallback: Record<string, string> = { ucaas: "UCaaS", ccaas: "CCaaS", ci: "Conversation Intelligence", va: "AI Virtual Agent" };
+    return fallback[s.solution_type] ?? s.solution_type;
+  }
+  const labels = journeys.slice(0, 3).map(j => JOURNEY_LABELS[j] ?? j);
+  return labels.join(" · ") + (journeys.length > 3 ? ` +${journeys.length - 3}` : "");
+}
+
+// ── Status data ───────────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<SolutionStatus, string> = {
   draft: "Draft",
@@ -32,11 +120,11 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
   lost: "#d13438",
 };
 
-
 const EMPTY_FORM = {
   customer_name: "",
   dynamics_account_id: "",
-  solution_type: "ucaas" as SolutionType,
+  journeys: [] as string[],
+  ucaas_vendor: "" as "" | "zoom" | "ringcentral" | "agnostic",
   pf_ae_user_id: "",
   pf_sa_user_id: "",
   pf_csm_user_id: "",
@@ -113,11 +201,12 @@ export default function SolutionsPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.customer_name.trim()) return;
+    if (!form.journeys.length) { showToast("Select at least one journey.", "error"); return; }
     setSaving(true);
     try {
       const payload: Parameters<typeof api.createSolution>[0] = {
         customer_name: form.customer_name.trim(),
-        solution_type: form.solution_type,
+        journeys: form.journeys,
       };
       if (form.dynamics_account_id) payload.dynamics_account_id = form.dynamics_account_id;
       if (form.pf_ae_user_id) payload.pf_ae_user_id = form.pf_ae_user_id;
@@ -152,10 +241,11 @@ export default function SolutionsPage() {
 
   const filtered = solutions.filter((s) => {
     if (statusFilter !== "all" && s.status !== statusFilter) return false;
-    if (typeFilter !== "all" && s.solution_type !== typeFilter) return false;
+    if (!journeyFilterMatch(s, typeFilter)) return false;
     if (search) {
       const q = search.toLowerCase();
-      if (!s.customer_name.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q)) return false;
+      const journeyText = parseJourneys(s).map(j => JOURNEY_LABELS[j] ?? j).join(" ").toLowerCase();
+      if (!s.customer_name.toLowerCase().includes(q) && !s.name.toLowerCase().includes(q) && !journeyText.includes(q)) return false;
     }
     return true;
   });
@@ -190,10 +280,9 @@ export default function SolutionsPage() {
             <option key={s} value={s}>{STATUS_LABELS[s]}</option>
           ))}
         </select>
-        <select className="ms-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 200 }}>
-          <option value="all">All Technology Types</option>
-          {(Object.keys(SOLUTION_TYPE_LABELS) as SolutionType[]).map((t) => (
-            <option key={t} value={t}>{SOLUTION_TYPE_LABELS[t]}</option>
+        <select className="ms-input" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} style={{ width: 220 }}>
+          {FILTER_CATEGORIES.map((fc) => (
+            <option key={fc.value} value={fc.value}>{fc.label}</option>
           ))}
         </select>
       </div>
@@ -231,8 +320,8 @@ export default function SolutionsPage() {
                     <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{s.name}</div>
                   </td>
                   <td>
-                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-                      {SOLUTION_TYPE_LABELS[s.solution_type] ?? s.solution_type}
+                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block" }}>
+                      {journeyBadgeText(s)}
                     </span>
                   </td>
                   <td>
@@ -265,10 +354,96 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); } }}>
           <div className="ms-modal" style={{ maxWidth: 560 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
+
+              {/* ── Journey Picker ── */}
+              <div className="ms-label">
+                <span>Core Journey *</span>
+
+                {/* UCaaS / CCaaS section */}
+                <div style={{ border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "12px 14px", marginBottom: 8, background: "#f8fafc" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>UCaaS / CCaaS</div>
+
+                  {/* Vendor tabs */}
+                  <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                    {(["zoom", "ringcentral", "agnostic"] as const).map((v) => {
+                      const labels: Record<string, string> = { zoom: "Zoom", ringcentral: "RingCentral", agnostic: "Agnostic" };
+                      const active = form.ucaas_vendor === v;
+                      return (
+                        <button key={v} type="button"
+                          onClick={() => {
+                            const prevKeys = form.ucaas_vendor ? VENDOR_JOURNEYS[form.ucaas_vendor] ?? [] : [];
+                            setForm((f) => ({
+                              ...f,
+                              ucaas_vendor: active ? "" : v,
+                              journeys: active
+                                ? f.journeys.filter(j => !prevKeys.includes(j))
+                                : f.journeys.filter(j => !prevKeys.includes(j)),
+                            }));
+                          }}
+                          style={{ padding: "4px 12px", fontSize: 12, borderRadius: 4, border: `1px solid ${active ? "#03395f" : "rgba(0,0,0,0.12)"}`, background: active ? "#03395f" : "transparent", color: active ? "#fff" : "#64748b", cursor: "pointer", fontWeight: active ? 600 : 400 }}>
+                          {labels[v]}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Sub-type checkboxes */}
+                  {form.ucaas_vendor ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
+                      {(VENDOR_JOURNEYS[form.ucaas_vendor] ?? []).map((key) => {
+                        const checked = form.journeys.includes(key);
+                        return (
+                          <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer", userSelect: "none" }}>
+                            <input type="checkbox" checked={checked}
+                              onChange={(e) => setForm((f) => ({
+                                ...f,
+                                journeys: e.target.checked ? [...f.journeys, key] : f.journeys.filter(j => j !== key),
+                              }))}
+                              style={{ accentColor: "#03395f" }}
+                            />
+                            {JOURNEY_LABELS[key]}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: "#94a3b8" }}>Select a vendor above to choose sub-technologies.</div>
+                  )}
+                </div>
+
+                {/* Standalone categories */}
+                <div style={{ border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "12px 14px", background: "#f8fafc" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>Other Technology</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
+                    {STANDALONE_JOURNEYS.map((key) => {
+                      const checked = form.journeys.includes(key);
+                      return (
+                        <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer", userSelect: "none" }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={(e) => setForm((f) => ({
+                              ...f,
+                              journeys: e.target.checked ? [...f.journeys, key] : f.journeys.filter(j => j !== key),
+                            }))}
+                            style={{ accentColor: "#03395f" }}
+                          />
+                          {JOURNEY_LABELS[key]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Selected summary */}
+                {form.journeys.length > 0 && (
+                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 6 }}>
+                    {form.journeys.length} journey{form.journeys.length > 1 ? "s" : ""} selected: {form.journeys.map(j => JOURNEY_LABELS[j] ?? j).join(", ")}
+                  </div>
+                )}
+              </div>
 
               {/* Customer — CRM lookup or manual */}
               <label className="ms-label">
@@ -307,16 +482,6 @@ export default function SolutionsPage() {
                 {form.dynamics_account_id && (
                   <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
                 )}
-              </label>
-
-              {/* Technology Category */}
-              <label className="ms-label">
-                <span>Technology *</span>
-                <select className="ms-input" value={form.solution_type} onChange={(e) => setForm((f) => ({ ...f, solution_type: e.target.value as SolutionType }))}>
-                  {(Object.keys(SOLUTION_TYPE_LABELS) as SolutionType[]).map((t) => (
-                    <option key={t} value={t}>{SOLUTION_TYPE_LABELS[t]}</option>
-                  ))}
-                </select>
               </label>
 
               {/* CRM team suggestion */}
