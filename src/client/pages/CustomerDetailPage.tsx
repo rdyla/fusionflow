@@ -8,7 +8,6 @@ import {
   type Solution,
   type Project,
   type User,
-  type SolutionType,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
@@ -22,6 +21,44 @@ type CustomerOptimization = { id: string; project_id: string; optimize_status: s
 const SOLUTION_TYPE_LABELS: Record<string, string> = {
   ucaas: "UCaaS", ccaas: "CCaaS", ci: "Conversation Intelligence", va: "AI Virtual Agent",
 };
+
+const JOURNEY_LABELS: Record<string, string> = {
+  zoom_ucaas: "UCaaS", zoom_ccaas: "CCaaS", zoom_rooms: "Zoom Rooms",
+  zoom_zva: "ZVA", zoom_zra: "ZRA", zoom_qm: "QM", zoom_wfm: "WFM",
+  zoom_ai_expert_assist: "AI Expert Assist", zoom_workvivo: "Workvivo",
+  zoom_integrations: "Integrations / API",
+  rc_ucaas: "UCaaS", rc_ccaas: "CCaaS", rc_air: "AIR", rc_ava: "AVA", rc_ace: "ACE",
+  agnostic_ucaas: "UCaaS", agnostic_ccaas: "CCaaS",
+  bdr: "Backup & Disaster Recovery", connectivity: "Connectivity",
+  colocation: "Colocation", cyber_security: "Cyber Security",
+  daas: "Desktop as a Service", help_desk: "Help Desk",
+  iaas: "Infrastructure as a Service", mobility: "Mobility (Corporate Cellular)",
+  managed_services: "Managed Services", managed_cloud: "Managed Public Cloud",
+  sdwan: "SD-WAN / SASE / Aggregation", tem: "Technology Expense Management (TEM)",
+  other: "Other Technology Discovery",
+};
+
+const VENDOR_JOURNEYS: Record<string, string[]> = {
+  zoom: ["zoom_ucaas", "zoom_ccaas", "zoom_rooms", "zoom_zva", "zoom_zra", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist", "zoom_workvivo", "zoom_integrations"],
+  ringcentral: ["rc_ucaas", "rc_ccaas", "rc_air", "rc_ava", "rc_ace"],
+  agnostic: ["agnostic_ucaas", "agnostic_ccaas"],
+};
+
+const STANDALONE_JOURNEYS = [
+  "bdr", "connectivity", "colocation", "cyber_security", "daas",
+  "help_desk", "iaas", "mobility", "managed_services", "managed_cloud",
+  "sdwan", "tem", "other",
+];
+
+function journeyBadgeText(journeysJson: string | null, solutionType: string): string {
+  if (!journeysJson) return SOLUTION_TYPE_LABELS[solutionType] ?? solutionType;
+  try {
+    const journeys: string[] = JSON.parse(journeysJson);
+    if (!journeys.length) return SOLUTION_TYPE_LABELS[solutionType] ?? solutionType;
+    const labels = journeys.slice(0, 3).map(j => JOURNEY_LABELS[j] ?? j);
+    return labels.join(" · ") + (journeys.length > 3 ? ` +${journeys.length - 3}` : "");
+  } catch { return SOLUTION_TYPE_LABELS[solutionType] ?? solutionType; }
+}
 
 const HEALTH_COLOR: Record<string, string> = {
   on_track: "#107c10", at_risk: "#ff8c00", off_track: "#d13438",
@@ -77,7 +114,7 @@ export default function CustomerDetailPage() {
 
   // New Solution modal
   const [showNewSolution, setShowNewSolution] = useState(false);
-  const [newSolutionForm, setNewSolutionForm] = useState<{ solution_type: SolutionType; vendor: string }>({ solution_type: "ucaas", vendor: "tbd" });
+  const [newSolutionForm, setNewSolutionForm] = useState<{ journeys: string[]; ucaas_vendor: "" | "zoom" | "ringcentral" | "agnostic" }>({ journeys: [], ucaas_vendor: "" });
   const [creatingSolution, setCreatingSolution] = useState(false);
 
   // New Implementation modal
@@ -230,13 +267,13 @@ export default function CustomerDetailPage() {
   async function handleCreateSolution(e: React.FormEvent) {
     e.preventDefault();
     if (!customer) return;
+    if (!newSolutionForm.journeys.length) { showToast("Select at least one journey.", "error"); return; }
     setCreatingSolution(true);
     try {
       const sol = await api.createSolution({
         customer_name: customer.name,
         customer_id: customer.id,
-        solution_type: newSolutionForm.solution_type,
-        vendor: newSolutionForm.vendor as "zoom" | "ringcentral" | "tbd",
+        journeys: newSolutionForm.journeys,
         pf_ae_user_id: customer.pf_ae_user_id ?? undefined,
         pf_sa_user_id: customer.pf_sa_user_id ?? undefined,
         pf_csm_user_id: customer.pf_csm_user_id ?? undefined,
@@ -494,7 +531,7 @@ export default function CustomerDetailPage() {
                   <td style={{ fontWeight: 600, color: "#1e293b" }}>{s.name}</td>
                   <td>
                     <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-                      {SOLUTION_TYPE_LABELS[s.solution_type] ?? s.solution_type}
+                      {journeyBadgeText((s as Solution & { journeys?: string | null }).journeys ?? null, s.solution_type)}
                     </span>
                   </td>
                   <td>
@@ -727,36 +764,84 @@ export default function CustomerDetailPage() {
             <p style={{ fontSize: 13, color: "#64748b", marginTop: 4, marginBottom: 16 }}>
               Starting a solution for <strong>{customer.name}</strong>. The PF team will be pre-populated from the customer record.
             </p>
-            <form onSubmit={handleCreateSolution} style={{ display: "grid", gap: 16 }}>
-              <label className="ms-label">
-                <span>Technology *</span>
-                <select
-                  autoFocus
-                  className="ms-input"
-                  value={newSolutionForm.solution_type}
-                  onChange={(e) => setNewSolutionForm((f) => ({ ...f, solution_type: e.target.value as SolutionType }))}
-                >
-                  <option value="ucaas">UCaaS</option>
-                  <option value="ccaas">CCaaS</option>
-                  <option value="ci">Conversation Intelligence</option>
-                  <option value="va">AI Virtual Agent</option>
-                </select>
-              </label>
-              <label className="ms-label">
-                <span>Vendor</span>
-                <select
-                  className="ms-input"
-                  value={newSolutionForm.vendor}
-                  onChange={(e) => setNewSolutionForm((f) => ({ ...f, vendor: e.target.value }))}
-                >
-                  <option value="tbd">TBD</option>
-                  <option value="zoom">Zoom</option>
-                  <option value="ringcentral">RingCentral</option>
-                </select>
-              </label>
+            <form onSubmit={handleCreateSolution} style={{ display: "grid", gap: 14 }}>
+              <div className="ms-label">
+                <span>Core Journey *</span>
+                {/* UCaaS / CCaaS */}
+                <div style={{ border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "12px 14px", marginBottom: 8, background: "#f8fafc" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>UCaaS / CCaaS</div>
+                  <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+                    {(["zoom", "ringcentral", "agnostic"] as const).map((v) => {
+                      const labels: Record<string, string> = { zoom: "Zoom", ringcentral: "RingCentral", agnostic: "Agnostic" };
+                      const active = newSolutionForm.ucaas_vendor === v;
+                      return (
+                        <button key={v} type="button"
+                          onClick={() => {
+                            const prevKeys = newSolutionForm.ucaas_vendor ? VENDOR_JOURNEYS[newSolutionForm.ucaas_vendor] ?? [] : [];
+                            setNewSolutionForm((f) => ({
+                              ...f,
+                              ucaas_vendor: active ? "" : v,
+                              journeys: f.journeys.filter(j => !prevKeys.includes(j)),
+                            }));
+                          }}
+                          style={{ padding: "4px 12px", fontSize: 12, borderRadius: 4, border: `1px solid ${active ? "#03395f" : "rgba(0,0,0,0.12)"}`, background: active ? "#03395f" : "transparent", color: active ? "#fff" : "#64748b", cursor: "pointer", fontWeight: active ? 600 : 400 }}>
+                          {labels[v]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {newSolutionForm.ucaas_vendor ? (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
+                      {(VENDOR_JOURNEYS[newSolutionForm.ucaas_vendor] ?? []).map((key) => {
+                        const checked = newSolutionForm.journeys.includes(key);
+                        return (
+                          <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer", userSelect: "none" }}>
+                            <input type="checkbox" checked={checked}
+                              onChange={(e) => setNewSolutionForm((f) => ({
+                                ...f,
+                                journeys: e.target.checked ? [...f.journeys, key] : f.journeys.filter(j => j !== key),
+                              }))}
+                              style={{ accentColor: "#03395f" }}
+                            />
+                            {JOURNEY_LABELS[key]}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: "#94a3b8" }}>Select a vendor above to choose sub-technologies.</div>
+                  )}
+                </div>
+                {/* Standalone */}
+                <div style={{ border: "1px solid rgba(0,0,0,0.1)", borderRadius: 8, padding: "12px 14px", background: "#f8fafc" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>Other Technology</div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 16px" }}>
+                    {STANDALONE_JOURNEYS.map((key) => {
+                      const checked = newSolutionForm.journeys.includes(key);
+                      return (
+                        <label key={key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer", userSelect: "none" }}>
+                          <input type="checkbox" checked={checked}
+                            onChange={(e) => setNewSolutionForm((f) => ({
+                              ...f,
+                              journeys: e.target.checked ? [...f.journeys, key] : f.journeys.filter(j => j !== key),
+                            }))}
+                            style={{ accentColor: "#03395f" }}
+                          />
+                          {JOURNEY_LABELS[key]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+                {newSolutionForm.journeys.length > 0 && (
+                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 6 }}>
+                    {newSolutionForm.journeys.length} selected: {newSolutionForm.journeys.map(j => JOURNEY_LABELS[j] ?? j).join(", ")}
+                  </div>
+                )}
+              </div>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn ms-btn-primary" disabled={creatingSolution}>{creatingSolution ? "Creating…" : "Start Solution"}</button>
-                <button type="button" className="ms-btn" onClick={() => setShowNewSolution(false)}>Cancel</button>
+                <button type="submit" className="ms-btn ms-btn-primary" disabled={creatingSolution || !newSolutionForm.journeys.length}>{creatingSolution ? "Creating…" : "Start Solution"}</button>
+                <button type="button" className="ms-btn" onClick={() => { setShowNewSolution(false); setNewSolutionForm({ journeys: [], ucaas_vendor: "" }); }}>Cancel</button>
               </div>
             </form>
           </div>
