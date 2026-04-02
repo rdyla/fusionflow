@@ -159,6 +159,9 @@ export default function AppShell() {
             <Divider />
             <NavSection label="Implementation" />
             <SideLink to="/dashboard" end onClick={() => setDrawerOpen(false)}>Dashboard</SideLink>
+            <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
+            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
+            <SideLink to="/optimize" onClick={() => setDrawerOpen(false)}>Optimizations</SideLink>
             <Divider />
           </>
         )}
