@@ -4,6 +4,106 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 2026-04-02
+
+### Prospecting Module
+
+New module for pre-sales domain research and AI-powered sales intelligence.
+
+**Core Functionality**
+- Upload prospect lists by pasting domains (one per line, comma, or tab-separated) or uploading a CSV file — domain column auto-detected
+- Lists are enriched via Apollo.io: organization details, industry, headcount, tech stack, UCaaS/CCaaS signal detection
+- Prospects scored and tiered automatically: Hot / Warm / Cold based on fit signals
+- Claude AI generation per prospect: "Why Now" statement, key challenges, proposed solution, email sequence, talk track, and LinkedIn message — all copyable with one click
+- Expandable rows show key contacts (decision-makers, champions) pulled from Apollo people search
+
+**Access & Permissions**
+- `admin` — full access to all lists
+- `executive` and `partner_ae` with reports — can see lists assigned to their team
+- `pf_ae` / `partner_ae` — can see their own lists
+- Sales leaders (admin) can assign lists to managed AEs at creation time
+
+**UI**
+- Prospecting list index: table with name, owner, status badge (Enriching / Ready), domain count, enriched count, and Hot/Warm/Cold mini-bar
+- List detail: stats bar (total, enriched, hot/warm/cold counts), filterable table with expandable prospect rows
+
+**Database**: `prospect_lists`, `prospects`, `prospect_contacts` tables (migration 0032)
+
+### Navigation Redesign
+
+Replaced the top navigation bar with a flat left sidebar.
+
+- Sidebar contains all module links with icons
+- Inbox icon and user avatar moved to top bar (top-right)
+- Connection status indicator moved to bottom of sidebar
+- Internal users (non-client roles) now see direct nav links to Projects, Solutions, and Optimizations in addition to module cards
+
+### Discovery Assessments — Extended Technology Journeys
+
+Added Needs Assessment support for all non-UCaaS/CCaaS technology journeys: Conversational Intelligence, Virtual Agent, and any additional journey types configured in the solution create flow.
+
+### Solution Create Flow — Journey Picker
+
+- Replaced single-technology dropdown with a journey-based multi-select
+- Technology and Vendor dropdowns on the Solution overview page expanded with additional options
+- "New Solution" modal on the Customer Detail page updated to use the journey picker
+
+### Bug Fixes
+- Fixed AI generation getting stuck (increased `max_tokens`, resolved streaming stuck state)
+- Fixed Apollo API key header (`X-Api-Key`), base URL, field names, and industry normalization
+- Fixed missing `enrichOrganizationWithError` import in prospecting route
+
+---
+
+## 2026-04-01
+
+### Module Restructure
+
+- Removed the Design & Dev module
+- Optimizations renumbered to module 03
+
+---
+
+## 2026-03-31
+
+### Client Portal — Solutioning Access
+
+- Solutioning module card now visible to client users on the landing page
+- Clients can view solutions and needs assessments linked to their account
+
+### CRM Links — UI Redesign
+
+- CRM Links section on project detail pages redesigned as consistent tiles (account, contact, case, opportunity)
+
+### Bug Fixes
+- Fixed duplicate legend entries appearing in dashboard donut charts
+- Updated favicon to the official green-dot Packet Fusion version
+
+---
+
+## 2026-03-30
+
+### CRM Case & Opportunity Integration — Hours Compliance
+
+New "CRM Case" tab on project detail pages for tracking time entry compliance against the SOW.
+
+**CRM Links**
+- Projects can now be linked to a Dynamics 365 case (`crm_case_id`) and opportunity (`crm_opportunity_id`)
+- Compact CRM Links card shows account, case, and opportunity with inline label/value rows
+
+**Hours Compliance**
+- Pulls time entries from Dynamics (`amc_timeentry`) for the linked case
+- Compares logged hours against SOW hours from the linked opportunity quote (`am_sow`)
+- Compliance card shows a progress bar and per-workstream breakdown
+- Time entries table lists all individual entries
+
+**Backend**
+- `GET /api/projects/:id/case-compliance` — returns time entries vs. SOW hours, resolves opportunity name from account opportunities
+- New Dynamics diagnostic endpoints for admin: case search, diagnose, time entry inspect
+- New DB columns: `crm_case_id`, `crm_opportunity_id` on `projects` (migrations 0029, 0030)
+
+---
+
 ## 2026-03-24
 
 ### Customer-Centric Journey — Full End-to-End Flow

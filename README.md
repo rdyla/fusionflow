@@ -44,6 +44,17 @@ Full project management for UCaaS and CCaaS delivery.
 - **Project health** — Automatically computed from task completion and open risks; manually overridable by admins
 - **Templates** — Admin-managed template library for common solution types to pre-populate phases and tasks on new projects
 
+### Prospecting
+Pre-sales domain research and AI-powered sales intelligence.
+
+- Upload lists of prospect domains via paste or CSV upload; domain column is auto-detected in CSV files
+- Each domain is enriched via **Apollo.io**: company name, industry, headcount, tech stack, UCaaS/CCaaS signal detection
+- Prospects are scored and tiered automatically: **Hot / Warm / Cold**
+- **Claude AI generation** per prospect: "Why Now" statement, key challenges, proposed solution, email sequence, talk track, and LinkedIn message copy — all one-click copyable
+- Key contacts (decision-makers, champions) pulled from Apollo people search
+- Sales leaders can create lists and assign them to managed AEs
+- Role-gated: admins see all lists; executives and managers see team lists; AEs see their own
+
 ### Optimize
 Post-go-live account management and customer success tracking.
 
@@ -92,6 +103,7 @@ Connect a Zoom account to pull license and utilization data for Optimize account
 - Search and link CRM accounts when creating projects and solutions
 - Pull contact lists and opportunity context
 - Used to identify and provision client (customer) portal users
+- **CRM Case & Hours Compliance** — link a project to a Dynamics case and opportunity; pulls time entries (`amc_timeentry`) and compares logged hours against SOW hours from the linked opportunity quote for compliance tracking
 
 ### Asana *(optional)*
 Link projects to Asana workspaces to sync phases and tasks into Asana for teams that use it as their primary task tool.
