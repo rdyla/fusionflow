@@ -138,8 +138,8 @@ export async function enrichOrganizationWithError(
   apiKey: string
 ): Promise<{ org: ApolloOrg | null; error: string | null }> {
   try {
-    const url = `${APOLLO_BASE}/organizations/enrich?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(apiKey)}`;
-    const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+    const url = `${APOLLO_BASE}/organizations/enrich?domain=${encodeURIComponent(domain)}`;
+    const res = await fetch(url, { headers: { "X-Api-Key": apiKey, "Cache-Control": "no-cache" } });
 
     if (!res.ok) {
       const body = await res.text().catch(() => "");
@@ -188,9 +188,8 @@ export async function searchContacts(domain: string, apiKey: string): Promise<Ap
   try {
     const res = await fetch(`${APOLLO_BASE}/mixed_people/search`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Cache-Control": "no-cache" },
+      headers: { "Content-Type": "application/json", "X-Api-Key": apiKey, "Cache-Control": "no-cache" },
       body: JSON.stringify({
-        api_key: apiKey,
         organization_domains: [domain],
         person_seniorities: ["c_suite", "vp", "director", "manager"],
         per_page: 10,

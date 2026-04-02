@@ -131,10 +131,10 @@ app.get("/debug/apollo", async (c) => {
   const apiKey = c.env.APOLLO_API_KEY;
   if (!apiKey) return c.json({ error: "APOLLO_API_KEY not set" }, 503);
 
-  const url = `https://api.apollo.io/api/v1/organizations/enrich?domain=${encodeURIComponent(domain)}&api_key=${encodeURIComponent(apiKey)}`;
+  const url = `https://api.apollo.io/api/v1/organizations/enrich?domain=${encodeURIComponent(domain)}`;
 
   try {
-    const res = await fetch(url, { headers: { "Cache-Control": "no-cache" } });
+    const res = await fetch(url, { headers: { "X-Api-Key": apiKey, "Cache-Control": "no-cache" } });
     const body = await res.json();
     return c.json({ status: res.status, ok: res.ok, url, body });
   } catch (e) {
