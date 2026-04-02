@@ -11,6 +11,7 @@ import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
 import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
 import ucaasSurveyJson from "../assets/ucaas_needs_assessment_unified_v1.json";
+import otherJourneysSurveyJson from "../assets/other_journeys_needs_assessment_v1.json";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -45,7 +46,25 @@ const TYPE_LABELS: Record<SolutionType, string> = {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "assessment" | "scope" | "handoff" | "labor" | "sharepoint";
+type Tab = "overview" | "assessment" | "other_discovery" | "scope" | "handoff" | "labor" | "sharepoint";
+
+const UC_CC_PREFIXES = ["zoom_", "rc_", "agnostic_"];
+
+function parseSolutionJourneys(solution: Solution): string[] {
+  if (!solution.journeys) return [];
+  try { return JSON.parse(solution.journeys); } catch { return []; }
+}
+
+function buildOtherSurvey(journeys: string[]) {
+  const nonUcKeys = journeys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filtered = (otherJourneysSurveyJson.sections as any[]).filter((s: any) => {
+    if (s.appliesTo === "all") return true;
+    if (Array.isArray(s.appliesTo)) return s.appliesTo.some((k: string) => nonUcKeys.includes(k));
+    return false;
+  });
+  return { ...otherJourneysSurveyJson, sections: filtered };
+}
 
 export default function SolutionDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -74,9 +93,10 @@ export default function SolutionDetailPage() {
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
-  // Needs Assessment (CI types)
+  // Needs Assessment
   const [needsAssessment, setNeedsAssessment] = useState<NeedsAssessment | null>(null);
   const [naView, setNaView] = useState<"sor" | "wizard">("sor");
+  const [odView, setOdView] = useState<"sor" | "wizard">("sor");
 
   // Labor Estimate
   const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
@@ -203,9 +223,16 @@ export default function SolutionDetailPage() {
   const statusIdx = STATUS_FLOW.indexOf(solution.status);
   const canAdvance = canEdit && statusIdx >= 0 && statusIdx < STATUS_FLOW.length - 1;
 
+  const solutionJourneys = parseSolutionJourneys(solution);
+  const nonUcJourneys = solutionJourneys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
+  const hasUcCc = solutionJourneys.some(j => UC_CC_PREFIXES.some(p => j.startsWith(p)))
+    || ["ucaas", "ccaas", "ci", "va"].includes(solution.solution_type);
+  const hasOther = nonUcJourneys.length > 0;
+
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview",    label: "Overview"         },
-    { key: "assessment",  label: "Needs Assessment" },
+    { key: "assessment",  label: hasOther && !hasUcCc ? "Discovery" : "Needs Assessment" },
+    ...(hasOther && hasUcCc ? [{ key: "other_discovery" as const, label: "Other Discovery" }] : []),
     { key: "scope",       label: "Scope of Work"    },
     ...(!isClient ? [{ key: "handoff" as const, label: "Handoff" }] : []),
     ...(!isClient ? [{ key: "labor" as const, label: "Labor Estimate" }] : []),
@@ -649,12 +676,63 @@ export default function SolutionDetailPage() {
       {tab === "assessment" && (
         <div>
           {(() => {
+            // Non-UC/CC only → show other journeys survey
+            if (hasOther && !hasUcCc) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const surveyJson = buildOtherSurvey(solutionJourneys) as any;
+              const initialAnswers = {
+                ...(needsAssessment?.answers as Record<string, unknown> | undefined ?? {}),
+                doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
+              };
+              return (odView === "wizard" || needsAssessment === null) && odView !== "sor" ? (
+                <NeedsAssessmentWizard
+                  key={needsAssessment?.id ?? "new-other"}
+                  solutionId={solution.id}
+                  customerName={solution.customer_name}
+                  surveyJson={surveyJson}
+                  initialAnswers={initialAnswers}
+                  onComplete={(na) => { setNeedsAssessment(na); setOdView("sor"); }}
+                  onCancel={() => setOdView("sor")}
+                />
+              ) : needsAssessment !== null && odView === "sor" ? (
+                <NeedsAssessmentSOR
+                  assessment={needsAssessment}
+                  customerName={solution.customer_name}
+                  solutionType={solution.name}
+                  surveyJson={surveyJson}
+                  onBack={canEditNA ? () => setOdView("wizard") : () => {}}
+                  canDelete={!isClient}
+                  onDelete={async () => {
+                    try {
+                      await api.deleteNeedsAssessment(solution.id);
+                      setNeedsAssessment(null);
+                      setOdView("sor");
+                    } catch {
+                      showToast("Failed to delete assessment", "error");
+                    }
+                  }}
+                />
+              ) : (
+                <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
+                  <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
+                    No discovery has been completed for this solution yet.
+                  </p>
+                  {canEditNA && (
+                    <button className="ms-btn-primary" onClick={() => setOdView("wizard")}>
+                      Start Discovery
+                    </button>
+                  )}
+                </div>
+              );
+            }
+
+            // UC/CC (or legacy) → existing survey
             const surveyJson =
               solution.solution_type === "ccaas" ? ccaasSurveyJson :
               solution.solution_type === "va" ? virtualAgentSurveyJson :
               solution.solution_type === "ucaas" ? ucaasSurveyJson :
               ciSurveyJson;
-            const solutionTypeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
+            const solutionTypeLabel = TYPE_LABELS[solution.solution_type as keyof typeof TYPE_LABELS] ?? solution.solution_type;
             return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
                 key={needsAssessment?.id ?? "new"}
@@ -664,7 +742,7 @@ export default function SolutionDetailPage() {
                 surveyJson={surveyJson as any}
                 initialAnswers={needsAssessment?.answers as Record<string, unknown> | undefined}
                 onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
-                onCancel={() => { if (needsAssessment) setNaView("sor"); else setNaView("sor"); }}
+                onCancel={() => setNaView("sor")}
               />
             ) : needsAssessment !== null && naView === "sor" ? (
               <NeedsAssessmentSOR
@@ -690,12 +768,56 @@ export default function SolutionDetailPage() {
                 <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
                   No needs assessment has been completed for this solution yet.
                 </p>
-                <button
-                  className="ms-btn-primary"
-                  onClick={() => setNaView("wizard")}
-                >
-                  Start Needs Assessment
-                </button>
+                {canEditNA && (
+                  <button className="ms-btn-primary" onClick={() => setNaView("wizard")}>
+                    Start Needs Assessment
+                  </button>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ── Other Discovery Tab (mixed UC/CC + other journeys) ── */}
+      {tab === "other_discovery" && (
+        <div>
+          {(() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const surveyJson = buildOtherSurvey(solutionJourneys) as any;
+            const initialAnswers = {
+              ...(needsAssessment?.answers as Record<string, unknown> | undefined ?? {}),
+              doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
+            };
+            return (odView === "wizard" || needsAssessment === null) && odView !== "sor" ? (
+              <NeedsAssessmentWizard
+                key={(needsAssessment?.id ?? "new-other") + "-od"}
+                solutionId={solution.id}
+                customerName={solution.customer_name}
+                surveyJson={surveyJson}
+                initialAnswers={initialAnswers}
+                onComplete={(na) => { setNeedsAssessment(na); setOdView("sor"); }}
+                onCancel={() => setOdView("sor")}
+              />
+            ) : needsAssessment !== null && odView === "sor" ? (
+              <NeedsAssessmentSOR
+                assessment={needsAssessment}
+                customerName={solution.customer_name}
+                solutionType={solution.name}
+                surveyJson={surveyJson}
+                onBack={canEditNA ? () => setOdView("wizard") : () => {}}
+                canDelete={false}
+              />
+            ) : (
+              <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
+                <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
+                  No other technology discovery has been completed yet.
+                </p>
+                {canEditNA && (
+                  <button className="ms-btn-primary" onClick={() => setOdView("wizard")}>
+                    Start Other Discovery
+                  </button>
+                )}
               </div>
             );
           })()}

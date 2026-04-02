@@ -15,6 +15,7 @@ type FieldDef = {
 
 type SectionDef = {
   id: string;
+  title?: string;
   fields: FieldDef[];
 };
 
@@ -26,7 +27,7 @@ type SorSectionDef = {
 
 type SurveyJson = {
   sections: SectionDef[];
-  statementOfRequirements: {
+  statementOfRequirements?: {
     sections: SorSectionDef[];
   };
   [key: string]: unknown;
@@ -435,7 +436,7 @@ type Props = {
   solutionType: string;
   surveyJson: SurveyJson;
   onBack: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   canDelete?: boolean;
 };
 
@@ -456,7 +457,14 @@ export default function NeedsAssessmentSOR({
   for (const f of allFields) {
     fieldMap[f.id] = f;
   }
-  const sorSections: SorSectionDef[] = surveyJson.statementOfRequirements.sections;
+  // Auto-generate SOR sections from survey sections when statementOfRequirements is absent
+  const sorSections: SorSectionDef[] = surveyJson.statementOfRequirements
+    ? surveyJson.statementOfRequirements.sections
+    : (surveyJson.sections as SectionDef[]).map((s) => ({
+        id: s.id,
+        title: s.title ?? s.id,
+        sourceFields: s.fields.filter((f) => f.type !== "info").map((f) => f.id),
+      }));
 
   const answers = assessment.answers;
   const status = assessment.readiness_status ?? "not_ready";

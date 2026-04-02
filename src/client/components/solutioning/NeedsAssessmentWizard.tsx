@@ -137,6 +137,20 @@ type FieldProps = {
 function FieldInput({ field, answers, onChange, allSections }: FieldProps) {
   const val = answers[field.id];
 
+  if (field.type === "info") {
+    const url = (val as string) ?? "";
+    const isUrl = url.startsWith("http");
+    return (
+      <div style={{ padding: "10px 14px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 13, color: "#0369a1" }}>
+        {isUrl ? (
+          <a href={url} target="_blank" rel="noreferrer" style={{ color: "#0369a1", wordBreak: "break-all" }}>{url}</a>
+        ) : (
+          <span style={{ color: "#64748b" }}>{url || field.label}</span>
+        )}
+      </div>
+    );
+  }
+
   if (field.type === "text" || field.type === "date") {
     return (
       <input

@@ -1,0 +1,318 @@
+{
+  "id": "other_journeys_needs_assessment_v1",
+  "name": "Technology Discovery",
+  "version": "1.0.0",
+  "description": "Discovery needs assessment for non-UC/CC technology journeys. Sections are filtered to match the solution's selected journeys.",
+  "sections": [
+    {
+      "id": "provider_contracts",
+      "title": "Provider & Contracts",
+      "appliesTo": "all",
+      "fields": [
+        { "id": "pc_current_provider", "type": "text", "label": "Who is your current provider / vendor?", "required": false },
+        { "id": "pc_contract_term", "type": "text", "label": "What is the contract term?", "required": false },
+        { "id": "pc_renewal_date", "type": "date", "label": "When does it renew / expire?", "required": false },
+        {
+          "id": "pc_etp",
+          "type": "single_select",
+          "label": "Are there early termination penalties?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "unknown", "label": "Unknown" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "documentation",
+      "title": "Documentation",
+      "appliesTo": "all",
+      "fields": [
+        {
+          "id": "doc_sharepoint_ref",
+          "type": "info",
+          "label": "Upload invoices, contracts, and utilization data in the Documents tab, then paste specific SharePoint links below.",
+          "required": false
+        },
+        { "id": "doc_invoice_link", "type": "text", "label": "Most recent invoice (SharePoint link)", "required": false },
+        { "id": "doc_contract_link", "type": "text", "label": "Contract(s) (SharePoint link)", "required": false },
+        { "id": "doc_utilization_link", "type": "text", "label": "Utilization data (SharePoint link)", "required": false }
+      ]
+    },
+    {
+      "id": "satisfaction",
+      "title": "Satisfaction",
+      "appliesTo": "all",
+      "fields": [
+        { "id": "sat_working_well", "type": "textarea", "label": "What is working well today?", "required": false },
+        { "id": "sat_pain_points", "type": "textarea", "label": "What are your biggest pain points?", "required": false },
+        { "id": "sat_goals", "type": "textarea", "label": "What are your top improvement goals?", "required": false }
+      ]
+    },
+    {
+      "id": "connectivity",
+      "title": "Connectivity",
+      "appliesTo": ["connectivity"],
+      "fields": [
+        { "id": "conn_isp_per_site", "type": "textarea", "label": "Current ISP per site?", "required": false },
+        { "id": "conn_contract_terms", "type": "text", "label": "Contract terms?", "required": false },
+        { "id": "conn_speeds", "type": "text", "label": "Upload / download speeds?", "required": false },
+        {
+          "id": "conn_symmetrical",
+          "type": "single_select",
+          "label": "Symmetrical?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "no", "label": "No" },
+            { "value": "some_sites", "label": "Some sites" }
+          ]
+        },
+        { "id": "conn_utilization", "type": "text", "label": "Utilization (avg / peak)?", "required": false },
+        {
+          "id": "conn_redundancy",
+          "type": "single_select",
+          "label": "Redundancy?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes — all sites" },
+            { "value": "partial", "label": "Some sites" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        {
+          "id": "conn_failover",
+          "type": "single_select",
+          "label": "Automatic failover?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "manual", "label": "Manual" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "conn_hardware", "type": "text", "label": "Hardware (make / model)?", "required": false },
+        { "id": "conn_perf_issues", "type": "textarea", "label": "Any performance issues?", "required": false }
+      ]
+    },
+    {
+      "id": "sdwan",
+      "title": "SD-WAN / SASE / Aggregation",
+      "appliesTo": ["sdwan"],
+      "fields": [
+        { "id": "sdwan_architecture", "type": "textarea", "label": "Current WAN architecture?", "required": false },
+        { "id": "sdwan_providers", "type": "text", "label": "Providers?", "required": false },
+        { "id": "sdwan_sites", "type": "text", "label": "Number of sites?", "required": false },
+        { "id": "sdwan_bandwidth", "type": "text", "label": "Bandwidth per site?", "required": false },
+        { "id": "sdwan_hardware", "type": "text", "label": "Hardware in use?", "required": false },
+        { "id": "sdwan_security_model", "type": "textarea", "label": "Security model?", "required": false },
+        { "id": "sdwan_cloud_issues", "type": "textarea", "label": "Cloud access issues?", "required": false }
+      ]
+    },
+    {
+      "id": "tem",
+      "title": "Technology Expense Management (TEM)",
+      "appliesTo": ["tem"],
+      "fields": [
+        { "id": "tem_how_tracked", "type": "textarea", "label": "How are technology expenses tracked today?", "required": false },
+        { "id": "tem_vendors", "type": "textarea", "label": "Vendors / carriers covered?", "required": false },
+        { "id": "tem_bills_link", "type": "text", "label": "Bills / invoices (SharePoint link)", "required": false },
+        { "id": "tem_billing_issues", "type": "textarea", "label": "Billing discrepancies or issues?", "required": false },
+        { "id": "tem_optimization_goals", "type": "textarea", "label": "Optimization goals?", "required": false }
+      ]
+    },
+    {
+      "id": "mobility",
+      "title": "Mobility (Corporate Cellular)",
+      "appliesTo": ["mobility"],
+      "fields": [
+        { "id": "mob_carriers", "type": "text", "label": "Carriers?", "required": false },
+        { "id": "mob_devices", "type": "textarea", "label": "Devices (types / quantities)?", "required": false },
+        { "id": "mob_plans", "type": "textarea", "label": "Plans in use?", "required": false },
+        { "id": "mob_usage_patterns", "type": "textarea", "label": "Usage patterns (data, voice, international)?", "required": false },
+        {
+          "id": "mob_overages",
+          "type": "single_select",
+          "label": "Overage charges?",
+          "required": false,
+          "options": [
+            { "value": "yes_frequent", "label": "Yes — frequent" },
+            { "value": "yes_occasional", "label": "Yes — occasional" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        {
+          "id": "mob_mdm",
+          "type": "single_select",
+          "label": "MDM / EMM in place?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "partial", "label": "Partial" },
+            { "value": "no", "label": "No" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "managed_services",
+      "title": "Managed Services",
+      "appliesTo": ["managed_services"],
+      "fields": [
+        { "id": "ms_current_msp", "type": "text", "label": "Current MSP?", "required": false },
+        { "id": "ms_scope", "type": "textarea", "label": "Scope of services?", "required": false },
+        { "id": "ms_slas", "type": "textarea", "label": "SLAs?", "required": false },
+        { "id": "ms_coverage", "type": "textarea", "label": "Coverage (hours, escalation)?", "required": false },
+        { "id": "ms_gaps", "type": "textarea", "label": "Gaps or areas of dissatisfaction?", "required": false }
+      ]
+    },
+    {
+      "id": "managed_cloud",
+      "title": "Managed Public Cloud",
+      "appliesTo": ["managed_cloud"],
+      "fields": [
+        {
+          "id": "mc_platforms",
+          "type": "multi_select",
+          "label": "Cloud platforms?",
+          "required": false,
+          "options": [
+            { "value": "aws", "label": "AWS" },
+            { "value": "azure", "label": "Azure" },
+            { "value": "gcp", "label": "Google Cloud" },
+            { "value": "oracle", "label": "Oracle Cloud" },
+            { "value": "other", "label": "Other" }
+          ]
+        },
+        { "id": "mc_workloads", "type": "textarea", "label": "Workloads / applications in cloud?", "required": false },
+        { "id": "mc_spend", "type": "text", "label": "Monthly cloud spend (approx.)?", "required": false },
+        { "id": "mc_optimization", "type": "textarea", "label": "Optimization opportunities or concerns?", "required": false },
+        { "id": "mc_governance", "type": "textarea", "label": "Governance, tagging, or cost management in place?", "required": false }
+      ]
+    },
+    {
+      "id": "cyber_security",
+      "title": "Cyber Security",
+      "appliesTo": ["cyber_security"],
+      "fields": [
+        { "id": "cs_tools", "type": "textarea", "label": "Security tools currently in place?", "required": false },
+        { "id": "cs_coverage", "type": "textarea", "label": "What does security coverage include?", "required": false },
+        {
+          "id": "cs_monitoring",
+          "type": "single_select",
+          "label": "24/7 monitoring?",
+          "required": false,
+          "options": [
+            { "value": "yes", "label": "Yes" },
+            { "value": "business_hours", "label": "Business hours only" },
+            { "value": "no", "label": "No" }
+          ]
+        },
+        { "id": "cs_incidents", "type": "textarea", "label": "Recent incidents or breaches?", "required": false },
+        { "id": "cs_compliance", "type": "textarea", "label": "Compliance requirements (HIPAA, PCI, SOC 2, etc.)?", "required": false },
+        { "id": "cs_gaps", "type": "textarea", "label": "Known security gaps?", "required": false }
+      ]
+    },
+    {
+      "id": "bdr",
+      "title": "Backup & Disaster Recovery",
+      "appliesTo": ["bdr"],
+      "fields": [
+        { "id": "bdr_platform", "type": "text", "label": "Backup platform / tool?", "required": false },
+        { "id": "bdr_data_volume", "type": "text", "label": "Data volume?", "required": false },
+        { "id": "bdr_rto_rpo", "type": "text", "label": "RTO / RPO requirements?", "required": false },
+        {
+          "id": "bdr_testing",
+          "type": "single_select",
+          "label": "Recovery tested regularly?",
+          "required": false,
+          "options": [
+            { "value": "yes_scheduled", "label": "Yes — on a schedule" },
+            { "value": "yes_adhoc", "label": "Yes — ad hoc" },
+            { "value": "no", "label": "No" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "daas",
+      "title": "Desktop as a Service",
+      "appliesTo": ["daas"],
+      "fields": [
+        { "id": "daas_users", "type": "text", "label": "Number of users?", "required": false },
+        { "id": "daas_applications", "type": "textarea", "label": "Key applications?", "required": false },
+        { "id": "daas_devices", "type": "textarea", "label": "Current devices / endpoints?", "required": false },
+        { "id": "daas_performance", "type": "textarea", "label": "Performance concerns?", "required": false }
+      ]
+    },
+    {
+      "id": "help_desk",
+      "title": "Help Desk",
+      "appliesTo": ["help_desk"],
+      "fields": [
+        {
+          "id": "hd_model",
+          "type": "single_select",
+          "label": "Internal or outsourced?",
+          "required": false,
+          "options": [
+            { "value": "internal", "label": "Internal" },
+            { "value": "outsourced", "label": "Outsourced" },
+            { "value": "hybrid", "label": "Hybrid" }
+          ]
+        },
+        { "id": "hd_volume", "type": "text", "label": "Ticket volume (monthly approx.)?", "required": false },
+        {
+          "id": "hd_channels",
+          "type": "multi_select",
+          "label": "Support channels?",
+          "required": false,
+          "options": [
+            { "value": "phone", "label": "Phone" },
+            { "value": "email", "label": "Email" },
+            { "value": "chat", "label": "Chat" },
+            { "value": "portal", "label": "Ticketing portal" },
+            { "value": "walk_in", "label": "Walk-in" }
+          ]
+        },
+        { "id": "hd_tools", "type": "text", "label": "Ticketing / ITSM tools?", "required": false },
+        { "id": "hd_slas", "type": "textarea", "label": "Current SLAs / response targets?", "required": false }
+      ]
+    },
+    {
+      "id": "iaas",
+      "title": "Infrastructure as a Service",
+      "appliesTo": ["iaas"],
+      "fields": [
+        { "id": "iaas_environment", "type": "textarea", "label": "Current environment (on-prem, colo, cloud, hybrid)?", "required": false },
+        { "id": "iaas_workloads", "type": "textarea", "label": "Workloads / applications hosted?", "required": false },
+        { "id": "iaas_utilization", "type": "text", "label": "Utilization (avg)?", "required": false },
+        { "id": "iaas_costs", "type": "text", "label": "Monthly infrastructure costs (approx.)?", "required": false }
+      ]
+    },
+    {
+      "id": "colocation",
+      "title": "Colocation",
+      "appliesTo": ["colocation"],
+      "fields": [
+        { "id": "colo_provider", "type": "text", "label": "Colocation provider?", "required": false },
+        { "id": "colo_racks", "type": "text", "label": "Number of racks / cages?", "required": false },
+        { "id": "colo_power", "type": "text", "label": "Power allocation?", "required": false },
+        { "id": "colo_hardware", "type": "textarea", "label": "Hardware hosted?", "required": false }
+      ]
+    },
+    {
+      "id": "other",
+      "title": "Other Technology Discovery",
+      "appliesTo": ["other"],
+      "fields": [
+        { "id": "other_initiatives", "type": "textarea", "label": "Top IT initiatives?", "required": false },
+        { "id": "other_pain_points", "type": "textarea", "label": "Pain points?", "required": false },
+        { "id": "other_vendor_overlap", "type": "textarea", "label": "Vendor overlap / consolidation opportunities?", "required": false },
+        { "id": "other_upcoming", "type": "textarea", "label": "Upcoming projects?", "required": false }
+      ]
+    }
+  ]
+}
