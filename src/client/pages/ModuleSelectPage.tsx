@@ -55,22 +55,6 @@ const MODULES: Module[] = [
   },
   {
     num: "03",
-    tag: "Build",
-    title: "Design & Dev",
-    subtitle: "Custom Development",
-    desc: "Manage bespoke build projects with sprint boards, design specs, UAT cycles, and go-live checkpoints in one place.",
-    features: ["Sprint & backlog management", "Design review workflows", "UAT sign-off tracking", "Deployment checklists"],
-    accent: "#7c3aed",
-    glow: "rgba(124,58,237,0.25)",
-    route: null,
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
-        <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
-      </svg>
-    ),
-  },
-  {
-    num: "04",
     tag: "Growth",
     title: "Optimization",
     subtitle: "Continuous Improvement",
