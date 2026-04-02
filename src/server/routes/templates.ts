@@ -7,6 +7,25 @@ import { canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// ── PM-accessible read (list only) ────────────────────────────────────────────
+
+app.get("/templates-list", requireRole("admin", "pm"), async (c) => {
+  const db = c.env.DB;
+  const templates = await db
+    .prepare(
+      `SELECT t.id, t.name, t.solution_type, t.description,
+              COUNT(DISTINCT tp.id) AS phase_count,
+              COUNT(DISTINCT tt.id) AS task_count
+       FROM templates t
+       LEFT JOIN template_phases tp ON tp.template_id = t.id
+       LEFT JOIN template_tasks tt ON tt.template_id = t.id
+       GROUP BY t.id
+       ORDER BY t.name ASC`
+    )
+    .all();
+  return c.json(templates.results ?? []);
+});
+
 // ── Admin CRUD (all require admin role) ────────────────────────────────────────
 
 app.get("/templates", requireRole("admin"), async (c) => {

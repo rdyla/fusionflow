@@ -256,9 +256,9 @@ export default function ProjectDetailPage() {
     load();
   }, [id]);
 
-  // Load template list for apply-template panel (admin/pm only — if it fails we just hide the section)
+  // Load template list for apply-template panel (admin + pm)
   useEffect(() => {
-    api.adminTemplates().then(setTemplateList).catch(() => {});
+    api.templatesList().then(setTemplateList).catch(() => {});
   }, []);
 
   // Load case compliance data when the case tab is opened
@@ -854,16 +854,19 @@ export default function ProjectDetailPage() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: 14 }}>
               {/* Primary PM */}
               {project.pm_user_id && (() => {
-                const pm = userMap.get(project.pm_user_id);
-                if (!pm) return null;
-                const abbr = pm.name ? pm.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : pm.email.slice(0, 2).toUpperCase();
+                // Use userMap if available (admin); fall back to pm_name/pm_email joined on the project
+                const pmFromMap = userMap.get(project.pm_user_id);
+                const pmName = pmFromMap?.name ?? (project as unknown as Record<string, unknown>).pm_name as string | null ?? null;
+                const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
+                if (!pmName && !pmEmail) return null;
+                const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
                 return (
                   <div key="pm" style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
                     <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 2 }}>Project Manager</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{pm.name ?? pm.email}</div>
-                      <a href={`mailto:${pm.email}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{pm.email}</a>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{pmName ?? pmEmail}</div>
+                      {pmEmail && <a href={`mailto:${pmEmail}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{pmEmail}</a>}
                     </div>
                   </div>
                 );

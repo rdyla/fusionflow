@@ -1617,6 +1617,7 @@ export const api = {
     request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessment`, { method: "DELETE" }),
 
   // ── Templates ────────────────────────────────────────────────────────────────
+  templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
   adminTemplates: () => request<Template[]>("/admin/templates"),
   adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminCreateTemplate: (payload: { name: string; solution_type?: string; description?: string }) =>

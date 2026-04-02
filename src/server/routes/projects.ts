@@ -76,6 +76,7 @@ app.get("/:id", async (c) => {
              p.pm_user_id, p.pm_name, p.ae_user_id, p.ae_name, p.sa_name, p.csm_name, p.engineer_name,
              p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id, p.crm_case_id, p.crm_opportunity_id,
              p.created_at, p.updated_at,
+             pmu.email AS pm_email,
              s.name AS linked_solution_name,
              s.customer_name AS linked_solution_customer,
              s.status AS linked_solution_status,
@@ -87,6 +88,7 @@ app.get("/:id", async (c) => {
              c.sharepoint_url AS customer_sharepoint_url,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
       FROM projects p
+      LEFT JOIN users pmu ON pmu.id = p.pm_user_id
       LEFT JOIN solutions s ON s.id = p.solution_id
       LEFT JOIN customers c ON c.id = p.customer_id
       LEFT JOIN users cpu1 ON cpu1.id = c.pf_ae_user_id
