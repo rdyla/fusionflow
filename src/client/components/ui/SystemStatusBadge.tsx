@@ -65,7 +65,7 @@ function VendorPanel({ name, vendor }: { name: string; vendor: VendorStatus }) {
   );
 }
 
-export function SystemStatusBadge({ status }: { status: SystemStatusResponse | null }) {
+export function SystemStatusBadge({ status, popUp = false }: { status: SystemStatusResponse | null; popUp?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -118,7 +118,7 @@ export function SystemStatusBadge({ status }: { status: SystemStatusResponse | n
 
       {open && (
         <div style={{
-          position: "absolute", top: "calc(100% + 8px)", right: 0,
+          position: "absolute", ...(popUp ? { bottom: "calc(100% + 8px)", left: 0 } : { top: "calc(100% + 8px)", right: 0 }),
           width: 280, zIndex: 200,
           background: "#ffffff",
           border: "1px solid #dde4ef",

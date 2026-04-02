@@ -21,7 +21,7 @@ function initials(name: string | null, email: string): string {
   return email.slice(0, 2).toUpperCase();
 }
 
-export function UserChip({ user, popout = "up" }: { user: User; popout?: "up" | "down" }) {
+export function UserChip({ user, popout = "up", compact = false }: { user: User; popout?: "up" | "down"; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const abbr = initials(user.name, user.email);
   const roleLabel = ROLE_LABELS[user.role] ?? user.role;
@@ -116,39 +116,61 @@ export function UserChip({ user, popout = "up" }: { user: User; popout?: "up" | 
       )}
 
       {/* Chip trigger */}
-      <button
-        onClick={() => setOpen(v => !v)}
-        style={{
-          width: "100%", display: "flex", alignItems: "center", gap: 10,
-          background: open ? "rgba(255,255,255,0.12)" : "transparent",
-          border: "none", borderRadius: 8, padding: "6px 8px",
-          cursor: "pointer", textAlign: "left", transition: "background 0.12s",
-        }}
-        onMouseEnter={e => { if (!open) e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
-        onMouseLeave={e => { if (!open) e.currentTarget.style.background = "transparent"; }}
-      >
-        <div style={{
-          width: 34, height: 34, borderRadius: "50%",
-          background: "linear-gradient(135deg, #63c1ea, #17c662)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700,
-          color: "#fff", flexShrink: 0, letterSpacing: "0.04em",
-        }}>
-          {abbr}
-        </div>
-        <div style={{ lineHeight: 1.35, minWidth: 0, flex: 1 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {user.name ?? user.email}
+      {compact ? (
+        <button
+          onClick={() => setOpen(v => !v)}
+          title={user.name ?? user.email}
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "none", border: "none", cursor: "pointer", padding: 2, borderRadius: "50%",
+          }}
+        >
+          <div style={{
+            width: 32, height: 32, borderRadius: "50%",
+            background: "linear-gradient(135deg, #63c1ea, #17c662)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'Jost', sans-serif", fontSize: 12, fontWeight: 700,
+            color: "#fff", letterSpacing: "0.04em",
+            boxShadow: open ? "0 0 0 2px rgba(255,255,255,0.4)" : "none",
+          }}>
+            {abbr}
           </div>
-          <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
-            {user.organization_name ? `${user.organization_name} · ` : ""}{roleLabel}
+        </button>
+      ) : (
+        <button
+          onClick={() => setOpen(v => !v)}
+          style={{
+            width: "100%", display: "flex", alignItems: "center", gap: 10,
+            background: open ? "rgba(255,255,255,0.12)" : "transparent",
+            border: "none", borderRadius: 8, padding: "6px 8px",
+            cursor: "pointer", textAlign: "left", transition: "background 0.12s",
+          }}
+          onMouseEnter={e => { if (!open) e.currentTarget.style.background = "rgba(255,255,255,0.08)"; }}
+          onMouseLeave={e => { if (!open) e.currentTarget.style.background = "transparent"; }}
+        >
+          <div style={{
+            width: 34, height: 34, borderRadius: "50%",
+            background: "linear-gradient(135deg, #63c1ea, #17c662)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700,
+            color: "#fff", flexShrink: 0, letterSpacing: "0.04em",
+          }}>
+            {abbr}
           </div>
-        </div>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
-          style={{ width: 14, height: 14, color: "rgba(255,255,255,0.4)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
-          <polyline points="18 15 12 9 6 15" />
-        </svg>
-      </button>
+          <div style={{ lineHeight: 1.35, minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "#ffffff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {user.name ?? user.email}
+            </div>
+            <div style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", whiteSpace: "nowrap", letterSpacing: "0.02em" }}>
+              {user.organization_name ? `${user.organization_name} · ` : ""}{roleLabel}
+            </div>
+          </div>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+            style={{ width: 14, height: 14, color: "rgba(255,255,255,0.4)", flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+            <polyline points="18 15 12 9 6 15" />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

@@ -54,10 +54,8 @@ export default function AppShell() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
-  // Close mobile nav drawer on navigation
   useEffect(() => { setDrawerOpen(false); }, [navigate]);
 
-  // Close notif panel on outside click
   useEffect(() => {
     if (!notifOpen) return;
     function handleClick(e: MouseEvent) {
@@ -153,67 +151,40 @@ export default function AppShell() {
 
   const navContent = (
     <>
-      <nav style={{ flex: 1, paddingTop: 10, overflowY: "auto" }}>
+      <nav style={{ flex: 1, paddingTop: 8, overflowY: "auto" }}>
         {!isClient && (
           <>
-            <NavSection label="Customers" />
-            <SideLink to="/customers" onClick={() => setDrawerOpen(false)}>All Customers</SideLink>
-            <Divider />
-            <NavSection label="Implementation" />
-            <SideLink to="/dashboard" end onClick={() => setDrawerOpen(false)}>Dashboard</SideLink>
-            <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
+            <SideLink to="/customers" onClick={() => setDrawerOpen(false)}>Customers</SideLink>
             <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
+            <SideLink to="/dashboard" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
             <SideLink to="/optimize" onClick={() => setDrawerOpen(false)}>Optimizations</SideLink>
-            <Divider />
+            {canProspect && (
+              <SideLink to="/prospecting" onClick={() => setDrawerOpen(false)}>Prospecting</SideLink>
+            )}
           </>
         )}
         {isClient && (
           <>
-            <NavSection label="Projects" />
-            <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>My Projects</SideLink>
-            <Divider />
-            <NavSection label="Solutions" />
-            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>My Solutions</SideLink>
-            <Divider />
-          </>
-        )}
-        {canProspect && (
-          <>
-            <Divider />
-            <NavSection label="Prospecting" />
-            <SideLink to="/prospecting" onClick={() => setDrawerOpen(false)}>Prospect Lists</SideLink>
-          </>
-        )}
-        {!isClient && (
-          <>
-            <NavSection label="Me" />
-            <SideLink to="/inbox" onClick={() => setDrawerOpen(false)}>
-              Inbox{unreadCount > 0 && (
-                <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, background: "#d13438", color: "#fff", borderRadius: 10, padding: "1px 6px", verticalAlign: "middle" }}>
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </SideLink>
-            <Divider />
+            <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
+            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
           </>
         )}
         {isAdmin && (
-          <>
-            <NavSection label="Admin" />
-            <SideLink to="/admin/projects" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
-            <SideLink to="/admin/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
-            <SideLink to="/admin/optimize" onClick={() => setDrawerOpen(false)}>Optimize</SideLink>
-            <SideLink to="/admin/labor" onClick={() => setDrawerOpen(false)}>Labor Config</SideLink>
-            <SideLink to="/admin/templates" onClick={() => setDrawerOpen(false)}>Templates</SideLink>
-            <SideLink to="/admin/users" onClick={() => setDrawerOpen(false)}>Users</SideLink>
-          </>
+          <div style={{ marginTop: 16, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <SideLink to="/admin/projects" onClick={() => setDrawerOpen(false)}>Admin: Projects</SideLink>
+            <SideLink to="/admin/solutions" onClick={() => setDrawerOpen(false)}>Admin: Solutions</SideLink>
+            <SideLink to="/admin/optimize" onClick={() => setDrawerOpen(false)}>Admin: Optimize</SideLink>
+            <SideLink to="/admin/labor" onClick={() => setDrawerOpen(false)}>Admin: Labor</SideLink>
+            <SideLink to="/admin/templates" onClick={() => setDrawerOpen(false)}>Admin: Templates</SideLink>
+            <SideLink to="/admin/users" onClick={() => setDrawerOpen(false)}>Admin: Users</SideLink>
+          </div>
         )}
       </nav>
-      {currentUser && (
-        <div style={{ padding: "14px 16px", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0 }}>
-          <UserChip user={currentUser} />
-        </div>
-      )}
+
+      {/* System status widget at bottom — pops up */}
+      <div style={{ flexShrink: 0, padding: "12px 14px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+        <SystemStatusBadge status={sysStatus} popUp />
+      </div>
     </>
   );
 
@@ -223,7 +194,7 @@ export default function AppShell() {
       {/* Desktop sidebar */}
       {!isMobile && (
         <aside style={{
-          width: 240,
+          width: 220,
           flexShrink: 0,
           display: "flex",
           flexDirection: "column",
@@ -232,7 +203,7 @@ export default function AppShell() {
         }}>
           <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
             <Link to="/" style={{ textDecoration: "none", display: "block" }}>
-              <img src={logoUrl} alt="FusionFlow360" style={{ width: 200, height: "auto", display: "block" }} />
+              <img src={logoUrl} alt="FusionFlow360" style={{ width: 180, height: "auto", display: "block" }} />
             </Link>
           </div>
           {navContent}
@@ -289,6 +260,7 @@ export default function AppShell() {
           borderBottom: "1px solid rgba(0,0,0,0.2)",
           justifyContent: "space-between",
         }}>
+          {/* Left: mobile hamburger or module label */}
           <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 12 : 10 }}>
             {isMobile && (
               <button
@@ -312,30 +284,34 @@ export default function AppShell() {
               {isMobile ? "FusionFlow360" : "Onboarding & Implementation"}
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }} ref={notifRef}>
-            <SystemStatusBadge status={sysStatus} />
-            <button
-              type="button"
-              onClick={openNotifPanel}
-              title="Notifications"
-              style={{ position: "relative", background: "none", border: "none", cursor: "pointer", color: notifOpen ? "#fff" : "rgba(255,255,255,0.75)", padding: 4, display: "flex", alignItems: "center" }}
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 20, height: 20 }}>
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-              </svg>
-              {unreadCount > 0 && (
-                <span style={{
-                  position: "absolute", top: 0, right: 0,
-                  fontSize: 9, fontWeight: 800,
-                  background: "#d13438", color: "#fff",
-                  borderRadius: 10, padding: "1px 4px",
-                  lineHeight: 1.4, minWidth: 14, textAlign: "center",
-                }}>
-                  {unreadCount > 99 ? "99+" : unreadCount}
-                </span>
-              )}
-            </button>
+
+          {/* Right: inbox bell + user avatar */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, position: "relative" }} ref={notifRef}>
+            {/* Notification bell */}
+            {!isClient && (
+              <button
+                type="button"
+                onClick={openNotifPanel}
+                title="Inbox"
+                style={{ position: "relative", background: "none", border: "none", cursor: "pointer", color: notifOpen ? "#fff" : "rgba(255,255,255,0.75)", padding: 6, display: "flex", alignItems: "center", borderRadius: 8 }}
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 20, height: 20 }}>
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                {unreadCount > 0 && (
+                  <span style={{
+                    position: "absolute", top: 2, right: 2,
+                    fontSize: 9, fontWeight: 800,
+                    background: "#d13438", color: "#fff",
+                    borderRadius: 10, padding: "1px 4px",
+                    lineHeight: 1.4, minWidth: 14, textAlign: "center",
+                  }}>
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </button>
+            )}
 
             {/* Notification dropdown panel */}
             {notifOpen && (
@@ -348,7 +324,6 @@ export default function AppShell() {
                 display: "flex", flexDirection: "column",
                 overflow: "hidden", zIndex: 1000,
               }}>
-                {/* Header */}
                 <div style={{ padding: "12px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
                   <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b" }}>Notifications</span>
                   <button
@@ -359,8 +334,6 @@ export default function AppShell() {
                     View all
                   </button>
                 </div>
-
-                {/* List */}
                 <div style={{ flex: 1, overflowY: "auto" }}>
                   {notifLoading ? (
                     <div style={{ padding: "32px 16px", textAlign: "center", fontSize: 13, color: "#94a3b8" }}>Loading…</div>
@@ -401,31 +374,21 @@ export default function AppShell() {
                               {n.body}
                             </div>
                           )}
-                          {/* Actions */}
                           <div style={{ display: "flex", gap: 8, marginTop: 5 }}>
                             {link && (
-                              <button
-                                type="button"
-                                onClick={() => handleNotifNavigate(n)}
-                                style={{ fontSize: 11, fontWeight: 600, color: "#0b9aad", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                              >
+                              <button type="button" onClick={() => handleNotifNavigate(n)}
+                                style={{ fontSize: 11, fontWeight: 600, color: "#0b9aad", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                                 Go to →
                               </button>
                             )}
                             {isUnread && (
-                              <button
-                                type="button"
-                                onClick={() => handleNotifRead(n.id)}
-                                style={{ fontSize: 11, color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0 }}
-                              >
+                              <button type="button" onClick={() => handleNotifRead(n.id)}
+                                style={{ fontSize: 11, color: "#64748b", background: "none", border: "none", cursor: "pointer", padding: 0 }}>
                                 Mark read
                               </button>
                             )}
-                            <button
-                              type="button"
-                              onClick={() => handleNotifDelete(n.id)}
-                              style={{ fontSize: 11, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: 0, marginLeft: "auto" }}
-                            >
+                            <button type="button" onClick={() => handleNotifDelete(n.id)}
+                              style={{ fontSize: 11, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: 0, marginLeft: "auto" }}>
                               Dismiss
                             </button>
                           </div>
@@ -435,6 +398,11 @@ export default function AppShell() {
                   })}
                 </div>
               </div>
+            )}
+
+            {/* User avatar — compact, pops down */}
+            {currentUser && (
+              <UserChip user={currentUser} compact popout="down" />
             )}
           </div>
         </header>
@@ -471,19 +439,6 @@ export default function AppShell() {
     </div>
   );
 }
-
-function NavSection({ label }: { label: string }) {
-  return (
-    <div style={{ fontSize: 9, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "rgba(255,255,255,0.45)", padding: "8px 20px 4px" }}>
-      {label}
-    </div>
-  );
-}
-
-function Divider() {
-  return <div style={{ height: 1, background: "rgba(0,0,0,0.1)", margin: "10px 16px" }} />;
-}
-
 
 function SideLink({ to, children, end, onClick }: { to: string; children: React.ReactNode; end?: boolean; onClick?: () => void }) {
   return (
