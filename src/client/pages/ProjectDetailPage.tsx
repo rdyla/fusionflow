@@ -206,7 +206,7 @@ export default function ProjectDetailPage() {
         const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, staffData, meData] =
           await Promise.all([
             api.project(id), api.phases(id), api.milestones(id), api.tasks(id),
-            api.risks(id), api.notes(id), api.users(), api.documents(id),
+            api.risks(id), api.notes(id), api.users().catch(() => [] as User[]), api.documents(id),
             api.projectStaff(id),
             api.me(),
           ]);

@@ -124,6 +124,7 @@ export default function CustomerDetailPage() {
 
   useEffect(() => {
     if (!id) return;
+    api.users().then(setUsers).catch(() => {}); // admin-only; non-admins get empty list gracefully
     Promise.all([
       api.customer(id),
       api.customerContacts(id),
@@ -131,16 +132,14 @@ export default function CustomerDetailPage() {
       api.customerSolutions(id),
       api.customerProjects(id) as unknown as Promise<CustomerProject[]>,
       api.customerOptimizations(id),
-      api.users(),
     ])
-      .then(([c, ct, ae, s, p, o, u]) => {
+      .then(([c, ct, ae, s, p, o]) => {
         setCustomer(c);
         setContacts(ct);
         setProviderAes(ae);
         setSolutions(s);
         setProjects(p);
         setOptimizations(o);
-        setUsers(u);
         setEditForm({
           sharepoint_url: c.sharepoint_url ?? "",
           pf_ae_user_id: c.pf_ae_user_id ?? "",
