@@ -154,29 +154,29 @@ export default function AppShell() {
       <nav style={{ flex: 1, paddingTop: 8, overflowY: "auto" }}>
         {!isClient && (
           <>
-            <SideLink to="/customers" onClick={() => setDrawerOpen(false)}>Customers</SideLink>
-            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
-            <SideLink to="/dashboard" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
-            <SideLink to="/optimize" onClick={() => setDrawerOpen(false)}>Optimizations</SideLink>
+            <SideLink to="/customers" icon={NAV_ICONS.customers} onClick={() => setDrawerOpen(false)}>Customers</SideLink>
+            <SideLink to="/solutions" icon={NAV_ICONS.solutions} onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
+            <SideLink to="/dashboard" icon={NAV_ICONS.projects} onClick={() => setDrawerOpen(false)}>Projects</SideLink>
+            <SideLink to="/optimize" icon={NAV_ICONS.optimizations} onClick={() => setDrawerOpen(false)}>Optimizations</SideLink>
             {canProspect && (
-              <SideLink to="/prospecting" onClick={() => setDrawerOpen(false)}>Prospecting</SideLink>
+              <SideLink to="/prospecting" icon={NAV_ICONS.prospecting} onClick={() => setDrawerOpen(false)}>Prospecting</SideLink>
             )}
           </>
         )}
         {isClient && (
           <>
-            <SideLink to="/projects" onClick={() => setDrawerOpen(false)}>Projects</SideLink>
-            <SideLink to="/solutions" onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
+            <SideLink to="/projects" icon={NAV_ICONS.projects} onClick={() => setDrawerOpen(false)}>Projects</SideLink>
+            <SideLink to="/solutions" icon={NAV_ICONS.solutions} onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
           </>
         )}
         {isAdmin && (
           <div style={{ marginTop: 16, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-            <SideLink to="/admin/projects" onClick={() => setDrawerOpen(false)}>Admin: Projects</SideLink>
-            <SideLink to="/admin/solutions" onClick={() => setDrawerOpen(false)}>Admin: Solutions</SideLink>
-            <SideLink to="/admin/optimize" onClick={() => setDrawerOpen(false)}>Admin: Optimize</SideLink>
-            <SideLink to="/admin/labor" onClick={() => setDrawerOpen(false)}>Admin: Labor</SideLink>
-            <SideLink to="/admin/templates" onClick={() => setDrawerOpen(false)}>Admin: Templates</SideLink>
-            <SideLink to="/admin/users" onClick={() => setDrawerOpen(false)}>Admin: Users</SideLink>
+            <SideLink to="/admin/projects" icon={NAV_ICONS.adminProjects} onClick={() => setDrawerOpen(false)}>Admin: Projects</SideLink>
+            <SideLink to="/admin/solutions" icon={NAV_ICONS.adminSolutions} onClick={() => setDrawerOpen(false)}>Admin: Solutions</SideLink>
+            <SideLink to="/admin/optimize" icon={NAV_ICONS.adminOptimize} onClick={() => setDrawerOpen(false)}>Admin: Optimize</SideLink>
+            <SideLink to="/admin/labor" icon={NAV_ICONS.adminLabor} onClick={() => setDrawerOpen(false)}>Admin: Labor</SideLink>
+            <SideLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setDrawerOpen(false)}>Admin: Templates</SideLink>
+            <SideLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setDrawerOpen(false)}>Admin: Users</SideLink>
           </div>
         )}
       </nav>
@@ -440,7 +440,7 @@ export default function AppShell() {
   );
 }
 
-function SideLink({ to, children, end, onClick }: { to: string; children: React.ReactNode; end?: boolean; onClick?: () => void }) {
+function SideLink({ to, children, end, onClick, icon }: { to: string; children: React.ReactNode; end?: boolean; onClick?: () => void; icon?: React.ReactNode }) {
   return (
     <NavLink
       to={to}
@@ -448,7 +448,90 @@ function SideLink({ to, children, end, onClick }: { to: string; children: React.
       onClick={onClick}
       className={({ isActive }) => `ms-nav-link${isActive ? " active" : ""}`}
     >
+      {icon}
       {children}
     </NavLink>
   );
 }
+
+// ── Nav icons ──────────────────────────────────────────────────────────────
+
+function I({ children }: { children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75"
+      strokeLinecap="round" strokeLinejoin="round"
+      style={{ width: 16, height: 16, flexShrink: 0, opacity: 0.85 }}>
+      {children}
+    </svg>
+  );
+}
+
+const NAV_ICONS = {
+  customers: (
+    <I>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+      <circle cx="9" cy="7" r="4"/>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+    </I>
+  ),
+  solutions: (
+    <I>
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+    </I>
+  ),
+  projects: (
+    <I>
+      <rect x="2" y="7" width="20" height="14" rx="2"/>
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+    </I>
+  ),
+  optimizations: (
+    <I>
+      <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+      <polyline points="17 6 23 6 23 12"/>
+    </I>
+  ),
+  prospecting: (
+    <I>
+      <circle cx="12" cy="12" r="10"/>
+      <circle cx="12" cy="12" r="6"/>
+      <circle cx="12" cy="12" r="2"/>
+    </I>
+  ),
+  adminProjects: (
+    <I>
+      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+    </I>
+  ),
+  adminSolutions: (
+    <I>
+      <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+      <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+      <line x1="12" y1="22.08" x2="12" y2="12"/>
+    </I>
+  ),
+  adminOptimize: (
+    <I>
+      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+    </I>
+  ),
+  adminLabor: (
+    <I>
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+    </I>
+  ),
+  adminTemplates: (
+    <I>
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <line x1="3" y1="9" x2="21" y2="9"/>
+      <line x1="9" y1="21" x2="9" y2="9"/>
+    </I>
+  ),
+  adminUsers: (
+    <I>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </I>
+  ),
+};
