@@ -9,7 +9,25 @@ import { computeProjectHealth } from "../lib/healthScore";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// All admin routes require admin role
+// PM-accessible read endpoints — must be registered BEFORE the admin-only catch-all below
+app.get("/templates-list", requireRole("admin", "pm"), async (c) => {
+  const db = c.env.DB;
+  const templates = await db
+    .prepare(
+      `SELECT t.id, t.name, t.solution_type, t.description,
+              COUNT(DISTINCT tp.id) AS phase_count,
+              COUNT(DISTINCT tt.id) AS task_count
+       FROM templates t
+       LEFT JOIN template_phases tp ON tp.template_id = t.id
+       LEFT JOIN template_tasks tt ON tt.template_id = t.id
+       GROUP BY t.id
+       ORDER BY t.name ASC`
+    )
+    .all();
+  return c.json(templates.results ?? []);
+});
+
+// All other admin routes require admin role
 app.use("*", requireRole("admin"));
 
 // ── Users ─────────────────────────────────────────────────────────────────────
