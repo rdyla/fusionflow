@@ -8,6 +8,7 @@ export async function canViewProject(
 ): Promise<boolean> {
   if (user.role === "admin") return true;
   if (user.role === "executive") return true;    // Executives have read-only portfolio-wide visibility
+  if (user.role === "pm") return true;           // PMs have portfolio-wide read visibility
   if (user.role === "pf_sa") return true;        // SAs have portfolio-wide visibility
   if (user.role === "pf_csm") return true;       // CSMs have portfolio-wide visibility
   if (user.role === "pf_engineer") return true;  // Engineers have portfolio-wide visibility
@@ -18,22 +19,6 @@ export async function canViewProject(
       .bind(projectId, user.dynamics_account_id)
       .first();
     return !!owned;
-  }
-
-  if (user.role === "pm") {
-    const owned = await db
-      .prepare(
-        `
-        SELECT id
-        FROM projects
-        WHERE id = ? AND pm_user_id = ?
-        LIMIT 1
-        `
-      )
-      .bind(projectId, user.id)
-      .first();
-
-    if (owned) return true;
   }
 
   if (user.role === "pf_ae") {

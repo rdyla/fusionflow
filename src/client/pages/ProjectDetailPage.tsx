@@ -676,8 +676,8 @@ export default function ProjectDetailPage() {
         </Link>
       </div>
 
-      {/* Customer Metadata Section */}
-      {project.customer_id && (
+      {/* Customer Metadata Section — shown when linked to a customer, or when project has team names set directly */}
+      {(project.customer_id || project.ae_name || project.sa_name || project.csm_name) && (
         <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <div>
@@ -693,12 +693,12 @@ export default function ProjectDetailPage() {
               </a>
             )}
           </div>
-          {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name) && (
+          {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name || project.ae_name || project.sa_name || project.csm_name) && (
             <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
               {[
-                { role: "Account Executive", name: project.customer_pf_ae_name, email: project.customer_pf_ae_email },
-                { role: "Solution Architect", name: project.customer_pf_sa_name, email: project.customer_pf_sa_email },
-                { role: "Client Success Manager", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email },
+                { role: "Account Executive", name: project.customer_pf_ae_name ?? project.ae_name, email: project.customer_pf_ae_email },
+                { role: "Solution Architect", name: project.customer_pf_sa_name ?? project.sa_name, email: project.customer_pf_sa_email },
+                { role: "Client Success Manager", name: project.customer_pf_csm_name ?? project.csm_name, email: project.customer_pf_csm_email },
               ].filter(m => m.name).map((m) => {
                 const photo = m.email ? customerTeamPhotoMap[m.email] : null;
                 const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
