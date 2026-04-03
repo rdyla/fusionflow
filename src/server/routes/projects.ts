@@ -142,6 +142,7 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
   const { name, customer_name, customer_id, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
+  const resolved_pm_name = pm_name ?? (auth.role === "pm" ? (auth.user.name ?? auth.user.email) : null);
   const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
 
   await db
@@ -149,7 +150,7 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
       `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id)
        VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null, crm_case_id ?? null)
+    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, resolved_pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null, crm_case_id ?? null)
     .run();
 
   const created = await db
