@@ -372,6 +372,7 @@ export default function ProjectDetailPage() {
     try {
       const { staff, crm } = await api.projectCrmSync(project.id);
       setProjectStaff(staff);
+      setProject(p => p ? { ...p, ae_name: crm.ae_name ?? p.ae_name, sa_name: crm.sa_name ?? p.sa_name, csm_name: crm.csm_name ?? p.csm_name } : p);
       const matched = [
         crm.ae_name  ? `AE: ${crm.ae_name}`  : null,
         crm.sa_name  ? `SA: ${crm.sa_name}`  : null,
