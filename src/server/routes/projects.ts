@@ -20,8 +20,7 @@ app.get("/", async (c) => {
   let sql = `
     SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
-           pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name,
-           managed_in_asana, asana_project_id, solution_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
+           pm_user_id, managed_in_asana, asana_project_id, solution_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
     FROM projects
     WHERE (archived = 0 OR archived IS NULL)
@@ -33,8 +32,9 @@ app.get("/", async (c) => {
     bindings = [auth.user.id];
   } else if (auth.role === "pf_ae") {
     const teamIds = await getTeamUserIds(auth.user.id, db);
-    sql += ` AND ae_user_id IN (${inPlaceholders(teamIds)})`;
-    bindings = teamIds;
+    const ph = inPlaceholders(teamIds);
+    sql += ` AND (customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id IN (${ph})) OR id IN (SELECT project_id FROM project_access WHERE user_id IN (${ph})))`;
+    bindings = [...teamIds, ...teamIds];
   } else if (auth.role === "partner_ae") {
     const teamIds = await getTeamUserIds(auth.user.id, db);
     const ph = inPlaceholders(teamIds);
@@ -73,8 +73,7 @@ app.get("/:id", async (c) => {
       `
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_type, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
-             p.pm_user_id, p.pm_name, p.ae_user_id, p.ae_name, p.sa_name, p.csm_name, p.engineer_name,
-             p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id, p.crm_case_id, p.crm_opportunity_id,
+             p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id, p.crm_case_id, p.crm_opportunity_id,
              p.created_at, p.updated_at,
              pmu.email AS pm_email,
              s.name AS linked_solution_name,
@@ -117,12 +116,6 @@ const createProjectSchema = z.object({
   kickoff_date: z.string().optional(),
   target_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
-  pm_name: z.string().max(500).nullable().optional(),
-  ae_user_id: z.string().nullable().optional(),
-  ae_name: z.string().max(500).nullable().optional(),
-  sa_name: z.string().max(500).nullable().optional(),
-  csm_name: z.string().max(500).nullable().optional(),
-  engineer_name: z.string().max(500).nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
   solution_id: z.string().nullable().optional(),
   crm_case_id: z.string().nullable().optional(),
@@ -139,11 +132,9 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, customer_id: customerIdInput, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id } = parsed.data;
+  const { name, customer_name, customer_id: customerIdInput, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, dynamics_account_id, solution_id, crm_case_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
-  const resolved_pm_name = pm_name ?? (auth.role === "pm" ? (auth.user.name ?? auth.user.email) : null);
-  const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
 
   // If a CRM account is selected, find or create the customer record and link the project to it
   let customer_id = customerIdInput ?? null;
@@ -181,21 +172,14 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
 
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id)
-       VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, dynamics_account_id, solution_id, crm_case_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, resolved_pm_name ?? null, ae_user_id, ae_name ?? null, sa_name ?? null, csm_name ?? null, engineer_name ?? null, dynamics_account_id ?? null, solution_id ?? null, crm_case_id ?? null)
+    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, dynamics_account_id ?? null, solution_id ?? null, crm_case_id ?? null)
     .run();
 
   const created = await db
-    .prepare(
-      `
-      SELECT id, name, customer_name, vendor, solution_type, status, health,
-             kickoff_date, target_go_live_date, actual_go_live_date,
-             pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name, engineer_name, created_at, updated_at
-      FROM projects WHERE id = ? LIMIT 1
-      `
-    )
+    .prepare("SELECT id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
     .first();
 
@@ -209,12 +193,6 @@ const updateProjectSchema = z.object({
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
-  pm_name: z.string().max(500).nullable().optional(),
-  ae_user_id: z.string().nullable().optional(),
-  ae_name: z.string().max(500).nullable().optional(),
-  sa_name: z.string().max(500).nullable().optional(),
-  csm_name: z.string().max(500).nullable().optional(),
-  engineer_name: z.string().max(500).nullable().optional(),
   asana_project_id: z.string().nullable().optional(),
   managed_in_asana: z.number().int().min(0).max(1).optional(),
   solution_id: z.string().nullable().optional(),
@@ -593,34 +571,29 @@ app.post("/:id/crm-sync", async (c) => {
     findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
   ]);
 
-  // Upsert each role into project_staff — INSERT OR IGNORE handles duplicates
-  const staffToSync = [
-    { userId: ae_user_id,  role: "ae"  },
-    { userId: sa_user_id,  role: "sa"  },
-    { userId: csm_user_id, role: "csm" },
-  ];
-
-  for (const { userId, role } of staffToSync) {
-    if (!userId) continue;
-    // Remove any existing staff in this role first so we replace rather than duplicate
-    await db.prepare("DELETE FROM project_staff WHERE project_id = ? AND staff_role = ?")
-      .bind(projectId, role).run();
-    await db.prepare("INSERT INTO project_staff (id, project_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), projectId, userId, role).run();
-  }
-
-  // Persist team names on the project row so they survive page reloads
-  await db
-    .prepare("UPDATE projects SET ae_name = ?, sa_name = ?, csm_name = ?, ae_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .bind(team.ae_name ?? null, team.sa_name ?? null, team.csm_name ?? null, ae_user_id ?? null, projectId)
-    .run();
-
-  // If there's a linked customer, update their account team user links too
-  if (project.customer_id && (ae_user_id || sa_user_id || csm_user_id)) {
+  // Account team lives on the customer — update or create the customer record
+  if (project.customer_id) {
     await db
       .prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
       .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, project.customer_id)
       .run();
+  } else if (project.dynamics_account_id && (ae_user_id || sa_user_id || csm_user_id)) {
+    // No customer yet — find or create one, then link the project
+    let custId: string;
+    const existingCust = await db
+      .prepare("SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1")
+      .bind(project.dynamics_account_id).first<{ id: string }>();
+    if (existingCust) {
+      custId = existingCust.id;
+    } else {
+      custId = crypto.randomUUID();
+      const projectRow = await db.prepare("SELECT customer_name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ customer_name: string | null }>();
+      await db.prepare("INSERT INTO customers (id, name, crm_account_id) VALUES (?, ?, ?)")
+        .bind(custId, projectRow?.customer_name ?? "Unknown", project.dynamics_account_id).run();
+    }
+    await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+      .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, custId).run();
+    await db.prepare("UPDATE projects SET customer_id = ? WHERE id = ?").bind(custId, projectId).run();
   }
 
   // Return updated staff list and the refreshed project row

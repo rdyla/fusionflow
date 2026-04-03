@@ -20,8 +20,9 @@ app.get("/summary", async (c) => {
     filterBindings = [auth.user.id];
   } else if (auth.role === "pf_ae") {
     teamIds = await getTeamUserIds(auth.user.id, db);
-    projectFilter = `WHERE ae_user_id IN (${inPlaceholders(teamIds)})`;
-    filterBindings = teamIds;
+    const ph = inPlaceholders(teamIds);
+    projectFilter = `WHERE (customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id IN (${ph})) OR id IN (SELECT project_id FROM project_access WHERE user_id IN (${ph})))`;
+    filterBindings = [...teamIds, ...teamIds];
   } else if (auth.role === "partner_ae") {
     teamIds = await getTeamUserIds(auth.user.id, db);
     const ph = inPlaceholders(teamIds);
@@ -82,7 +83,7 @@ app.get("/summary", async (c) => {
   const projects = await db
     .prepare(
       `SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
-              kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, ae_user_id
+              kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id
        FROM projects ${projectFilter}
        ORDER BY
          CASE status WHEN 'completed' THEN 1 ELSE 0 END,

@@ -83,9 +83,6 @@ export type Solution = {
   vendor: SolutionVendor;
   solution_type: SolutionType;
   status: SolutionStatus;
-  pf_ae_user_id: string | null;
-  pf_sa_user_id: string | null;
-  pf_csm_user_id: string | null;
   partner_ae_user_id: string | null;
   partner_ae_name: string | null;
   partner_ae_email: string | null;
@@ -100,10 +97,6 @@ export type Solution = {
   created_at: string;
   updated_at: string;
   // Joined fields
-  pf_ae_name: string | null;
-  pf_ae_email_addr: string | null;
-  pf_sa_name: string | null;
-  pf_csm_name: string | null;
   partner_ae_display_name: string | null;
   linked_project_count: number | null;
   customer_pf_ae_name: string | null;
@@ -166,13 +159,6 @@ export type Project = {
   target_go_live_date: string | null;
   actual_go_live_date: string | null;
   pm_user_id: string | null;
-  pm_name: string | null;
-  ae_user_id: string | null;
-  ae_name: string | null;
-  sa_name: string | null;
-  partner_ae_names: string | null;
-  csm_name: string | null;
-  engineer_name: string | null;
   customer_id: string | null;
   dynamics_account_id: string | null;
   asana_project_id: string | null;
@@ -735,15 +721,16 @@ export type OptimizeAccount = {
   graduated_at: string;
   graduation_method: "auto" | "manual" | "direct";
   optimize_status: "active" | "paused" | "churned";
+  next_review_date: string | null;
+  notes: string | null;
+  customer_id: string | null;
+  // Team comes from the linked customer
   ae_user_id: string | null;
   ae_name: string | null;
   sa_user_id: string | null;
   sa_name: string | null;
   csm_user_id: string | null;
   csm_name: string | null;
-  next_review_date: string | null;
-  notes: string | null;
-  customer_id: string | null;
   dynamics_account_id: string | null;
   solution_id: string | null;
   linked_solution_name: string | null;

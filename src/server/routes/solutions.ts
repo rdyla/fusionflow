@@ -12,20 +12,14 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const SOLUTION_SELECT = `
   SELECT s.*,
-    u1.name as pf_ae_name, u1.email as pf_ae_email_addr,
     u2.name as partner_ae_display_name,
-    u3.name as pf_sa_name,
-    u4.name as pf_csm_name,
     cu1.name as customer_pf_ae_name, cu1.email as customer_pf_ae_email,
     cu2.name as customer_pf_sa_name, cu2.email as customer_pf_sa_email,
     cu3.name as customer_pf_csm_name, cu3.email as customer_pf_csm_email,
     cust.sharepoint_url as customer_sharepoint_url,
     (SELECT COUNT(*) FROM projects p WHERE p.solution_id = s.id) AS linked_project_count
   FROM solutions s
-  LEFT JOIN users u1 ON u1.id = s.pf_ae_user_id
   LEFT JOIN users u2 ON u2.id = s.partner_ae_user_id
-  LEFT JOIN users u3 ON u3.id = s.pf_sa_user_id
-  LEFT JOIN users u4 ON u4.id = s.pf_csm_user_id
   LEFT JOIN customers cust ON cust.id = s.customer_id
   LEFT JOIN users cu1 ON cu1.id = cust.pf_ae_user_id
   LEFT JOIN users cu2 ON cu2.id = cust.pf_sa_user_id
@@ -82,8 +76,8 @@ function accessClause(role: string, teamIds: string[], accountId?: string | null
   if (role === "pf_ae") {
     const ph = inPlaceholders(teamIds);
     return {
-      where: `(s.pf_ae_user_id IN (${ph}) OR s.created_by IN (${ph}) OR s.id IN (SELECT solution_id FROM solution_staff WHERE user_id IN (${ph}) AND staff_role = 'pf_ae'))`,
-      bindings: [...teamIds, ...teamIds, ...teamIds],
+      where: `(s.customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id IN (${ph})) OR s.created_by IN (${ph}))`,
+      bindings: [...teamIds, ...teamIds],
     };
   }
   if (role === "client") {
@@ -119,9 +113,6 @@ const createSolutionSchema = z.object({
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
   solution_type: z.string().optional(),
   journeys: z.array(z.string()).optional(),
-  pf_ae_user_id: z.string().optional(),
-  pf_sa_user_id: z.string().optional(),
-  pf_csm_user_id: z.string().optional(),
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
   partner_ae_email: z.string().email().optional().or(z.literal("")),
@@ -136,7 +127,6 @@ app.post("/", async (c) => {
 
   const {
     customer_name, customer_id, dynamics_account_id,
-    pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
   } = parsed.data;
 
@@ -190,27 +180,14 @@ app.post("/", async (c) => {
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type, journeys,
-          pf_ae_user_id, pf_sa_user_id, pf_csm_user_id,
           partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, customer_id ?? null, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
-      pf_ae_user_id ?? null, pf_sa_user_id ?? null, pf_csm_user_id ?? null,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
     .run();
-
-  // Auto-populate solution_staff from CRM-resolved team members
-  const staffEntries: [string, string][] = [
-    ...(pf_ae_user_id  ? [[pf_ae_user_id,  "pf_ae"] as [string, string]]  : []),
-    ...(pf_sa_user_id  ? [[pf_sa_user_id,  "pf_sa"] as [string, string]]  : []),
-    ...(pf_csm_user_id ? [[pf_csm_user_id, "pf_csm"] as [string, string]] : []),
-  ];
-  for (const [userId, role] of staffEntries) {
-    await db.prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), id, userId, role).run();
-  }
 
   const created = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(id).first();
   return c.json(created, 201);
@@ -243,9 +220,6 @@ const updateSolutionSchema = z.object({
   solution_type: z.string().optional(),
   journeys: z.array(z.string()).nullable().optional(),
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
-  pf_ae_user_id: z.string().nullable().optional(),
-  pf_sa_user_id: z.string().nullable().optional(),
-  pf_csm_user_id: z.string().nullable().optional(),
   partner_ae_user_id: z.string().nullable().optional(),
   partner_ae_name: z.string().nullable().optional(),
   partner_ae_email: z.string().nullable().optional(),
@@ -392,8 +366,7 @@ app.get("/:id/projects", async (c) => {
   const rows = await db.prepare(`
     SELECT id, name, customer_name, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
-           pm_user_id, pm_name, ae_user_id, ae_name, sa_name, csm_name,
-           solution_id, created_at, updated_at,
+           pm_user_id, solution_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
     FROM projects
     WHERE solution_id = ? AND (archived = 0 OR archived IS NULL)
@@ -461,7 +434,7 @@ app.post("/:id/create-project", async (c) => {
     .bind(solutionId)
     .first<{
       id: string; name: string; customer_name: string; vendor: string; solution_type: string;
-      pf_ae_user_id: string | null; partner_ae_user_id: string | null;
+      customer_id: string | null; partner_ae_user_id: string | null;
       dynamics_account_id: string | null;
     }>();
 
@@ -476,35 +449,20 @@ app.post("/:id/create-project", async (c) => {
   const projectId = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, vendor, solution_type, status, ae_user_id, solution_id, dynamics_account_id)
-       VALUES (?, ?, ?, ?, ?, 'planning', ?, ?, ?)`
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, solution_id, dynamics_account_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'planning', ?, ?)`
     )
     .bind(
       projectId,
       solution.name,
       solution.customer_name,
+      solution.customer_id ?? null,
       VENDOR_LABELS[solution.vendor] ?? solution.vendor,
       solution.solution_type,
-      solution.pf_ae_user_id ?? null,
       solutionId,
       solution.dynamics_account_id ?? null,
     )
     .run();
-
-  // Copy solution_staff (pf_ae/pf_sa/pf_csm) into project_staff (ae/sa/csm)
-  const solutionStaff = await db
-    .prepare("SELECT user_id, staff_role FROM solution_staff WHERE solution_id = ? AND staff_role IN ('pf_ae', 'pf_sa', 'pf_csm')")
-    .bind(solutionId)
-    .all<{ user_id: string; staff_role: string }>();
-
-  const roleMap: Record<string, string> = { pf_ae: "ae", pf_sa: "sa", pf_csm: "csm" };
-  for (const ss of solutionStaff.results ?? []) {
-    const projectRole = roleMap[ss.staff_role];
-    if (projectRole) {
-      await db.prepare("INSERT OR IGNORE INTO project_staff (id, project_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
-        .bind(crypto.randomUUID(), projectId, ss.user_id, projectRole).run();
-    }
-  }
 
   // Grant partner AE viewer access on the new project
   if (solution.partner_ae_user_id) {
@@ -602,9 +560,9 @@ app.post("/:id/crm-sync", async (c) => {
   const solutionId = c.req.param("id");
 
   const solution = await db
-    .prepare("SELECT dynamics_account_id FROM solutions WHERE id = ? LIMIT 1")
+    .prepare("SELECT dynamics_account_id, customer_id FROM solutions WHERE id = ? LIMIT 1")
     .bind(solutionId)
-    .first<{ dynamics_account_id: string | null }>();
+    .first<{ dynamics_account_id: string | null; customer_id: string | null }>();
 
   if (!solution?.dynamics_account_id) {
     throw new HTTPException(400, { message: "No CRM account linked to this solution" });
@@ -618,29 +576,25 @@ app.post("/:id/crm-sync", async (c) => {
     findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
   ]);
 
-  const staffToSync = [
-    { userId: ae_user_id,  role: "pf_ae"  },
-    { userId: sa_user_id,  role: "pf_sa"  },
-    { userId: csm_user_id, role: "pf_csm" },
-  ];
-
-  for (const { userId, role: staffRole } of staffToSync) {
-    if (!userId) continue;
-    await db.prepare("DELETE FROM solution_staff WHERE solution_id = ? AND staff_role = ?")
-      .bind(solutionId, staffRole).run();
-    await db.prepare("INSERT INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
-      .bind(crypto.randomUUID(), solutionId, userId, staffRole).run();
+  // Account team lives on the customer — update or create it
+  let customerId = solution.customer_id;
+  if (customerId) {
+    await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+      .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, customerId).run();
+  } else {
+    const existingCust = await db.prepare("SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1")
+      .bind(solution.dynamics_account_id).first<{ id: string }>();
+    if (existingCust) {
+      customerId = existingCust.id;
+      await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+        .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, customerId).run();
+      await db.prepare("UPDATE solutions SET customer_id = ? WHERE id = ?").bind(customerId, solutionId).run();
+    }
   }
 
-  const staff = await db.prepare(`
-    SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
-           u.name, u.email, u.role, u.avatar_url
-    FROM solution_staff ss JOIN users u ON u.id = ss.user_id
-    WHERE ss.solution_id = ?
-  `).bind(solutionId).all();
-
+  const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
   return c.json({
-    staff: staff.results ?? [],
+    solution: updated,
     crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name },
   });
 });

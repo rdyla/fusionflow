@@ -89,7 +89,7 @@ export default function SolutionDetailPage() {
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
 
   // Tab-local state
-  const [overview, setOverview] = useState({ name: "", customer_name: "", vendor: "tbd" as SolutionVendor, solution_type: "ucaas" as SolutionType, pf_ae_user_id: "", partner_ae_user_id: "", status: "" as SolutionStatus });
+  const [overview, setOverview] = useState({ name: "", customer_name: "", vendor: "tbd" as SolutionVendor, solution_type: "ucaas" as SolutionType, partner_ae_user_id: "", status: "" as SolutionStatus });
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
@@ -127,7 +127,6 @@ export default function SolutionDetailPage() {
       customer_name: s.customer_name,
       vendor: s.vendor as SolutionVendor,
       solution_type: s.solution_type as SolutionType,
-      pf_ae_user_id: s.pf_ae_user_id ?? "",
       partner_ae_user_id: s.partner_ae_user_id ?? "",
       status: s.status,
     });

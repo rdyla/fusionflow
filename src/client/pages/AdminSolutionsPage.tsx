@@ -106,7 +106,7 @@ function SolutionTable({
                     {STATUS_LABELS[s.status] ?? s.status}
                   </span>
                 </td>
-                <td style={{ color: "#64748b", fontSize: 13 }}>{s.pf_ae_name ?? "—"}</td>
+                <td style={{ color: "#64748b", fontSize: 13 }}>{s.customer_pf_ae_name ?? "—"}</td>
                 <td style={{ color: "#64748b", fontSize: 13 }}>{s.partner_ae_display_name ?? s.partner_ae_name ?? "—"}</td>
                 <td style={{ color: "#94a3b8", fontSize: 12 }}>{s.updated_at?.slice(0, 10) ?? "—"}</td>
                 <td>

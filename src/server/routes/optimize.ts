@@ -28,11 +28,12 @@ app.get("/accounts", async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
-      oa.optimize_status, oa.next_review_date, oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
-      oa.customer_id,
+      oa.optimize_status, oa.next_review_date, oa.customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
-      ae.name AS ae_name, sa.name AS sa_name, csm.name AS csm_name,
+      cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
+      cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name,
+      cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name,
       sol.name AS linked_solution_name,
       (SELECT conducted_date FROM impact_assessments WHERE project_id = oa.project_id
        ORDER BY conducted_date DESC LIMIT 1) AS last_assessment_date,
@@ -40,9 +41,10 @@ app.get("/accounts", async (c) => {
        ORDER BY conducted_date DESC LIMIT 1) AS last_assessment_score
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
-    LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
-    LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
-    LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN customers cust ON cust.id = COALESCE(oa.customer_id, p.customer_id)
+    LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
+    LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
+    LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
     LEFT JOIN solutions sol ON sol.id = p.solution_id
     ORDER BY oa.graduated_at DESC
   `).all();
@@ -74,29 +76,22 @@ app.get("/accounts/:projectId", async (c) => {
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.notes,
-      oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
       oa.customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
-      p.pm_name, p.solution_id,
+      p.solution_id,
       sol.name AS linked_solution_name,
-      ae.name  AS ae_name,  ae.email  AS ae_email,
-      sa.name  AS sa_name,  sa.email  AS sa_email,
-      csm.name AS csm_name, csm.email AS csm_email,
-      cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
-      cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
-      cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+      cust.pf_ae_user_id AS ae_user_id, ae.name  AS ae_name,  ae.email  AS ae_email,
+      cust.pf_sa_user_id AS sa_user_id, sa.name  AS sa_name,  sa.email  AS sa_email,
+      cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name, csm.email AS csm_email,
       cust.sharepoint_url AS customer_sharepoint_url
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
-    LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
-    LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
-    LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN customers cust ON cust.id = COALESCE(oa.customer_id, p.customer_id)
+    LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
+    LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
+    LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
     LEFT JOIN solutions sol ON sol.id = p.solution_id
-    LEFT JOIN customers cust ON cust.id = oa.customer_id
-    LEFT JOIN users cpu1 ON cpu1.id = cust.pf_ae_user_id
-    LEFT JOIN users cpu2 ON cpu2.id = cust.pf_sa_user_id
-    LEFT JOIN users cpu3 ON cpu3.id = cust.pf_csm_user_id
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });
@@ -150,16 +145,16 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("projectId");
 
-  const project = await db
-    .prepare("SELECT dynamics_account_id FROM projects WHERE id = ? LIMIT 1")
+  const row = await db
+    .prepare("SELECT p.dynamics_account_id, COALESCE(oa.customer_id, p.customer_id) AS customer_id FROM optimize_accounts oa JOIN projects p ON p.id = oa.project_id WHERE oa.project_id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ dynamics_account_id: string | null }>();
+    .first<{ dynamics_account_id: string | null; customer_id: string | null }>();
 
-  if (!project?.dynamics_account_id) {
+  if (!row?.dynamics_account_id) {
     throw new HTTPException(400, { message: "No CRM account linked to this project" });
   }
 
-  const team = await getAccountTeam(c.env, project.dynamics_account_id);
+  const team = await getAccountTeam(c.env, row.dynamics_account_id);
 
   const [ae_user_id, sa_user_id, csm_user_id] = await Promise.all([
     findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
@@ -167,32 +162,28 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
     findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
   ]);
 
-  await db.prepare(`
-    UPDATE optimize_accounts
-    SET ae_user_id  = COALESCE(?, ae_user_id),
-        sa_user_id  = COALESCE(?, sa_user_id),
-        csm_user_id = COALESCE(?, csm_user_id),
-        updated_at  = CURRENT_TIMESTAMP
-    WHERE project_id = ?
-  `).bind(ae_user_id, sa_user_id, csm_user_id, projectId).run();
+  // Account team lives on the customer — update it
+  if (row.customer_id) {
+    await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+      .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, row.customer_id).run();
+  }
 
-  // Return the full updated account in single-account shape
+  // Return the full updated account
   const updated = await db.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
-      oa.optimize_status, oa.next_review_date, oa.notes,
-      oa.ae_user_id, oa.sa_user_id, oa.csm_user_id, oa.updated_at,
+      oa.optimize_status, oa.next_review_date, oa.notes, oa.customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
-      p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
-      p.pm_name,
-      ae.name  AS ae_name,  ae.email  AS ae_email,
-      sa.name  AS sa_name,  sa.email  AS sa_email,
-      csm.name AS csm_name, csm.email AS csm_email
+      p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
+      cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name, ae.email AS ae_email,
+      cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name, sa.email AS sa_email,
+      cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name, csm.email AS csm_email
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
-    LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
-    LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
-    LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN customers cust ON cust.id = COALESCE(oa.customer_id, p.customer_id)
+    LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
+    LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
+    LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
 
@@ -206,9 +197,6 @@ const directEnrollSchema = z.object({
   vendor: z.string().max(100).nullable().optional(),
   solution_type: z.string().max(100).nullable().optional(),
   actual_go_live_date: z.string().nullable().optional(),
-  ae_user_id: z.string().nullable().optional(),
-  sa_user_id: z.string().nullable().optional(),
-  csm_user_id: z.string().nullable().optional(),
   next_review_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
@@ -250,30 +238,28 @@ app.post("/accounts/direct", async (c) => {
   // Create the optimize account
   const accountId = crypto.randomUUID();
   await db.prepare(`
-    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method,
-      ae_user_id, sa_user_id, csm_user_id, next_review_date, notes)
-    VALUES (?, ?, ?, 'direct', ?, ?, ?, ?, ?)
-  `).bind(
-    accountId, projectId, auth.user.id,
-    d.ae_user_id ?? null, d.sa_user_id ?? null, d.csm_user_id ?? null,
-    d.next_review_date ?? null, d.notes ?? null
-  ).run();
+    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method, next_review_date, notes)
+    VALUES (?, ?, ?, 'direct', ?, ?)
+  `).bind(accountId, projectId, auth.user.id, d.next_review_date ?? null, d.notes ?? null).run();
 
   // Return in list-query shape
   const created = await db.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
-      oa.optimize_status, oa.next_review_date, oa.ae_user_id, oa.sa_user_id, oa.csm_user_id,
+      oa.optimize_status, oa.next_review_date, oa.customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
-      ae.name AS ae_name, sa.name AS sa_name, csm.name AS csm_name,
+      cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
+      cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name,
+      cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name,
       sol.name AS linked_solution_name,
       NULL AS last_assessment_date, NULL AS last_assessment_score
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
-    LEFT JOIN users ae  ON ae.id  = oa.ae_user_id
-    LEFT JOIN users sa  ON sa.id  = oa.sa_user_id
-    LEFT JOIN users csm ON csm.id = oa.csm_user_id
+    LEFT JOIN customers cust ON cust.id = COALESCE(oa.customer_id, p.customer_id)
+    LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
+    LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
+    LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
     LEFT JOIN solutions sol ON sol.id = p.solution_id
     WHERE oa.id = ? LIMIT 1
   `).bind(accountId).first();
@@ -283,9 +269,6 @@ app.post("/accounts/direct", async (c) => {
 // ── Graduate a project ─────────────────────────────────────────────────────────
 
 const graduateSchema = z.object({
-  ae_user_id: z.string().nullable().optional(),
-  sa_user_id: z.string().nullable().optional(),
-  csm_user_id: z.string().nullable().optional(),
   next_review_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
 });
@@ -308,9 +291,9 @@ app.post("/accounts/:projectId/graduate", async (c) => {
 
   const id = crypto.randomUUID();
   await db.prepare(`
-    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method, ae_user_id, sa_user_id, csm_user_id, next_review_date, notes)
-    VALUES (?, ?, ?, 'manual', ?, ?, ?, ?, ?)
-  `).bind(id, projectId, auth.user.id, data.ae_user_id ?? null, data.sa_user_id ?? null, data.csm_user_id ?? null, data.next_review_date ?? null, data.notes ?? null).run();
+    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method, next_review_date, notes)
+    VALUES (?, ?, ?, 'manual', ?, ?)
+  `).bind(id, projectId, auth.user.id, data.next_review_date ?? null, data.notes ?? null).run();
 
   const created = await db.prepare("SELECT * FROM optimize_accounts WHERE id = ? LIMIT 1").bind(id).first();
   return c.json(created, 201);
@@ -319,9 +302,6 @@ app.post("/accounts/:projectId/graduate", async (c) => {
 // ── Update account ─────────────────────────────────────────────────────────────
 
 const updateAccountSchema = z.object({
-  ae_user_id: z.string().nullable().optional(),
-  sa_user_id: z.string().nullable().optional(),
-  csm_user_id: z.string().nullable().optional(),
   optimize_status: z.enum(["active", "paused", "churned"]).optional(),
   next_review_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),

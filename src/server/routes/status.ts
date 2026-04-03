@@ -229,7 +229,7 @@ async function vendorsForUser(
          AND (archived = 0 OR archived IS NULL)
          AND (
            pm_user_id = ?
-           OR ae_user_id = ?
+           OR customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id = ?)
            OR id IN (SELECT project_id FROM project_access WHERE user_id = ?)
          )`
     )

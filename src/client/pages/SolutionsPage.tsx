@@ -330,7 +330,7 @@ export default function SolutionsPage() {
                     </span>
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>
-                    {s.pf_ae_name ?? <span style={{ color: "#94a3b8" }}>—</span>}
+                    {s.customer_pf_ae_name ?? <span style={{ color: "#94a3b8" }}>—</span>}
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>
                     {s.partner_ae_display_name ?? s.partner_ae_name ?? <span style={{ color: "#94a3b8" }}>—</span>}
