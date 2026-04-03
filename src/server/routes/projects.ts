@@ -577,9 +577,9 @@ app.post("/:id/crm-sync", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await db
-    .prepare("SELECT dynamics_account_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT dynamics_account_id, customer_id FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ dynamics_account_id: string | null }>();
+    .first<{ dynamics_account_id: string | null; customer_id: string | null }>();
 
   if (!project?.dynamics_account_id) {
     throw new HTTPException(400, { message: "No CRM account linked to this project" });
@@ -609,18 +609,50 @@ app.post("/:id/crm-sync", async (c) => {
       .bind(crypto.randomUUID(), projectId, userId, role).run();
   }
 
-  // Return updated staff list
-  const staff = await db.prepare(`
-    SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url, u.organization_name
-    FROM project_staff ps JOIN users u ON u.id = ps.user_id
-    WHERE ps.project_id = ?
-    ORDER BY ps.staff_role, u.name
-  `).bind(projectId).all();
+  // Persist team names on the project row so they survive page reloads
+  await db
+    .prepare("UPDATE projects SET ae_name = ?, sa_name = ?, csm_name = ?, ae_user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(team.ae_name ?? null, team.sa_name ?? null, team.csm_name ?? null, ae_user_id ?? null, projectId)
+    .run();
+
+  // If there's a linked customer, update their account team user links too
+  if (project.customer_id && (ae_user_id || sa_user_id || csm_user_id)) {
+    await db
+      .prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+      .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, project.customer_id)
+      .run();
+  }
+
+  // Return updated staff list and the refreshed project row
+  const [staff, updatedProject] = await Promise.all([
+    db.prepare(`
+      SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
+             u.name, u.email, u.role, u.avatar_url, u.organization_name
+      FROM project_staff ps JOIN users u ON u.id = ps.user_id
+      WHERE ps.project_id = ?
+      ORDER BY ps.staff_role, u.name
+    `).bind(projectId).all(),
+    db.prepare(`
+      SELECT p.*, pmu.email AS pm_email,
+             c.name AS customer_display_name,
+             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
+             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
+             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+             c.sharepoint_url AS customer_sharepoint_url
+      FROM projects p
+      LEFT JOIN users pmu ON pmu.id = p.pm_user_id
+      LEFT JOIN customers c ON c.id = p.customer_id
+      LEFT JOIN users cpu1 ON cpu1.id = c.pf_ae_user_id
+      LEFT JOIN users cpu2 ON cpu2.id = c.pf_sa_user_id
+      LEFT JOIN users cpu3 ON cpu3.id = c.pf_csm_user_id
+      WHERE p.id = ? LIMIT 1
+    `).bind(projectId).first(),
+  ]);
 
   return c.json({
     staff: staff.results ?? [],
     crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name },
+    project: updatedProject,
   });
 });
 
