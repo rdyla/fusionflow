@@ -139,11 +139,45 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, customer_id, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id } = parsed.data;
+  const { name, customer_name, customer_id: customerIdInput, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, pm_name, ae_user_id: aeInput, ae_name, sa_name, csm_name, engineer_name, dynamics_account_id, solution_id, crm_case_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
   const resolved_pm_name = pm_name ?? (auth.role === "pm" ? (auth.user.name ?? auth.user.email) : null);
   const ae_user_id = aeInput ?? (auth.role === "pf_ae" ? auth.user.id : null);
+
+  // If a CRM account is selected, find or create the customer record and link the project to it
+  let customer_id = customerIdInput ?? null;
+  if (dynamics_account_id && !customer_id) {
+    const existing = await db
+      .prepare(`SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1`)
+      .bind(dynamics_account_id)
+      .first<{ id: string }>();
+    if (existing) {
+      customer_id = existing.id;
+    } else {
+      const newCustomerId = crypto.randomUUID();
+      await db
+        .prepare(`INSERT INTO customers (id, name, crm_account_id) VALUES (?, ?, ?)`)
+        .bind(newCustomerId, customer_name ?? "Unknown", dynamics_account_id)
+        .run();
+      customer_id = newCustomerId;
+      // Best-effort CRM sync to populate the account team
+      try {
+        const team = await getAccountTeam(c.env, dynamics_account_id);
+        const [aeId, saId, csmId] = await Promise.all([
+          findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+          findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+          findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
+        ]);
+        if (aeId || saId || csmId) {
+          await db
+            .prepare(`UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?`)
+            .bind(aeId ?? null, saId ?? null, csmId ?? null, newCustomerId)
+            .run();
+        }
+      } catch { /* sync is best-effort */ }
+    }
+  }
 
   await db
     .prepare(
