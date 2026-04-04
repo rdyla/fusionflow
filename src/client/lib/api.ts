@@ -161,8 +161,6 @@ export type Project = {
   pm_user_id: string | null;
   customer_id: string | null;
   dynamics_account_id: string | null;
-  asana_project_id: string | null;
-  managed_in_asana: number | null;
   archived: number | null;
   solution_id: string | null;
   crm_case_id: string | null;
@@ -190,67 +188,43 @@ export type ProjectChain = {
   optimizeAccount: { project_id: string; optimize_status: string } | null;
 };
 
-export type AsanaSectionSummary = {
-  gid: string;
-  name: string;
-  sort_order: number;
-  total: number;
-  completed: number;
+export type ZoomRecordingFile = {
+  id: string;
+  file_type: string;
+  file_size: number;
+  play_url: string | null;
+  download_url: string | null;
+  recording_type: string;
+  recording_start: string;
+  recording_end: string;
 };
 
-export type AsanaWorkspace = {
-  gid: string;
-  name: string;
+export type ZoomRecording = {
+  id: string;
+  project_id: string;
+  phase_id: string | null;
+  phase_name: string | null;
+  meeting_id: string;
+  topic: string;
+  start_time: string;
+  duration_mins: number;
+  host_email: string | null;
+  recording_files: ZoomRecordingFile[];
+  match_reason: string | null;
+  manually_assigned: number;
+  created_at: string;
 };
 
-export type AsanaProjectSummary = {
-  gid: string;
-  name: string;
-  notes: string | null;
-  due_on: string | null;
-};
-
-export type AsanaCustomFieldValue = {
-  gid: string;
-  name: string;
-  display_value: string | null;
-  type: string;
-};
-
-export type AsanaCustomFieldDef = {
-  gid: string;
-  name: string;
-  type: string;
-};
-
-export type AsanaTask = {
-  gid: string;
-  name: string;
-  completed: boolean;
-  due_on: string | null;
-  start_on: string | null;
-  assignee: { gid: string; name: string } | null;
-  notes: string | null;
-  num_subtasks: number;
-  custom_fields: AsanaCustomFieldValue[];
-};
-
-export type AsanaSectionWithTasks = {
-  section: { gid: string; name: string };
-  tasks: AsanaTask[];
-};
-
-export type AsanaProjectData = {
-  project: {
-    gid: string;
-    name: string;
-    notes: string | null;
-    due_on: string | null;
-    created_at: string;
-    color: string | null;
-  };
-  sections: AsanaSectionWithTasks[];
-  customFieldDefs: AsanaCustomFieldDef[];
+export type ZoomRecordingSuggestion = {
+  meeting_id: string;
+  topic: string;
+  start_time: string;
+  duration_mins: number;
+  host_email: string | null;
+  recording_files: ZoomRecordingFile[];
+  suggested_phase_id: string | null;
+  suggested_phase_name: string | null;
+  match_reason: string | null;
 };
 
 export type DynamicsAccount = {
@@ -1551,27 +1525,24 @@ export const api = {
   optimizeUtilizationSync: (projectId: string) =>
     request<UtilizationSnapshot>(`/optimize/accounts/${projectId}/utilization/sync`, { method: "POST" }),
 
-  // ── Asana integration ──────────────────────────────────────────────────────
+  // ── Zoom Recordings ──────────────────────────────────────────────────────────
 
-  asanaStatus: () => request<{ connected: boolean }>("/asana/status"),
-  asanaAuthUrl: () => request<{ url: string }>("/asana/auth"),
-  asanaSectionSummary: (projectId: string) =>
-    request<AsanaSectionSummary[]>(`/asana/section-summary/${projectId}`),
-  asanaWorkspaces: () => request<AsanaWorkspace[]>("/asana/workspaces"),
-  asanaSearchProjects: (workspace: string) =>
-    request<AsanaProjectSummary[]>(`/asana/search-projects?workspace=${encodeURIComponent(workspace)}`),
-  asanaProjectData: (projectId: string) =>
-    request<AsanaProjectData>(`/asana/project-data/${projectId}`),
-  linkAsanaProject: (projectId: string, asanaProjectGid: string) =>
-    request<Project>(`/projects/${projectId}`, {
-      method: "PATCH",
-      body: JSON.stringify({ asana_project_id: asanaProjectGid, managed_in_asana: 1 }),
+  zoomRecordings: (projectId: string) =>
+    request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings`),
+  zoomSyncRecordings: (projectId: string) =>
+    request<{ suggestions: ZoomRecordingSuggestion[]; already_linked: ZoomRecording[] }>(`/projects/${projectId}/zoom/recordings/sync`, { method: "POST" }),
+  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; match_reason: string | null }[]) =>
+    request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ confirmations }),
     }),
-  unlinkAsanaProject: (projectId: string) =>
-    request<Project>(`/projects/${projectId}`, {
+  zoomReassignRecording: (projectId: string, recordingId: string, phase_id: string | null) =>
+    request<ZoomRecording>(`/projects/${projectId}/zoom/recordings/${recordingId}`, {
       method: "PATCH",
-      body: JSON.stringify({ asana_project_id: null, managed_in_asana: 0 }),
+      body: JSON.stringify({ phase_id }),
     }),
+  zoomDeleteRecording: (projectId: string, recordingId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/zoom/recordings/${recordingId}`, { method: "DELETE" }),
 
   // ── Labor Estimates ──────────────────────────────────────────────────────────
   laborEstimate: (solutionId: string) =>

@@ -366,6 +366,127 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   };
 }
 
+// ── Recordings ───────────────────────────────────────────────────────────────
+
+export type ZoomRecordingFile = {
+  id: string;
+  file_type: string;
+  file_size: number;
+  play_url: string | null;
+  download_url: string | null;
+  recording_type: string;
+  recording_start: string;
+  recording_end: string;
+};
+
+export type ZoomMeeting = {
+  uuid: string;
+  id: number;
+  topic: string;
+  start_time: string;
+  duration: number;
+  host_email: string;
+  recording_files?: ZoomRecordingFile[];
+};
+
+type ZoomRecordingsPage = {
+  meetings?: ZoomMeeting[];
+  next_page_token?: string;
+};
+
+/** Fetch cloud recordings for a project's Zoom account (last 90 days, up to 300 meetings). */
+export async function getZoomRecordings(kv: KVNamespace, projectId: string): Promise<ZoomMeeting[]> {
+  const creds = await getCreds(kv, projectId);
+  if (!creds) throw new Error("No Zoom credentials configured for this project");
+
+  const token = await getToken(kv, creds, projectId);
+
+  const today = new Date();
+  const from = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const to = today.toISOString().slice(0, 10);
+
+  const meetings: ZoomMeeting[] = [];
+  let nextPageToken = "";
+
+  do {
+    const qs = new URLSearchParams({ from, to, page_size: "300" });
+    if (nextPageToken) qs.set("next_page_token", nextPageToken);
+
+    const page = await zoomGet<ZoomRecordingsPage>(token, `/accounts/me/recordings?${qs}`);
+    meetings.push(...(page.meetings ?? []));
+    nextPageToken = page.next_page_token ?? "";
+  } while (nextPageToken);
+
+  return meetings;
+}
+
+// Phase keyword map — order matters: more specific terms first
+const PHASE_KEYWORDS: Array<{ keywords: RegExp[]; phase_pattern: RegExp }> = [
+  { keywords: [/hypercare/i, /post[\s-]?go[\s-]?live/i], phase_pattern: /hypercare/i },
+  { keywords: [/go[\s-]?live/i, /cutover/i, /migration/i], phase_pattern: /go[\s-]?live/i },
+  { keywords: [/training/i, /train\b/i, /end[\s-]?user/i], phase_pattern: /training/i },
+  { keywords: [/\buat\b/i, /user[\s-]?acceptance/i, /testing/i, /\btest\b/i], phase_pattern: /test/i },
+  { keywords: [/\bbuild\b/i, /config/i, /implementation/i, /install/i, /deploy/i], phase_pattern: /build/i },
+  { keywords: [/\bdesign\b/i, /architect/i, /solution/i], phase_pattern: /design/i },
+  { keywords: [/kick[\s-]?off/i, /discovery/i, /scoping/i, /requirement/i, /onboard/i], phase_pattern: /discovery|kick.?off/i },
+];
+
+type PhaseRow = { id: string; name: string; planned_start: string | null; planned_end: string | null };
+
+export type RecordingMatch = {
+  meeting: ZoomMeeting;
+  phase_id: string | null;
+  match_reason: string | null;
+};
+
+/**
+ * Match Zoom meetings to project phases using three signals (in priority order):
+ * 1. CRM case ID extracted from topic matched against project.crm_case_id
+ * 2. Phase keyword matching on meeting topic
+ * 3. Date range — meeting start_time within a phase's planned_start..planned_end
+ */
+export function matchRecordingsToPhases(
+  meetings: ZoomMeeting[],
+  phases: PhaseRow[],
+  crmCaseId: string | null
+): RecordingMatch[] {
+  return meetings.map((meeting) => {
+    const topic = meeting.topic ?? "";
+
+    // Signal 1: CRM case ID
+    if (crmCaseId) {
+      const escapedCase = crmCaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (new RegExp(escapedCase, "i").test(topic)) {
+        return { meeting, phase_id: null, match_reason: "case_number" };
+      }
+    }
+
+    // Signal 2: Keyword → phase name match
+    for (const { keywords, phase_pattern } of PHASE_KEYWORDS) {
+      const topicMatches = keywords.some((kw) => kw.test(topic));
+      if (!topicMatches) continue;
+      const phase = phases.find((p) => phase_pattern.test(p.name));
+      if (phase) {
+        return { meeting, phase_id: phase.id, match_reason: `keyword:${phase.name}` };
+      }
+    }
+
+    // Signal 3: Date range
+    const meetingDate = meeting.start_time?.slice(0, 10);
+    if (meetingDate) {
+      const phaseInRange = phases.find((p) => {
+        if (!p.planned_start || !p.planned_end) return false;
+        return meetingDate >= p.planned_start && meetingDate <= p.planned_end;
+      });
+      if (phaseInRange) {
+        return { meeting, phase_id: phaseInRange.id, match_reason: "date_range" };
+      }
+    }
+
+    return { meeting, phase_id: null, match_reason: null };
+  });
+}
+
 export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise<ZoomStatus | null> {
   const creds = await getCreds(kv, projectId);
   if (!creds) return null;

@@ -20,7 +20,7 @@ app.get("/", async (c) => {
   let sql = `
     SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
-           pm_user_id, managed_in_asana, asana_project_id, solution_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
+           pm_user_id, solution_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
     FROM projects
     WHERE (archived = 0 OR archived IS NULL)
@@ -73,7 +73,7 @@ app.get("/:id", async (c) => {
       `
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_type, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
-             p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.solution_id, p.crm_case_id, p.crm_opportunity_id,
+             p.pm_user_id, p.dynamics_account_id, p.solution_id, p.crm_case_id, p.crm_opportunity_id,
              p.created_at, p.updated_at,
              pmu.email AS pm_email,
              s.name AS linked_solution_name,
@@ -193,8 +193,6 @@ const updateProjectSchema = z.object({
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
-  asana_project_id: z.string().nullable().optional(),
-  managed_in_asana: z.number().int().min(0).max(1).optional(),
   solution_id: z.string().nullable().optional(),
   crm_case_id: z.string().nullable().optional(),
   crm_opportunity_id: z.string().nullable().optional(),

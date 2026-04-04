@@ -2,9 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
-  type AsanaProjectSummary,
-  type AsanaSectionSummary,
-  type AsanaWorkspace,
   type CaseComplianceData,
   type Document,
   type DynamicsContact,
@@ -20,17 +17,19 @@ import {
   type Task,
   type TaskComment,
   type User,
+  type ZoomRecording,
+  type ZoomRecordingSuggestion,
+  type ZoomRecordingFile,
 } from "../lib/api";
 import LifecycleChain from "../components/ui/LifecycleChain";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
-import AsanaProjectView from "../components/asana/AsanaProjectView";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "asana" | "case";
+type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -146,17 +145,13 @@ export default function ProjectDetailPage() {
   const [addPartnerUserId, setAddPartnerUserId] = useState("");
   const [addingPartner, setAddingPartner] = useState(false);
 
-  // Asana section summaries (loaded for managed_in_asana projects)
-  const [asanaSectionSummaries, setAsanaSectionSummaries] = useState<AsanaSectionSummary[]>([]);
+  // Zoom recordings
+  const [recordings, setRecordings] = useState<ZoomRecording[]>([]);
+  const [syncingSuggestions, setSyncingSuggestions] = useState(false);
+  const [syncSuggestions, setSyncSuggestions] = useState<ZoomRecordingSuggestion[] | null>(null);
+  const [confirmingRecordings, setConfirmingRecordings] = useState(false);
+  const [suggestionPhaseOverrides, setSuggestionPhaseOverrides] = useState<Record<number, string | null>>({});
 
-  // Asana link modal
-  const [showAsanaModal, setShowAsanaModal] = useState(false);
-  const [asanaConnected, setAsanaConnected] = useState<boolean | null>(null);
-  const [asanaWorkspaces, setAsanaWorkspaces] = useState<AsanaWorkspace[]>([]);
-  const [asanaSelectedWorkspace, setAsanaSelectedWorkspace] = useState("");
-  const [asanaProjects, setAsanaProjects] = useState<AsanaProjectSummary[]>([]);
-  const [asanaLoadingProjects, setAsanaLoadingProjects] = useState(false);
-  const [asanaLinking, setAsanaLinking] = useState(false);
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
@@ -216,9 +211,7 @@ export default function ProjectDetailPage() {
         setEditStatus(projectData.status ?? "");
         setEditHealth(projectData.health ?? "");
         setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
-        if (projectData.managed_in_asana) {
-          api.asanaSectionSummary(id).then(setAsanaSectionSummaries).catch(() => {});
-        }
+        api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
         if (staffData.length > 0) {
           const emails = staffData.map((s: { email: string }) => s.email);
@@ -784,11 +777,8 @@ export default function ProjectDetailPage() {
       {(() => {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
-        const managedInAsana = !!project.managed_in_asana;
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = managedInAsana
-          ? ["overview", "asana", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"]
-          : ["overview", "timeline", "tasks", "risks", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "risks", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -797,7 +787,7 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "asana" ? "Asana" : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -957,66 +947,6 @@ export default function ProjectDetailPage() {
           })()}
 
           {canEdit && <div className="ms-section-card">
-            <div className="ms-section-title">Asana Integration</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-              {project.managed_in_asana ? (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f06a35", flexShrink: 0 }} />
-                    <span style={{ fontSize: 13, color: "#1e293b", fontWeight: 500 }}>Managed in Asana</span>
-                    {project.asana_project_id && (
-                      <span style={{ fontSize: 11, color: "#94a3b8" }}>GID: {project.asana_project_id}</span>
-                    )}
-                  </div>
-                  <button
-                    className="ms-btn-secondary"
-                    style={{ fontSize: 12 }}
-                    onClick={async () => {
-                      try {
-                        const updated = await api.unlinkAsanaProject(project.id);
-                        setProject(updated);
-                        showToast("Asana project unlinked.", "success");
-                      } catch {
-                        showToast("Failed to unlink Asana project", "error");
-                      }
-                    }}
-                  >
-                    Unlink Asana
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span style={{ fontSize: 13, color: "#94a3b8" }}>Not managed in Asana</span>
-                  <button
-                    className="ms-btn-secondary"
-                    style={{ fontSize: 12 }}
-                    onClick={async () => {
-                      setShowAsanaModal(true);
-                      setAsanaProjects([]);
-                      setAsanaSelectedWorkspace("");
-                      const status = await api.asanaStatus().catch(() => ({ connected: false }));
-                      setAsanaConnected(status.connected);
-                      if (status.connected) {
-                        const ws = await api.asanaWorkspaces().catch(() => []);
-                        setAsanaWorkspaces(ws);
-                        if (ws.length === 1) {
-                          setAsanaSelectedWorkspace(ws[0].gid);
-                          setAsanaLoadingProjects(true);
-                          const projects = await api.asanaSearchProjects(ws[0].gid).catch(() => []);
-                          setAsanaProjects(projects);
-                          setAsanaLoadingProjects(false);
-                        }
-                      }
-                    }}
-                  >
-                    Link to Asana Project
-                  </button>
-                </>
-              )}
-            </div>
-          </div>}
-
-          {canEdit && <div className="ms-section-card">
             <div className="ms-section-title">Project Controls</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
               <label className="ms-label">
@@ -1162,42 +1092,6 @@ export default function ProjectDetailPage() {
           </div>
 
           {/* ── Asana Phase Progress ──────────────────────────────────────── */}
-          {!!project.managed_in_asana && asanaSectionSummaries.length > 0 && (
-            <div className="ms-section-card">
-              <div className="ms-section-title">Phase Progress</div>
-              <div style={{ display: "grid", gap: 10 }}>
-                {asanaSectionSummaries.map((s) => {
-                  const pct = s.total > 0 ? Math.round((s.completed / s.total) * 100) : 0;
-                  const status = s.total === 0 ? "not_started"
-                    : s.completed === s.total ? "completed"
-                    : s.completed > 0 ? "in_progress"
-                    : "not_started";
-                  const statusColor: Record<string, string> = {
-                    completed: "#059669", in_progress: "#0891b2", not_started: "#94a3b8",
-                  };
-                  const color = statusColor[status];
-                  return (
-                    <div key={s.gid}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 5 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: color, flexShrink: 0 }} />
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name}</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <span style={{ fontSize: 11, color: "#94a3b8" }}>{s.completed}/{s.total} tasks</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color }}>{pct}%</span>
-                        </div>
-                      </div>
-                      <div style={{ height: 6, background: "#e2e8f0", borderRadius: 999, overflow: "hidden" }}>
-                        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 999, transition: "width 0.3s" }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
@@ -1392,6 +1286,203 @@ export default function ProjectDetailPage() {
                     </button>
                     {noteMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{noteMessage}</span>}
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Zoom Recordings ─────────────────────────────────────── */}
+            {detectPlatform(project.vendor) === "zoom" && (
+              <div className="ms-section-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: recordings.length > 0 ? 14 : 0 }}>
+                  <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Zoom Recordings</div>
+                  {canEdit && (
+                    <button
+                      className="ms-btn-secondary"
+                      style={{ fontSize: 12 }}
+                      disabled={syncingSuggestions}
+                      onClick={async () => {
+                        setSyncingSuggestions(true);
+                        setSyncSuggestions(null);
+                        setSuggestionPhaseOverrides({});
+                        try {
+                          const result = await api.zoomSyncRecordings(project.id);
+                          setSyncSuggestions(result.suggestions);
+                          setRecordings(result.already_linked);
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : "Failed to sync recordings", "error");
+                        } finally {
+                          setSyncingSuggestions(false);
+                        }
+                      }}
+                    >
+                      {syncingSuggestions ? "Syncing..." : "Sync Recordings"}
+                    </button>
+                  )}
+                </div>
+
+                {recordings.length > 0 && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {recordings.map((rec) => (
+                      <div key={rec.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
+                        <div style={{ fontSize: 20, flexShrink: 0 }}>🎥</div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b", marginBottom: 3 }}>{rec.topic}</div>
+                          <div style={{ fontSize: 12, color: "#64748b", marginBottom: 6 }}>
+                            {new Date(rec.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                            {" · "}{rec.duration_mins}m
+                            {rec.host_email && <> · {rec.host_email}</>}
+                            {rec.match_reason && (
+                              <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: rec.manually_assigned ? "rgba(124,58,237,0.12)" : "rgba(8,145,178,0.12)", color: rec.manually_assigned ? "#7c3aed" : "#0891b2", border: `1px solid ${rec.manually_assigned ? "rgba(124,58,237,0.3)" : "rgba(8,145,178,0.3)"}` }}>
+                                {rec.manually_assigned ? "manual" : rec.match_reason.replace("keyword:", "")}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                            {rec.recording_files.filter((f) => f.play_url).slice(0, 1).map((f) => (
+                              <a key={f.id} href={f.play_url!} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
+                                Watch recording ↗
+                              </a>
+                            ))}
+                            {canEdit && (
+                              <select
+                                className="ms-input"
+                                style={{ fontSize: 12, padding: "2px 6px", height: "auto", width: "auto" }}
+                                value={rec.phase_id ?? ""}
+                                onChange={async (e) => {
+                                  const newPhaseId = e.target.value || null;
+                                  try {
+                                    const updated = await api.zoomReassignRecording(project.id, rec.id, newPhaseId);
+                                    setRecordings((prev) => prev.map((r) => r.id === updated.id ? updated : r));
+                                    showToast("Recording reassigned.", "success");
+                                  } catch {
+                                    showToast("Failed to reassign recording", "error");
+                                  }
+                                }}
+                              >
+                                <option value="">— unassigned —</option>
+                                {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                              </select>
+                            )}
+                            {canEdit && (
+                              <button
+                                className="ms-btn-ghost"
+                                style={{ fontSize: 11, color: "#d13438", borderColor: "rgba(209,52,56,0.3)" }}
+                                onClick={async () => {
+                                  if (!confirm("Remove this recording link?")) return;
+                                  await api.zoomDeleteRecording(project.id, rec.id);
+                                  setRecordings((prev) => prev.filter((r) => r.id !== rec.id));
+                                }}
+                              >
+                                Remove
+                              </button>
+                            )}
+                          </div>
+                          {rec.phase_name && (
+                            <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Phase: {rec.phase_name}</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {recordings.length === 0 && !syncSuggestions && (
+                  <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginTop: 8 }}>
+                    No recordings linked yet. Click "Sync Recordings" to import from Zoom.
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Sync suggestions modal ────────────────────────────── */}
+            {syncSuggestions !== null && (
+              <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSyncSuggestions(null); }}>
+                <div className="ms-modal" style={{ maxWidth: 640 }}>
+                  <h2>Sync Recordings</h2>
+                  {syncSuggestions.length === 0 ? (
+                    <div>
+                      <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>No new recordings found in the last 90 days.</p>
+                      <button className="ms-btn-secondary" onClick={() => setSyncSuggestions(null)}>Close</button>
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 16 }}>
+                      <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
+                        Found {syncSuggestions.length} new recording{syncSuggestions.length !== 1 ? "s" : ""}. Review phase assignments before confirming.
+                      </p>
+                      <div style={{ display: "grid", gap: 10, maxHeight: 420, overflowY: "auto" }}>
+                        {syncSuggestions.map((s, idx) => {
+                          const overridePhaseId = idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id;
+                          return (
+                            <div key={s.meeting_id} style={{ padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9", display: "grid", gap: 8 }}>
+                              <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>{s.topic}</div>
+                              <div style={{ fontSize: 12, color: "#64748b" }}>
+                                {new Date(s.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                {" · "}{s.duration_mins}m
+                                {s.host_email && <> · {s.host_email}</>}
+                                {s.match_reason && (
+                                  <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: "rgba(8,145,178,0.12)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.3)" }}>
+                                    {s.match_reason.replace("keyword:", "")}
+                                  </span>
+                                )}
+                                {!s.match_reason && (
+                                  <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: "rgba(148,163,184,0.15)", color: "#94a3b8", border: "1px solid rgba(148,163,184,0.3)" }}>
+                                    no match
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Assign to phase:</span>
+                                <select
+                                  className="ms-input"
+                                  style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
+                                  value={overridePhaseId ?? ""}
+                                  onChange={(e) => setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }))}
+                                >
+                                  <option value="">— unassigned —</option>
+                                  {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        <button className="ms-btn-secondary" onClick={() => setSyncSuggestions(null)}>Cancel</button>
+                        <button
+                          className="ms-btn-primary"
+                          disabled={confirmingRecordings}
+                          onClick={async () => {
+                            setConfirmingRecordings(true);
+                            try {
+                              const confirmations = syncSuggestions.map((s, idx) => ({
+                                meeting_id: s.meeting_id,
+                                phase_id: (idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id) ?? null,
+                                topic: s.topic,
+                                start_time: s.start_time,
+                                duration_mins: s.duration_mins,
+                                host_email: s.host_email ?? null,
+                                recording_files: s.recording_files as ZoomRecordingFile[],
+                                match_reason: (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) ? "manual" : s.match_reason ?? null,
+                              }));
+                              const saved = await api.zoomConfirmRecordings(project.id, confirmations);
+                              setRecordings((prev) => {
+                                const map = new Map(prev.map((r) => [r.id, r]));
+                                saved.forEach((r) => map.set(r.id, r));
+                                return [...map.values()].sort((a, b) => b.start_time.localeCompare(a.start_time));
+                              });
+                              setSyncSuggestions(null);
+                              showToast(`${saved.length} recording${saved.length !== 1 ? "s" : ""} linked successfully.`, "success");
+                            } catch (err) {
+                              showToast(err instanceof Error ? err.message : "Failed to confirm recordings", "error");
+                            } finally {
+                              setConfirmingRecordings(false);
+                            }
+                          }}
+                        >
+                          {confirmingRecordings ? "Saving..." : `Confirm ${syncSuggestions.length} Recording${syncSuggestions.length !== 1 ? "s" : ""}`}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1801,125 +1892,6 @@ export default function ProjectDetailPage() {
           ? <RingCentralTab projectId={project.id} />
           : <ZoomTab projectId={project.id} />;
       })()}
-
-      {/* ── Asana ─────────────────────────────────────────────────────────── */}
-      {tab === "asana" && <AsanaProjectView projectId={project.id} />}
-
-      {/* ── Asana Link Modal ──────────────────────────────────────────────── */}
-      {showAsanaModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAsanaModal(false); }}>
-          <div className="ms-modal" style={{ maxWidth: 520 }}>
-            <h2>Link to Asana Project</h2>
-
-            {asanaConnected === false && (
-              <div style={{ display: "grid", gap: 14 }}>
-                <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
-                  Asana is not connected. An admin needs to authorize FusionFlow360 to access Asana.
-                </p>
-                <button
-                  className="ms-btn-primary"
-                  onClick={async () => {
-                    try {
-                      const { url } = await api.asanaAuthUrl();
-                      window.location.href = url;
-                    } catch {
-                      showToast("Failed to get Asana auth URL. Check that ASANA_CLIENT_ID is configured.", "error");
-                    }
-                  }}
-                >
-                  Connect Asana
-                </button>
-              </div>
-            )}
-
-            {asanaConnected === true && (
-              <div style={{ display: "grid", gap: 16 }}>
-                {asanaWorkspaces.length > 1 && (
-                  <label className="ms-label">
-                    <span>Workspace</span>
-                    <select
-                      className="ms-input"
-                      value={asanaSelectedWorkspace}
-                      onChange={async (e) => {
-                        const ws = e.target.value;
-                        setAsanaSelectedWorkspace(ws);
-                        if (ws) {
-                          setAsanaLoadingProjects(true);
-                          const projects = await api.asanaSearchProjects(ws).catch(() => []);
-                          setAsanaProjects(projects);
-                          setAsanaLoadingProjects(false);
-                        }
-                      }}
-                    >
-                      <option value="">Select workspace</option>
-                      {asanaWorkspaces.map((w) => (
-                        <option key={w.gid} value={w.gid}>{w.name}</option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-
-                {asanaLoadingProjects && (
-                  <div style={{ color: "#94a3b8", fontSize: 13 }}>Loading projects...</div>
-                )}
-
-                {!asanaLoadingProjects && asanaSelectedWorkspace && asanaProjects.length === 0 && (
-                  <div style={{ color: "#94a3b8", fontSize: 13 }}>No projects found in this workspace.</div>
-                )}
-
-                {asanaProjects.length > 0 && (
-                  <div style={{ display: "grid", gap: 6, maxHeight: 320, overflowY: "auto" }}>
-                    {asanaProjects.map((p) => (
-                      <button
-                        key={p.gid}
-                        disabled={asanaLinking}
-                        onClick={async () => {
-                          setAsanaLinking(true);
-                          try {
-                            const updated = await api.linkAsanaProject(project.id, p.gid);
-                            setProject(updated);
-                            setTab("asana");
-                            setShowAsanaModal(false);
-                            showToast(`Linked to "${p.name}" in Asana.`, "success");
-                          } catch {
-                            showToast("Failed to link Asana project", "error");
-                          } finally {
-                            setAsanaLinking(false);
-                          }
-                        }}
-                        style={{
-                          display: "block",
-                          width: "100%",
-                          textAlign: "left",
-                          padding: "10px 14px",
-                          background: "#f8fafc",
-                          border: "1px solid rgba(0,0,0,0.06)",
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: "#1e293b",
-                        }}
-                      >
-                        {p.name}
-                        {p.due_on && <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 400, marginLeft: 8 }}>Due {p.due_on}</span>}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {asanaConnected === null && (
-              <div style={{ color: "#94a3b8", fontSize: 13 }}>Checking connection...</div>
-            )}
-
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-              <button className="ms-btn-secondary" onClick={() => setShowAsanaModal(false)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Risk Modal ────────────────────────────────────────────────────── */}
       {showRiskModal && (

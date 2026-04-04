@@ -34,9 +34,6 @@ export type Bindings = {
   ZOOM_ORG_ACCOUNT_ID?: string;
   ZOOM_ORG_CLIENT_ID?: string;
   ZOOM_ORG_CLIENT_SECRET?: string;
-  // Asana OAuth integration (set via wrangler secret put)
-  ASANA_CLIENT_ID?: string;
-  ASANA_CLIENT_SECRET?: string;
   // Email (set via wrangler secret put RESEND_API_KEY)
   RESEND_API_KEY?: string;
   // Apollo.io prospecting API key
