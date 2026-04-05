@@ -83,36 +83,46 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await c.env.DB
-    .prepare("SELECT crm_case_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT crm_case_id, pm_user_id, customer_name FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ crm_case_id: string | null }>();
+    .first<{ crm_case_id: string | null; pm_user_id: string | null; customer_name: string | null }>();
 
-  const phasesResult = await c.env.DB
-    .prepare("SELECT id, name, planned_start, planned_end FROM phases WHERE project_id = ? ORDER BY sort_order ASC")
-    .bind(projectId)
-    .all<{ id: string; name: string; planned_start: string | null; planned_end: string | null }>();
+  // Look up PM's Zoom user ID and email if a PM is assigned
+  let pmInfo: { zoom_user_id: string | null; email: string | null } | null = null;
+  if (project?.pm_user_id) {
+    pmInfo = await c.env.DB
+      .prepare("SELECT zoom_user_id, email FROM users WHERE id = ? LIMIT 1")
+      .bind(project.pm_user_id)
+      .first<{ zoom_user_id: string | null; email: string | null }>() ?? null;
+  }
+
+  const [phasesResult, linkedResult, alreadyLinked] = await Promise.all([
+    c.env.DB
+      .prepare("SELECT id, name, planned_start, planned_end FROM phases WHERE project_id = ? ORDER BY sort_order ASC")
+      .bind(projectId)
+      .all<{ id: string; name: string; planned_start: string | null; planned_end: string | null }>(),
+    c.env.DB
+      .prepare("SELECT meeting_id FROM zoom_recordings WHERE project_id = ?")
+      .bind(projectId)
+      .all<{ meeting_id: string }>(),
+    c.env.DB
+      .prepare(`
+        SELECT zr.*, ph.name AS phase_name
+        FROM zoom_recordings zr
+        LEFT JOIN phases ph ON ph.id = zr.phase_id
+        WHERE zr.project_id = ?
+        ORDER BY zr.start_time DESC
+      `)
+      .bind(projectId)
+      .all<Record<string, unknown>>(),
+  ]);
+
   const phases = phasesResult.results ?? [];
-
-  const linkedResult = await c.env.DB
-    .prepare("SELECT meeting_id FROM zoom_recordings WHERE project_id = ?")
-    .bind(projectId)
-    .all<{ meeting_id: string }>();
   const linkedMeetingIds = new Set((linkedResult.results ?? []).map((r) => r.meeting_id));
-
-  const alreadyLinked = await c.env.DB
-    .prepare(`
-      SELECT zr.*, ph.name AS phase_name
-      FROM zoom_recordings zr
-      LEFT JOIN phases ph ON ph.id = zr.phase_id
-      WHERE zr.project_id = ?
-      ORDER BY zr.start_time DESC
-    `)
-    .bind(projectId)
-    .all<Record<string, unknown>>();
 
   let meetings;
   try {
-    meetings = await getZoomRecordings(c.env.KV, projectId, c.env);
+    meetings = await getZoomRecordings(c.env.KV, projectId, c.env, pmInfo ?? undefined);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Zoom API error";
     console.error("Zoom recordings sync error:", message);
@@ -120,7 +130,8 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
   }
 
   const newMeetings = meetings.filter((m) => !linkedMeetingIds.has(String(m.id)));
-  const matches = matchRecordingsToPhases(newMeetings, phases, project?.crm_case_id ?? null);
+  const hasPm = pmInfo !== null;
+  const matches = matchRecordingsToPhases(newMeetings, phases, project?.crm_case_id ?? null, project?.customer_name ?? null, hasPm);
 
   const suggestions = matches
     .filter((m) => (m.meeting.recording_files ?? []).length > 0)

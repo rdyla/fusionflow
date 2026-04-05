@@ -413,9 +413,31 @@ async function getAllUsers(token: string): Promise<Array<{ id: string; email: st
   return users;
 }
 
-/** Fetch cloud recordings for a project's Zoom account (last 90 days, all users).
+type PmInfo = { zoom_user_id: string | null; email: string | null };
+
+async function fetchUserRecordings(token: string, userId: string, from: string, to: string): Promise<ZoomMeeting[]> {
+  const meetings: ZoomMeeting[] = [];
+  let nextPageToken = "";
+  do {
+    const qs = new URLSearchParams({ from, to, page_size: "300", mc: "false", trash: "false" });
+    if (nextPageToken) qs.set("next_page_token", nextPageToken);
+    const page = await zoomGet<ZoomRecordingsPage>(token, `/users/${encodeURIComponent(userId)}/recordings?${qs}`);
+    meetings.push(...(page.meetings ?? []));
+    nextPageToken = page.next_page_token ?? "";
+  } while (nextPageToken);
+  return meetings;
+}
+
+/** Fetch cloud recordings.
+ *  - If pmInfo provided: fetch only that PM's recordings (by zoom_user_id, or by email lookup).
+ *  - Otherwise: fetch all users' recordings.
  *  Falls back to org-level credentials when no project-specific credentials exist. */
-export async function getZoomRecordings(kv: KVNamespace, projectId: string, env?: OrgEnv): Promise<ZoomMeeting[]> {
+export async function getZoomRecordings(
+  kv: KVNamespace,
+  projectId: string,
+  env?: OrgEnv,
+  pmInfo?: PmInfo,
+): Promise<ZoomMeeting[]> {
   const creds = await getCreds(kv, projectId);
   const token = creds
     ? await getToken(kv, creds, projectId)
@@ -425,37 +447,34 @@ export async function getZoomRecordings(kv: KVNamespace, projectId: string, env?
 
   if (!token) throw new Error("No Zoom credentials configured for this project or org");
 
-  const resolvedToken: string = token;
   const today = new Date();
   const from = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const to = today.toISOString().slice(0, 10);
 
-  const users = await getAllUsers(resolvedToken);
+  // PM-scoped fetch
+  if (pmInfo) {
+    // Prefer stored zoom_user_id; fall back to email lookup in Zoom's user list
+    let userId = pmInfo.zoom_user_id ?? null;
+    if (!userId && pmInfo.email) {
+      const users = await getAllUsers(token);
+      const match = users.find((u) => u.email.toLowerCase() === pmInfo.email!.toLowerCase());
+      userId = match?.id ?? null;
+    }
+    if (!userId) throw new Error("PM's Zoom account could not be found — set their Zoom User ID in user settings");
+    return fetchUserRecordings(token, userId, from, to);
+  }
 
-  // Fetch recordings for each user concurrently (max 10 at a time to avoid rate limits)
+  // No PM — fetch all users
+  const users = await getAllUsers(token);
   const allMeetings: ZoomMeeting[] = [];
   const BATCH = 10;
   for (let i = 0; i < users.length; i += BATCH) {
     const batch = users.slice(i, i + BATCH);
-    const results = await Promise.allSettled(
-      batch.map(async (user) => {
-        const meetings: ZoomMeeting[] = [];
-        let nextPageToken = "";
-        do {
-          const qs = new URLSearchParams({ from, to, page_size: "300", mc: "false", trash: "false" });
-          if (nextPageToken) qs.set("next_page_token", nextPageToken);
-          const page = await zoomGet<ZoomRecordingsPage>(resolvedToken, `/users/${encodeURIComponent(user.id)}/recordings?${qs}`);
-          meetings.push(...(page.meetings ?? []));
-          nextPageToken = page.next_page_token ?? "";
-        } while (nextPageToken);
-        return meetings;
-      })
-    );
+    const results = await Promise.allSettled(batch.map((u) => fetchUserRecordings(token, u.id, from, to)));
     for (const result of results) {
       if (result.status === "fulfilled") allMeetings.push(...result.value);
     }
   }
-
   return allMeetings;
 }
 
@@ -479,38 +498,63 @@ export type RecordingMatch = {
 };
 
 /**
- * Match Zoom meetings to project phases using three signals (in priority order):
- * 1. CRM case ID extracted from topic matched against project.crm_case_id
- * 2. Phase keyword matching on meeting topic
- * 3. Date range — meeting start_time within a phase's planned_start..planned_end
+ * Match Zoom meetings to project phases using four signals (in priority order):
+ * 1. Customer name in topic
+ * 2. CRM case ID in topic
+ * 3. Phase keyword matching on topic
+ * 4. Date range — meeting start_time within a phase's planned_start..planned_end
+ *
+ * When hasPm is false (no PM assigned), only meetings that match via signal 1 or 2
+ * are returned — date/keyword matches across all users would produce too much noise.
  */
 export function matchRecordingsToPhases(
   meetings: ZoomMeeting[],
   phases: PhaseRow[],
-  crmCaseId: string | null
+  crmCaseId: string | null,
+  customerName: string | null,
+  hasPm: boolean,
 ): RecordingMatch[] {
-  return meetings.map((meeting) => {
+  const customerRe = customerName
+    ? new RegExp(customerName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    : null;
+  const caseRe = crmCaseId
+    ? new RegExp(crmCaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i")
+    : null;
+
+  const matched: RecordingMatch[] = [];
+
+  for (const meeting of meetings) {
     const topic = meeting.topic ?? "";
 
-    // Signal 1: CRM case ID
-    if (crmCaseId) {
-      const escapedCase = crmCaseId.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      if (new RegExp(escapedCase, "i").test(topic)) {
-        return { meeting, phase_id: null, match_reason: "case_number" };
-      }
+    // Signal 1: Customer name
+    if (customerRe?.test(topic)) {
+      matched.push({ meeting, phase_id: null, match_reason: "customer_name" });
+      continue;
     }
 
-    // Signal 2: Keyword → phase name match
+    // Signal 2: CRM case ID
+    if (caseRe?.test(topic)) {
+      matched.push({ meeting, phase_id: null, match_reason: "case_number" });
+      continue;
+    }
+
+    // No PM → skip keyword/date signals (too noisy across all users)
+    if (!hasPm) continue;
+
+    // Signal 3: Keyword → phase name match
+    let keywordMatched = false;
     for (const { keywords, phase_pattern } of PHASE_KEYWORDS) {
-      const topicMatches = keywords.some((kw) => kw.test(topic));
-      if (!topicMatches) continue;
+      if (!keywords.some((kw) => kw.test(topic))) continue;
       const phase = phases.find((p) => phase_pattern.test(p.name));
       if (phase) {
-        return { meeting, phase_id: phase.id, match_reason: `keyword:${phase.name}` };
+        matched.push({ meeting, phase_id: phase.id, match_reason: `keyword:${phase.name}` });
+        keywordMatched = true;
+        break;
       }
     }
+    if (keywordMatched) continue;
 
-    // Signal 3: Date range
+    // Signal 4: Date range
     const meetingDate = meeting.start_time?.slice(0, 10);
     if (meetingDate) {
       const phaseInRange = phases.find((p) => {
@@ -518,12 +562,15 @@ export function matchRecordingsToPhases(
         return meetingDate >= p.planned_start && meetingDate <= p.planned_end;
       });
       if (phaseInRange) {
-        return { meeting, phase_id: phaseInRange.id, match_reason: "date_range" };
+        matched.push({ meeting, phase_id: phaseInRange.id, match_reason: "date_range" });
+        continue;
       }
     }
 
-    return { meeting, phase_id: null, match_reason: null };
-  });
+    matched.push({ meeting, phase_id: null, match_reason: null });
+  }
+
+  return matched;
 }
 
 export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise<ZoomStatus | null> {
