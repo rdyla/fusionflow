@@ -91,6 +91,32 @@ async function dynamicsGet<T>(env: Env, path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** Create a record; returns the new entity GUID extracted from the OData-EntityId response header. */
+async function dynamicsCreate(env: Env, path: string, body: Record<string, unknown>): Promise<string> {
+  const token = await getToken(env);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Dynamics create error ${res.status} ${path}: ${text}`);
+  }
+
+  const entityId = res.headers.get("OData-EntityId") ?? "";
+  const match = entityId.match(/\(([^)]+)\)$/);
+  if (!match) throw new Error(`Dynamics create: missing entity ID header for ${path}`);
+  return match[1];
+}
+
 export async function searchAccounts(env: Env, query: string): Promise<DynamicsAccount[]> {
   if (!isConfigured(env) || !query.trim()) return [];
 
@@ -805,4 +831,122 @@ export async function getAnnotationBody(env: Env, annotationId: string): Promise
   } catch {
     return null;
   }
+}
+
+// ── Time Entry ────────────────────────────────────────────────────────────────
+
+export type DynamicsPayCode = {
+  amc_paycodeid: string;
+  amc_name: string;
+  amc_description: string | null;
+};
+
+export type DynamicsCostCode = {
+  amc_costcodeid: string;
+  amc_name: string;
+  amc_description: string | null;
+};
+
+/** Fetch all pay codes (cached 1 hour). */
+export async function getPayCodes(env: Env): Promise<DynamicsPayCode[]> {
+  if (!isConfigured(env)) return [];
+  const cacheKey = "dynamics:paycodes";
+  const cached = await env.KV.get<DynamicsPayCode[]>(cacheKey, "json");
+  if (cached) return cached;
+  try {
+    const data = await dynamicsGet<{ value: DynamicsPayCode[] }>(
+      env,
+      "/amc_paycodes?$select=amc_paycodeid,amc_name,amc_description&$orderby=amc_name asc"
+    );
+    const codes = data.value ?? [];
+    await env.KV.put(cacheKey, JSON.stringify(codes), { expirationTtl: 3600 });
+    return codes;
+  } catch {
+    return [];
+  }
+}
+
+/** Get the job GUID and case GUID for a project's CRM case (by ticketnumber). */
+export async function getCaseAndJob(
+  env: Env,
+  ticketNumber: string,
+): Promise<{ caseId: string; jobId: string | null } | null> {
+  if (!isConfigured(env)) return null;
+  const escaped = ticketNumber.replace(/'/g, "''");
+  try {
+    const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null }> }>(
+      env,
+      `/incidents?$select=incidentid,_amc_job_value&$filter=ticketnumber eq '${escaped}'&$top=1`
+    );
+    const row = data.value?.[0];
+    if (!row) return null;
+    return { caseId: row.incidentid, jobId: row._amc_job_value ?? null };
+  } catch {
+    return null;
+  }
+}
+
+/** Fetch cost codes available for a job (cached 1 hour per job). */
+export async function getCostCodesForJob(env: Env, jobId: string): Promise<DynamicsCostCode[]> {
+  if (!isConfigured(env)) return [];
+  const cacheKey = `dynamics:costcodes:${jobId}`;
+  const cached = await env.KV.get<DynamicsCostCode[]>(cacheKey, "json");
+  if (cached) return cached;
+  try {
+    const data = await dynamicsGet<{ value: DynamicsCostCode[] }>(
+      env,
+      `/amc_costcodes?$select=amc_costcodeid,amc_name,amc_description&$filter=_amc_job_value eq ${jobId}&$orderby=amc_name asc`
+    );
+    const codes = data.value ?? [];
+    await env.KV.put(cacheKey, JSON.stringify(codes), { expirationTtl: 3600 });
+    return codes;
+  } catch {
+    return [];
+  }
+}
+
+/** Look up a Dynamics systemuser GUID by email address (cached 24 hours). */
+export async function getSystemUserIdByEmail(env: Env, email: string): Promise<string | null> {
+  if (!isConfigured(env)) return null;
+  const cacheKey = `dynamics:sysuser:${email.toLowerCase()}`;
+  const cached = await env.KV.get(cacheKey);
+  if (cached !== null) return cached || null;
+  try {
+    const escaped = email.replace(/'/g, "''");
+    const data = await dynamicsGet<{ value: Array<{ systemuserid: string }> }>(
+      env,
+      `/systemusers?$select=systemuserid&$filter=internalemailaddress eq '${escaped}' and isdisabled eq false&$top=1`
+    );
+    const userId = data.value?.[0]?.systemuserid ?? null;
+    await env.KV.put(cacheKey, userId ?? "", { expirationTtl: 86400 });
+    return userId;
+  } catch {
+    return null;
+  }
+}
+
+export type CreateTimeEntryInput = {
+  scheduledStart: string;   // ISO datetime string (UTC)
+  scheduledEnd: string;     // ISO datetime string (UTC)
+  caseId: string;           // incident GUID
+  jobId: string;            // amc_job GUID
+  payCodeId: string;        // amc_paycode GUID
+  costCodeId?: string | null;
+  ownerId: string;          // systemuser GUID
+};
+
+/** Create an amc_timeentry record; returns the new entity GUID. */
+export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Promise<string> {
+  const body: Record<string, unknown> = {
+    scheduledstart: input.scheduledStart,
+    scheduledend: input.scheduledEnd,
+    "amc_case@odata.bind": `/incidents(${input.caseId})`,
+    "amc_job@odata.bind": `/amc_jobs(${input.jobId})`,
+    "amc_paycode@odata.bind": `/amc_paycodes(${input.payCodeId})`,
+    "ownerid@odata.bind": `/systemusers(${input.ownerId})`,
+  };
+  if (input.costCodeId) {
+    body["amc_costcode@odata.bind"] = `/amc_costcodes(${input.costCodeId})`;
+  }
+  return dynamicsCreate(env, "/amc_timeentries", body);
 }

@@ -121,6 +121,11 @@ export default function ProjectDetailPage() {
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [savingTask, setSavingTask] = useState(false);
+  const [timeEntryTask, setTimeEntryTask] = useState<Task | null>(null);
+  const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
+  const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
+  const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", useCostCode: false });
+  const [submittingTimeEntry, setSubmittingTimeEntry] = useState(false);
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
   const [taskCommentBody, setTaskCommentBody] = useState("");
   const [addingComment, setAddingComment] = useState(false);
@@ -1156,6 +1161,26 @@ export default function ProjectDetailPage() {
                           </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                             <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
+                            {task.status !== "completed" && (task.assignee_user_id === project?.id || canEdit || task.assignee_user_id === project?.pm_user_id || true) && (
+                              <button
+                                className="ms-btn-secondary"
+                                style={{ fontSize: 11, padding: "3px 10px" }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const today = new Date().toISOString().slice(0, 10);
+                                  setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
+                                  setTimeEntrySetup(null);
+                                  setTimeEntryTask(task);
+                                  setTimeEntryLoadingSetup(true);
+                                  api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                                }}
+                              >
+                                Log Time
+                              </button>
+                            )}
+                            {task.crm_time_entry_id && (
+                              <span style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>✓ Logged</span>
+                            )}
                           </div>
                         </div>
                         {taskRecordings.length > 0 && (
@@ -2099,6 +2124,117 @@ export default function ProjectDetailPage() {
         </div>
       )}
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}
+      {/* ── Time Entry Modal ──────────────────────────────────────────────── */}
+      {timeEntryTask && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setTimeEntryTask(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 480 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Log Time</h2>
+              <button onClick={() => setTimeEntryTask(null)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, fontWeight: 500 }}>{timeEntryTask.title}</div>
+
+            {timeEntryLoadingSetup ? (
+              <div style={{ color: "#64748b", fontSize: 13, padding: "16px 0" }}>Loading CRM data…</div>
+            ) : !timeEntrySetup?.case_id || !timeEntrySetup?.job_id ? (
+              <div style={{ color: "#d13438", fontSize: 13, padding: "8px 0" }}>
+                {!timeEntrySetup ? "Could not load CRM data." : "This project has no CRM case or job linked. Time entries cannot be submitted."}
+              </div>
+            ) : (
+              <div style={{ display: "grid", gap: 14 }}>
+                {/* Date */}
+                <label className="ms-label">
+                  <span>Date</span>
+                  <input type="date" className="ms-input" value={timeEntryForm.date} onChange={(e) => setTimeEntryForm((f) => ({ ...f, date: e.target.value }))} />
+                </label>
+
+                {/* Start / End time */}
+                <div>
+                  <span className="ms-label" style={{ display: "block", marginBottom: 6 }}><span>Time</span></span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <input type="time" className="ms-input" style={{ flex: 1 }} value={timeEntryForm.startTime} onChange={(e) => setTimeEntryForm((f) => ({ ...f, startTime: e.target.value }))} />
+                    <span style={{ color: "#94a3b8", fontSize: 13 }}>→</span>
+                    <input type="time" className="ms-input" style={{ flex: 1 }} value={timeEntryForm.endTime} onChange={(e) => setTimeEntryForm((f) => ({ ...f, endTime: e.target.value }))} />
+                    {timeEntryForm.startTime && timeEntryForm.endTime && (() => {
+                      const [sh, sm] = timeEntryForm.startTime.split(":").map(Number);
+                      const [eh, em] = timeEntryForm.endTime.split(":").map(Number);
+                      const mins = (eh * 60 + em) - (sh * 60 + sm);
+                      if (mins <= 0) return null;
+                      const h = Math.floor(mins / 60), m = mins % 60;
+                      return <span style={{ fontSize: 12, color: "#0891b2", fontWeight: 600, whiteSpace: "nowrap" }}>{h > 0 ? `${h}h ` : ""}{m > 0 ? `${m}m` : ""}</span>;
+                    })()}
+                  </div>
+                </div>
+
+                {/* Pay Code */}
+                <label className="ms-label">
+                  <span>Pay Code</span>
+                  <select className="ms-input" value={timeEntryForm.payCodeId} onChange={(e) => setTimeEntryForm((f) => ({ ...f, payCodeId: e.target.value }))}>
+                    <option value="">— Select —</option>
+                    {timeEntrySetup.pay_codes.map((pc) => (
+                      <option key={pc.amc_paycodeid} value={pc.amc_paycodeid}>{pc.amc_name}</option>
+                    ))}
+                  </select>
+                </label>
+
+                {/* Cost Code (optional) */}
+                {timeEntrySetup.cost_codes.length > 0 && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: 13, color: "#475569" }}>
+                      <input type="checkbox" checked={timeEntryForm.useCostCode} onChange={(e) => setTimeEntryForm((f) => ({ ...f, useCostCode: e.target.checked, costCodeId: "" }))} />
+                      Include cost code
+                    </label>
+                    {timeEntryForm.useCostCode && (
+                      <select className="ms-input" value={timeEntryForm.costCodeId} onChange={(e) => setTimeEntryForm((f) => ({ ...f, costCodeId: e.target.value }))}>
+                        <option value="">— Select cost code —</option>
+                        {timeEntrySetup.cost_codes.map((cc) => (
+                          <option key={cc.amc_costcodeid} value={cc.amc_costcodeid}>{cc.amc_name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                  <button
+                    className="ms-btn-primary"
+                    style={{ flex: 1 }}
+                    disabled={submittingTimeEntry || !timeEntryForm.date || !timeEntryForm.startTime || !timeEntryForm.endTime || !timeEntryForm.payCodeId || (timeEntryForm.useCostCode && !timeEntryForm.costCodeId)}
+                    onClick={async () => {
+                      if (!project || !timeEntryTask || !timeEntrySetup?.case_id || !timeEntrySetup?.job_id) return;
+                      setSubmittingTimeEntry(true);
+                      try {
+                        // Build ISO datetimes from local date + time (treat as UTC for submission)
+                        const start = `${timeEntryForm.date}T${timeEntryForm.startTime}:00Z`;
+                        const end = `${timeEntryForm.date}T${timeEntryForm.endTime}:00Z`;
+                        const updated = await api.completeTaskWithTimeEntry(project.id, timeEntryTask.id, {
+                          scheduled_start: start,
+                          scheduled_end: end,
+                          pay_code_id: timeEntryForm.payCodeId,
+                          cost_code_id: timeEntryForm.useCostCode ? timeEntryForm.costCodeId || null : null,
+                          case_id: timeEntrySetup.case_id!,
+                          job_id: timeEntrySetup.job_id!,
+                        });
+                        setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
+                        setTimeEntryTask(null);
+                        showToast("Time entry submitted to CRM.", "success");
+                      } catch (err) {
+                        showToast(err instanceof Error ? err.message : "Failed to submit time entry", "error");
+                      } finally {
+                        setSubmittingTimeEntry(false);
+                      }
+                    }}
+                  >
+                    {submittingTimeEntry ? "Submitting…" : "Complete Task & Submit to CRM"}
+                  </button>
+                  <button className="ms-btn-secondary" onClick={() => setTimeEntryTask(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {editingTask && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
           <div className="ms-modal" style={{ maxWidth: 660, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>

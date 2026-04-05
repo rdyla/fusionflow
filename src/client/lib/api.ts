@@ -497,6 +497,18 @@ export type Task = {
   completed_at: string | null;
   status: string | null;
   priority: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  pay_code_id: string | null;
+  cost_code_id: string | null;
+  crm_time_entry_id: string | null;
+};
+
+export type TimeEntrySetup = {
+  pay_codes: Array<{ amc_paycodeid: string; amc_name: string; amc_description: string | null }>;
+  cost_codes: Array<{ amc_costcodeid: string; amc_name: string; amc_description: string | null }>;
+  case_id: string | null;
+  job_id: string | null;
 };
 
 export type Risk = {
@@ -1110,6 +1122,26 @@ export const api = {
   deleteTask: (projectId: string, taskId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}`, {
       method: "DELETE",
+    }),
+
+  timeEntrySetup: (projectId: string) =>
+    request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup`),
+
+  completeTaskWithTimeEntry: (
+    projectId: string,
+    taskId: string,
+    payload: {
+      scheduled_start: string;
+      scheduled_end: string;
+      pay_code_id: string;
+      cost_code_id?: string | null;
+      case_id: string;
+      job_id: string;
+    }
+  ) =>
+    request<Task>(`/projects/${projectId}/tasks/${taskId}/complete`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   // Project Contacts

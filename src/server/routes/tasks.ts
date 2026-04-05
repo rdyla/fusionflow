@@ -6,12 +6,16 @@ import { canEditProject, canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
+import {
+  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry,
+} from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
   SELECT id, project_id, phase_id, title, assignee_user_id, due_date,
-         completed_at, status, priority
+         completed_at, status, priority,
+         scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
 
@@ -346,6 +350,126 @@ app.delete("/:id/tasks/:taskId/comments/:commentId", async (c) => {
 
   await db.prepare("DELETE FROM task_comments WHERE id = ?").bind(commentId).run();
   return c.json({ success: true });
+});
+
+// ── Time Entry ────────────────────────────────────────────────────────────────
+
+/** Return pay codes + cost codes for the project's CRM job. Used to populate the time entry form. */
+app.get("/:id/time-entry/setup", async (c) => {
+  const auth = c.get("auth");
+  const projectId = c.req.param("id");
+  const allowed = await canViewProject(c.env.DB, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const project = await c.env.DB
+    .prepare("SELECT crm_case_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ crm_case_id: string | null }>();
+
+  const [payCodes, caseAndJob] = await Promise.all([
+    getPayCodes(c.env),
+    project?.crm_case_id ? getCaseAndJob(c.env, project.crm_case_id) : Promise.resolve(null),
+  ]);
+
+  const costCodes = caseAndJob?.jobId
+    ? await getCostCodesForJob(c.env, caseAndJob.jobId)
+    : [];
+
+  return c.json({
+    pay_codes: payCodes,
+    cost_codes: costCodes,
+    case_id: caseAndJob?.caseId ?? null,
+    job_id: caseAndJob?.jobId ?? null,
+  });
+});
+
+const completeTaskSchema = z.object({
+  scheduled_start: z.string(),   // ISO datetime (local, converted to UTC by client)
+  scheduled_end: z.string(),     // ISO datetime
+  pay_code_id: z.string(),
+  cost_code_id: z.string().nullable().optional(),
+  case_id: z.string(),           // incident GUID (from setup)
+  job_id: z.string(),            // amc_job GUID (from setup)
+});
+
+/** Complete a task and ship a time entry to Dynamics CRM. */
+app.post("/:id/tasks/:taskId/complete", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+
+  const task = await db
+    .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
+    .bind(taskId, projectId)
+    .first<{ id: string; assignee_user_id: string | null; status: string | null }>();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const isEngineerOnOwnTask = auth.role === "pf_engineer" && task.assignee_user_id === auth.user.id;
+  const canEdit = await canEditProject(db, auth.user, projectId);
+  if (!canEdit && !isEngineerOnOwnTask) throw new HTTPException(403, { message: "Forbidden" });
+
+  const body = await c.req.json();
+  const parsed = completeTaskSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid time entry data" });
+
+  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id } = parsed.data;
+
+  // Look up the engineer's Dynamics systemuser ID
+  const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
+  if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
+
+  // Create the time entry in CRM
+  let crmTimeEntryId: string;
+  try {
+    crmTimeEntryId = await createTimeEntry(c.env, {
+      scheduledStart: scheduled_start,
+      scheduledEnd: scheduled_end,
+      caseId: case_id,
+      jobId: job_id,
+      payCodeId: pay_code_id,
+      costCodeId: cost_code_id ?? null,
+      ownerId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry failed";
+    console.error("createTimeEntry error:", message);
+    throw new HTTPException(502, { message: `CRM error: ${message}` });
+  }
+
+  // Mark task complete in our DB
+  await db
+    .prepare(`
+      UPDATE tasks SET
+        status = 'completed',
+        completed_at = CURRENT_TIMESTAMP,
+        scheduled_start = ?,
+        scheduled_end = ?,
+        pay_code_id = ?,
+        cost_code_id = ?,
+        crm_time_entry_id = ?
+      WHERE id = ? AND project_id = ?
+    `)
+    .bind(scheduled_start, scheduled_end, pay_code_id, cost_code_id ?? null, crmTimeEntryId, taskId, projectId)
+    .run();
+
+  const updated = await db.prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`).bind(taskId).first();
+
+  // Notify PM
+  const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
+  if (project?.pm_user_id && project.pm_user_id !== auth.user.id) {
+    const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
+    if (pm) {
+      const appUrl = c.env.APP_URL ?? "";
+      c.executionCtx.waitUntil(sendEmail(c.env, {
+        to: pm.email,
+        subject: `Task completed on ${project.name}: ${(updated as { title?: string })?.title ?? ""}`,
+        html: pmTaskUpdate({ pmName: pm.name ?? pm.email, taskTitle: (updated as { title?: string })?.title ?? "", projectName: project.name, updatedByName: auth.user.name ?? auth.user.email, status: "completed", appUrl, projectId }),
+      }));
+    }
+  }
+
+  return c.json(updated);
 });
 
 app.delete("/:id/tasks/:taskId", async (c) => {
