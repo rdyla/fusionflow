@@ -973,6 +973,7 @@ export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Pr
     "amc_case_amc_timeentry@odata.bind": `/incidents(${input.caseId})`,
     "amc_job_amc_timeentry@odata.bind": `/amc_jobs(${input.jobId})`,
     "amc_paycode_amc_timeentry@odata.bind": `/amc_paycodes(${input.payCodeId})`,
+    "amc_member_amc_timeentry@odata.bind": `/systemusers(${input.ownerId})`,
     "ownerid@odata.bind": `/systemusers(${input.ownerId})`,
   };
   if (input.costCodeId) {
