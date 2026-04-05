@@ -1139,24 +1139,42 @@ export default function ProjectDetailPage() {
                     <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
                   )}
 
-                  {phaseTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className="ms-row-item"
-                      onClick={() => setEditingTask(task)}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 3 }}>{task.title}</div>
-                        <div style={{ fontSize: 12, color: "#64748b" }}>
-                          Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
+                  {phaseTasks.map((task) => {
+                    const taskRecordings = recordings.filter((r) => r.task_id === task.id);
+                    return (
+                      <div key={task.id}>
+                        <div
+                          className="ms-row-item"
+                          onClick={() => setEditingTask(task)}
+                          style={{ cursor: "pointer" }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 3 }}>{task.title}</div>
+                            <div style={{ fontSize: 12, color: "#64748b" }}>
+                              Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                            <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
+                          </div>
                         </div>
+                        {taskRecordings.length > 0 && (
+                          <div style={{ paddingLeft: 16, paddingBottom: 6, display: "grid", gap: 3 }}>
+                            {taskRecordings.map((rec) => (
+                              <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#7c3aed" }}>
+                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#7c3aed", flexShrink: 0, display: "inline-block" }} />
+                                <span style={{ fontWeight: 500 }}>{rec.topic}</span>
+                                <span style={{ color: "#94a3b8" }}>
+                                  {new Date(rec.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                  {" · "}{rec.duration_mins}m
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                        <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {canEdit && (
                     <button

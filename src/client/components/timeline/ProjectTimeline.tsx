@@ -390,6 +390,22 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
                           ))}
                         </div>
                       )}
+
+                      {recordings.filter((r) => r.phase_id === phase.id).length > 0 && (
+                        <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                          {recordings.filter((r) => r.phase_id === phase.id).map((rec) => (
+                            <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#7c3aed" }}>
+                              <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#7c3aed", flexShrink: 0, display: "inline-block" }} />
+                              <span style={{ fontWeight: 500 }}>{rec.topic}</span>
+                              <span style={{ color: "#94a3b8" }}>
+                                {new Date(rec.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                {" · "}{rec.duration_mins}m
+                                {rec.task_name && <> · <span style={{ color: "#7c3aed" }}>{rec.task_name}</span></>}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                     <button className="ms-btn-ghost" onClick={() => startEdit(phase)} style={{ flexShrink: 0 }}>
                       Edit
