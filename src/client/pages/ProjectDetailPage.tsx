@@ -1204,7 +1204,7 @@ export default function ProjectDetailPage() {
                   {canEdit && (
                     <button
                       className="ms-btn-ghost"
-                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, due_date: null, completed_at: null, status: "not_started", priority: null })}
+                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, due_date: null, completed_at: null, status: "not_started", priority: null, scheduled_start: null, scheduled_end: null, pay_code_id: null, cost_code_id: null, crm_time_entry_id: null })}
                       style={{ alignSelf: "start", border: "1px dashed rgba(255,255,255,0.2)", color: "#64748b" }}
                     >
                       + Add Task
