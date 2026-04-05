@@ -867,17 +867,30 @@ export async function getPayCodes(env: Env): Promise<DynamicsPayCode[]> {
 }
 
 /** Get the job GUID and case GUID for a project's CRM case (by ticketnumber). */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function getCaseAndJob(
   env: Env,
-  ticketNumber: string,
+  crmCaseId: string,
 ): Promise<{ caseId: string; jobId: string | null } | null> {
   if (!isConfigured(env)) return null;
-  const escaped = ticketNumber.replace(/'/g, "''");
-  const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null }> }>(
-    env,
-    `/incidents?$select=incidentid,_amc_job_value&$filter=ticketnumber eq '${escaped}'&$top=1`
-  );
-  const row = data.value?.[0];
+  let row: { incidentid: string; _amc_job_value: string | null } | undefined;
+  if (UUID_RE.test(crmCaseId)) {
+    // stored value is the incident GUID — fetch directly
+    const data = await dynamicsGet<{ incidentid: string; _amc_job_value: string | null }>(
+      env,
+      `/incidents(${crmCaseId})?$select=incidentid,_amc_job_value`
+    );
+    row = data;
+  } else {
+    // stored value is a ticket number (e.g. CAS-001234)
+    const escaped = crmCaseId.replace(/'/g, "''");
+    const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null }> }>(
+      env,
+      `/incidents?$select=incidentid,_amc_job_value&$filter=ticketnumber eq '${escaped}'&$top=1`
+    );
+    row = data.value?.[0];
+  }
   if (!row) return null;
   return { caseId: row.incidentid, jobId: row._amc_job_value ?? null };
 }
