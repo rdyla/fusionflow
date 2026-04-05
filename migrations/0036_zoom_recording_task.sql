@@ -1,0 +1,1 @@
+ALTER TABLE zoom_recordings ADD COLUMN task_id TEXT REFERENCES tasks(id) ON DELETE SET NULL;

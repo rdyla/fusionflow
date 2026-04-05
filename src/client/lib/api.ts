@@ -205,6 +205,8 @@ export type ZoomRecording = {
   project_id: string;
   phase_id: string | null;
   phase_name: string | null;
+  task_id: string | null;
+  task_name: string | null;
   meeting_id: string;
   topic: string;
   start_time: string;
@@ -1533,15 +1535,15 @@ export const api = {
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings`),
   zoomSyncRecordings: (projectId: string) =>
     request<{ suggestions: ZoomRecordingSuggestion[]; already_linked: ZoomRecording[] }>(`/projects/${projectId}/zoom/recordings/sync`, { method: "POST" }),
-  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; match_reason: string | null }[]) =>
+  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; match_reason: string | null }[]) =>
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings/confirm`, {
       method: "POST",
       body: JSON.stringify({ confirmations }),
     }),
-  zoomReassignRecording: (projectId: string, recordingId: string, phase_id: string | null) =>
+  zoomReassignRecording: (projectId: string, recordingId: string, phase_id: string | null, task_id?: string | null) =>
     request<ZoomRecording>(`/projects/${projectId}/zoom/recordings/${recordingId}`, {
       method: "PATCH",
-      body: JSON.stringify({ phase_id }),
+      body: JSON.stringify({ phase_id, task_id }),
     }),
   zoomDeleteRecording: (projectId: string, recordingId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/recordings/${recordingId}`, { method: "DELETE" }),

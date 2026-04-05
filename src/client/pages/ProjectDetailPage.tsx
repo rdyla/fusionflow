@@ -152,6 +152,7 @@ export default function ProjectDetailPage() {
   const [confirmingRecordings, setConfirmingRecordings] = useState(false);
   const [suggestionPhaseOverrides, setSuggestionPhaseOverrides] = useState<Record<number, string | null>>({});
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
+  const [suggestionTaskOverrides, setSuggestionTaskOverrides] = useState<Record<number, string | null>>({});
 
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
@@ -1114,6 +1115,7 @@ export default function ProjectDetailPage() {
         <ProjectTimeline
           phases={phases}
           milestones={milestones}
+          recordings={recordings}
           onUpdatePhase={async (phaseId, updates) => {
             if (!project) return;
             const updated = await api.updatePhase(project.id, phaseId, updates);
@@ -1305,6 +1307,7 @@ export default function ProjectDetailPage() {
                         setSyncingSuggestions(true);
                         setSyncSuggestions(null);
                         setSuggestionPhaseOverrides({});
+                        setSuggestionTaskOverrides({});
                         setSelectedSuggestions(new Set());
                         try {
                           const result = await api.zoomSyncRecordings(project.id);
@@ -1483,17 +1486,39 @@ export default function ProjectDetailPage() {
                                     )}
                                   </div>
                                   {isSelected && (
-                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
-                                      <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Phase:</span>
-                                      <select
-                                        className="ms-input"
-                                        style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
-                                        value={overridePhaseId ?? ""}
-                                        onChange={(e) => setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }))}
-                                      >
-                                        <option value="">— Unassigned —</option>
-                                        {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
-                                      </select>
+                                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                        <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Phase:</span>
+                                        <select
+                                          className="ms-input"
+                                          style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
+                                          value={overridePhaseId ?? ""}
+                                          onChange={(e) => {
+                                            setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }));
+                                            // Clear task when phase changes
+                                            setSuggestionTaskOverrides((prev) => ({ ...prev, [idx]: null }));
+                                          }}
+                                        >
+                                          <option value="">— Unassigned —</option>
+                                          {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                        </select>
+                                      </div>
+                                      {overridePhaseId && (
+                                        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                          <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Task:</span>
+                                          <select
+                                            className="ms-input"
+                                            style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
+                                            value={suggestionTaskOverrides[idx] ?? ""}
+                                            onChange={(e) => setSuggestionTaskOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }))}
+                                          >
+                                            <option value="">— None —</option>
+                                            {tasks
+                                              .filter((t) => t.phase_id === overridePhaseId)
+                                              .map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
+                                          </select>
+                                        </div>
+                                      )}
                                     </div>
                                   )}
                                 </div>
@@ -1516,15 +1541,18 @@ export default function ProjectDetailPage() {
                               const confirmations = [...selectedSuggestions].map((idx) => {
                                 const s = syncSuggestions[idx];
                                 const phaseId = (idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id) ?? null;
+                                const taskId = suggestionTaskOverrides[idx] ?? null;
+                                const isManual = (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) || !!taskId;
                                 return {
                                   meeting_id: s.meeting_id,
                                   phase_id: phaseId,
+                                  task_id: taskId,
                                   topic: s.topic,
                                   start_time: s.start_time,
                                   duration_mins: s.duration_mins,
                                   host_email: s.host_email ?? null,
                                   recording_files: s.recording_files as ZoomRecordingFile[],
-                                  match_reason: (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) ? "manual" : s.match_reason ?? null,
+                                  match_reason: isManual ? "manual" : s.match_reason ?? null,
                                 };
                               });
                               const saved = await api.zoomConfirmRecordings(project.id, confirmations);

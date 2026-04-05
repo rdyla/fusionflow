@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Milestone, Phase } from "../../lib/api";
+import type { Milestone, Phase, ZoomRecording } from "../../lib/api";
 
 type PhaseUpdate = {
   status?: "not_started" | "in_progress" | "completed";
@@ -12,6 +12,7 @@ type PhaseUpdate = {
 type Props = {
   phases: Phase[];
   milestones: Milestone[];
+  recordings?: ZoomRecording[];
   onUpdatePhase: (phaseId: string, updates: PhaseUpdate) => Promise<void>;
 };
 
@@ -66,7 +67,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: Props) {
+export default function ProjectTimeline({ phases, milestones, recordings = [], onUpdatePhase }: Props) {
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
@@ -79,6 +80,7 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
   if (datedPhases.length > 0) {
     const allMs = datedPhases.flatMap((p) => [parseDate(p.planned_start)!, parseDate(p.planned_end)!]);
     milestones.forEach((m) => { const ms = parseDate(m.target_date); if (ms) allMs.push(ms); });
+    recordings.forEach((r) => { const ms = parseDate(r.start_time.slice(0, 10)); if (ms) allMs.push(ms); });
 
     const rawMin = Math.min(...allMs);
     const rawMax = Math.max(...allMs);
@@ -189,6 +191,34 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
               );
             })}
 
+            {/* Recording markers */}
+            {recordings.length > 0 && (
+              <>
+                <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0 6px", marginLeft: LABEL_W }} />
+                {recordings.map((r) => {
+                  const rMs = parseDate(r.start_time.slice(0, 10));
+                  if (!rMs) return null;
+                  const label = r.task_name ?? r.phase_name ?? "";
+                  return (
+                    <div key={r.id} style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 18 }}>
+                      <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#7c3aed", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title={r.topic}>
+                        {r.topic}
+                      </div>
+                      <div style={{ flex: 1, position: "relative", height: 18 }}>
+                        <div
+                          style={{ position: "absolute", left: `${pct(rMs, minMs, totalMs)}%`, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}
+                          title={`${r.topic}${label ? ` · ${label}` : ""} (${r.start_time.slice(0, 10)})`}
+                        >
+                          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#7c3aed", border: "2px solid rgba(124,58,237,0.3)" }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+
             {/* Milestone markers */}
             <div style={{ display: "flex", marginTop: 6, paddingLeft: LABEL_W }}>
               <div style={{ flex: 1, position: "relative", height: 20 }}>
@@ -222,6 +252,12 @@ export default function ProjectTimeline({ phases, milestones, onUpdatePhase }: P
                 <span style={{ width: 8, height: 8, background: "#ff8c00", transform: "rotate(45deg)", display: "inline-block", borderRadius: 1 }} />
                 Milestone
               </span>
+              {recordings.length > 0 && (
+                <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#7c3aed", display: "inline-block" }} />
+                  Recording
+                </span>
+              )}
             </div>
           </div>
         </div>
