@@ -354,6 +354,15 @@ app.delete("/:id/tasks/:taskId/comments/:commentId", async (c) => {
 
 // ── Time Entry ────────────────────────────────────────────────────────────────
 
+/** Temporary: return lookup field names on amc_timeentry for discovery. Admin only. */
+app.get("/time-entry/metadata", async (c) => {
+  const auth = c.get("auth");
+  if (auth.role !== "admin") throw new HTTPException(403, { message: "Forbidden" });
+  const { getTimeEntryLookupFields } = await import("../services/dynamicsService");
+  const fields = await getTimeEntryLookupFields(c.env);
+  return c.json(fields);
+});
+
 /** Return pay codes + cost codes for the project's CRM job. Used to populate the time entry form. */
 app.get("/:id/time-entry/setup", async (c) => {
   const auth = c.get("auth");

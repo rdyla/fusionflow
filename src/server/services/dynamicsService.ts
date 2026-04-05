@@ -945,6 +945,23 @@ export type CreateTimeEntryInput = {
 };
 
 /** Create an amc_timeentry record; returns the new entity GUID. */
+/** Fetch lookup field metadata for amc_timeentry — used to discover correct navigation property names. */
+export async function getTimeEntryLookupFields(env: Env): Promise<unknown> {
+  const token = await getToken(env);
+  const res = await fetch(
+    `${API_BASE}/EntityDefinitions(LogicalName='amc_timeentry')/Attributes/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=LogicalName,SchemaName,Targets`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        "OData-MaxVersion": "4.0",
+        "OData-Version": "4.0",
+      },
+    }
+  );
+  return res.json();
+}
+
 export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Promise<string> {
   const body: Record<string, unknown> = {
     scheduledstart: input.scheduledStart,
