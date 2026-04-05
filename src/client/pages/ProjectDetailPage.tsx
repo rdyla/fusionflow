@@ -16,6 +16,7 @@ import {
   type SupportCase,
   type Task,
   type TaskComment,
+  type TaskTimeEntry,
   type User,
   type ZoomRecording,
   type ZoomRecordingSuggestion,
@@ -126,6 +127,7 @@ export default function ProjectDetailPage() {
   const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
   const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", useCostCode: false });
   const [submittingTimeEntry, setSubmittingTimeEntry] = useState(false);
+  const [taskTimeEntries, setTaskTimeEntries] = useState<Record<string, TaskTimeEntry[]>>({});
   const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
   const [taskCommentBody, setTaskCommentBody] = useState("");
   const [addingComment, setAddingComment] = useState(false);
@@ -232,6 +234,11 @@ export default function ProjectDetailPage() {
         setPhases(phaseData);
         setMilestones(milestoneData);
         setTasks(taskData);
+        // Load time entries for all tasks
+        if (taskData.length > 0) {
+          Promise.all(taskData.map((t) => api.getTaskTimeEntries(id, t.id).then((entries) => ({ id: t.id, entries })).catch(() => ({ id: t.id, entries: [] }))))
+            .then((results) => setTaskTimeEntries(Object.fromEntries(results.map((r) => [r.id, r.entries]))));
+        }
         setRisks(riskData);
         setNotes(noteData);
         setUsers(userData);
@@ -1161,26 +1168,21 @@ export default function ProjectDetailPage() {
                           </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                             <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
-                            {task.status !== "completed" && (task.assignee_user_id === project?.id || canEdit || task.assignee_user_id === project?.pm_user_id || true) && (
-                              <button
-                                className="ms-btn-secondary"
-                                style={{ fontSize: 11, padding: "3px 10px" }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const today = new Date().toISOString().slice(0, 10);
-                                  setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
-                                  setTimeEntrySetup(null);
-                                  setTimeEntryTask(task);
-                                  setTimeEntryLoadingSetup(true);
-                                  api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
-                                }}
-                              >
-                                Log Time
-                              </button>
-                            )}
-                            {task.crm_time_entry_id && (
-                              <span style={{ fontSize: 11, color: "#059669", fontWeight: 600 }}>✓ Logged</span>
-                            )}
+                            <button
+                              className="ms-btn-secondary"
+                              style={{ fontSize: 11, padding: "3px 10px" }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const today = new Date().toISOString().slice(0, 10);
+                                setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
+                                setTimeEntrySetup(null);
+                                setTimeEntryTask(task);
+                                setTimeEntryLoadingSetup(true);
+                                api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                              }}
+                            >
+                              Log Time
+                            </button>
                           </div>
                         </div>
                         {taskRecordings.length > 0 && (
@@ -1195,6 +1197,27 @@ export default function ProjectDetailPage() {
                                 </span>
                               </div>
                             ))}
+                          </div>
+                        )}
+                        {(taskTimeEntries[task.id] ?? []).length > 0 && (
+                          <div style={{ paddingLeft: 16, paddingBottom: 6, display: "grid", gap: 3 }}>
+                            {(taskTimeEntries[task.id] ?? []).map((entry) => {
+                              const startDt = entry.scheduled_start ? new Date(entry.scheduled_start) : null;
+                              const endDt = entry.scheduled_end ? new Date(entry.scheduled_end) : null;
+                              const mins = startDt && endDt ? Math.round((endDt.getTime() - startDt.getTime()) / 60000) : null;
+                              return (
+                                <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#0369a1" }}>
+                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#0369a1", flexShrink: 0, display: "inline-block" }} />
+                                  <span style={{ fontWeight: 500 }}>{entry.user_name ?? "Unknown"}</span>
+                                  <span style={{ color: "#94a3b8" }}>
+                                    {startDt ? startDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                                    {" · "}{startDt ? startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
+                                    {" – "}{endDt ? endDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
+                                    {mins !== null ? ` · ${mins}m` : ""}
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
                       </div>
@@ -2207,7 +2230,7 @@ export default function ProjectDetailPage() {
                         // Build ISO datetimes from local date + time (treat as UTC for submission)
                         const start = `${timeEntryForm.date}T${timeEntryForm.startTime}:00Z`;
                         const end = `${timeEntryForm.date}T${timeEntryForm.endTime}:00Z`;
-                        const updated = await api.completeTaskWithTimeEntry(project.id, timeEntryTask.id, {
+                        const entry = await api.logTaskTime(project.id, timeEntryTask.id, {
                           scheduled_start: start,
                           scheduled_end: end,
                           pay_code_id: timeEntryForm.payCodeId,
@@ -2216,7 +2239,7 @@ export default function ProjectDetailPage() {
                           job_id: timeEntrySetup.job_id!,
                           account_id: timeEntrySetup.account_id ?? null,
                         });
-                        setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
+                        setTaskTimeEntries((prev) => ({ ...prev, [timeEntryTask.id]: [...(prev[timeEntryTask.id] ?? []), entry] }));
                         setTimeEntryTask(null);
                         showToast("Time entry submitted to CRM.", "success");
                       } catch (err) {
@@ -2226,7 +2249,7 @@ export default function ProjectDetailPage() {
                       }
                     }}
                   >
-                    {submittingTimeEntry ? "Submitting…" : "Complete Task & Submit to CRM"}
+                    {submittingTimeEntry ? "Submitting…" : "Submit Time Entry to CRM"}
                   </button>
                   <button className="ms-btn-secondary" onClick={() => setTimeEntryTask(null)}>Cancel</button>
                 </div>

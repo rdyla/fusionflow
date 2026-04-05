@@ -413,18 +413,42 @@ app.get("/:id/time-entry/setup", async (c) => {
   });
 });
 
-const completeTaskSchema = z.object({
-  scheduled_start: z.string(),   // ISO datetime (local, converted to UTC by client)
-  scheduled_end: z.string(),     // ISO datetime
+const logTimeSchema = z.object({
+  scheduled_start: z.string(),
+  scheduled_end: z.string(),
   pay_code_id: z.string(),
   cost_code_id: z.string().nullable().optional(),
-  case_id: z.string(),           // incident GUID (from setup)
-  job_id: z.string(),            // amc_job GUID (from setup)
-  account_id: z.string().nullable().optional(), // account GUID (from setup)
+  case_id: z.string(),
+  job_id: z.string(),
+  account_id: z.string().nullable().optional(),
 });
 
-/** Complete a task and ship a time entry to Dynamics CRM. */
-app.post("/:id/tasks/:taskId/complete", async (c) => {
+/** List time entries for a task. */
+app.get("/:id/tasks/:taskId/time-entries", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await db
+    .prepare(`
+      SELECT tte.*, u.name AS user_name
+      FROM task_time_entries tte
+      LEFT JOIN users u ON u.id = tte.user_id
+      WHERE tte.task_id = ? AND tte.project_id = ?
+      ORDER BY tte.scheduled_start ASC
+    `)
+    .bind(taskId, projectId)
+    .all();
+
+  return c.json(rows.results ?? []);
+});
+
+/** Log a time entry against a task and ship it to Dynamics CRM. Does not change task status. */
+app.post("/:id/tasks/:taskId/time-entries", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -441,16 +465,14 @@ app.post("/:id/tasks/:taskId/complete", async (c) => {
   if (!canEdit && !isEngineerOnOwnTask) throw new HTTPException(403, { message: "Forbidden" });
 
   const body = await c.req.json();
-  const parsed = completeTaskSchema.safeParse(body);
+  const parsed = logTimeSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid time entry data" });
 
   const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id, account_id } = parsed.data;
 
-  // Look up the engineer's Dynamics systemuser ID
   const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
   if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
 
-  // Create the time entry in CRM
   let crmTimeEntryId: string;
   try {
     crmTimeEntryId = await createTimeEntry(c.env, {
@@ -470,39 +492,21 @@ app.post("/:id/tasks/:taskId/complete", async (c) => {
     throw new HTTPException(502, { message: `CRM error: ${message}` });
   }
 
-  // Mark task complete in our DB
+  const entryId = crypto.randomUUID();
   await db
     .prepare(`
-      UPDATE tasks SET
-        status = 'completed',
-        completed_at = CURRENT_TIMESTAMP,
-        scheduled_start = ?,
-        scheduled_end = ?,
-        pay_code_id = ?,
-        cost_code_id = ?,
-        crm_time_entry_id = ?
-      WHERE id = ? AND project_id = ?
+      INSERT INTO task_time_entries (id, task_id, project_id, crm_time_entry_id, scheduled_start, scheduled_end, pay_code_id, cost_code_id, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    .bind(scheduled_start, scheduled_end, pay_code_id, cost_code_id ?? null, crmTimeEntryId, taskId, projectId)
+    .bind(entryId, taskId, projectId, crmTimeEntryId, scheduled_start, scheduled_end, pay_code_id, cost_code_id ?? null, auth.user.id)
     .run();
 
-  const updated = await db.prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`).bind(taskId).first();
+  const created = await db
+    .prepare(`SELECT tte.*, u.name AS user_name FROM task_time_entries tte LEFT JOIN users u ON u.id = tte.user_id WHERE tte.id = ? LIMIT 1`)
+    .bind(entryId)
+    .first();
 
-  // Notify PM
-  const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
-  if (project?.pm_user_id && project.pm_user_id !== auth.user.id) {
-    const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
-    if (pm) {
-      const appUrl = c.env.APP_URL ?? "";
-      c.executionCtx.waitUntil(sendEmail(c.env, {
-        to: pm.email,
-        subject: `Task completed on ${project.name}: ${(updated as { title?: string })?.title ?? ""}`,
-        html: pmTaskUpdate({ pmName: pm.name ?? pm.email, taskTitle: (updated as { title?: string })?.title ?? "", projectName: project.name, updatedByName: auth.user.name ?? auth.user.email, status: "completed", appUrl, projectId }),
-      }));
-    }
-  }
-
-  return c.json(updated);
+  return c.json(created, 201);
 });
 
 app.delete("/:id/tasks/:taskId", async (c) => {

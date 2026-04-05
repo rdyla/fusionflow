@@ -512,6 +512,20 @@ export type TimeEntrySetup = {
   account_id: string | null;
 };
 
+export type TaskTimeEntry = {
+  id: string;
+  task_id: string;
+  project_id: string;
+  crm_time_entry_id: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  pay_code_id: string | null;
+  cost_code_id: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  created_at: string;
+};
+
 export type Risk = {
   id: string;
   project_id: string;
@@ -1128,7 +1142,10 @@ export const api = {
   timeEntrySetup: (projectId: string) =>
     request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup`),
 
-  completeTaskWithTimeEntry: (
+  getTaskTimeEntries: (projectId: string, taskId: string) =>
+    request<TaskTimeEntry[]>(`/projects/${projectId}/tasks/${taskId}/time-entries`),
+
+  logTaskTime: (
     projectId: string,
     taskId: string,
     payload: {
@@ -1141,7 +1158,7 @@ export const api = {
       account_id?: string | null;
     }
   ) =>
-    request<Task>(`/projects/${projectId}/tasks/${taskId}/complete`, {
+    request<TaskTimeEntry>(`/projects/${projectId}/tasks/${taskId}/time-entries`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
