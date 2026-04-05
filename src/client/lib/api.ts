@@ -26,8 +26,8 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => null) as { error?: string } | null;
-    throw new Error(body?.error ?? `API error: ${res.status}`);
+    const body = await res.json().catch(() => null) as { error?: string; message?: string } | null;
+    throw new Error(body?.error ?? body?.message ?? `API error: ${res.status}`);
   }
 
   return res.json();

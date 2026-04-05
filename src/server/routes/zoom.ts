@@ -115,6 +115,7 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
     meetings = await getZoomRecordings(c.env.KV, projectId);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Zoom API error";
+    console.error("Zoom recordings sync error:", message);
     throw new HTTPException(502, { message });
   }
 
