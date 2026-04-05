@@ -415,16 +415,40 @@ async function getAllUsers(token: string): Promise<Array<{ id: string; email: st
 
 type PmInfo = { zoom_user_id: string | null; email: string | null };
 
+/** Zoom recordings API allows a maximum 30-day window per request — chunk accordingly. */
 async function fetchUserRecordings(token: string, userId: string, from: string, to: string): Promise<ZoomMeeting[]> {
+  // Build list of 30-day chunks covering [from, to]
+  const chunks: Array<{ from: string; to: string }> = [];
+  let chunkStart = new Date(from);
+  const end = new Date(to);
+  while (chunkStart <= end) {
+    const chunkEnd = new Date(chunkStart);
+    chunkEnd.setDate(chunkEnd.getDate() + 29);
+    if (chunkEnd > end) chunkEnd.setTime(end.getTime());
+    chunks.push({ from: chunkStart.toISOString().slice(0, 10), to: chunkEnd.toISOString().slice(0, 10) });
+    chunkStart = new Date(chunkEnd);
+    chunkStart.setDate(chunkStart.getDate() + 1);
+  }
+
+  const seen = new Set<string>();
   const meetings: ZoomMeeting[] = [];
-  let nextPageToken = "";
-  do {
-    const qs = new URLSearchParams({ from, to, page_size: "300", mc: "false", trash: "false" });
-    if (nextPageToken) qs.set("next_page_token", nextPageToken);
-    const page = await zoomGet<ZoomRecordingsPage>(token, `/users/${encodeURIComponent(userId)}/recordings?${qs}`);
-    meetings.push(...(page.meetings ?? []));
-    nextPageToken = page.next_page_token ?? "";
-  } while (nextPageToken);
+
+  for (const chunk of chunks) {
+    let nextPageToken = "";
+    do {
+      const qs = new URLSearchParams({ from: chunk.from, to: chunk.to, page_size: "300", mc: "false", trash: "false" });
+      if (nextPageToken) qs.set("next_page_token", nextPageToken);
+      const page = await zoomGet<ZoomRecordingsPage>(token, `/users/${encodeURIComponent(userId)}/recordings?${qs}`);
+      for (const m of page.meetings ?? []) {
+        if (!seen.has(String(m.id))) {
+          seen.add(String(m.id));
+          meetings.push(m);
+        }
+      }
+      nextPageToken = page.next_page_token ?? "";
+    } while (nextPageToken);
+  }
+
   return meetings;
 }
 
@@ -444,7 +468,7 @@ export async function getZoomRecordings(
   void projectId; // retained for signature compatibility
 
   const today = new Date();
-  const from = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const from = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const to = today.toISOString().slice(0, 10);
 
   // PM-scoped fetch
