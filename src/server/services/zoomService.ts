@@ -431,21 +431,17 @@ async function fetchUserRecordings(token: string, userId: string, from: string, 
 /** Fetch cloud recordings.
  *  - If pmInfo provided: fetch only that PM's recordings (by zoom_user_id, or by email lookup).
  *  - Otherwise: fetch all users' recordings.
- *  Falls back to org-level credentials when no project-specific credentials exist. */
+ *  Always uses org-level credentials — recordings are sourced from the PF Zoom tenant,
+ *  not per-project customer credentials. */
 export async function getZoomRecordings(
   kv: KVNamespace,
   projectId: string,
   env?: OrgEnv,
   pmInfo?: PmInfo,
 ): Promise<ZoomMeeting[]> {
-  const creds = await getCreds(kv, projectId);
-  const token = creds
-    ? await getToken(kv, creds, projectId)
-    : env
-      ? await getOrgToken(kv, env)
-      : null;
-
-  if (!token) throw new Error("No Zoom credentials configured for this project or org");
+  if (!env) throw new Error("Org environment not available");
+  const token = await getOrgToken(kv, env);
+  void projectId; // retained for signature compatibility
 
   const today = new Date();
   const from = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
