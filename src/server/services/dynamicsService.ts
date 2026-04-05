@@ -94,16 +94,18 @@ async function dynamicsGet<T>(env: Env, path: string): Promise<T> {
 /** Create a record; returns the new entity GUID extracted from the OData-EntityId response header. */
 async function dynamicsCreate(env: Env, path: string, body: Record<string, unknown>): Promise<string> {
   const token = await getToken(env);
+  const jsonBody = JSON.stringify(body);
+  console.log(`[dynamicsCreate] POST ${path} body:`, jsonBody);
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: "application/json",
-      "Content-Type": "application/json",
+      "Content-Type": "application/json; charset=utf-8",
       "OData-MaxVersion": "4.0",
       "OData-Version": "4.0",
     },
-    body: JSON.stringify(body),
+    body: jsonBody,
   });
 
   if (!res.ok) {
@@ -945,21 +947,21 @@ export type CreateTimeEntryInput = {
 };
 
 /** Create an amc_timeentry record; returns the new entity GUID. */
-/** Fetch lookup field metadata for amc_timeentry — used to discover correct navigation property names. */
+/** Fetch lookup field + relationship navigation property names for amc_timeentry. */
 export async function getTimeEntryLookupFields(env: Env): Promise<unknown> {
   const token = await getToken(env);
-  const res = await fetch(
-    `${API_BASE}/EntityDefinitions(LogicalName='amc_timeentry')/Attributes/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=LogicalName,SchemaName,Targets`,
-    {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-        "OData-MaxVersion": "4.0",
-        "OData-Version": "4.0",
-      },
-    }
-  );
-  return res.json();
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    "OData-MaxVersion": "4.0",
+    "OData-Version": "4.0",
+  };
+  const [attrsRes, relsRes] = await Promise.all([
+    fetch(`${API_BASE}/EntityDefinitions(LogicalName='amc_timeentry')/Attributes/Microsoft.Dynamics.CRM.LookupAttributeMetadata?$select=LogicalName,SchemaName,Targets`, { headers }),
+    fetch(`${API_BASE}/EntityDefinitions(LogicalName='amc_timeentry')/ManyToOneRelationships?$select=ReferencingAttribute,ReferencedEntity,ReferencingEntityNavigationPropertyName`, { headers }),
+  ]);
+  const [attrs, rels] = await Promise.all([attrsRes.json(), relsRes.json()]);
+  return { attributes: attrs, relationships: rels };
 }
 
 export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Promise<string> {
