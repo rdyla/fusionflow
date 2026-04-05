@@ -873,17 +873,13 @@ export async function getCaseAndJob(
 ): Promise<{ caseId: string; jobId: string | null } | null> {
   if (!isConfigured(env)) return null;
   const escaped = ticketNumber.replace(/'/g, "''");
-  try {
-    const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null }> }>(
-      env,
-      `/incidents?$select=incidentid,_amc_job_value&$filter=ticketnumber eq '${escaped}'&$top=1`
-    );
-    const row = data.value?.[0];
-    if (!row) return null;
-    return { caseId: row.incidentid, jobId: row._amc_job_value ?? null };
-  } catch {
-    return null;
-  }
+  const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null }> }>(
+    env,
+    `/incidents?$select=incidentid,_amc_job_value&$filter=ticketnumber eq '${escaped}'&$top=1`
+  );
+  const row = data.value?.[0];
+  if (!row) return null;
+  return { caseId: row.incidentid, jobId: row._amc_job_value ?? null };
 }
 
 /** Fetch cost codes available for a job (cached 1 hour per job). */

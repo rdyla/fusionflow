@@ -366,10 +366,25 @@ app.get("/:id/time-entry/setup", async (c) => {
     .bind(projectId)
     .first<{ crm_case_id: string | null }>();
 
-  const [payCodes, caseAndJob] = await Promise.all([
-    getPayCodes(c.env),
-    project?.crm_case_id ? getCaseAndJob(c.env, project.crm_case_id) : Promise.resolve(null),
-  ]);
+  console.log("[time-entry/setup] crm_case_id:", project?.crm_case_id ?? "(null)");
+
+  let payCodes: Awaited<ReturnType<typeof getPayCodes>> = [];
+  let caseAndJob: Awaited<ReturnType<typeof getCaseAndJob>> = null;
+  let caseError: string | null = null;
+
+  try {
+    [payCodes, caseAndJob] = await Promise.all([
+      getPayCodes(c.env),
+      project?.crm_case_id ? getCaseAndJob(c.env, project.crm_case_id) : Promise.resolve(null),
+    ]);
+  } catch (err) {
+    caseError = err instanceof Error ? err.message : String(err);
+    console.error("[time-entry/setup] CRM lookup failed:", caseError);
+    // still try pay codes alone
+    try { payCodes = await getPayCodes(c.env); } catch { /* ignore */ }
+  }
+
+  console.log("[time-entry/setup] caseAndJob:", JSON.stringify(caseAndJob), "error:", caseError);
 
   const costCodes = caseAndJob?.jobId
     ? await getCostCodesForJob(c.env, caseAndJob.jobId)
@@ -380,6 +395,11 @@ app.get("/:id/time-entry/setup", async (c) => {
     cost_codes: costCodes,
     case_id: caseAndJob?.caseId ?? null,
     job_id: caseAndJob?.jobId ?? null,
+    _debug: {
+      crm_case_id: project?.crm_case_id ?? null,
+      case_found: !!caseAndJob,
+      case_error: caseError,
+    },
   });
 });
 
