@@ -116,6 +116,7 @@ export default function AdminUsersPage() {
       organization_name: user.organization_name ?? "",
       role: user.role as Role,
       manager_id: user.manager_id ?? null,
+      zoom_user_id: user.zoom_user_id ?? null,
     });
   }
 
@@ -130,6 +131,7 @@ export default function AdminUsersPage() {
         organization_name: typeof editForm.organization_name === "string" ? editForm.organization_name.trim() || undefined : undefined,
         role: editForm.role,
         manager_id: editForm.manager_id ?? null,
+        zoom_user_id: typeof editForm.zoom_user_id === "string" ? editForm.zoom_user_id.trim() || null : null,
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setEditingUser(null);
@@ -357,6 +359,15 @@ export default function AdminUsersPage() {
                   </label>
                 )}
               </div>
+              <label className="ms-label">
+                <span>Zoom User ID</span>
+                <input
+                  className="ms-input"
+                  placeholder="e.g. aBcD1234EfGh"
+                  value={editForm.zoom_user_id ?? ""}
+                  onChange={(e) => setEditForm({ ...editForm, zoom_user_id: e.target.value || null })}
+                />
+              </label>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
                 <button type="button" className="ms-btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>
