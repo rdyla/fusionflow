@@ -151,6 +151,7 @@ export default function ProjectDetailPage() {
   const [syncSuggestions, setSyncSuggestions] = useState<ZoomRecordingSuggestion[] | null>(null);
   const [confirmingRecordings, setConfirmingRecordings] = useState(false);
   const [suggestionPhaseOverrides, setSuggestionPhaseOverrides] = useState<Record<number, string | null>>({});
+  const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
 
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
@@ -1304,9 +1305,24 @@ export default function ProjectDetailPage() {
                         setSyncingSuggestions(true);
                         setSyncSuggestions(null);
                         setSuggestionPhaseOverrides({});
+                        setSelectedSuggestions(new Set());
                         try {
                           const result = await api.zoomSyncRecordings(project.id);
-                          setSyncSuggestions(result.suggestions);
+                          const matchPriority = (r: ZoomRecordingSuggestion) => {
+                            if (!r.match_reason) return 99;
+                            if (r.match_reason === "customer_name") return 0;
+                            if (r.match_reason === "case_number") return 1;
+                            if (r.match_reason.startsWith("keyword:")) return 2;
+                            if (r.match_reason === "date_range") return 3;
+                            return 4;
+                          };
+                          const sorted = [...result.suggestions].sort((a, b) => matchPriority(a) - matchPriority(b));
+                          // Default-select all matched recordings
+                          const defaultSelected = new Set(
+                            sorted.map((s, i) => s.match_reason ? i : -1).filter((i) => i >= 0)
+                          );
+                          setSyncSuggestions(sorted);
+                          setSelectedSuggestions(defaultSelected);
                           setRecordings(result.already_linked);
                         } catch (err) {
                           showToast(err instanceof Error ? err.message : "Failed to sync recordings", "error");
@@ -1400,69 +1416,117 @@ export default function ProjectDetailPage() {
                   <h2>Sync Recordings</h2>
                   {syncSuggestions.length === 0 ? (
                     <div>
-                      <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>No new recordings found in the last 90 days.</p>
+                      <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 16px" }}>No new recordings found in the last year.</p>
                       <button className="ms-btn-secondary" onClick={() => setSyncSuggestions(null)}>Close</button>
                     </div>
                   ) : (
                     <div style={{ display: "grid", gap: 16 }}>
-                      <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
-                        Found {syncSuggestions.length} new recording{syncSuggestions.length !== 1 ? "s" : ""}. Review phase assignments before confirming.
-                      </p>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <p style={{ fontSize: 13, color: "#64748b", margin: 0 }}>
+                          Found {syncSuggestions.length} new recording{syncSuggestions.length !== 1 ? "s" : ""}. Select the ones to link.
+                        </p>
+                        <div style={{ display: "flex", gap: 10, fontSize: 12 }}>
+                          <button
+                            type="button"
+                            style={{ background: "none", border: "none", color: "#0078d4", cursor: "pointer", padding: 0, fontSize: 12 }}
+                            onClick={() => setSelectedSuggestions(new Set(syncSuggestions.map((_, i) => i)))}
+                          >Select all</button>
+                          <button
+                            type="button"
+                            style={{ background: "none", border: "none", color: "#0078d4", cursor: "pointer", padding: 0, fontSize: 12 }}
+                            onClick={() => setSelectedSuggestions(new Set())}
+                          >Deselect all</button>
+                        </div>
+                      </div>
                       <div style={{ display: "grid", gap: 10, maxHeight: 420, overflowY: "auto" }}>
                         {syncSuggestions.map((s, idx) => {
+                          const isSelected = selectedSuggestions.has(idx);
                           const overridePhaseId = idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id;
                           return (
-                            <div key={s.meeting_id} style={{ padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9", display: "grid", gap: 8 }}>
-                              <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>{s.topic}</div>
-                              <div style={{ fontSize: 12, color: "#64748b" }}>
-                                {new Date(s.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                                {" · "}{s.duration_mins}m
-                                {s.host_email && <> · {s.host_email}</>}
-                                {s.match_reason && (
-                                  <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: "rgba(8,145,178,0.12)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.3)" }}>
-                                    {s.match_reason.replace("keyword:", "")}
-                                  </span>
-                                )}
-                                {!s.match_reason && (
-                                  <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: "rgba(148,163,184,0.15)", color: "#94a3b8", border: "1px solid rgba(148,163,184,0.3)" }}>
-                                    no match
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Assign to phase:</span>
-                                <select
-                                  className="ms-input"
-                                  style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
-                                  value={overridePhaseId ?? ""}
-                                  onChange={(e) => setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }))}
-                                >
-                                  <option value="">— unassigned —</option>
-                                  {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
-                                </select>
+                            <div
+                              key={s.meeting_id}
+                              style={{
+                                padding: "12px 14px", borderRadius: 6, display: "grid", gap: 8,
+                                background: isSelected ? "#f0f9ff" : "#f8fafc",
+                                border: `1px solid ${isSelected ? "rgba(8,145,178,0.3)" : "#f1f5f9"}`,
+                                opacity: isSelected ? 1 : 0.6,
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    setSelectedSuggestions((prev) => {
+                                      const next = new Set(prev);
+                                      e.target.checked ? next.add(idx) : next.delete(idx);
+                                      return next;
+                                    });
+                                  }}
+                                  style={{ marginTop: 2, flexShrink: 0, cursor: "pointer" }}
+                                />
+                                <div style={{ flex: 1, minWidth: 0 }}>
+                                  <div style={{ fontWeight: 600, fontSize: 13, color: "#1e293b" }}>{s.topic}</div>
+                                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                                    {new Date(s.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                    {" · "}{s.duration_mins}m
+                                    {s.host_email && <> · {s.host_email}</>}
+                                    {s.match_reason && (
+                                      <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: "rgba(8,145,178,0.12)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.3)" }}>
+                                        {s.match_reason.replace("keyword:", "")}
+                                      </span>
+                                    )}
+                                    {!s.match_reason && (
+                                      <span style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", background: "rgba(148,163,184,0.15)", color: "#94a3b8", border: "1px solid rgba(148,163,184,0.3)" }}>
+                                        no match
+                                      </span>
+                                    )}
+                                  </div>
+                                  {isSelected && (
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+                                      <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Phase:</span>
+                                      <select
+                                        className="ms-input"
+                                        style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
+                                        value={overridePhaseId ?? ""}
+                                        onChange={(e) => setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }))}
+                                      >
+                                        <option value="">— Unassigned —</option>
+                                        {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                      </select>
+                                    </div>
+                                  )}
+                                </div>
                               </div>
                             </div>
                           );
                         })}
                       </div>
-                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                      <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
+                        {selectedSuggestions.size === 0 && (
+                          <span style={{ fontSize: 12, color: "#94a3b8", marginRight: "auto" }}>Select at least one recording to link.</span>
+                        )}
                         <button className="ms-btn-secondary" onClick={() => setSyncSuggestions(null)}>Cancel</button>
                         <button
                           className="ms-btn-primary"
-                          disabled={confirmingRecordings}
+                          disabled={confirmingRecordings || selectedSuggestions.size === 0}
                           onClick={async () => {
                             setConfirmingRecordings(true);
                             try {
-                              const confirmations = syncSuggestions.map((s, idx) => ({
-                                meeting_id: s.meeting_id,
-                                phase_id: (idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id) ?? null,
-                                topic: s.topic,
-                                start_time: s.start_time,
-                                duration_mins: s.duration_mins,
-                                host_email: s.host_email ?? null,
-                                recording_files: s.recording_files as ZoomRecordingFile[],
-                                match_reason: (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) ? "manual" : s.match_reason ?? null,
-                              }));
+                              const confirmations = [...selectedSuggestions].map((idx) => {
+                                const s = syncSuggestions[idx];
+                                const phaseId = (idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id) ?? null;
+                                return {
+                                  meeting_id: s.meeting_id,
+                                  phase_id: phaseId,
+                                  topic: s.topic,
+                                  start_time: s.start_time,
+                                  duration_mins: s.duration_mins,
+                                  host_email: s.host_email ?? null,
+                                  recording_files: s.recording_files as ZoomRecordingFile[],
+                                  match_reason: (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) ? "manual" : s.match_reason ?? null,
+                                };
+                              });
                               const saved = await api.zoomConfirmRecordings(project.id, confirmations);
                               setRecordings((prev) => {
                                 const map = new Map(prev.map((r) => [r.id, r]));
@@ -1478,7 +1542,7 @@ export default function ProjectDetailPage() {
                             }
                           }}
                         >
-                          {confirmingRecordings ? "Saving..." : `Confirm ${syncSuggestions.length} Recording${syncSuggestions.length !== 1 ? "s" : ""}`}
+                          {confirmingRecordings ? "Saving..." : `Link ${selectedSuggestions.size} Recording${selectedSuggestions.size !== 1 ? "s" : ""}`}
                         </button>
                       </div>
                     </div>
