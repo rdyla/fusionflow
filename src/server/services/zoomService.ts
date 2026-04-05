@@ -453,15 +453,20 @@ export async function getZoomRecordings(
 
   // PM-scoped fetch
   if (pmInfo) {
-    // Prefer stored zoom_user_id; fall back to email lookup in Zoom's user list
-    let userId = pmInfo.zoom_user_id ?? null;
-    if (!userId && pmInfo.email) {
+    // Try zoom_user_id first; if it fails (stale/wrong ID), fall back to email lookup
+    if (pmInfo.zoom_user_id) {
+      try {
+        return await fetchUserRecordings(token, pmInfo.zoom_user_id, from, to);
+      } catch {
+        console.warn(`Zoom user ID ${pmInfo.zoom_user_id} failed, falling back to email lookup`);
+      }
+    }
+    if (pmInfo.email) {
       const users = await getAllUsers(token);
       const match = users.find((u) => u.email.toLowerCase() === pmInfo.email!.toLowerCase());
-      userId = match?.id ?? null;
+      if (match) return fetchUserRecordings(token, match.id, from, to);
     }
-    if (!userId) throw new Error("PM's Zoom account could not be found — set their Zoom User ID in user settings");
-    return fetchUserRecordings(token, userId, from, to);
+    throw new Error("PM's Zoom account could not be found — verify their Zoom User ID or email in user settings");
   }
 
   // No PM — fetch all users
