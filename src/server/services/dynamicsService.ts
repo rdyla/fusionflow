@@ -964,6 +964,8 @@ export async function getTimeEntryLookupFields(env: Env): Promise<unknown> {
 
 export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Promise<string> {
   const body: Record<string, unknown> = {
+    // Activity entities require @odata.type so Dynamics can resolve navigation properties
+    "@odata.type": "Microsoft.Dynamics.CRM.amc_timeentry",
     scheduledstart: input.scheduledStart,
     scheduledend: input.scheduledEnd,
     "amc_case@odata.bind": `/incidents(${input.caseId})`,
