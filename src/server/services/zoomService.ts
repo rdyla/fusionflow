@@ -394,7 +394,26 @@ type ZoomRecordingsPage = {
   next_page_token?: string;
 };
 
-/** Fetch cloud recordings for a project's Zoom account (last 90 days, up to 300 meetings). */
+type ZoomUsersPage = {
+  users?: Array<{ id: string; email: string }>;
+  next_page_token?: string;
+};
+
+/** Fetch all active users in the account (paginated). */
+async function getAllUsers(token: string): Promise<Array<{ id: string; email: string }>> {
+  const users: Array<{ id: string; email: string }> = [];
+  let nextPageToken = "";
+  do {
+    const qs = new URLSearchParams({ status: "active", page_size: "300" });
+    if (nextPageToken) qs.set("next_page_token", nextPageToken);
+    const page = await zoomGet<ZoomUsersPage>(token, `/users?${qs}`);
+    users.push(...(page.users ?? []));
+    nextPageToken = page.next_page_token ?? "";
+  } while (nextPageToken);
+  return users;
+}
+
+/** Fetch cloud recordings for a project's Zoom account (last 90 days, all users). */
 export async function getZoomRecordings(kv: KVNamespace, projectId: string): Promise<ZoomMeeting[]> {
   const creds = await getCreds(kv, projectId);
   if (!creds) throw new Error("No Zoom credentials configured for this project");
@@ -405,19 +424,33 @@ export async function getZoomRecordings(kv: KVNamespace, projectId: string): Pro
   const from = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const to = today.toISOString().slice(0, 10);
 
-  const meetings: ZoomMeeting[] = [];
-  let nextPageToken = "";
+  const users = await getAllUsers(token);
 
-  do {
-    const qs = new URLSearchParams({ from, to, page_size: "300" });
-    if (nextPageToken) qs.set("next_page_token", nextPageToken);
+  // Fetch recordings for each user concurrently (max 10 at a time to avoid rate limits)
+  const allMeetings: ZoomMeeting[] = [];
+  const BATCH = 10;
+  for (let i = 0; i < users.length; i += BATCH) {
+    const batch = users.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (user) => {
+        const meetings: ZoomMeeting[] = [];
+        let nextPageToken = "";
+        do {
+          const qs = new URLSearchParams({ from, to, page_size: "300", mc: "false", trash: "false" });
+          if (nextPageToken) qs.set("next_page_token", nextPageToken);
+          const page = await zoomGet<ZoomRecordingsPage>(token, `/users/${encodeURIComponent(user.id)}/recordings?${qs}`);
+          meetings.push(...(page.meetings ?? []));
+          nextPageToken = page.next_page_token ?? "";
+        } while (nextPageToken);
+        return meetings;
+      })
+    );
+    for (const result of results) {
+      if (result.status === "fulfilled") allMeetings.push(...result.value);
+    }
+  }
 
-    const page = await zoomGet<ZoomRecordingsPage>(token, `/accounts/me/recordings?${qs}`);
-    meetings.push(...(page.meetings ?? []));
-    nextPageToken = page.next_page_token ?? "";
-  } while (nextPageToken);
-
-  return meetings;
+  return allMeetings;
 }
 
 // Phase keyword map — order matters: more specific terms first
