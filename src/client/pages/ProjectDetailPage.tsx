@@ -2214,6 +2214,7 @@ export default function ProjectDetailPage() {
                           cost_code_id: timeEntryForm.useCostCode ? timeEntryForm.costCodeId || null : null,
                           case_id: timeEntrySetup.case_id!,
                           job_id: timeEntrySetup.job_id!,
+                          account_id: timeEntrySetup.account_id ?? null,
                         });
                         setTasks((prev) => prev.map((t) => t.id === updated.id ? updated : t));
                         setTimeEntryTask(null);

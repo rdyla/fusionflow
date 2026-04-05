@@ -874,27 +874,25 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export async function getCaseAndJob(
   env: Env,
   crmCaseId: string,
-): Promise<{ caseId: string; jobId: string | null } | null> {
+): Promise<{ caseId: string; jobId: string | null; accountId: string | null } | null> {
   if (!isConfigured(env)) return null;
-  let row: { incidentid: string; _amc_job_value: string | null } | undefined;
+  let row: { incidentid: string; _amc_job_value: string | null; _customerid_value: string | null } | undefined;
   if (UUID_RE.test(crmCaseId)) {
-    // stored value is the incident GUID — fetch directly
-    const data = await dynamicsGet<{ incidentid: string; _amc_job_value: string | null }>(
+    const data = await dynamicsGet<{ incidentid: string; _amc_job_value: string | null; _customerid_value: string | null }>(
       env,
-      `/incidents(${crmCaseId})?$select=incidentid,_amc_job_value`
+      `/incidents(${crmCaseId})?$select=incidentid,_amc_job_value,_customerid_value`
     );
     row = data;
   } else {
-    // stored value is a ticket number (e.g. CAS-001234)
     const escaped = crmCaseId.replace(/'/g, "''");
-    const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null }> }>(
+    const data = await dynamicsGet<{ value: Array<{ incidentid: string; _amc_job_value: string | null; _customerid_value: string | null }> }>(
       env,
-      `/incidents?$select=incidentid,_amc_job_value&$filter=ticketnumber eq '${escaped}'&$top=1`
+      `/incidents?$select=incidentid,_amc_job_value,_customerid_value&$filter=ticketnumber eq '${escaped}'&$top=1`
     );
     row = data.value?.[0];
   }
   if (!row) return null;
-  return { caseId: row.incidentid, jobId: row._amc_job_value ?? null };
+  return { caseId: row.incidentid, jobId: row._amc_job_value ?? null, accountId: row._customerid_value ?? null };
 }
 
 /** Fetch cost codes available for a job (cached 1 hour per job). */
@@ -937,12 +935,14 @@ export async function getSystemUserIdByEmail(env: Env, email: string): Promise<s
 }
 
 export type CreateTimeEntryInput = {
+  subject: string;
   scheduledStart: string;   // ISO datetime string (UTC)
   scheduledEnd: string;     // ISO datetime string (UTC)
   caseId: string;           // incident GUID
   jobId: string;            // amc_job GUID
   payCodeId: string;        // amc_paycode GUID
   costCodeId?: string | null;
+  companyId?: string | null; // account GUID (amc_company)
   ownerId: string;          // systemuser GUID
 };
 
@@ -966,6 +966,7 @@ export async function getTimeEntryLookupFields(env: Env): Promise<unknown> {
 
 export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Promise<string> {
   const body: Record<string, unknown> = {
+    subject: input.subject,
     scheduledstart: input.scheduledStart,
     scheduledend: input.scheduledEnd,
     // Navigation property names per ManyToOneRelationships metadata
@@ -976,6 +977,9 @@ export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Pr
   };
   if (input.costCodeId) {
     body["amc_costcode_amc_timeentry@odata.bind"] = `/amc_costcodes(${input.costCodeId})`;
+  }
+  if (input.companyId) {
+    body["amc_company_amc_timeentry@odata.bind"] = `/accounts(${input.companyId})`;
   }
   return dynamicsCreate(env, "/amc_timeentries", body);
 }

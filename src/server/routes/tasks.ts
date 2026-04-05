@@ -404,6 +404,7 @@ app.get("/:id/time-entry/setup", async (c) => {
     cost_codes: costCodes,
     case_id: caseAndJob?.caseId ?? null,
     job_id: caseAndJob?.jobId ?? null,
+    account_id: caseAndJob?.accountId ?? null,
     _debug: {
       crm_case_id: project?.crm_case_id ?? null,
       case_found: !!caseAndJob,
@@ -419,6 +420,7 @@ const completeTaskSchema = z.object({
   cost_code_id: z.string().nullable().optional(),
   case_id: z.string(),           // incident GUID (from setup)
   job_id: z.string(),            // amc_job GUID (from setup)
+  account_id: z.string().nullable().optional(), // account GUID (from setup)
 });
 
 /** Complete a task and ship a time entry to Dynamics CRM. */
@@ -431,7 +433,7 @@ app.post("/:id/tasks/:taskId/complete", async (c) => {
   const task = await db
     .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first<{ id: string; assignee_user_id: string | null; status: string | null }>();
+    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null }>();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const isEngineerOnOwnTask = auth.role === "pf_engineer" && task.assignee_user_id === auth.user.id;
@@ -442,7 +444,7 @@ app.post("/:id/tasks/:taskId/complete", async (c) => {
   const parsed = completeTaskSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid time entry data" });
 
-  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id } = parsed.data;
+  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id, account_id } = parsed.data;
 
   // Look up the engineer's Dynamics systemuser ID
   const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
@@ -452,12 +454,14 @@ app.post("/:id/tasks/:taskId/complete", async (c) => {
   let crmTimeEntryId: string;
   try {
     crmTimeEntryId = await createTimeEntry(c.env, {
+      subject: task.title,
       scheduledStart: scheduled_start,
       scheduledEnd: scheduled_end,
       caseId: case_id,
       jobId: job_id,
       payCodeId: pay_code_id,
       costCodeId: cost_code_id ?? null,
+      companyId: account_id ?? null,
       ownerId,
     });
   } catch (err) {

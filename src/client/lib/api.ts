@@ -509,6 +509,7 @@ export type TimeEntrySetup = {
   cost_codes: Array<{ amc_costcodeid: string; amc_name: string; amc_description: string | null }>;
   case_id: string | null;
   job_id: string | null;
+  account_id: string | null;
 };
 
 export type Risk = {
@@ -1137,6 +1138,7 @@ export const api = {
       cost_code_id?: string | null;
       case_id: string;
       job_id: string;
+      account_id?: string | null;
     }
   ) =>
     request<Task>(`/projects/${projectId}/tasks/${taskId}/complete`, {
