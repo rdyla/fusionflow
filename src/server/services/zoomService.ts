@@ -413,18 +413,24 @@ async function getAllUsers(token: string): Promise<Array<{ id: string; email: st
   return users;
 }
 
-/** Fetch cloud recordings for a project's Zoom account (last 90 days, all users). */
-export async function getZoomRecordings(kv: KVNamespace, projectId: string): Promise<ZoomMeeting[]> {
+/** Fetch cloud recordings for a project's Zoom account (last 90 days, all users).
+ *  Falls back to org-level credentials when no project-specific credentials exist. */
+export async function getZoomRecordings(kv: KVNamespace, projectId: string, env?: OrgEnv): Promise<ZoomMeeting[]> {
   const creds = await getCreds(kv, projectId);
-  if (!creds) throw new Error("No Zoom credentials configured for this project");
+  const token = creds
+    ? await getToken(kv, creds, projectId)
+    : env
+      ? await getOrgToken(kv, env)
+      : null;
 
-  const token = await getToken(kv, creds, projectId);
+  if (!token) throw new Error("No Zoom credentials configured for this project or org");
 
+  const resolvedToken: string = token;
   const today = new Date();
   const from = new Date(today.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const to = today.toISOString().slice(0, 10);
 
-  const users = await getAllUsers(token);
+  const users = await getAllUsers(resolvedToken);
 
   // Fetch recordings for each user concurrently (max 10 at a time to avoid rate limits)
   const allMeetings: ZoomMeeting[] = [];
@@ -438,7 +444,7 @@ export async function getZoomRecordings(kv: KVNamespace, projectId: string): Pro
         do {
           const qs = new URLSearchParams({ from, to, page_size: "300", mc: "false", trash: "false" });
           if (nextPageToken) qs.set("next_page_token", nextPageToken);
-          const page = await zoomGet<ZoomRecordingsPage>(token, `/users/${encodeURIComponent(user.id)}/recordings?${qs}`);
+          const page = await zoomGet<ZoomRecordingsPage>(resolvedToken, `/users/${encodeURIComponent(user.id)}/recordings?${qs}`);
           meetings.push(...(page.meetings ?? []));
           nextPageToken = page.next_page_token ?? "";
         } while (nextPageToken);
