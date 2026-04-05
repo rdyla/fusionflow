@@ -43,6 +43,7 @@ export type User = {
   avatar_url?: string | null;
   dynamics_account_id?: string | null;
   manager_id?: string | null;
+  zoom_user_id?: string | null;
   can_open_cases?: boolean;
 };
 
@@ -1253,6 +1254,7 @@ export const api = {
       is_active?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
+      zoom_user_id?: string | null;
     }
   ) =>
     request<User>(`/admin/users/${id}`, {
