@@ -966,17 +966,16 @@ export async function getTimeEntryLookupFields(env: Env): Promise<unknown> {
 
 export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Promise<string> {
   const body: Record<string, unknown> = {
-    // Activity entities require @odata.type so Dynamics can resolve navigation properties
-    "@odata.type": "Microsoft.Dynamics.CRM.amc_timeentry",
     scheduledstart: input.scheduledStart,
     scheduledend: input.scheduledEnd,
-    "amc_case@odata.bind": `/incidents(${input.caseId})`,
-    "amc_job@odata.bind": `/amc_jobs(${input.jobId})`,
-    "amc_paycode@odata.bind": `/amc_paycodes(${input.payCodeId})`,
+    // Navigation property names per ManyToOneRelationships metadata
+    "amc_case_amc_timeentry@odata.bind": `/incidents(${input.caseId})`,
+    "amc_job_amc_timeentry@odata.bind": `/amc_jobs(${input.jobId})`,
+    "amc_paycode_amc_timeentry@odata.bind": `/amc_paycodes(${input.payCodeId})`,
     "ownerid@odata.bind": `/systemusers(${input.ownerId})`,
   };
   if (input.costCodeId) {
-    body["amc_costcode@odata.bind"] = `/amc_costcodes(${input.costCodeId})`;
+    body["amc_costcode_amc_timeentry@odata.bind"] = `/amc_costcodes(${input.costCodeId})`;
   }
   return dynamicsCreate(env, "/amc_timeentries", body);
 }
