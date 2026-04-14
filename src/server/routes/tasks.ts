@@ -42,6 +42,8 @@ const createTaskSchema = z.object({
   phase_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
   due_date: z.string().nullable().optional(),
+  scheduled_start: z.string().nullable().optional(),
+  scheduled_end: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).default("not_started"),
 });
@@ -63,17 +65,17 @@ app.post("/:id/tasks", async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { title, phase_id, assignee_user_id, due_date, priority, status } = parsed.data;
+  const { title, phase_id, assignee_user_id, due_date, scheduled_start, scheduled_end, priority, status } = parsed.data;
   const taskId = crypto.randomUUID();
 
   await db
     .prepare(
       `
-      INSERT INTO tasks (id, project_id, phase_id, title, assignee_user_id, due_date, status, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, project_id, phase_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(taskId, projectId, phase_id ?? null, title, assignee_user_id ?? null, due_date ?? null, status, priority ?? null)
+    .bind(taskId, projectId, phase_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
     .run();
 
   const created = await db
@@ -115,6 +117,8 @@ const updateTaskSchema = z.object({
   phase_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
   due_date: z.string().nullable().optional(),
+  scheduled_start: z.string().nullable().optional(),
+  scheduled_end: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
 });

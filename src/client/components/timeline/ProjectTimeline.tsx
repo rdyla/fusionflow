@@ -107,8 +107,8 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
     ganttContent = (
       <div className="ms-section-card" style={{ marginBottom: 20 }}>
         <div className="ms-section-title">Schedule</div>
-        <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 600 }}>
+        <div style={{ overflow: "hidden" }}>
+          <div>
             {/* Month headers */}
             <div style={{ display: "flex", marginBottom: 8, paddingLeft: LABEL_W }}>
               <div style={{ position: "relative", flex: 1, height: 20 }}>

@@ -433,6 +433,8 @@ export default function ProjectDetailPage() {
           title: editingTask.title.trim(),
           phase_id: editingTask.phase_id,
           due_date: editingTask.due_date || null,
+          scheduled_start: editingTask.scheduled_start || null,
+          scheduled_end: editingTask.scheduled_end || null,
           priority: (editingTask.priority as "low" | "medium" | "high") || null,
           assignee_user_id: editingTask.assignee_user_id || null,
           status: (editingTask.status as "not_started") ?? "not_started",
@@ -453,6 +455,8 @@ export default function ProjectDetailPage() {
         title: editingTask.title,
         phase_id: editingTask.phase_id,
         due_date: editingTask.due_date,
+        scheduled_start: editingTask.scheduled_start,
+        scheduled_end: editingTask.scheduled_end,
         priority: editingTask.priority as "low" | "medium" | "high" | null,
         assignee_user_id: editingTask.assignee_user_id,
         status: editingTask.status as "not_started" | "in_progress" | "completed" | "blocked",
@@ -2264,6 +2268,18 @@ export default function ProjectDetailPage() {
                     <option value="">Unassigned</option>
                     {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
                   </select>
+                </label>
+              </div>
+
+              {/* Scheduled Start + End */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label className="ms-label">
+                  <span>Scheduled Start</span>
+                  <input type="date" className="ms-input" value={editingTask.scheduled_start ?? ""} onChange={(e) => setEditingTask({ ...editingTask, scheduled_start: e.target.value || null })} disabled={!canEdit} />
+                </label>
+                <label className="ms-label">
+                  <span>Scheduled End</span>
+                  <input type="date" className="ms-input" value={editingTask.scheduled_end ?? ""} onChange={(e) => setEditingTask({ ...editingTask, scheduled_end: e.target.value || null })} disabled={!canEdit} />
                 </label>
               </div>
 

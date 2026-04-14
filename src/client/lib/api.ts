@@ -1097,6 +1097,8 @@ export const api = {
       phase_id?: string | null;
       assignee_user_id?: string | null;
       due_date?: string | null;
+      scheduled_start?: string | null;
+      scheduled_end?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
     }
@@ -1114,6 +1116,8 @@ export const api = {
       phase_id?: string | null;
       assignee_user_id?: string | null;
       due_date?: string | null;
+      scheduled_start?: string | null;
+      scheduled_end?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
     }
