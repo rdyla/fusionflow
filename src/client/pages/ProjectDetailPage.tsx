@@ -9,7 +9,6 @@ import {
   type Note,
   type Phase,
   type Project,
-  type ProjectChain,
   type ProjectContact,
   type ProjectStaffMember,
   type Risk,
@@ -22,7 +21,6 @@ import {
   type ZoomRecordingSuggestion,
   type ZoomRecordingFile,
 } from "../lib/api";
-import LifecycleChain from "../components/ui/LifecycleChain";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
@@ -176,13 +174,6 @@ export default function ProjectDetailPage() {
   const [caseSearching, setCaseSearching] = useState(false);
   const [savingCaseLink, setSavingCaseLink] = useState(false);
 
-  // Lifecycle chain
-  const [chain, setChain] = useState<ProjectChain | null>(null);
-  const [showLinkSolutionModal, setShowLinkSolutionModal] = useState(false);
-  const [allSolutions, setAllSolutions] = useState<{ id: string; name: string; customer_name: string }[]>([]);
-  const [linkSolutionId, setLinkSolutionId] = useState("");
-  const [linkingSolution, setLinkingSolution] = useState(false);
-
   // Apply template
   const [templateList, setTemplateList] = useState<{ id: string; name: string; phase_count?: number; task_count?: number }[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
@@ -215,7 +206,6 @@ export default function ProjectDetailPage() {
             api.me(),
           ]);
         api.projectContacts(id).then(setContacts).catch(() => {});
-        api.projectChain(id).then(setChain).catch(() => {});
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
         setEditHealth(projectData.health ?? "");
@@ -811,48 +801,6 @@ export default function ProjectDetailPage() {
       {/* ── Overview ──────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <div style={{ display: "grid", gap: 16 }}>
-          {/* ── Lifecycle Chain ──────────────────────────────────────────── */}
-          <LifecycleChain
-            current="project"
-            currentLabel={project.name}
-            solution={chain?.solution ?? null}
-            optimization={chain?.optimizeAccount ?? null}
-            actions={canEdit && (
-              <>
-                {!chain?.solution && (
-                  <button
-                    className="ms-btn-secondary"
-                    style={{ fontSize: 12 }}
-                    onClick={() => {
-                      setShowLinkSolutionModal(true);
-                      setLinkSolutionId("");
-                      api.solutions().then(setAllSolutions).catch(() => {});
-                    }}
-                  >
-                    + Link to Solution
-                  </button>
-                )}
-                {chain?.solution && (
-                  <button
-                    className="ms-btn-ghost"
-                    style={{ fontSize: 12, color: "#94a3b8" }}
-                    onClick={async () => {
-                      try {
-                        await api.unlinkProjectFromSolution(chain.solution!.id, project.id);
-                        setChain((c) => c ? { ...c, solution: null } : null);
-                        showToast("Solution unlinked.", "success");
-                      } catch {
-                        showToast("Failed to unlink solution", "error");
-                      }
-                    }}
-                  >
-                    Unlink Solution
-                  </button>
-                )}
-              </>
-            )}
-          />
-
           {/* ── Project Team ──────────────────────────────────────────────── */}
           <div className="ms-section-card">
             <div className="ms-section-title">PF Team</div>
@@ -2444,54 +2392,6 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-          </div>
-        </div>
-      )}
-
-      {/* ── Link Solution Modal ──────────────────────────────────────────── */}
-      {showLinkSolutionModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowLinkSolutionModal(false); }}>
-          <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Link to Solution</h2>
-              <button onClick={() => setShowLinkSolutionModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
-            </div>
-            <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
-              <label className="ms-label">
-                <span>Solution</span>
-                <select className="ms-input" value={linkSolutionId} onChange={(e) => setLinkSolutionId(e.target.value)}>
-                  <option value="">— Select a solution —</option>
-                  {allSolutions.map((s) => (
-                    <option key={s.id} value={s.id}>{s.name}{s.customer_name ? ` — ${s.customer_name}` : ""}</option>
-                  ))}
-                </select>
-              </label>
-              <p style={{ fontSize: 12, color: "#94a3b8", margin: 0 }}>Associates this project with a solutioning record for lifecycle tracking. Existing project data will not be overwritten.</p>
-            </div>
-            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-              <button
-                className="ms-btn-primary"
-                disabled={!linkSolutionId || linkingSolution}
-                onClick={async () => {
-                  if (!linkSolutionId || !project) return;
-                  setLinkingSolution(true);
-                  try {
-                    await api.linkProjectToSolution(linkSolutionId, project.id);
-                    const updatedChain = await api.projectChain(project.id);
-                    setChain(updatedChain);
-                    setShowLinkSolutionModal(false);
-                    showToast("Linked to solution.", "success");
-                  } catch {
-                    showToast("Failed to link solution", "error");
-                  } finally {
-                    setLinkingSolution(false);
-                  }
-                }}
-              >
-                {linkingSolution ? "Linking…" : "Link Solution"}
-              </button>
-              <button className="ms-btn-secondary" onClick={() => setShowLinkSolutionModal(false)}>Cancel</button>
-            </div>
           </div>
         </div>
       )}

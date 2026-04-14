@@ -468,7 +468,7 @@ app.get("/:id/projects", async (c) => {
     .prepare(`
       SELECT p.id, p.name, p.vendor, p.solution_type, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
-             p.pm_user_id, p.solution_id, p.created_at, p.updated_at,
+             p.pm_user_id, p.created_at, p.updated_at,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
       FROM projects p
       WHERE p.customer_id = ? AND (p.archived = 0 OR p.archived IS NULL)

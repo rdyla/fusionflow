@@ -297,7 +297,6 @@ export default function SolutionsPage() {
               <th>Stage</th>
               <th>PF AE</th>
               <th>Partner AE</th>
-              <th>Projects</th>
               <th>Updated</th>
             </tr>
           </thead>
@@ -334,15 +333,6 @@ export default function SolutionsPage() {
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>
                     {s.partner_ae_display_name ?? s.partner_ae_name ?? <span style={{ color: "#94a3b8" }}>—</span>}
-                  </td>
-                  <td>
-                    {(s.linked_project_count ?? 0) > 0 ? (
-                      <span className="ms-badge" style={{ background: "rgba(16,124,16,0.1)", color: "#107c10", border: "1px solid rgba(16,124,16,0.3)" }}>
-                        {s.linked_project_count} project{(s.linked_project_count ?? 0) > 1 ? "s" : ""}
-                      </span>
-                    ) : (
-                      <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                    )}
                   </td>
                   <td style={{ color: "#94a3b8", fontSize: 12 }}>{fmt(s.updated_at)}</td>
                 </tr>

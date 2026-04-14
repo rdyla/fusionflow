@@ -15,7 +15,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 type Tab = "overview" | "solutions" | "implementations" | "optimizations" | "documents";
 
 type CustomerSolution = Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id">;
-type CustomerProject = Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "solution_id" | "created_at" | "updated_at"> & { has_optimization: number | null };
+type CustomerProject = Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "created_at" | "updated_at"> & { has_optimization: number | null };
 type CustomerOptimization = { id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_type: string | null; actual_go_live_date: string | null };
 
 const SOLUTION_TYPE_LABELS: Record<string, string> = {

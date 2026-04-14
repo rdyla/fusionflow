@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import LifecycleChain from "../components/ui/LifecycleChain";
 import {
   api,
   type OptimizeAccount,
@@ -324,13 +323,6 @@ export default function OptimizeAccountPage() {
           ))}
         </div>
       </div>
-
-      {/* Lifecycle Chain */}
-      <LifecycleChain
-        current="optimization"
-        solution={account.solution_id ? { id: account.solution_id, name: account.linked_solution_name ?? "Solution" } : null}
-        project={{ id: account.project_id, name: account.project_name ?? "Project" }}
-      />
 
       {/* Tabs */}
       <div style={{ display: "flex", gap: 2, marginBottom: 24, borderBottom: "1px solid rgba(0,0,0,0.06)", paddingBottom: 0 }}>

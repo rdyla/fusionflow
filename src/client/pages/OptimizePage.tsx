@@ -203,7 +203,6 @@ export default function OptimizePage() {
                 <th>Account</th>
                 <th>Graduated</th>
                 <th>Status</th>
-                <th>Solution</th>
                 <th>AE</th>
                 <th>SA</th>
                 <th>CSM</th>
@@ -233,17 +232,6 @@ export default function OptimizePage() {
                     <span className="ms-badge" style={{ background: (STATUS_COLOR[a.optimize_status] ?? "#94a3b8") + "1a", color: STATUS_COLOR[a.optimize_status] ?? "#94a3b8", border: `1px solid ${(STATUS_COLOR[a.optimize_status] ?? "#94a3b8")}40` }}>
                       {a.optimize_status}
                     </span>
-                  </td>
-                  <td style={{ fontSize: 12 }}>
-                    {a.solution_id ? (
-                      <Link
-                        to={`/solutions/${a.solution_id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ color: "#8764b8", textDecoration: "none", fontWeight: 500 }}
-                      >
-                        {a.linked_solution_name ?? a.solution_id}
-                      </Link>
-                    ) : "—"}
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.ae_name ?? "—"}</td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.sa_name ?? "—"}</td>

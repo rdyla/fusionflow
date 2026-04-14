@@ -30,11 +30,10 @@ app.get("/accounts", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
-      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
+      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
       cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name,
       cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name,
-      sol.name AS linked_solution_name,
       (SELECT conducted_date FROM impact_assessments WHERE project_id = oa.project_id
        ORDER BY conducted_date DESC LIMIT 1) AS last_assessment_date,
       (SELECT overall_score FROM impact_assessments WHERE project_id = oa.project_id
@@ -45,7 +44,6 @@ app.get("/accounts", async (c) => {
     LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
     LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
     LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
-    LEFT JOIN solutions sol ON sol.id = p.solution_id
     ORDER BY oa.graduated_at DESC
   `).all();
   return c.json(rows.results ?? []);
@@ -79,8 +77,6 @@ app.get("/accounts/:projectId", async (c) => {
       oa.customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
-      p.solution_id,
-      sol.name AS linked_solution_name,
       cust.pf_ae_user_id AS ae_user_id, ae.name  AS ae_name,  ae.email  AS ae_email,
       cust.pf_sa_user_id AS sa_user_id, sa.name  AS sa_name,  sa.email  AS sa_email,
       cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name, csm.email AS csm_email,
@@ -91,28 +87,10 @@ app.get("/accounts/:projectId", async (c) => {
     LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
     LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
     LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
-    LEFT JOIN solutions sol ON sol.id = p.solution_id
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });
   return c.json(row);
-});
-
-// ── Linked solution for an optimize account ────────────────────────────────────
-
-app.get("/accounts/:projectId/linked-solution", async (c) => {
-  assertOptimizeAccess(c.get("auth").role);
-  const db = c.env.DB;
-  const projectId = c.req.param("projectId");
-
-  const row = await db.prepare(`
-    SELECT s.id, s.name, s.customer_name, s.status, s.solution_type, s.vendor
-    FROM solutions s
-    JOIN projects p ON p.solution_id = s.id
-    WHERE p.id = ? LIMIT 1
-  `).bind(projectId).first();
-
-  return c.json(row ?? null);
 });
 
 // ── CRM account search ─────────────────────────────────────────────────────────
@@ -174,7 +152,7 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.notes, oa.customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
-      p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
+      p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name, ae.email AS ae_email,
       cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name, sa.email AS sa_email,
       cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name, csm.email AS csm_email
@@ -248,11 +226,10 @@ app.post("/accounts/direct", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
-      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id, p.solution_id,
+      p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
       cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name,
       cust.pf_csm_user_id AS csm_user_id, csm.name AS csm_name,
-      sol.name AS linked_solution_name,
       NULL AS last_assessment_date, NULL AS last_assessment_score
     FROM optimize_accounts oa
     JOIN projects p ON p.id = oa.project_id
@@ -260,7 +237,6 @@ app.post("/accounts/direct", async (c) => {
     LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
     LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
     LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
-    LEFT JOIN solutions sol ON sol.id = p.solution_id
     WHERE oa.id = ? LIMIT 1
   `).bind(accountId).first();
   return c.json(created, 201);
