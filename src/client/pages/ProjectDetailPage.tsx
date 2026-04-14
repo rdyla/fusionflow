@@ -21,6 +21,7 @@ import {
   type ZoomRecordingSuggestion,
   type ZoomRecordingFile,
 } from "../lib/api";
+import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -1071,6 +1072,18 @@ export default function ProjectDetailPage() {
 
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {tab === "tasks" && (
+        <>
+        <ProjectTimeline
+          phases={phases}
+          milestones={milestones}
+          recordings={recordings}
+          ganttOnly
+          onUpdatePhase={async (phaseId, updates) => {
+            if (!project) return;
+            const updated = await api.updatePhase(project.id, phaseId, updates);
+            setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+          }}
+        />
         <div className="ms-section-card">
           <div className="ms-section-title">Tasks by Phase</div>
           <div style={{ display: "grid", gap: 24 }}>
@@ -1222,6 +1235,7 @@ export default function ProjectDetailPage() {
             ))}
           </div>
         </div>
+        </>
       )}
 
       {/* ── Blockers ───────────────────────────────────────────────────────── */}

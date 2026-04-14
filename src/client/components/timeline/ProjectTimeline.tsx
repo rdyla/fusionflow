@@ -14,6 +14,7 @@ type Props = {
   milestones: Milestone[];
   recordings?: ZoomRecording[];
   onUpdatePhase: (phaseId: string, updates: PhaseUpdate) => Promise<void>;
+  ganttOnly?: boolean;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProjectTimeline({ phases, milestones, recordings = [], onUpdatePhase }: Props) {
+export default function ProjectTimeline({ phases, milestones, recordings = [], onUpdatePhase, ganttOnly = false }: Props) {
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
@@ -296,6 +297,8 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
+
+  if (ganttOnly) return <div>{ganttContent}</div>;
 
   return (
     <div>
