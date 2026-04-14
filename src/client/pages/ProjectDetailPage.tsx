@@ -28,7 +28,7 @@ import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "risks" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "timeline" | "tasks" | "blockers" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -560,27 +560,27 @@ export default function ProjectDetailPage() {
       if (editingRisk) {
         const updated = await api.updateRisk(project.id, editingRisk.id, payload);
         setRisks((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-        showToast("Risk updated.", "success");
+        showToast("Blocker updated.", "success");
       } else {
         const created = await api.createRisk(project.id, payload);
         setRisks((prev) => [...prev, created]);
-        showToast("Risk added.", "success");
+        showToast("Blocker added.", "success");
       }
       setShowRiskModal(false);
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save risk", "error");
+      showToast(err instanceof Error ? err.message : "Failed to save blocker", "error");
     } finally {
       setSavingRisk(false);
     }
   }
   async function handleDeleteRisk(riskId: string) {
-    if (!project || !window.confirm("Delete this risk?")) return;
+    if (!project || !window.confirm("Delete this blocker?")) return;
     try {
       await api.deleteRisk(project.id, riskId);
       setRisks((prev) => prev.filter((r) => r.id !== riskId));
-      showToast("Risk deleted.", "success");
+      showToast("Blocker deleted.", "success");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to delete risk", "error");
+      showToast(err instanceof Error ? err.message : "Failed to delete blocker", "error");
     }
   }
 
@@ -782,7 +782,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "risks", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "blockers", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -1057,7 +1057,7 @@ export default function ProjectDetailPage() {
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
-              {[["Phases", phases.length], ["Milestones", milestones.length], ["Tasks", tasks.length], ["Risks", risks.length], ["Notes", notes.length]].map(
+              {[["Phases", phases.length], ["Milestones", milestones.length], ["Tasks", tasks.length], ["Blockers", risks.length], ["Notes", notes.length]].map(
                 ([label, value]) => (
                   <div key={label as string} className="ms-info-item" style={{ textAlign: "center" }}>
                     <div className="ms-info-label">{label}</div>
@@ -1188,15 +1188,15 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* ── Risks ─────────────────────────────────────────────────────────── */}
-      {tab === "risks" && (
+      {/* ── Blockers ───────────────────────────────────────────────────────── */}
+      {tab === "blockers" && (
         <div className="ms-section-card">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Risks & Blockers</div>
-            {canEdit && <button className="ms-btn-primary" onClick={openNewRisk}>+ Add Risk</button>}
+            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Blockers</div>
+            {canEdit && <button className="ms-btn-primary" onClick={openNewRisk}>+ Add Blocker</button>}
           </div>
           {risks.length === 0 ? (
-            <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No risks recorded.</div>
+            <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No blockers recorded.</div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {risks.map((risk) => (
@@ -1999,11 +1999,11 @@ export default function ProjectDetailPage() {
           : <ZoomTab projectId={project.id} />;
       })()}
 
-      {/* ── Risk Modal ────────────────────────────────────────────────────── */}
+      {/* ── Blocker Modal ─────────────────────────────────────────────────── */}
       {showRiskModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
           <div className="ms-modal">
-            <h2>{editingRisk ? "Edit Risk" : "Add Risk"}</h2>
+            <h2>{editingRisk ? "Edit Blocker" : "Add Blocker"}</h2>
             <form onSubmit={handleSaveRisk} style={{ display: "grid", gap: 14 }}>
               <label className="ms-label">
                 <span>Title *</span>
@@ -2040,7 +2040,7 @@ export default function ProjectDetailPage() {
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={savingRisk || !riskForm.title.trim()}>
-                  {savingRisk ? "Saving..." : editingRisk ? "Save Changes" : "Add Risk"}
+                  {savingRisk ? "Saving..." : editingRisk ? "Save Changes" : "Add Blocker"}
                 </button>
                 <button type="button" className="ms-btn-secondary" onClick={() => setShowRiskModal(false)}>Cancel</button>
               </div>
