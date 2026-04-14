@@ -297,7 +297,7 @@ export default function DashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
   }
 
-  const { user, summary, projects, projectPhases, openTasks, openBlockers, phaseDistribution, vendorDistribution, typeDistribution } = data;
+  const { user, summary, projects, projectPhases, openBlockers, phaseDistribution, vendorDistribution, typeDistribution } = data;
 
   // Build a map from project_id → sorted phases
   const phasesByProject = projectPhases.reduce<Record<string, PhaseEntry[]>>((acc, ph) => {
