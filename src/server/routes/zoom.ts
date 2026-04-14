@@ -140,7 +140,7 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
         duration_mins: m.meeting.duration,
         host_email: m.meeting.host_email ?? null,
         recording_files: m.meeting.recording_files ?? [],
-        recording_password: m.meeting.password ?? null,
+        recording_password: m.meeting.recording_play_passcode ?? null,
         suggested_phase_id: phaseId,
         suggested_phase_name: phaseName,
         match_reason: m.match_reason,

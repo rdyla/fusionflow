@@ -1379,18 +1379,16 @@ export default function ProjectDetailPage() {
                             )}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                            {rec.recording_files.filter((f) => f.play_url).slice(0, 1).map((f) => (
-                              <span key={f.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                <a href={f.play_url!} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
+                            {rec.recording_files.filter((f) => f.play_url).slice(0, 1).map((f) => {
+                              const url = rec.recording_password
+                                ? `${f.play_url}?pwd=${rec.recording_password}`
+                                : f.play_url!;
+                              return (
+                                <a key={f.id} href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
                                   Watch recording ↗
                                 </a>
-                                {rec.recording_password && (
-                                  <span style={{ fontSize: 11, color: "#64748b" }}>
-                                    Password: <span style={{ fontFamily: "monospace", color: "#1e293b", userSelect: "all" }}>{rec.recording_password}</span>
-                                  </span>
-                                )}
-                              </span>
-                            ))}
+                              );
+                            })}
                             {canEdit && (
                               <select
                                 className="ms-input"
