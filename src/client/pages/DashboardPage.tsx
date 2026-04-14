@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { api, type DashboardSummaryResponse } from "../lib/api";
+import { api, type DashboardSummaryResponse, type Task } from "../lib/api";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
@@ -197,9 +197,53 @@ function MetricCard({ title, value, accent }: { title: string; value: number; ac
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type MyTask = Task & { project_name: string; phase_name: string | null; assignee_name: string | null };
+
+const STATUS_FILTER_OPTIONS = [
+  { value: "all",         label: "All Open"     },
+  { value: "not_started", label: "Not Started"  },
+  { value: "in_progress", label: "In Progress"  },
+  { value: "blocked",     label: "Blocked"      },
+  { value: "overdue",     label: "Overdue"      },
+  { value: "completed",   label: "Completed"    },
+];
+
+const PRIORITY_FILTER_OPTIONS = [
+  { value: "all",    label: "Any Priority" },
+  { value: "high",   label: "High"         },
+  { value: "medium", label: "Medium"       },
+  { value: "low",    label: "Low"          },
+];
+
+const TASK_STATUS_COLOR: Record<string, string> = {
+  not_started: "#94a3b8",
+  in_progress: "#0891b2",
+  blocked:     "#d13438",
+  completed:   "#059669",
+};
+
+const TASK_STATUS_LABEL: Record<string, string> = {
+  not_started: "Not Started",
+  in_progress: "In Progress",
+  blocked:     "Blocked",
+  completed:   "Completed",
+};
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummaryResponse | null>(null);
   const navigate = useNavigate();
+
+  // ── My Tasks state ────────────────────────────────────────────────────────
+  const [taskItems, setTaskItems]         = useState<MyTask[]>([]);
+  const [taskTotal, setTaskTotal]         = useState(0);
+  const [taskPage, setTaskPage]           = useState(1);
+  const [taskHasMore, setTaskHasMore]     = useState(false);
+  const [taskLoading, setTaskLoading]     = useState(false);
+  const [taskStatus, setTaskStatus]       = useState("all");
+  const [taskPriority, setTaskPriority]   = useState("all");
+  const [taskSearch, setTaskSearch]       = useState("");
+  const [taskSearchInput, setTaskSearchInput] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     api.dashboardSummary().then((d) => {
@@ -210,6 +254,44 @@ export default function DashboardPage() {
       setData(d);
     });
   }, [navigate]);
+
+  const loadTasks = useCallback((status: string, priority: string, search: string, page: number) => {
+    setTaskLoading(true);
+    api.myTasks({
+      status:   status   !== "all" ? status   : undefined,
+      priority: priority !== "all" ? priority : undefined,
+      search:   search || undefined,
+      page,
+    }).then((res) => {
+      setTaskItems(page === 1 ? res.items : (prev) => [...prev, ...res.items]);
+      setTaskTotal(res.total);
+      setTaskHasMore(res.hasMore);
+    }).catch(() => {}).finally(() => setTaskLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!data) return;
+    setTaskPage(1);
+    loadTasks(taskStatus, taskPriority, taskSearch, 1);
+  }, [data, taskStatus, taskPriority, taskSearch, loadTasks]);
+
+  function handleSearchChange(val: string) {
+    setTaskSearchInput(val);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setTaskSearch(val), 350);
+  }
+
+  function handleFilterChange(newStatus: string, newPriority: string) {
+    setTaskStatus(newStatus);
+    setTaskPriority(newPriority);
+    setTaskPage(1);
+  }
+
+  function loadMoreTasks() {
+    const next = taskPage + 1;
+    setTaskPage(next);
+    loadTasks(taskStatus, taskPriority, taskSearch, next);
+  }
 
   if (!data) {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
@@ -375,74 +457,172 @@ export default function DashboardPage() {
         </table>
       </div>
 
-      {/* Open Tasks + Open Risks */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
-        {/* Open Tasks */}
+      {/* ── My Tasks (full width, filterable) ───────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 20, alignItems: "start" }}>
+
+        {/* Tasks panel */}
         <div className="ms-card" style={{ overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Open Tasks
-          </div>
-          {openTasks.length === 0 ? (
-            <div style={{ padding: "20px", color: "#64748b", fontSize: 14 }}>No open tasks.</div>
-          ) : (
-            <div>
-              {openTasks.map((t) => (
-                <div
-                  key={t.id}
-                  style={{ padding: "11px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 10 }}
+          {/* Header + filters */}
+          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                My Tasks
+                {taskTotal > 0 && (
+                  <span style={{ marginLeft: 8, fontSize: 12, fontWeight: 400, color: "#94a3b8", textTransform: "none", letterSpacing: 0 }}>
+                    {taskTotal} total
+                  </span>
+                )}
+              </div>
+              {/* Search */}
+              <input
+                type="text"
+                className="ms-input"
+                placeholder="Search tasks…"
+                value={taskSearchInput}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                style={{ fontSize: 13, padding: "5px 10px", width: 200, height: 32 }}
+              />
+            </div>
+            {/* Status + Priority filter pills */}
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {STATUS_FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleFilterChange(opt.value, taskPriority)}
+                  style={{
+                    padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: taskStatus === opt.value ? 700 : 400,
+                    border: `1px solid ${taskStatus === opt.value ? "#0b9aad" : "#e2e8f0"}`,
+                    background: taskStatus === opt.value ? "#e0f2fe" : "#fff",
+                    color: taskStatus === opt.value ? "#0b9aad" : "#64748b",
+                    cursor: "pointer",
+                  }}
                 >
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: ({ completed: "#059669", in_progress: "#0891b2", blocked: "#d13438" } as Record<string,string>)[t.status ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <Link
-                      to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}
-                      style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block", textDecoration: "none" }}
-                    >
-                      {t.title}
-                    </Link>
-                    <div style={{ fontSize: 12, color: "#64748b", display: "flex", gap: 6 }}>
-                      <Link to={`/projects/${t.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
-                        {t.project_name}
-                      </Link>
-                      {t.due_date && <span>· Due {formatDate(t.due_date)}</span>}
-                    </div>
-                  </div>
-                  {t.priority && (
-                    <Badge label={t.priority} color={PRIORITY_COLOR[t.priority] ?? "#94a3b8"} />
-                  )}
-                </div>
+                  {opt.label}
+                </button>
+              ))}
+              <div style={{ width: 1, background: "#e2e8f0", margin: "0 2px" }} />
+              {PRIORITY_FILTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => handleFilterChange(taskStatus, opt.value)}
+                  style={{
+                    padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: taskPriority === opt.value ? 700 : 400,
+                    border: `1px solid ${taskPriority === opt.value ? "#8764b8" : "#e2e8f0"}`,
+                    background: taskPriority === opt.value ? "#f3e8ff" : "#fff",
+                    color: taskPriority === opt.value ? "#8764b8" : "#64748b",
+                    cursor: "pointer",
+                  }}
+                >
+                  {opt.label}
+                </button>
               ))}
             </div>
+          </div>
+
+          {/* Task rows */}
+          {taskLoading && taskItems.length === 0 ? (
+            <div style={{ padding: "24px 20px", color: "#94a3b8", fontSize: 13 }}>Loading…</div>
+          ) : taskItems.length === 0 ? (
+            <div style={{ padding: "24px 20px", color: "#64748b", fontSize: 13 }}>No tasks match the current filter.</div>
+          ) : (
+            <>
+              {taskItems.map((t) => {
+                const isOverdue = t.status !== "completed" && t.due_date && new Date(t.due_date + "T00:00:00") < new Date();
+                return (
+                  <div
+                    key={t.id}
+                    style={{
+                      padding: "10px 20px", borderBottom: "1px solid #f1f5f9",
+                      display: "flex", alignItems: "flex-start", gap: 12,
+                      background: t.status === "blocked" ? "rgba(209,52,56,0.03)" : undefined,
+                    }}
+                  >
+                    {/* Status dot */}
+                    <div style={{ paddingTop: 4, flexShrink: 0 }}>
+                      <span style={{
+                        display: "inline-block", width: 8, height: 8, borderRadius: "50%",
+                        background: TASK_STATUS_COLOR[t.status ?? ""] ?? "#94a3b8",
+                      }} />
+                    </div>
+
+                    {/* Main content */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <Link
+                        to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}
+                        style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", textDecoration: "none", marginBottom: 2 }}
+                      >
+                        {t.title}
+                      </Link>
+                      <div style={{ fontSize: 11, color: "#94a3b8", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Link to={`/projects/${t.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
+                          {t.project_name}
+                        </Link>
+                        {t.phase_name && <span>· {t.phase_name}</span>}
+                        {t.assignee_name && <span>· {t.assignee_name}</span>}
+                        {t.due_date && (
+                          <span style={{ color: isOverdue ? "#d13438" : "#94a3b8", fontWeight: isOverdue ? 600 : 400 }}>
+                            · Due {formatDate(t.due_date)}{isOverdue ? " (overdue)" : ""}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Badges */}
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+                      {t.status && t.status !== "not_started" && (
+                        <Badge
+                          label={TASK_STATUS_LABEL[t.status] ?? t.status}
+                          color={TASK_STATUS_COLOR[t.status] ?? "#94a3b8"}
+                        />
+                      )}
+                      {t.priority && (
+                        <Badge label={t.priority} color={PRIORITY_COLOR[t.priority] ?? "#94a3b8"} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* Load more */}
+              {taskHasMore && (
+                <div style={{ padding: "12px 20px", textAlign: "center" }}>
+                  <button
+                    className="ms-btn-secondary"
+                    onClick={loadMoreTasks}
+                    disabled={taskLoading}
+                    style={{ fontSize: 12 }}
+                  >
+                    {taskLoading ? "Loading…" : `Load more (${taskTotal - taskItems.length} remaining)`}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
-        {/* Open Blockers */}
+        {/* Open Blockers sidebar */}
         <div className="ms-card" style={{ overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 13, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Open Blockers
           </div>
           {openBlockers.length === 0 ? (
-            <div style={{ padding: "20px", color: "#64748b", fontSize: 14 }}>No open blockers.</div>
+            <div style={{ padding: "16px", color: "#64748b", fontSize: 13 }}>No open blockers.</div>
           ) : (
             <div>
               {openBlockers.map((r) => (
-                <div
-                  key={r.id}
-                  style={{ padding: "11px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 10 }}
-                >
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: SEVERITY_COLOR[r.severity ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
+                <div key={r.id} style={{ padding: "10px 16px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 8 }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: SEVERITY_COLOR[r.severity ?? ""] ?? "#94a3b8", marginTop: 5, flexShrink: 0 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, color: "#1e293b", fontWeight: 500, marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <div style={{ fontSize: 12, color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 2 }}>
                       {r.title}
                     </div>
-                    <div style={{ fontSize: 12 }}>
-                      <Link to={`/projects/${r.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
-                        {r.project_name}
-                      </Link>
-                    </div>
+                    <Link to={`/projects/${r.project_id}?tab=blockers`} style={{ fontSize: 11, color: "#63c1ea", textDecoration: "none" }}>
+                      {r.project_name}
+                    </Link>
                   </div>
-                  {r.severity && (
-                    <Badge label={r.severity} color={SEVERITY_COLOR[r.severity] ?? "#94a3b8"} />
-                  )}
+                  {r.severity && <Badge label={r.severity} color={SEVERITY_COLOR[r.severity] ?? "#94a3b8"} />}
                 </div>
               ))}
             </div>

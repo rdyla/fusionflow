@@ -907,6 +907,14 @@ export const api = {
     request<Record<string, string | null>>(`/staff/photos?emails=${emails.map(encodeURIComponent).join(",")}`),
   users: () => request<User[]>("/users"),
   dashboardSummary: () => request<DashboardSummaryResponse>("/dashboard/summary"),
+  myTasks: (params: { status?: string; priority?: string; search?: string; page?: number }) => {
+    const q = new URLSearchParams();
+    if (params.status)   q.set("status",   params.status);
+    if (params.priority) q.set("priority", params.priority);
+    if (params.search)   q.set("search",   params.search);
+    if (params.page)     q.set("page",     String(params.page));
+    return request<{ items: (Task & { project_name: string; phase_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
+  },
   projects: () => request<Project[]>("/projects"),
   project: (id: string) => request<Project>(`/projects/${id}`),
 
