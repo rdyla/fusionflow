@@ -16,7 +16,7 @@ const SOLUTION_SELECT = `
     cu1.name as customer_pf_ae_name, cu1.email as customer_pf_ae_email,
     cu2.name as customer_pf_sa_name, cu2.email as customer_pf_sa_email,
     cu3.name as customer_pf_csm_name, cu3.email as customer_pf_csm_email,
-    cust.sharepoint_url as customer_sharepoint_url,
+    cust.sharepoint_url as customer_sharepoint_url
   FROM solutions s
   LEFT JOIN users u2 ON u2.id = s.partner_ae_user_id
   LEFT JOIN customers cust ON cust.id = s.customer_id
