@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount, type CrmAccountTeam, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
