@@ -117,6 +117,9 @@ const createSolutionSchema = z.object({
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
   partner_ae_email: z.string().email().optional().or(z.literal("")),
+  vendor_ae_user_id: z.string().optional(),
+  vendor_ae_name: z.string().optional(),
+  vendor_ae_email: z.string().email().optional().or(z.literal("")),
 });
 
 app.post("/", async (c) => {
@@ -129,6 +132,7 @@ app.post("/", async (c) => {
   const {
     customer_name, customer_id, dynamics_account_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
+    vendor_ae_user_id, vendor_ae_name, vendor_ae_email,
   } = parsed.data;
 
   const journeys = parsed.data.journeys ?? [];
@@ -210,16 +214,48 @@ app.post("/", async (c) => {
     }
   }
 
+  // Resolve vendor AE: use existing user, find by email, or create + invite
+  let resolvedVendorAeUserId: string | null = vendor_ae_user_id ?? null;
+  if (!resolvedVendorAeUserId && vendor_ae_email) {
+    const existingVae = await db
+      .prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1")
+      .bind(vendor_ae_email)
+      .first<{ id: string }>();
+    if (existingVae) {
+      resolvedVendorAeUserId = existingVae.id;
+    } else if (vendor_ae_name) {
+      const newUserId = crypto.randomUUID();
+      await db
+        .prepare("INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, 'partner_ae', 1)")
+        .bind(newUserId, vendor_ae_email.toLowerCase(), vendor_ae_name)
+        .run();
+      resolvedVendorAeUserId = newUserId;
+      const appUrl = c.env.APP_URL ?? "";
+      c.executionCtx.waitUntil(sendEmail(c.env, {
+        to: vendor_ae_email,
+        subject: "You've been invited to FusionFlow360",
+        html: userInvite({
+          recipientName: vendor_ae_name,
+          invitedByName: auth.user.name ?? auth.user.email,
+          role: "partner_ae",
+          appUrl,
+        }),
+      }));
+    }
+  }
+
   await db
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type, journeys,
-          partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          partner_ae_user_id, partner_ae_name, partner_ae_email,
+          vendor_ae_user_id, vendor_ae_name, vendor_ae_email, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
-      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
+      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null,
+      resolvedVendorAeUserId, vendor_ae_name ?? null, vendor_ae_email ?? null, auth.user.id
     )
     .run();
 

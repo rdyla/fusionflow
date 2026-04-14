@@ -1347,6 +1347,9 @@ export const api = {
     partner_ae_user_id?: string;
     partner_ae_name?: string;
     partner_ae_email?: string;
+    vendor_ae_user_id?: string;
+    vendor_ae_name?: string;
+    vendor_ae_email?: string;
   }) =>
     request<Solution>("/solutions", {
       method: "POST",
