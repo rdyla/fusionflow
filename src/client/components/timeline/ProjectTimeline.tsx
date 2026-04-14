@@ -255,20 +255,41 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
                     );
                   })}
 
+                  {/* Recording dots for this phase */}
+                  {recordings.filter((r) => r.phase_id === phase.id).map((r) => {
+                    const rMs = parseDate(r.start_time.slice(0, 10));
+                    if (!rMs) return null;
+                    return (
+                      <div key={r.id} style={{ display: "flex", alignItems: "center", marginBottom: 3, minHeight: 18 }}>
+                        <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#7c3aed", paddingRight: 8, paddingLeft: 16, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          title={r.topic}>
+                          {r.topic}
+                        </div>
+                        <div style={{ flex: 1, position: "relative", height: 14 }}>
+                          <div
+                            style={{ position: "absolute", top: 3, left: `${pct(rMs, minMs, totalMs)}%`, transform: "translateX(-50%)" }}
+                            title={`${r.topic} (${r.start_time.slice(0, 10)})`}
+                          >
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#7c3aed", border: "2px solid rgba(124,58,237,0.3)" }} />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
                   {/* Small gap after each phase group */}
-                  {phaseTasks.length > 0 && <div style={{ height: 4 }} />}
+                  {(phaseTasks.length > 0 || recordings.some((r) => r.phase_id === phase.id)) && <div style={{ height: 4 }} />}
                 </React.Fragment>
               );
             })}
 
-            {/* Recording markers */}
-            {recordings.length > 0 && (
+            {/* Unassigned recording markers — recordings not linked to any phase */}
+            {recordings.filter((r) => !r.phase_id).length > 0 && (
               <>
                 <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0 6px", marginLeft: LABEL_W }} />
-                {recordings.map((r) => {
+                {recordings.filter((r) => !r.phase_id).map((r) => {
                   const rMs = parseDate(r.start_time.slice(0, 10));
                   if (!rMs) return null;
-                  const label = r.task_name ?? r.phase_name ?? "";
                   return (
                     <div key={r.id} style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 18 }}>
                       <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#7c3aed", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
@@ -278,7 +299,7 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
                       <div style={{ flex: 1, position: "relative", height: 18 }}>
                         <div
                           style={{ position: "absolute", left: `${pct(rMs, minMs, totalMs)}%`, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}
-                          title={`${r.topic}${label ? ` · ${label}` : ""} (${r.start_time.slice(0, 10)})`}
+                          title={`${r.topic} (${r.start_time.slice(0, 10)}) — unassigned`}
                         >
                           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#7c3aed", border: "2px solid rgba(124,58,237,0.3)" }} />
                         </div>

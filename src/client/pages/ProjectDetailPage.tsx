@@ -1380,9 +1380,16 @@ export default function ProjectDetailPage() {
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                             {rec.recording_files.filter((f) => f.play_url).slice(0, 1).map((f) => (
-                              <a key={f.id} href={f.play_url!} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
-                                Watch recording ↗
-                              </a>
+                              <span key={f.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                <a href={f.play_url!} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
+                                  Watch recording ↗
+                                </a>
+                                {rec.recording_password && (
+                                  <span style={{ fontSize: 11, color: "#64748b" }}>
+                                    Password: <span style={{ fontFamily: "monospace", color: "#1e293b", userSelect: "all" }}>{rec.recording_password}</span>
+                                  </span>
+                                )}
+                              </span>
                             ))}
                             {canEdit && (
                               <select
@@ -1574,6 +1581,7 @@ export default function ProjectDetailPage() {
                                   duration_mins: s.duration_mins,
                                   host_email: s.host_email ?? null,
                                   recording_files: s.recording_files as ZoomRecordingFile[],
+                                  recording_password: s.recording_password ?? null,
                                   match_reason: isManual ? "manual" : s.match_reason ?? null,
                                 };
                               });

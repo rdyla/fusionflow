@@ -387,6 +387,7 @@ export type ZoomMeeting = {
   duration: number;
   host_email: string;
   recording_files?: ZoomRecordingFile[];
+  recording_play_passcode?: string | null;
 };
 
 type ZoomRecordingsPage = {
