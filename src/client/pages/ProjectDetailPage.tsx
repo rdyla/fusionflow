@@ -802,190 +802,139 @@ export default function ProjectDetailPage() {
       {/* ── Overview ──────────────────────────────────────────────────────── */}
       {tab === "overview" && (
         <>
+        <ProjectTimeline
+          phases={phases}
+          milestones={milestones}
+          tasks={tasks}
+          recordings={recordings}
+          ganttOnly
+          onUpdatePhase={async (phaseId, updates) => {
+            if (!project) return;
+            const updated = await api.updatePhase(project.id, phaseId, updates);
+            setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+          }}
+          onClickPhase={(phaseId) => {
+            setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
+            setTab("tasks");
+          }}
+          onClickTask={(taskId, phaseId) => {
+            if (phaseId) setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
+            const task = tasks.find((t) => t.id === taskId);
+            if (task) setEditingTask(task);
+            setTab("tasks");
+          }}
+        />
         <div style={{ display: "grid", gap: 16 }}>
-          {/* ── Project Team ──────────────────────────────────────────────── */}
-          <div className="ms-section-card">
-            <div className="ms-section-title">PF Team</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: 14 }}>
-              {/* Primary PM */}
+          {/* ── Team & Controls (consolidated) ───────────────────────────── */}
+          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+            {/* Staff chips row */}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>Team</span>
+              {/* PM chip */}
               {project.pm_user_id && (() => {
-                // Use userMap if available (admin); fall back to pm_name/pm_email joined on the project
                 const pmFromMap = userMap.get(project.pm_user_id);
                 const pmName = pmFromMap?.name ?? (project as unknown as Record<string, unknown>).pm_name as string | null ?? null;
                 const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
                 if (!pmName && !pmEmail) return null;
                 const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
                 return (
-                  <div key="pm" style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 2 }}>Project Manager</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{pmName ?? pmEmail}</div>
-                      {pmEmail && <a href={`mailto:${pmEmail}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{pmEmail}</a>}
-                    </div>
-                  </div>
+                  <span key="pm" title={`PM · ${pmEmail ?? ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
+                    <span style={{ color: "#334155", fontWeight: 500 }}>{pmName ?? pmEmail}</span>
+                    <span style={{ color: "#94a3b8", fontSize: 10 }}>PM</span>
+                  </span>
                 );
               })()}
-              {/* Additional PF staff (excludes partner AEs and AE/SA/CSM — owned by customer) */}
+              {/* PF staff chips */}
               {projectStaff.filter(s => s.staff_role !== "partner_ae" && !["ae", "sa", "csm"].includes(s.staff_role)).map((s) => {
                 const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const roleLabel: Record<string, string> = { ae: "Account Executive", sa: "Solution Architect", csm: "Client Success Manager", engineer: "Implementation Engineer", pm: "Project Manager" };
+                const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
                 const photo = staffPhotoMap[s.email] ?? s.avatar_url;
                 return (
-                  <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)", position: "relative" }}>
+                  <span key={s.id} title={`${s.staff_role} · ${s.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 4px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12, position: "relative" }}>
                     {photo
-                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
                     }
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name ?? s.email}</div>
-                      <a href={`mailto:${s.email}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{s.email}</a>
-                    </div>
-                    {canEdit && (
-                      <button onClick={() => handleRemoveStaff(s.id)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
-                    )}
-                  </div>
+                    <span style={{ color: "#334155", fontWeight: 500, paddingRight: canEdit ? 0 : 4 }}>{s.name ?? s.email}</span>
+                    {canEdit && <span style={{ color: "#94a3b8", fontSize: 10, paddingRight: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</span>}
+                    {canEdit && <button onClick={() => handleRemoveStaff(s.id)} style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" }} title="Remove">✕</button>}
+                  </span>
                 );
               })}
-              {projectStaff.filter(s => s.staff_role !== "partner_ae" && !["ae", "sa", "csm"].includes(s.staff_role)).length === 0 && !project.pm_user_id && (
-                <div style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic", gridColumn: "1 / -1" }}>No staff assigned.</div>
+              {/* Partner AE chips */}
+              {projectStaff.filter(s => s.staff_role === "partner_ae").map((s) => {
+                const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
+                const photo = staffPhotoMap[s.email] ?? s.avatar_url;
+                return (
+                  <span key={s.id} title={`Partner AE · ${s.organization_name ?? ""} · ${s.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 4px 3px 4px", background: "rgba(16,124,16,0.07)", border: "1px solid rgba(16,124,16,0.2)", borderRadius: 20, fontSize: 12 }}>
+                    {photo
+                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(16,124,16,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#107c10", flexShrink: 0 }}>{abbr}</span>
+                    }
+                    <span style={{ color: "#334155", fontWeight: 500, paddingRight: canEdit ? 0 : 4 }}>{s.name ?? s.email}</span>
+                    {canEdit && <span style={{ color: "#94a3b8", fontSize: 10, paddingRight: 2 }}>Partner</span>}
+                    {canEdit && <button onClick={() => handleRemovePartner(s.id)} style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" }} title="Remove">✕</button>}
+                  </span>
+                );
+              })}
+              {/* Add buttons */}
+              {canEdit && (
+                <>
+                  <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
+                  {(() => {
+                    const partnerStaff = projectStaff.filter(s => s.staff_role === "partner_ae");
+                    const assignablePartners = users.filter(u => u.role === "partner_ae" && !partnerStaff.some(s => s.user_id === u.id));
+                    return <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner</button>;
+                  })()}
+                  {project.dynamics_account_id && (
+                    <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} disabled={crmSyncing} onClick={handleCrmSync}>{crmSyncing ? "Syncing…" : "Sync CRM"}</button>
+                  )}
+                </>
               )}
             </div>
+
+            {/* Controls row */}
             {canEdit && (
-              <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9", display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {project.dynamics_account_id && (
-                  <button className="ms-btn-secondary" style={{ fontSize: 12 }} disabled={crmSyncing} onClick={handleCrmSync}>
-                    {crmSyncing ? "Syncing…" : "Sync from CRM"}
-                  </button>
-                )}
-                <button className="ms-btn-secondary" onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>
-                  + Add Staff Member
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ── Partner AE Access ────────────────────────────────────────────── */}
-          {(() => {
-            const partnerStaff = projectStaff.filter(s => s.staff_role === "partner_ae");
-            const assignablePartners = users.filter(u => u.role === "partner_ae" && !partnerStaff.some(s => s.user_id === u.id));
-            if (!canEdit && partnerStaff.length === 0) return null;
-            return (
-              <div className="ms-section-card">
-                <div className="ms-section-title">Partner Access</div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10, marginBottom: partnerStaff.length > 0 ? 14 : 0 }}>
-                  {partnerStaff.map((s) => {
-                    const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                    const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-                    return (
-                      <div key={s.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)", position: "relative" }}>
-                        {photo
-                          ? <img src={photo} alt={s.name ?? s.email} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                          : <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(16,124,16,0.25), rgba(16,124,16,0.1))", border: "1px solid rgba(16,124,16,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#107c10" }}>{abbr}</div>
-                        }
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 2 }}>{s.organization_name ?? "Partner AE"}</div>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{s.name ?? s.email}</div>
-                          <a href={`mailto:${s.email}`} style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none" }}>{s.email}</a>
-                        </div>
-                        {canEdit && (
-                          <button onClick={() => handleRemovePartner(s.id)} style={{ position: "absolute", top: 8, right: 8, background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px" }} title="Remove">✕</button>
-                        )}
-                      </div>
-                    );
-                  })}
-                  {partnerStaff.length === 0 && (
-                    <div style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic", gridColumn: "1 / -1" }}>No partner AEs assigned.</div>
-                  )}
-                </div>
-                {canEdit && (
-                  <div style={{ paddingTop: 12, borderTop: "1px solid #f1f5f9" }}>
-                    <button className="ms-btn-secondary" onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>
-                      + Add Partner AE
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {canEdit && <div className="ms-section-card">
-            <div className="ms-section-title">Project Controls</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 14 }}>
-              <label className="ms-label">
-                <span>Status</span>
-                <select className="ms-input" value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                  <option value="">Select status</option>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 10, borderTop: "1px solid #f1f5f9" }}>
+                <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                  <option value="">Status</option>
                   <option value="not_started">Not Started</option>
                   <option value="in_progress">In Progress</option>
                   <option value="blocked">Blocked</option>
                   <option value="complete">Complete</option>
                 </select>
-              </label>
-              <label className="ms-label">
-                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  Health
-                  {project.health_override && (
-                    <button
-                      type="button"
-                      onClick={handleClearHealthOverride}
-                      style={{ fontSize: 11, fontWeight: 600, color: "#0891b2", background: "rgba(8,145,178,0.08)", border: "1px solid rgba(8,145,178,0.25)", borderRadius: 4, padding: "1px 8px", cursor: "pointer" }}
-                    >
-                      Reset to Auto
-                    </button>
-                  )}
-                </span>
-                <select className="ms-input" value={editHealth} onChange={(e) => setEditHealth(e.target.value)}>
-                  <option value="">Select health</option>
+                <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editHealth} onChange={(e) => setEditHealth(e.target.value)}>
+                  <option value="">Health</option>
                   <option value="on_track">On Track</option>
                   <option value="at_risk">At Risk</option>
                   <option value="off_track">Off Track</option>
                 </select>
-              </label>
-              <label className="ms-label">
-                <span>Target Go-Live</span>
-                <input type="date" className="ms-input" value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
-              </label>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 16 }}>
-              <button className="ms-btn-primary" onClick={handleSaveProject} disabled={savingProject}>
-                {savingProject ? "Saving..." : "Save Changes"}
-              </button>
-              {saveMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{saveMessage}</span>}
-            </div>
-
-            {templateList.length > 0 && (
-              <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid #f1f5f9" }}>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 10 }}>Apply Template</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <select
-                    className="ms-input"
-                    style={{ flex: 1 }}
-                    value={selectedTemplateId}
-                    onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}
-                  >
-                    <option value="">— Select a template —</option>
-                    {templateList.map((t) => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                  <button
-                    className="ms-btn-secondary"
-                    disabled={!selectedTemplateId || applyingTemplate}
-                    onClick={() => setShowApplyConfirm(true)}
-                  >
-                    Apply
-                  </button>
-                </div>
-                {applyResult && (
-                  <div style={{ marginTop: 8, fontSize: 12, color: "#059669" }}>
-                    Applied: {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added.
-                  </div>
+                {project.health_override && (
+                  <button type="button" onClick={handleClearHealthOverride} style={{ fontSize: 11, color: "#0891b2", background: "rgba(8,145,178,0.08)", border: "1px solid rgba(8,145,178,0.25)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Reset Health</button>
+                )}
+                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
+                  Go-Live
+                  <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
+                </label>
+                <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={handleSaveProject} disabled={savingProject}>
+                  {savingProject ? "Saving…" : "Save"}
+                </button>
+                {saveMessage && <span style={{ fontSize: 12, color: "#64748b" }}>{saveMessage}</span>}
+                {templateList.length > 0 && (
+                  <>
+                    <span style={{ color: "#e2e8f0", margin: "0 2px" }}>|</span>
+                    <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
+                      <option value="">— Template —</option>
+                      {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                    <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
+                    {applyResult && <span style={{ fontSize: 12, color: "#059669" }}>{applyResult.phases_created} phases, {applyResult.tasks_created} tasks added</span>}
+                  </>
                 )}
               </div>
             )}
-          </div>}
+          </div>
 
           {/* ── Customer Contacts ─────────────────────────────────────────── */}
           <div className="ms-section-card">
@@ -1070,38 +1019,6 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         </div>
-        <ProjectTimeline
-          phases={phases}
-          milestones={milestones}
-          tasks={tasks}
-          recordings={recordings}
-          ganttOnly
-          onUpdatePhase={async (phaseId, updates) => {
-            if (!project) return;
-            const updated = await api.updatePhase(project.id, phaseId, updates);
-            setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-          }}
-          onClickPhase={(phaseId) => {
-            setCollapsedPhases((prev) => {
-              const next = new Set(prev);
-              next.delete(phaseId);
-              return next;
-            });
-            setTab("tasks");
-          }}
-          onClickTask={(taskId, phaseId) => {
-            if (phaseId) {
-              setCollapsedPhases((prev) => {
-                const next = new Set(prev);
-                next.delete(phaseId);
-                return next;
-              });
-            }
-            const task = tasks.find((t) => t.id === taskId);
-            if (task) setEditingTask(task);
-            setTab("tasks");
-          }}
-        />
         </>
       )}
 

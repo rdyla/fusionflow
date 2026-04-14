@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import type { Milestone, Phase, Task, ZoomRecording } from "../../lib/api";
 
 type PhaseUpdate = {
@@ -136,7 +136,7 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
 
-            {/* Phase rows */}
+            {/* Phase rows with tasks interleaved immediately after each phase */}
             {phases.map((phase) => {
               const pStart = parseDate(phase.planned_start);
               const pEnd   = parseDate(phase.planned_end);
@@ -145,120 +145,120 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
               const hasPlan   = pStart !== null && pEnd !== null;
               const hasActual = aStart !== null && aEnd !== null;
               const color = STATUS_COLOR[phase.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+              const phaseTasks = datedTasks.filter((t) => t.phase_id === phase.id);
 
               return (
-                <div key={phase.id} style={{ display: "flex", alignItems: "center", marginBottom: 6, minHeight: 28 }}>
-                  {/* Label */}
-                  <div
-                    style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickPhase ? "pointer" : "default" }}
-                    onClick={() => onClickPhase?.(phase.id)}
-                  >
-                    {phase.name}
-                  </div>
-
-                  {/* Bar area */}
-                  <div style={{ flex: 1, position: "relative", height: hasActual ? 26 : 16 }}>
-                    {hasPlan && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: 0,
-                          left: `${pct(pStart!, minMs, totalMs)}%`,
-                          width: `${pct(pEnd!, minMs, totalMs) - pct(pStart!, minMs, totalMs)}%`,
-                          height: 16,
-                          borderRadius: 3,
-                          background: color,
-                          opacity: 0.85,
-                          minWidth: 4,
-                          display: "flex",
-                          alignItems: "center",
-                          paddingLeft: 6,
-                          overflow: "hidden",
-                          cursor: onClickPhase ? "pointer" : "default",
-                        }}
-                        title={`Planned: ${phase.planned_start} → ${phase.planned_end}`}
-                        onClick={() => onClickPhase?.(phase.id)}
-                      >
-                        <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                          {phase.name}
-                        </span>
-                      </div>
-                    )}
-                    {hasActual && (
-                      <div
-                        style={{
-                          position: "absolute",
-                          top: 20,
-                          left: `${pct(aStart!, minMs, totalMs)}%`,
-                          width: `${pct(aEnd!, minMs, totalMs) - pct(aStart!, minMs, totalMs)}%`,
-                          height: 6,
-                          borderRadius: 3,
-                          background: "#107c10",
-                          opacity: 0.75,
-                          minWidth: 4,
-                        }}
-                        title={`Actual: ${phase.actual_start} → ${phase.actual_end}`}
-                      />
-                    )}
-                    {!hasPlan && (
-                      <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: "16px" }}>No dates set</div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {/* Task rows — grouped under their phase */}
-            {phases.map((phase) => {
-              const phaseTasks = datedTasks.filter((t) => t.phase_id === phase.id);
-              if (phaseTasks.length === 0) return null;
-              return phaseTasks.map((task) => {
-                const tStart = parseDate(task.scheduled_start);
-                const tEnd   = parseDate(task.scheduled_end);
-                const tDue   = parseDate(task.due_date);
-                const hasBar = tStart !== null && tEnd !== null;
-                const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
-                return (
-                  <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 20 }}>
+                <React.Fragment key={phase.id}>
+                  {/* Phase bar row */}
+                  <div style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 28 }}>
                     <div
-                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#64748b", paddingRight: 12, paddingLeft: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default" }}
-                      title={task.title}
-                      onClick={() => onClickTask?.(task.id, task.phase_id)}
+                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickPhase ? "pointer" : "default" }}
+                      onClick={() => onClickPhase?.(phase.id)}
                     >
-                      {task.title}
+                      {phase.name}
                     </div>
-                    <div style={{ flex: 1, position: "relative", height: 14 }}>
-                      {hasBar && (
+                    <div style={{ flex: 1, position: "relative", height: hasActual ? 26 : 16 }}>
+                      {hasPlan && (
                         <div
                           style={{
                             position: "absolute",
-                            top: 1,
-                            left: `${pct(tStart!, minMs, totalMs)}%`,
-                            width: `${Math.max(pct(tEnd!, minMs, totalMs) - pct(tStart!, minMs, totalMs), 0.5)}%`,
-                            height: 12,
-                            borderRadius: 2,
-                            background: taskColor,
-                            opacity: 0.7,
+                            top: 0,
+                            left: `${pct(pStart!, minMs, totalMs)}%`,
+                            width: `${pct(pEnd!, minMs, totalMs) - pct(pStart!, minMs, totalMs)}%`,
+                            height: 16,
+                            borderRadius: 3,
+                            background: color,
+                            opacity: 0.85,
                             minWidth: 4,
-                            cursor: onClickTask ? "pointer" : "default",
+                            display: "flex",
+                            alignItems: "center",
+                            paddingLeft: 6,
+                            overflow: "hidden",
+                            cursor: onClickPhase ? "pointer" : "default",
                           }}
-                          title={`${task.title}: ${task.scheduled_start} → ${task.scheduled_end}`}
-                          onClick={() => onClickTask?.(task.id, task.phase_id)}
+                          title={`Planned: ${phase.planned_start} → ${phase.planned_end}`}
+                          onClick={() => onClickPhase?.(phase.id)}
+                        >
+                          <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {phase.name}
+                          </span>
+                        </div>
+                      )}
+                      {hasActual && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 20,
+                            left: `${pct(aStart!, minMs, totalMs)}%`,
+                            width: `${pct(aEnd!, minMs, totalMs) - pct(aStart!, minMs, totalMs)}%`,
+                            height: 6,
+                            borderRadius: 3,
+                            background: "#107c10",
+                            opacity: 0.75,
+                            minWidth: 4,
+                          }}
+                          title={`Actual: ${phase.actual_start} → ${phase.actual_end}`}
                         />
                       )}
-                      {!hasBar && tDue && (
-                        <div
-                          style={{ position: "absolute", top: 2, left: `${pct(tDue, minMs, totalMs)}%`, transform: "translateX(-50%)", cursor: onClickTask ? "pointer" : "default" }}
-                          title={`${task.title} due: ${task.due_date}`}
-                          onClick={() => onClickTask?.(task.id, task.phase_id)}
-                        >
-                          <div style={{ width: 8, height: 8, background: taskColor, transform: "rotate(45deg)", borderRadius: 1 }} />
-                        </div>
+                      {!hasPlan && (
+                        <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: "16px" }}>No dates set</div>
                       )}
                     </div>
                   </div>
-                );
-              });
+
+                  {/* Task rows for this phase */}
+                  {phaseTasks.map((task) => {
+                    const tStart = parseDate(task.scheduled_start);
+                    const tEnd   = parseDate(task.scheduled_end);
+                    const tDue   = parseDate(task.due_date);
+                    const hasBar = tStart !== null && tEnd !== null;
+                    const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+                    return (
+                      <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 3, minHeight: 18 }}>
+                        <div
+                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default" }}
+                          title={task.title}
+                          onClick={() => onClickTask?.(task.id, task.phase_id)}
+                        >
+                          {task.title}
+                        </div>
+                        <div style={{ flex: 1, position: "relative", height: 12 }}>
+                          {hasBar && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 0,
+                                left: `${pct(tStart!, minMs, totalMs)}%`,
+                                width: `${Math.max(pct(tEnd!, minMs, totalMs) - pct(tStart!, minMs, totalMs), 0.5)}%`,
+                                height: 12,
+                                borderRadius: 2,
+                                background: taskColor,
+                                opacity: 0.55,
+                                minWidth: 4,
+                                cursor: onClickTask ? "pointer" : "default",
+                              }}
+                              title={`${task.title}: ${task.scheduled_start} → ${task.scheduled_end}`}
+                              onClick={() => onClickTask?.(task.id, task.phase_id)}
+                            />
+                          )}
+                          {!hasBar && tDue && (
+                            <div
+                              style={{ position: "absolute", top: 2, left: `${pct(tDue, minMs, totalMs)}%`, transform: "translateX(-50%)", cursor: onClickTask ? "pointer" : "default" }}
+                              title={`${task.title} due: ${task.due_date}`}
+                              onClick={() => onClickTask?.(task.id, task.phase_id)}
+                            >
+                              <div style={{ width: 7, height: 7, background: taskColor, opacity: 0.7, transform: "rotate(45deg)", borderRadius: 1 }} />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Small gap after each phase group */}
+                  {phaseTasks.length > 0 && <div style={{ height: 4 }} />}
+                </React.Fragment>
+              );
             })}
 
             {/* Recording markers */}
