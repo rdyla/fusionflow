@@ -28,7 +28,7 @@ app.get("/accounts", async (c) => {
   const rows = await c.env.DB.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
-      oa.optimize_status, oa.next_review_date, oa.customer_id,
+      oa.optimize_status, oa.next_review_date, COALESCE(oa.customer_id, p.customer_id) AS customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
@@ -74,7 +74,7 @@ app.get("/accounts/:projectId", async (c) => {
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.notes,
-      oa.customer_id, oa.updated_at,
+      COALESCE(oa.customer_id, p.customer_id) AS customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name  AS ae_name,  ae.email  AS ae_email,
@@ -150,7 +150,7 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
   const updated = await db.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
-      oa.optimize_status, oa.next_review_date, oa.notes, oa.customer_id, oa.updated_at,
+      oa.optimize_status, oa.next_review_date, oa.notes, COALESCE(oa.customer_id, p.customer_id) AS customer_id, oa.updated_at,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name, ae.email AS ae_email,
@@ -192,6 +192,39 @@ app.post("/accounts/direct", async (c) => {
 
   let projectId: string;
 
+  // Find or create customer when a CRM account is provided
+  let customerId: string | null = null;
+  if (d.dynamics_account_id) {
+    const existingCustomer = await db
+      .prepare("SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1")
+      .bind(d.dynamics_account_id)
+      .first<{ id: string }>();
+    if (existingCustomer) {
+      customerId = existingCustomer.id;
+    } else {
+      const newCustomerId = crypto.randomUUID();
+      await db
+        .prepare("INSERT INTO customers (id, name, crm_account_id) VALUES (?, ?, ?)")
+        .bind(newCustomerId, d.customer_name, d.dynamics_account_id)
+        .run();
+      customerId = newCustomerId;
+      try {
+        const team = await getAccountTeam(c.env, d.dynamics_account_id);
+        const [aeId, saId, csmId] = await Promise.all([
+          findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+          findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+          findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
+        ]);
+        if (aeId || saId || csmId) {
+          await db
+            .prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+            .bind(aeId ?? null, saId ?? null, csmId ?? null, newCustomerId)
+            .run();
+        }
+      } catch { /* sync is best-effort */ }
+    }
+  }
+
   if (d.project_id) {
     // Use an existing project rather than creating a shell
     const existing = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(d.project_id).first();
@@ -199,15 +232,20 @@ app.post("/accounts/direct", async (c) => {
     const alreadyInOptimize = await db.prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1").bind(d.project_id).first();
     if (alreadyInOptimize) throw new HTTPException(409, { message: "Project is already in Optimize" });
     projectId = d.project_id;
+    // Link the customer to the existing project if we resolved one
+    if (customerId) {
+      await db.prepare("UPDATE projects SET customer_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND customer_id IS NULL")
+        .bind(customerId, projectId).run();
+    }
   } else {
     // Create a minimal project shell
     projectId = crypto.randomUUID();
     await db.prepare(`
-      INSERT INTO projects (id, name, customer_name, vendor, solution_type, actual_go_live_date,
+      INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, actual_go_live_date,
         status, health, dynamics_account_id, archived)
-      VALUES (?, ?, ?, ?, ?, ?, 'not_started', 'on_track', ?, 0)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started', 'on_track', ?, 0)
     `).bind(
-      projectId, d.customer_name, d.customer_name,
+      projectId, d.customer_name, d.customer_name, customerId,
       d.vendor ?? null, d.solution_type ?? null,
       d.actual_go_live_date ?? null, d.dynamics_account_id ?? null
     ).run();
@@ -224,7 +262,7 @@ app.post("/accounts/direct", async (c) => {
   const created = await db.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
-      oa.optimize_status, oa.next_review_date, oa.customer_id,
+      oa.optimize_status, oa.next_review_date, COALESCE(oa.customer_id, p.customer_id) AS customer_id,
       p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,

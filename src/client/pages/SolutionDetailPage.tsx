@@ -233,8 +233,8 @@ export default function SolutionDetailPage() {
     <div style={{ maxWidth: 960, margin: "0 auto" }}>
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
-        <Link to={(!isClient && solution.customer_id) ? `/customers/${solution.customer_id}` : "/solutions"} style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
-          ← {(!isClient && solution.customer_id) ? solution.customer_name : "Solutions"}
+        <Link to="/solutions" style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
+          ← Solutions
         </Link>
       </div>
 

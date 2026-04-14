@@ -669,8 +669,8 @@ export default function ProjectDetailPage() {
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
-        <Link to={project.customer_id ? `/customers/${project.customer_id}` : "/projects"} style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
-          ← {project.customer_id ? (project.customer_name ?? project.customer_display_name ?? "Customer") : "Projects"}
+        <Link to="/projects" style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
+          ← Projects
         </Link>
       </div>
 

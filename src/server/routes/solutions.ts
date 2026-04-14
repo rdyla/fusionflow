@@ -143,6 +143,39 @@ app.post("/", async (c) => {
     : `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
   const id = crypto.randomUUID();
 
+  // Find or create customer record when a CRM account is selected
+  let resolvedCustomerId: string | null = customer_id ?? null;
+  if (dynamics_account_id && !resolvedCustomerId) {
+    const existingCustomer = await db
+      .prepare("SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1")
+      .bind(dynamics_account_id)
+      .first<{ id: string }>();
+    if (existingCustomer) {
+      resolvedCustomerId = existingCustomer.id;
+    } else {
+      const newCustomerId = crypto.randomUUID();
+      await db
+        .prepare("INSERT INTO customers (id, name, crm_account_id) VALUES (?, ?, ?)")
+        .bind(newCustomerId, customer_name ?? "Unknown", dynamics_account_id)
+        .run();
+      resolvedCustomerId = newCustomerId;
+      try {
+        const team = await getAccountTeam(c.env, dynamics_account_id);
+        const [aeId, saId, csmId] = await Promise.all([
+          findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+          findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+          findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
+        ]);
+        if (aeId || saId || csmId) {
+          await db
+            .prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
+            .bind(aeId ?? null, saId ?? null, csmId ?? null, newCustomerId)
+            .run();
+        }
+      } catch { /* sync is best-effort */ }
+    }
+  }
+
   // Resolve partner AE: use existing user, find by email, or create + invite
   let resolvedPartnerAeUserId: string | null = partner_ae_user_id ?? null;
   if (!resolvedPartnerAeUserId && partner_ae_email) {
@@ -183,7 +216,7 @@ app.post("/", async (c) => {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      id, name, customer_name, customer_id ?? null, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
+      id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
     .run();

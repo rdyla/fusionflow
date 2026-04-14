@@ -240,10 +240,10 @@ export default function OptimizeAccountPage() {
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
         <button
-          onClick={() => navigate(account.customer_id ? `/customers/${account.customer_id}` : "/optimize")}
+          onClick={() => navigate("/optimize")}
           style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 13, padding: 0 }}
         >
-          ← {account.customer_id ? account.customer_name : "Optimize"}
+          ← Optimize
         </button>
       </div>
 
