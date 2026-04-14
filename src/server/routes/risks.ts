@@ -6,6 +6,7 @@ import { canViewProject, canEditProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { riskAssigned, pmRiskNotification } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
+import { syncProjectBlockedStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -19,7 +20,7 @@ app.get("/:id/risks", async (c) => {
 
   const rows = await db
     .prepare(
-      `SELECT id, project_id, title, description, severity, status, owner_user_id
+      `SELECT id, project_id, title, description, severity, status, owner_user_id, task_id
        FROM risks
        WHERE project_id = ?
        ORDER BY title ASC`
@@ -36,6 +37,7 @@ const riskSchema = z.object({
   severity: z.enum(["low", "medium", "high"]).optional(),
   status: z.enum(["open", "mitigated", "closed"]).optional(),
   owner_user_id: z.string().nullable().optional(),
+  task_id: z.string().nullable().optional(),
 });
 
 app.post("/:id/risks", async (c) => {
@@ -49,18 +51,21 @@ app.post("/:id/risks", async (c) => {
   const parsed = riskSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { title, description, severity, status, owner_user_id } = parsed.data;
+  const { title, description, severity, status, owner_user_id, task_id } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
     .prepare(
-      `INSERT INTO risks (id, project_id, title, description, severity, status, owner_user_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO risks (id, project_id, title, description, severity, status, owner_user_id, task_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null)
+    .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null, task_id ?? null)
     .run();
 
-  const created = await db.prepare("SELECT * FROM risks WHERE id = ? LIMIT 1").bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null }>();
+  const created = await db.prepare("SELECT id, project_id, title, description, severity, status, owner_user_id, task_id FROM risks WHERE id = ? LIMIT 1").bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null; task_id: string | null }>();
+
+  // Auto-block the project when an open blocker is added
+  await syncProjectBlockedStatus(db, projectId);
 
   if (created) {
     const appUrl = c.env.APP_URL ?? "";
@@ -120,6 +125,7 @@ const updateRiskSchema = z.object({
   severity: z.enum(["low", "medium", "high"]).optional(),
   status: z.enum(["open", "mitigated", "closed"]).optional(),
   owner_user_id: z.string().nullable().optional(),
+  task_id: z.string().nullable().optional(),
 });
 
 app.patch("/:id/risks/:riskId", async (c) => {
@@ -155,7 +161,10 @@ app.patch("/:id/risks/:riskId", async (c) => {
     .bind(...values, riskId)
     .run();
 
-  const updated = await db.prepare("SELECT * FROM risks WHERE id = ? LIMIT 1").bind(riskId).first<{ id: string; title: string; description: string | null; severity: string | null; status: string | null }>();
+  const updated = await db.prepare("SELECT id, project_id, title, description, severity, status, owner_user_id, task_id FROM risks WHERE id = ? LIMIT 1").bind(riskId).first<{ id: string; title: string; description: string | null; severity: string | null; status: string | null; task_id: string | null }>();
+
+  // Sync project blocked status after blocker update
+  await syncProjectBlockedStatus(db, projectId);
 
   // Notify PM of risk update (skip if PM made the change)
   const appUrl = c.env.APP_URL ?? "";
@@ -187,6 +196,7 @@ app.delete("/:id/risks/:riskId", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "Risk not found" });
 
   await db.prepare("DELETE FROM risks WHERE id = ?").bind(riskId).run();
+  await syncProjectBlockedStatus(db, projectId);
   return c.json({ success: true });
 });
 

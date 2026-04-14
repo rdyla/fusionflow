@@ -215,7 +215,7 @@ export default function DashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
   }
 
-  const { user, summary, projects, projectPhases, openTasks, openRisks, phaseDistribution, vendorDistribution, typeDistribution } = data;
+  const { user, summary, projects, projectPhases, openTasks, openBlockers, phaseDistribution, vendorDistribution, typeDistribution } = data;
 
   // Build a map from project_id → sorted phases
   const phasesByProject = projectPhases.reduce<Record<string, PhaseEntry[]>>((acc, ph) => {
@@ -260,7 +260,7 @@ export default function DashboardPage() {
         <MetricCard title="Active Projects" value={summary.activeProjects} />
         <MetricCard title="At Risk" value={summary.atRiskProjects} accent={summary.atRiskProjects > 0 ? "#ff8c00" : undefined} />
         <MetricCard title="Open Tasks" value={summary.openTasks} />
-        <MetricCard title="Open Risks" value={summary.openRisks} accent={summary.openRisks > 0 ? "#d13438" : undefined} />
+        <MetricCard title="Open Blockers" value={summary.openBlockers} accent={summary.openBlockers > 0 ? "#d13438" : undefined} />
       </div>
 
       {/* Distribution charts */}
@@ -415,16 +415,16 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* Open Risks */}
+        {/* Open Blockers */}
         <div className="ms-card" style={{ overflow: "hidden" }}>
           <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-            Open Risks
+            Open Blockers
           </div>
-          {openRisks.length === 0 ? (
-            <div style={{ padding: "20px", color: "#64748b", fontSize: 14 }}>No open risks.</div>
+          {openBlockers.length === 0 ? (
+            <div style={{ padding: "20px", color: "#64748b", fontSize: 14 }}>No open blockers.</div>
           ) : (
             <div>
-              {openRisks.map((r) => (
+              {openBlockers.map((r) => (
                 <div
                   key={r.id}
                   style={{ padding: "11px 20px", borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "flex-start", gap: 10 }}

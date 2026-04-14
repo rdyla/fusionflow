@@ -24,3 +24,34 @@ export async function getTeamUserIds(userId: string, db: D1Database): Promise<st
 export function inPlaceholders(ids: string[]): string {
   return ids.map(() => "?").join(", ");
 }
+
+/**
+ * Syncs project.status to "blocked" when any task is blocked or any open
+ * blocker exists.  Reverts to "in_progress" when all blockers are resolved
+ * and no tasks remain blocked (only if the project was previously auto-blocked).
+ */
+export async function syncProjectBlockedStatus(db: D1Database, projectId: string): Promise<void> {
+  const project = await db
+    .prepare("SELECT status FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ status: string | null }>();
+  if (!project || project.status === "complete" || project.status === "not_started") return;
+
+  const blockedTask = await db
+    .prepare("SELECT id FROM tasks WHERE project_id = ? AND status = 'blocked' LIMIT 1")
+    .bind(projectId)
+    .first();
+
+  const openBlocker = await db
+    .prepare("SELECT id FROM risks WHERE project_id = ? AND status = 'open' LIMIT 1")
+    .bind(projectId)
+    .first();
+
+  const shouldBeBlocked = !!(blockedTask || openBlocker);
+
+  if (shouldBeBlocked && project.status !== "blocked") {
+    await db.prepare("UPDATE projects SET status = 'blocked', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(projectId).run();
+  } else if (!shouldBeBlocked && project.status === "blocked") {
+    await db.prepare("UPDATE projects SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(projectId).run();
+  }
+}

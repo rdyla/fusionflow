@@ -72,7 +72,7 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings, ...taskAssigneeBinding)
     .first<{ count: number }>();
 
-  const openRisksCount = await db
+  const openBlockersCount = await db
     .prepare(
       `SELECT COUNT(*) as count FROM risks WHERE status = 'open' AND project_id IN (${projectSubquery})`
     )
@@ -124,11 +124,11 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings, ...taskAssigneeBinding)
     .all();
 
-  // Open risks with project name, highest severity first
-  const openRisks = await db
+  // Open blockers with project name, highest severity first
+  const openBlockers = await db
     .prepare(
       `SELECT r.id, r.project_id, r.title, r.description, r.severity, r.status,
-              r.owner_user_id, p.name as project_name
+              r.owner_user_id, r.task_id, p.name as project_name
        FROM risks r
        JOIN projects p ON p.id = r.project_id
        WHERE r.status = 'open'
@@ -194,12 +194,12 @@ app.get("/summary", async (c) => {
       activeProjects: activeProjects?.count ?? 0,
       atRiskProjects: atRiskProjects?.count ?? 0,
       openTasks: openTasksCount?.count ?? 0,
-      openRisks: openRisksCount?.count ?? 0,
+      openBlockers: openBlockersCount?.count ?? 0,
     },
     projects: projects.results ?? [],
     projectPhases: projectPhases.results ?? [],
     openTasks: openTasks.results ?? [],
-    openRisks: openRisks.results ?? [],
+    openBlockers: openBlockers.results ?? [],
     phaseDistribution: phaseDistribution.results ?? [],
     vendorDistribution: vendorDistribution.results ?? [],
     typeDistribution: typeDistribution.results ?? [],

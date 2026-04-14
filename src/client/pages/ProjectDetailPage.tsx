@@ -129,7 +129,7 @@ export default function ProjectDetailPage() {
 
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
-  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "" });
+  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
   const [savingRisk, setSavingRisk] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
@@ -528,7 +528,7 @@ export default function ProjectDetailPage() {
 
   function openNewRisk() {
     setEditingRisk(null);
-    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "" });
+    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
     setShowRiskModal(true);
   }
   function openEditRisk(risk: Risk) {
@@ -539,6 +539,7 @@ export default function ProjectDetailPage() {
       severity: risk.severity ?? "medium",
       status: risk.status ?? "open",
       owner_user_id: risk.owner_user_id ?? "",
+      task_id: risk.task_id ?? "",
     });
     setShowRiskModal(true);
   }
@@ -553,6 +554,7 @@ export default function ProjectDetailPage() {
         severity: riskForm.severity as "low" | "medium" | "high",
         status: riskForm.status as "open" | "mitigated" | "closed",
         owner_user_id: riskForm.owner_user_id || null,
+        task_id: riskForm.task_id || null,
       };
       if (editingRisk) {
         const updated = await api.updateRisk(project.id, editingRisk.id, payload);
@@ -1148,7 +1150,13 @@ export default function ProjectDetailPage() {
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
                     {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Severity: {risk.severity ?? "—"} · Owner: {userName(risk.owner_user_id)}</div>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Severity: {risk.severity ?? "—"} · Owner: {userName(risk.owner_user_id)}
+                      {risk.task_id && (() => {
+                        const t = tasks.find((t) => t.id === risk.task_id);
+                        return t ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{t.title}</span></> : null;
+                      })()}
+                    </div>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                     <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
@@ -1931,6 +1939,15 @@ export default function ProjectDetailPage() {
               <label className="ms-label">
                 <span>Description</span>
                 <textarea className="ms-input" value={riskForm.description} onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })} rows={3} style={{ resize: "vertical" }} />
+              </label>
+              <label className="ms-label">
+                <span>Blocking Task</span>
+                <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
+                  <option value="">— Not task-specific —</option>
+                  {tasks.filter((t) => t.status !== "completed").map((t) => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
               </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 <label className="ms-label">

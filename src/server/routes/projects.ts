@@ -181,7 +181,7 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
 });
 
 const updateProjectSchema = z.object({
-  status: z.string().min(1).optional(),
+  status: z.enum(["not_started", "in_progress", "blocked", "complete"]).optional(),
   health: z.string().min(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),

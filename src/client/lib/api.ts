@@ -135,12 +135,12 @@ export type DashboardSummaryResponse = {
     activeProjects: number;
     atRiskProjects: number;
     openTasks: number;
-    openRisks: number;
+    openBlockers: number;
   };
   projects: Project[];
   projectPhases: { project_id: string; name: string; status: string; sort_order: number }[];
   openTasks: DashboardTask[];
-  openRisks: DashboardRisk[];
+  openBlockers: DashboardRisk[];
   phaseDistribution: { phase_name: string; count: number }[];
   vendorDistribution: { label: string; count: number }[];
   typeDistribution: { label: string; count: number }[];
@@ -522,6 +522,7 @@ export type Risk = {
   severity: string | null;
   status: string | null;
   owner_user_id: string | null;
+  task_id: string | null;
 };
 
 export type Document = {
@@ -991,6 +992,7 @@ export const api = {
       severity?: "low" | "medium" | "high";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
+      task_id?: string | null;
     }
   ) =>
     request<Risk>(`/projects/${projectId}/risks`, {
@@ -1007,6 +1009,7 @@ export const api = {
       severity?: "low" | "medium" | "high";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
+      task_id?: string | null;
     }
   ) =>
     request<Risk>(`/projects/${projectId}/risks/${riskId}`, {

@@ -9,6 +9,7 @@ import { createNotification } from "../lib/notifications";
 import {
   getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry,
 } from "../services/dynamicsService";
+import { syncProjectBlockedStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -232,6 +233,11 @@ app.patch("/:id/tasks/:taskId", async (c) => {
         html: pmTaskUpdate({ pmName: pm.name ?? pm.email, taskTitle: updated.title, projectName: project.name, updatedByName: auth.user.name ?? auth.user.email, status: updated.status, appUrl, projectId }),
       }));
     }
+  }
+
+  // Sync project blocked status whenever task status changes
+  if (updates.status !== undefined) {
+    await syncProjectBlockedStatus(db, projectId);
   }
 
   // Notify PM if task just became blocked
