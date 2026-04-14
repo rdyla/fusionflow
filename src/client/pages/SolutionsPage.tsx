@@ -251,7 +251,8 @@ export default function SolutionsPage() {
   });
 
   function fmt(d: string) {
-    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T00:00:00" : d;
+    return new Date(normalized).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading...</div>;
