@@ -87,9 +87,6 @@ export type Solution = {
   partner_ae_user_id: string | null;
   partner_ae_name: string | null;
   partner_ae_email: string | null;
-  vendor_ae_user_id: string | null;
-  vendor_ae_name: string | null;
-  vendor_ae_email: string | null;
   needs_assessment: string | null;
   requirements: string | null;
   scope_of_work: string | null;
@@ -102,7 +99,6 @@ export type Solution = {
   updated_at: string;
   // Joined fields
   partner_ae_display_name: string | null;
-  vendor_ae_display_name: string | null;
   customer_pf_ae_name: string | null;
   customer_pf_ae_email: string | null;
   customer_pf_sa_name: string | null;
@@ -1347,9 +1343,6 @@ export const api = {
     partner_ae_user_id?: string;
     partner_ae_name?: string;
     partner_ae_email?: string;
-    vendor_ae_user_id?: string;
-    vendor_ae_name?: string;
-    vendor_ae_email?: string;
   }) =>
     request<Solution>("/solutions", {
       method: "POST",
@@ -1369,9 +1362,6 @@ export const api = {
       partner_ae_user_id: string | null;
       partner_ae_name: string | null;
       partner_ae_email: string | null;
-      vendor_ae_user_id: string | null;
-      vendor_ae_name: string | null;
-      vendor_ae_email: string | null;
       needs_assessment: string | null;
       requirements: string | null;
       scope_of_work: string | null;

@@ -534,16 +534,16 @@ export default function SolutionDetailPage() {
               solution.vendor === "microsoft_teams" ? "Microsoft Teams AE" :
               solution.vendor === "webex" ? "Webex AE" :
               "Vendor AE";
-            const displayName = solution.vendor_ae_display_name ?? solution.vendor_ae_name;
-            const displayEmail = solution.vendor_ae_email;
+            const displayName = solution.partner_ae_display_name ?? solution.partner_ae_name;
+            const displayEmail = solution.partner_ae_email;
             return (
               <div className="ms-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: displayName ? 14 : 0 }}>
                   <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{vendorLabel}</h3>
                   {canEdit && (
                     <button className="ms-btn-secondary" onClick={() => {
-                      setVendorAeMode(solution.vendor_ae_user_id ? "existing" : "existing");
-                      setVendorAeUserId(solution.vendor_ae_user_id ?? "");
+                      setVendorAeMode("existing");
+                      setVendorAeUserId(solution.partner_ae_user_id ?? "");
                       setVendorAeNewName("");
                       setVendorAeNewEmail("");
                       setShowVendorAeModal(true);
@@ -647,9 +647,9 @@ export default function SolutionDetailPage() {
           setSavingVendorAe(true);
           try {
             if (vendorAeMode === "existing") {
-              await save({ vendor_ae_user_id: vendorAeUserId || null, vendor_ae_name: null, vendor_ae_email: null });
+              await save({ partner_ae_user_id: vendorAeUserId || null, partner_ae_name: null, partner_ae_email: null });
             } else {
-              await save({ vendor_ae_name: vendorAeNewName.trim() || null, vendor_ae_email: vendorAeNewEmail.trim() || null, vendor_ae_user_id: null });
+              await save({ partner_ae_name: vendorAeNewName.trim() || null, partner_ae_email: vendorAeNewEmail.trim() || null, partner_ae_user_id: null });
             }
             setShowVendorAeModal(false);
           } finally {

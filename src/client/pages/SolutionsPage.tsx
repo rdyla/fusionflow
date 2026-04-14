@@ -132,10 +132,6 @@ const EMPTY_FORM = {
   partner_ae_name: "",
   partner_ae_email: "",
   partner_ae_mode: "existing" as "existing" | "new",
-  vendor_ae_user_id: "",
-  vendor_ae_name: "",
-  vendor_ae_email: "",
-  vendor_ae_mode: "existing" as "existing" | "new",
 };
 
 export default function SolutionsPage() {
@@ -221,12 +217,6 @@ export default function SolutionsPage() {
       } else if (form.partner_ae_mode === "new" && form.partner_ae_email) {
         payload.partner_ae_name = form.partner_ae_name;
         payload.partner_ae_email = form.partner_ae_email;
-      }
-      if (form.vendor_ae_mode === "existing" && form.vendor_ae_user_id) {
-        payload.vendor_ae_user_id = form.vendor_ae_user_id;
-      } else if (form.vendor_ae_mode === "new" && form.vendor_ae_email) {
-        payload.vendor_ae_name = form.vendor_ae_name;
-        payload.vendor_ae_email = form.vendor_ae_email;
       }
 
       const created = await api.createSolution(payload);
@@ -526,9 +516,9 @@ export default function SolutionsPage() {
                   </label>
                 )}
 
-                {/* Partner AE mode toggle — always shown */}
+                {/* Vendor AE mode toggle — always shown */}
                 <label className="ms-label" style={crmTeam ? { gridColumn: "1 / -1" } : {}}>
-                  <span>Partner AE</span>
+                  <span>Vendor AE</span>
                   <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
                     {(["existing", "new"] as const).map((mode) => (
                       <button
@@ -594,48 +584,6 @@ export default function SolutionsPage() {
                 </div>
               )}
 
-              {/* Vendor AE */}
-              <label className="ms-label">
-                <span>Vendor AE</span>
-                <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-                  {(["existing", "new"] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, vendor_ae_mode: mode }))}
-                      style={{
-                        flex: 1, padding: "5px 0", fontSize: 12, borderRadius: 4,
-                        border: `1px solid ${form.vendor_ae_mode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
-                        background: form.vendor_ae_mode === mode ? "rgba(99,193,234,0.1)" : "transparent",
-                        color: form.vendor_ae_mode === mode ? "#63c1ea" : "#94a3b8",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {mode === "existing" ? "Select Existing" : "Invite New"}
-                    </button>
-                  ))}
-                </div>
-                {form.vendor_ae_mode === "existing" ? (
-                  <select className="ms-input" value={form.vendor_ae_user_id} onChange={(e) => setForm((f) => ({ ...f, vendor_ae_user_id: e.target.value }))}>
-                    <option value="">— None —</option>
-                    {partnerAes.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
-                    ))}
-                  </select>
-                ) : null}
-              </label>
-              {form.vendor_ae_mode === "new" && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, background: "#f8fafc", borderRadius: 6, padding: "12px 14px", border: "1px solid rgba(0,0,0,0.07)" }}>
-                  <label className="ms-label">
-                    <span>Name</span>
-                    <input className="ms-input" placeholder="Full name" value={form.vendor_ae_name} onChange={(e) => setForm((f) => ({ ...f, vendor_ae_name: e.target.value }))} />
-                  </label>
-                  <label className="ms-label">
-                    <span>Email (sends invite)</span>
-                    <input className="ms-input" type="email" placeholder="ae@zoom.us" value={form.vendor_ae_email} onChange={(e) => setForm((f) => ({ ...f, vendor_ae_email: e.target.value }))} />
-                  </label>
-                </div>
-              )}
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving || !form.customer_name.trim()}>

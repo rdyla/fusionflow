@@ -13,14 +13,12 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 const SOLUTION_SELECT = `
   SELECT s.*,
     u2.name as partner_ae_display_name,
-    u4.name as vendor_ae_display_name,
     cu1.name as customer_pf_ae_name, cu1.email as customer_pf_ae_email,
     cu2.name as customer_pf_sa_name, cu2.email as customer_pf_sa_email,
     cu3.name as customer_pf_csm_name, cu3.email as customer_pf_csm_email,
     cust.sharepoint_url as customer_sharepoint_url
   FROM solutions s
   LEFT JOIN users u2 ON u2.id = s.partner_ae_user_id
-  LEFT JOIN users u4 ON u4.id = s.vendor_ae_user_id
   LEFT JOIN customers cust ON cust.id = s.customer_id
   LEFT JOIN users cu1 ON cu1.id = cust.pf_ae_user_id
   LEFT JOIN users cu2 ON cu2.id = cust.pf_sa_user_id
@@ -117,9 +115,6 @@ const createSolutionSchema = z.object({
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
   partner_ae_email: z.string().email().optional().or(z.literal("")),
-  vendor_ae_user_id: z.string().optional(),
-  vendor_ae_name: z.string().optional(),
-  vendor_ae_email: z.string().email().optional().or(z.literal("")),
 });
 
 app.post("/", async (c) => {
@@ -132,7 +127,6 @@ app.post("/", async (c) => {
   const {
     customer_name, customer_id, dynamics_account_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
-    vendor_ae_user_id, vendor_ae_name, vendor_ae_email,
   } = parsed.data;
 
   const journeys = parsed.data.journeys ?? [];
@@ -214,48 +208,16 @@ app.post("/", async (c) => {
     }
   }
 
-  // Resolve vendor AE: use existing user, find by email, or create + invite
-  let resolvedVendorAeUserId: string | null = vendor_ae_user_id ?? null;
-  if (!resolvedVendorAeUserId && vendor_ae_email) {
-    const existingVae = await db
-      .prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1")
-      .bind(vendor_ae_email)
-      .first<{ id: string }>();
-    if (existingVae) {
-      resolvedVendorAeUserId = existingVae.id;
-    } else if (vendor_ae_name) {
-      const newUserId = crypto.randomUUID();
-      await db
-        .prepare("INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, 'partner_ae', 1)")
-        .bind(newUserId, vendor_ae_email.toLowerCase(), vendor_ae_name)
-        .run();
-      resolvedVendorAeUserId = newUserId;
-      const appUrl = c.env.APP_URL ?? "";
-      c.executionCtx.waitUntil(sendEmail(c.env, {
-        to: vendor_ae_email,
-        subject: "You've been invited to FusionFlow360",
-        html: userInvite({
-          recipientName: vendor_ae_name,
-          invitedByName: auth.user.name ?? auth.user.email,
-          role: "partner_ae",
-          appUrl,
-        }),
-      }));
-    }
-  }
-
   await db
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type, journeys,
-          partner_ae_user_id, partner_ae_name, partner_ae_email,
-          vendor_ae_user_id, vendor_ae_name, vendor_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
-      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null,
-      resolvedVendorAeUserId, vendor_ae_name ?? null, vendor_ae_email ?? null, auth.user.id
+      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
     .run();
 
@@ -293,9 +255,6 @@ const updateSolutionSchema = z.object({
   partner_ae_user_id: z.string().nullable().optional(),
   partner_ae_name: z.string().nullable().optional(),
   partner_ae_email: z.string().nullable().optional(),
-  vendor_ae_user_id: z.string().nullable().optional(),
-  vendor_ae_name: z.string().nullable().optional(),
-  vendor_ae_email: z.string().email().nullable().optional().or(z.literal("")),
   needs_assessment: z.string().nullable().optional(),
   requirements: z.string().nullable().optional(),
   scope_of_work: z.string().nullable().optional(),
@@ -314,37 +273,7 @@ app.patch("/:id", async (c) => {
   const parsed = updateSolutionSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const updates: typeof parsed.data & { vendor_ae_user_id?: string | null } = { ...parsed.data };
-
-  // Resolve vendor AE: if an email is provided without a user_id, find or create + invite
-  if (!updates.vendor_ae_user_id && updates.vendor_ae_email) {
-    const auth = c.get("auth");
-    const existing = await db
-      .prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1")
-      .bind(updates.vendor_ae_email)
-      .first<{ id: string }>();
-    if (existing) {
-      updates.vendor_ae_user_id = existing.id;
-    } else if (updates.vendor_ae_name) {
-      const newUserId = crypto.randomUUID();
-      await db
-        .prepare("INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, 'partner_ae', 1)")
-        .bind(newUserId, updates.vendor_ae_email.toLowerCase(), updates.vendor_ae_name)
-        .run();
-      updates.vendor_ae_user_id = newUserId;
-      const appUrl = c.env.APP_URL ?? "";
-      c.executionCtx.waitUntil(sendEmail(c.env, {
-        to: updates.vendor_ae_email,
-        subject: "You've been invited to FusionFlow360",
-        html: userInvite({
-          recipientName: updates.vendor_ae_name,
-          invitedByName: auth.user.name ?? auth.user.email,
-          role: "partner_ae",
-          appUrl,
-        }),
-      }));
-    }
-  }
+  const updates = parsed.data;
 
   const fields: string[] = [];
   const values: unknown[] = [];
