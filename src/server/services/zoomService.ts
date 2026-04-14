@@ -388,6 +388,7 @@ export type ZoomMeeting = {
   host_email: string;
   recording_files?: ZoomRecordingFile[];
   recording_play_passcode?: string | null;
+  share_url?: string | null;
 };
 
 type ZoomRecordingsPage = {

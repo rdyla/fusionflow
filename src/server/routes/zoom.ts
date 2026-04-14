@@ -141,6 +141,7 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
         host_email: m.meeting.host_email ?? null,
         recording_files: m.meeting.recording_files ?? [],
         recording_password: m.meeting.recording_play_passcode ?? null,
+        share_url: m.meeting.share_url ?? null,
         suggested_phase_id: phaseId,
         suggested_phase_name: phaseName,
         match_reason: m.match_reason,
@@ -167,6 +168,7 @@ const confirmSchema = z.object({
     host_email: z.string().nullable().optional(),
     recording_files: z.array(z.unknown()),
     recording_password: z.string().nullable().optional(),
+    share_url: z.string().nullable().optional(),
     match_reason: z.string().nullable().optional(),
   })),
 });
@@ -186,16 +188,17 @@ app.post("/:projectId/zoom/recordings/confirm", async (c) => {
     const id = crypto.randomUUID();
     await c.env.DB
       .prepare(`
-        INSERT INTO zoom_recordings (id, project_id, phase_id, task_id, meeting_id, topic, start_time, duration_mins, host_email, recording_files, recording_password, match_reason, manually_assigned)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        INSERT INTO zoom_recordings (id, project_id, phase_id, task_id, meeting_id, topic, start_time, duration_mins, host_email, recording_files, recording_password, share_url, match_reason, manually_assigned)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         ON CONFLICT (project_id, meeting_id) DO UPDATE SET
           phase_id = excluded.phase_id,
           task_id = excluded.task_id,
           recording_password = excluded.recording_password,
+          share_url = excluded.share_url,
           match_reason = excluded.match_reason,
           updated_at = CURRENT_TIMESTAMP
       `)
-      .bind(id, projectId, conf.phase_id ?? null, conf.task_id ?? null, conf.meeting_id, conf.topic, conf.start_time, conf.duration_mins, conf.host_email ?? null, JSON.stringify(conf.recording_files), conf.recording_password ?? null, conf.match_reason ?? null)
+      .bind(id, projectId, conf.phase_id ?? null, conf.task_id ?? null, conf.meeting_id, conf.topic, conf.start_time, conf.duration_mins, conf.host_email ?? null, JSON.stringify(conf.recording_files), conf.recording_password ?? null, conf.share_url ?? null, conf.match_reason ?? null)
       .run();
 
     const row = await c.env.DB

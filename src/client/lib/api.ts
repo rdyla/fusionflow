@@ -210,6 +210,7 @@ export type ZoomRecording = {
   host_email: string | null;
   recording_files: ZoomRecordingFile[];
   recording_password: string | null;
+  share_url: string | null;
   match_reason: string | null;
   manually_assigned: number;
   created_at: string;
@@ -223,6 +224,7 @@ export type ZoomRecordingSuggestion = {
   host_email: string | null;
   recording_files: ZoomRecordingFile[];
   recording_password: string | null;
+  share_url: string | null;
   suggested_phase_id: string | null;
   suggested_phase_name: string | null;
   match_reason: string | null;
@@ -1532,7 +1534,7 @@ export const api = {
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings`),
   zoomSyncRecordings: (projectId: string) =>
     request<{ suggestions: ZoomRecordingSuggestion[]; already_linked: ZoomRecording[] }>(`/projects/${projectId}/zoom/recordings/sync`, { method: "POST" }),
-  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; recording_password?: string | null; match_reason: string | null }[]) =>
+  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; recording_password?: string | null; share_url?: string | null; match_reason: string | null }[]) =>
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings/confirm`, {
       method: "POST",
       body: JSON.stringify({ confirmations }),

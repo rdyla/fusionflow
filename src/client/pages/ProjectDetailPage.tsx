@@ -1321,16 +1321,25 @@ export default function ProjectDetailPage() {
                             )}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                            {rec.recording_files.filter((f) => f.play_url).slice(0, 1).map((f) => {
+                            {(() => {
+                              if (rec.share_url) {
+                                return (
+                                  <a href={rec.share_url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
+                                    Watch recording ↗
+                                  </a>
+                                );
+                              }
+                              const file = rec.recording_files.find((f) => f.play_url);
+                              if (!file) return null;
                               const url = rec.recording_password
-                                ? `${f.play_url}?pwd=${rec.recording_password}`
-                                : f.play_url!;
+                                ? `${file.play_url}?pwd=${rec.recording_password}`
+                                : file.play_url!;
                               return (
-                                <a key={f.id} href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
+                                <a href={url} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", fontWeight: 500 }}>
                                   Watch recording ↗
                                 </a>
                               );
-                            })}
+                            })()}
                             {canEdit && (
                               <select
                                 className="ms-input"
@@ -1522,6 +1531,7 @@ export default function ProjectDetailPage() {
                                   host_email: s.host_email ?? null,
                                   recording_files: s.recording_files as ZoomRecordingFile[],
                                   recording_password: s.recording_password ?? null,
+                                  share_url: s.share_url ?? null,
                                   match_reason: isManual ? "manual" : s.match_reason ?? null,
                                 };
                               });
