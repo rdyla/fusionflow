@@ -1329,7 +1329,7 @@ export default function ProjectDetailPage() {
                                   </a>
                                 );
                               }
-                              const file = rec.recording_files.find((f) => f.play_url);
+                              const file = rec.recording_files.find((f) => f.play_url && ["MP4", "M4A"].includes((f.file_type ?? "").toUpperCase()));
                               if (!file) return null;
                               const url = rec.recording_password
                                 ? `${file.play_url}?pwd=${rec.recording_password}`
