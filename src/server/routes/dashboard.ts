@@ -16,8 +16,8 @@ app.get("/summary", async (c) => {
   let teamIds: string[] = [auth.user.id];
 
   if (auth.role === "pm") {
-    projectFilter = "WHERE pm_user_id = ?";
-    filterBindings = [auth.user.id];
+    projectFilter = "WHERE (pm_user_id = ? OR id IN (SELECT project_id FROM project_staff WHERE user_id = ? AND staff_role = 'pm'))";
+    filterBindings = [auth.user.id, auth.user.id];
   } else if (auth.role === "pf_ae") {
     teamIds = await getTeamUserIds(auth.user.id, db);
     const ph = inPlaceholders(teamIds);
