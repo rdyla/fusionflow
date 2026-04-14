@@ -21,14 +21,13 @@ import {
   type ZoomRecordingSuggestion,
   type ZoomRecordingFile,
 } from "../lib/api";
-import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "blockers" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "tasks" | "blockers" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -782,7 +781,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "blockers", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "tasks", "blockers", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -1070,20 +1069,6 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* ── Timeline ──────────────────────────────────────────────────────── */}
-      {tab === "timeline" && (
-        <ProjectTimeline
-          phases={phases}
-          milestones={milestones}
-          recordings={recordings}
-          onUpdatePhase={async (phaseId, updates) => {
-            if (!project) return;
-            const updated = await api.updatePhase(project.id, phaseId, updates);
-            setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-          }}
-        />
-      )}
-
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {tab === "tasks" && (
         <div className="ms-section-card">
@@ -1091,8 +1076,59 @@ export default function ProjectDetailPage() {
           <div style={{ display: "grid", gap: 24 }}>
             {groupedTasks.map(({ phase, tasks: phaseTasks }) => (
               <div key={phase.id}>
-                <div style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 10, paddingBottom: 6, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
-                  {phase.name}
+                {/* Phase header with inline editing */}
+                <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 6 }}>
+                    {phase.name}
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+                    <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
+                      Start
+                      <input
+                        type="date"
+                        value={phase.planned_start ?? ""}
+                        disabled={!canEdit}
+                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
+                        onChange={async (e) => {
+                          if (!project) return;
+                          const updated = await api.updatePhase(project.id, phase.id, { planned_start: e.target.value || null });
+                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                        }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
+                      End
+                      <input
+                        type="date"
+                        value={phase.planned_end ?? ""}
+                        disabled={!canEdit}
+                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
+                        onChange={async (e) => {
+                          if (!project) return;
+                          const updated = await api.updatePhase(project.id, phase.id, { planned_end: e.target.value || null });
+                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                        }}
+                      />
+                    </label>
+                    <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
+                      Status
+                      <select
+                        value={phase.status ?? "not_started"}
+                        disabled={!canEdit}
+                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
+                        onChange={async (e) => {
+                          if (!project) return;
+                          const updated = await api.updatePhase(project.id, phase.id, { status: e.target.value as "not_started" | "in_progress" | "completed" });
+                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                        }}
+                      >
+                        <option value="not_started">Not Started</option>
+                        <option value="in_progress">In Progress</option>
+                        <option value="completed">Completed</option>
+                      </select>
+                    </label>
+                    <Badge label={(phase.status ?? "not_started").replaceAll("_", " ")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} />
+                  </div>
                 </div>
                 <div style={{ display: "grid", gap: 6 }}>
                   {phaseTasks.length === 0 && (
