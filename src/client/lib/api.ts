@@ -475,16 +475,6 @@ export type Phase = {
   status: string | null;
 };
 
-export type Milestone = {
-  id: string;
-  project_id: string;
-  phase_id: string | null;
-  name: string;
-  target_date: string | null;
-  actual_date: string | null;
-  status: string | null;
-};
-
 export type Task = {
   id: string;
   project_id: string;
@@ -920,7 +910,6 @@ export const api = {
   project: (id: string) => request<Project>(`/projects/${id}`),
 
   phases: (projectId: string) => request<Phase[]>(`/projects/${projectId}/phases`),
-  milestones: (projectId: string) => request<Milestone[]>(`/projects/${projectId}/milestones`),
   tasks: (projectId: string) => request<Task[]>(`/projects/${projectId}/tasks`),
   risks: (projectId: string) => request<Risk[]>(`/projects/${projectId}/risks`),
   notes: (projectId: string) => request<Note[]>(`/projects/${projectId}/notes`),
@@ -1030,41 +1019,6 @@ export const api = {
       method: "DELETE",
     }),
 
-  createMilestone: (
-    projectId: string,
-    payload: {
-      name: string;
-      phase_id?: string | null;
-      target_date?: string | null;
-      actual_date?: string | null;
-      status?: "not_started" | "in_progress" | "completed";
-    }
-  ) =>
-    request<Milestone>(`/projects/${projectId}/milestones`, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    }),
-
-  updateMilestone: (
-    projectId: string,
-    milestoneId: string,
-    payload: {
-      name?: string;
-      phase_id?: string | null;
-      target_date?: string | null;
-      actual_date?: string | null;
-      status?: "not_started" | "in_progress" | "completed";
-    }
-  ) =>
-    request<Milestone>(`/projects/${projectId}/milestones/${milestoneId}`, {
-      method: "PATCH",
-      body: JSON.stringify(payload),
-    }),
-
-  deleteMilestone: (projectId: string, milestoneId: string) =>
-    request<{ success: boolean }>(`/projects/${projectId}/milestones/${milestoneId}`, {
-      method: "DELETE",
-    }),
 
   taskComments: (projectId: string, taskId: string) =>
     request<TaskComment[]>(`/projects/${projectId}/tasks/${taskId}/comments`),

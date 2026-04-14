@@ -12,7 +12,6 @@ const NOTIF_TYPE_LABELS: Record<string, string> = {
   risk_assigned: "Risk assigned",
   risk_added: "Risk added",
   note_added: "Note",
-  milestone_overdue: "Milestone overdue",
   go_live_reminder: "Go-live reminder",
   direct_message: "Message",
 };
@@ -23,7 +22,6 @@ const NOTIF_TYPE_COLOR: Record<string, string> = {
   risk_assigned: "#ff8c00",
   risk_added: "#ff8c00",
   note_added: "#6366f1",
-  milestone_overdue: "#d13438",
   go_live_reminder: "#107c10",
   direct_message: "#0b9aad",
 };
@@ -134,7 +132,6 @@ export default function AppShell() {
     if (!n.project_id) return null;
     if (n.entity_type === "task") return `/projects/${n.project_id}?tab=tasks&taskId=${n.entity_id}`;
     if (n.entity_type === "risk") return `/projects/${n.project_id}?tab=risks`;
-    if (n.entity_type === "milestone") return `/projects/${n.project_id}?tab=milestones`;
     if (n.entity_type === "note") return `/projects/${n.project_id}?tab=notes`;
     if (n.entity_type === "project") return `/projects/${n.project_id}`;
     return null;

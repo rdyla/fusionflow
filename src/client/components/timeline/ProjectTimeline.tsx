@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { Milestone, Phase, Task, ZoomRecording } from "../../lib/api";
+import type { Phase, Task, ZoomRecording } from "../../lib/api";
 
 type PhaseUpdate = {
   status?: "not_started" | "in_progress" | "completed";
@@ -11,7 +11,6 @@ type PhaseUpdate = {
 
 type Props = {
   phases: Phase[];
-  milestones: Milestone[];
   tasks?: Task[];
   recordings?: ZoomRecording[];
   onUpdatePhase: (phaseId: string, updates: PhaseUpdate) => Promise<void>;
@@ -71,7 +70,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProjectTimeline({ phases, milestones, tasks = [], recordings = [], onUpdatePhase, ganttOnly = false, onClickPhase, onClickTask }: Props) {
+export default function ProjectTimeline({ phases, tasks = [], recordings = [], onUpdatePhase, ganttOnly = false, onClickPhase, onClickTask }: Props) {
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
@@ -383,7 +382,6 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
         <div className="ms-section-title">Phase Details</div>
         <div style={{ display: "grid", gap: 8 }}>
           {phases.map((phase) => {
-            const phaseMilestones = milestones.filter((m) => m.phase_id === phase.id);
             const isEditing = editingPhaseId === phase.id;
             const color = STATUS_COLOR[phase.status ?? "not_started"] ?? STATUS_COLOR.not_started;
 
@@ -456,18 +454,6 @@ export default function ProjectTimeline({ phases, milestones, tasks = [], record
                         <div style={{ width: progressWidth(phase.status), height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
                       </div>
 
-                      {phaseMilestones.length > 0 && (
-                        <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                          {phaseMilestones.map((ms) => (
-                            <span
-                              key={ms.id}
-                              style={{ fontSize: 11, padding: "2px 8px", borderRadius: 4, background: "rgba(255,140,0,0.12)", color: "#ff8c00", border: "1px solid rgba(255,140,0,0.3)" }}
-                            >
-                              ◆ {ms.name}{ms.target_date ? ` (${ms.target_date})` : ""}
-                            </span>
-                          ))}
-                        </div>
-                      )}
 
                       {recordings.filter((r) => r.phase_id === phase.id).length > 0 && (
                         <div style={{ marginTop: 8, display: "grid", gap: 4 }}>

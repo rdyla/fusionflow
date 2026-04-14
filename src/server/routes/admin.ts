@@ -218,7 +218,6 @@ app.delete("/projects/:id", async (c) => {
   await db.prepare("DELETE FROM notes WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM risks WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM tasks WHERE project_id = ?").bind(projectId).run();
-  await db.prepare("DELETE FROM milestones WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM phases WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
 

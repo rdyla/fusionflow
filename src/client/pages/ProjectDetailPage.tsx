@@ -5,7 +5,6 @@ import {
   type CaseComplianceData,
   type Document,
   type DynamicsContact,
-  type Milestone,
   type Note,
   type Phase,
   type Project,
@@ -28,7 +27,7 @@ import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { useToast } from "../components/ui/ToastProvider";
 
-type DetailTab = "overview" | "tasks" | "blockers" | "milestones" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -48,12 +47,6 @@ const RISK_COLOR: Record<string, string> = {
   mitigated: "#ff8c00",
   closed: "#059669",
 };
-const MILESTONE_COLOR: Record<string, string> = {
-  not_started: "#94a3b8",
-  in_progress: "#0891b2",
-  completed: "#059669",
-};
-
 function formatDate(d: string | null) {
   if (!d) return "—";
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T00:00:00" : d;
@@ -92,7 +85,6 @@ export default function ProjectDetailPage() {
 
   const [project, setProject] = useState<Project | null>(null);
   const [phases, setPhases] = useState<Phase[]>([]);
-  const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
@@ -139,11 +131,6 @@ export default function ProjectDetailPage() {
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
   const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "" });
   const [savingRisk, setSavingRisk] = useState(false);
-
-  const [showMilestoneModal, setShowMilestoneModal] = useState(false);
-  const [editingMilestone, setEditingMilestone] = useState<Milestone | null>(null);
-  const [milestoneForm, setMilestoneForm] = useState({ name: "", phase_id: "", target_date: "", actual_date: "", status: "not_started" });
-  const [savingMilestone, setSavingMilestone] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
@@ -200,9 +187,9 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, milestoneData, taskData, riskData, noteData, userData, docData, staffData, meData] =
+        const [projectData, phaseData, taskData, riskData, noteData, userData, docData, staffData, meData] =
           await Promise.all([
-            api.project(id), api.phases(id), api.milestones(id), api.tasks(id),
+            api.project(id), api.phases(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users().catch(() => [] as User[]), api.documents(id),
             api.projectStaff(id),
             api.me(),
@@ -224,7 +211,6 @@ export default function ProjectDetailPage() {
           api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
         }
         setPhases(phaseData);
-        setMilestones(milestoneData);
         setTasks(taskData);
         // Load time entries for all tasks
         if (taskData.length > 0) {
@@ -590,61 +576,6 @@ export default function ProjectDetailPage() {
     }
   }
 
-  function openNewMilestone() {
-    setEditingMilestone(null);
-    setMilestoneForm({ name: "", phase_id: "", target_date: "", actual_date: "", status: "not_started" });
-    setShowMilestoneModal(true);
-  }
-  function openEditMilestone(ms: Milestone) {
-    setEditingMilestone(ms);
-    setMilestoneForm({
-      name: ms.name,
-      phase_id: ms.phase_id ?? "",
-      target_date: ms.target_date ?? "",
-      actual_date: ms.actual_date ?? "",
-      status: ms.status ?? "not_started",
-    });
-    setShowMilestoneModal(true);
-  }
-  async function handleSaveMilestone(e: React.FormEvent) {
-    e.preventDefault();
-    if (!project) return;
-    setSavingMilestone(true);
-    try {
-      const payload = {
-        name: milestoneForm.name.trim(),
-        phase_id: milestoneForm.phase_id || null,
-        target_date: milestoneForm.target_date || null,
-        actual_date: milestoneForm.actual_date || null,
-        status: milestoneForm.status as "not_started" | "in_progress" | "completed",
-      };
-      if (editingMilestone) {
-        const updated = await api.updateMilestone(project.id, editingMilestone.id, payload);
-        setMilestones((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-        showToast("Milestone updated.", "success");
-      } else {
-        const created = await api.createMilestone(project.id, payload);
-        setMilestones((prev) => [...prev, created]);
-        showToast("Milestone added.", "success");
-      }
-      setShowMilestoneModal(false);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save milestone", "error");
-    } finally {
-      setSavingMilestone(false);
-    }
-  }
-  async function handleDeleteMilestone(milestoneId: string) {
-    if (!project || !window.confirm("Delete this milestone?")) return;
-    try {
-      await api.deleteMilestone(project.id, milestoneId);
-      setMilestones((prev) => prev.filter((m) => m.id !== milestoneId));
-      showToast("Milestone deleted.", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to delete milestone", "error");
-    }
-  }
-
   async function handleAddNote() {
     if (!project) return;
     if (!newNoteBody.trim()) { setNoteMessage("Please enter a note."); return; }
@@ -788,7 +719,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "tasks", "blockers", "milestones", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -809,7 +740,6 @@ export default function ProjectDetailPage() {
         <>
         <ProjectTimeline
           phases={phases}
-          milestones={milestones}
           tasks={tasks}
           recordings={recordings}
           ganttOnly
@@ -1013,7 +943,7 @@ export default function ProjectDetailPage() {
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
-              {[["Phases", phases.length], ["Milestones", milestones.length], ["Tasks", tasks.length], ["Blockers", risks.length], ["Notes", notes.length]].map(
+              {[["Phases", phases.length], ["Tasks", tasks.length], ["Blockers", risks.length], ["Notes", notes.length]].map(
                 ([label, value]) => (
                   <div key={label as string} className="ms-info-item" style={{ textAlign: "center" }}>
                     <div className="ms-info-label">{label}</div>
@@ -1219,37 +1149,6 @@ export default function ProjectDetailPage() {
                     <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
                     {canEdit && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
                     {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Milestones ────────────────────────────────────────────────────── */}
-      {tab === "milestones" && (
-        <div className="ms-section-card">
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Milestones</div>
-            {canEdit && <button className="ms-btn-primary" onClick={openNewMilestone}>+ Add Milestone</button>}
-          </div>
-          {milestones.length === 0 ? (
-            <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No milestones recorded.</div>
-          ) : (
-            <div style={{ display: "grid", gap: 8 }}>
-              {milestones.map((ms) => (
-                <div key={ms.id} className="ms-row-item">
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{ms.name}</div>
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Phase: {phases.find((p) => p.id === ms.phase_id)?.name ?? "—"} · Target: {ms.target_date ? formatDate(ms.target_date) : "—"} · Actual: {ms.actual_date ? formatDate(ms.actual_date) : "—"}
-                    </div>
-                  </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    <Badge label={ms.status?.replaceAll("_", " ") ?? "not started"} color={MILESTONE_COLOR[ms.status ?? "not_started"] ?? "#94a3b8"} />
-                    {canEdit && <button className="ms-btn-ghost" onClick={() => openEditMilestone(ms)}>Edit</button>}
-                    {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteMilestone(ms.id)}>Delete</button>}
                   </div>
                 </div>
               ))}
@@ -2064,51 +1963,6 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* ── Milestone Modal ───────────────────────────────────────────────── */}
-      {showMilestoneModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowMilestoneModal(false); }}>
-          <div className="ms-modal" style={{ maxWidth: 500 }}>
-            <h2>{editingMilestone ? "Edit Milestone" : "Add Milestone"}</h2>
-            <form onSubmit={handleSaveMilestone} style={{ display: "grid", gap: 14 }}>
-              <label className="ms-label">
-                <span>Name *</span>
-                <input autoFocus required className="ms-input" value={milestoneForm.name} onChange={(e) => setMilestoneForm({ ...milestoneForm, name: e.target.value })} />
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label className="ms-label">
-                  <span>Phase</span>
-                  <select className="ms-input" value={milestoneForm.phase_id} onChange={(e) => setMilestoneForm({ ...milestoneForm, phase_id: e.target.value })}>
-                    <option value="">No phase</option>
-                    {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Status</span>
-                  <select className="ms-input" value={milestoneForm.status} onChange={(e) => setMilestoneForm({ ...milestoneForm, status: e.target.value })}>
-                    <option value="not_started">Not Started</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Target Date</span>
-                  <input type="date" className="ms-input" value={milestoneForm.target_date} onChange={(e) => setMilestoneForm({ ...milestoneForm, target_date: e.target.value })} />
-                </label>
-                <label className="ms-label">
-                  <span>Actual Date</span>
-                  <input type="date" className="ms-input" value={milestoneForm.actual_date} onChange={(e) => setMilestoneForm({ ...milestoneForm, actual_date: e.target.value })} />
-                </label>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn-primary" disabled={savingMilestone || !milestoneForm.name.trim()}>
-                  {savingMilestone ? "Saving..." : editingMilestone ? "Save Changes" : "Add Milestone"}
-                </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => setShowMilestoneModal(false)}>Cancel</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}
       {/* ── Time Entry Modal ──────────────────────────────────────────────── */}
       {timeEntryTask && (
