@@ -106,6 +106,7 @@ export default function ProjectDetailPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [tab, setTab] = useState<DetailTab>("overview");
+  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
@@ -800,6 +801,7 @@ export default function ProjectDetailPage() {
 
       {/* ── Overview ──────────────────────────────────────────────────────── */}
       {tab === "overview" && (
+        <>
         <div style={{ display: "grid", gap: 16 }}>
           {/* ── Project Team ──────────────────────────────────────────────── */}
           <div className="ms-section-card">
@@ -1068,14 +1070,10 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* ── Tasks ─────────────────────────────────────────────────────────── */}
-      {tab === "tasks" && (
-        <>
         <ProjectTimeline
           phases={phases}
           milestones={milestones}
+          tasks={tasks}
           recordings={recordings}
           ganttOnly
           onUpdatePhase={async (phaseId, updates) => {
@@ -1083,16 +1081,54 @@ export default function ProjectDetailPage() {
             const updated = await api.updatePhase(project.id, phaseId, updates);
             setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
           }}
+          onClickPhase={(phaseId) => {
+            setCollapsedPhases((prev) => {
+              const next = new Set(prev);
+              next.delete(phaseId);
+              return next;
+            });
+            setTab("tasks");
+          }}
+          onClickTask={(taskId, phaseId) => {
+            if (phaseId) {
+              setCollapsedPhases((prev) => {
+                const next = new Set(prev);
+                next.delete(phaseId);
+                return next;
+              });
+            }
+            const task = tasks.find((t) => t.id === taskId);
+            if (task) setEditingTask(task);
+            setTab("tasks");
+          }}
         />
+        </>
+      )}
+
+      {/* ── Tasks ─────────────────────────────────────────────────────────── */}
+      {tab === "tasks" && (
+        <>
         <div className="ms-section-card">
           <div className="ms-section-title">Tasks by Phase</div>
           <div style={{ display: "grid", gap: 24 }}>
-            {groupedTasks.map(({ phase, tasks: phaseTasks }) => (
+            {groupedTasks.map(({ phase, tasks: phaseTasks }) => {
+              const isCollapsed = collapsedPhases.has(phase.id);
+              const toggleCollapse = () => setCollapsedPhases((prev) => {
+                const next = new Set(prev);
+                next.has(phase.id) ? next.delete(phase.id) : next.add(phase.id);
+                return next;
+              });
+              return (
               <div key={phase.id}>
                 {/* Phase header with inline editing */}
-                <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 6 }}>
+                <div style={{ marginBottom: isCollapsed ? 0 : 10, paddingBottom: 8, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+                  <div
+                    style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}
+                    onClick={toggleCollapse}
+                  >
+                    <span style={{ fontSize: 10, color: "#94a3b8", transition: "transform 0.15s", display: "inline-block", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▼</span>
                     {phase.name}
+                    <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", textTransform: "none", letterSpacing: 0 }}>({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})</span>
                   </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                     <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
@@ -1143,7 +1179,7 @@ export default function ProjectDetailPage() {
                     <Badge label={(phase.status ?? "not_started").replaceAll("_", " ")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} />
                   </div>
                 </div>
-                <div style={{ display: "grid", gap: 6 }}>
+                {!isCollapsed && <div style={{ display: "grid", gap: 6 }}>
                   {phaseTasks.length === 0 && (
                     <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
                   )}
@@ -1230,9 +1266,10 @@ export default function ProjectDetailPage() {
                       + Add Task
                     </button>
                   )}
-                </div>
+                </div>}
               </div>
-            ))}
+              );
+            })}
           </div>
         </div>
         </>

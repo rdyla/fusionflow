@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Milestone, Phase, ZoomRecording } from "../../lib/api";
+import type { Milestone, Phase, Task, ZoomRecording } from "../../lib/api";
 
 type PhaseUpdate = {
   status?: "not_started" | "in_progress" | "completed";
@@ -12,9 +12,12 @@ type PhaseUpdate = {
 type Props = {
   phases: Phase[];
   milestones: Milestone[];
+  tasks?: Task[];
   recordings?: ZoomRecording[];
   onUpdatePhase: (phaseId: string, updates: PhaseUpdate) => Promise<void>;
   ganttOnly?: boolean;
+  onClickPhase?: (phaseId: string) => void;
+  onClickTask?: (taskId: string, phaseId: string | null) => void;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -68,7 +71,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProjectTimeline({ phases, milestones, recordings = [], onUpdatePhase, ganttOnly = false }: Props) {
+export default function ProjectTimeline({ phases, milestones, tasks = [], recordings = [], onUpdatePhase, ganttOnly = false, onClickPhase, onClickTask }: Props) {
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
@@ -78,9 +81,17 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
   const datedPhases = phases.filter((p) => p.planned_start && p.planned_end);
   let ganttContent: React.ReactNode = null;
 
-  if (datedPhases.length > 0) {
-    const allMs = datedPhases.flatMap((p) => [parseDate(p.planned_start)!, parseDate(p.planned_end)!]);
-    milestones.forEach((m) => { const ms = parseDate(m.target_date); if (ms) allMs.push(ms); });
+  // tasks that have at least one date for bounding the chart
+  const datedTasks = tasks.filter((t) => t.scheduled_start || t.scheduled_end || t.due_date);
+
+  if (datedPhases.length > 0 || datedTasks.length > 0) {
+    const allMs: number[] = [];
+    datedPhases.forEach((p) => { allMs.push(parseDate(p.planned_start)!, parseDate(p.planned_end)!); });
+    datedTasks.forEach((t) => {
+      const s = parseDate(t.scheduled_start); if (s) allMs.push(s);
+      const e = parseDate(t.scheduled_end);   if (e) allMs.push(e);
+      const d = parseDate(t.due_date);        if (d) allMs.push(d);
+    });
     recordings.forEach((r) => { const ms = parseDate(r.start_time.slice(0, 10)); if (ms) allMs.push(ms); });
 
     const rawMin = Math.min(...allMs);
@@ -138,7 +149,10 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
               return (
                 <div key={phase.id} style={{ display: "flex", alignItems: "center", marginBottom: 6, minHeight: 28 }}>
                   {/* Label */}
-                  <div style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div
+                    style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 500, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickPhase ? "pointer" : "default" }}
+                    onClick={() => onClickPhase?.(phase.id)}
+                  >
                     {phase.name}
                   </div>
 
@@ -160,8 +174,10 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
                           alignItems: "center",
                           paddingLeft: 6,
                           overflow: "hidden",
+                          cursor: onClickPhase ? "pointer" : "default",
                         }}
                         title={`Planned: ${phase.planned_start} → ${phase.planned_end}`}
+                        onClick={() => onClickPhase?.(phase.id)}
                       >
                         <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                           {phase.name}
@@ -192,6 +208,59 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
               );
             })}
 
+            {/* Task rows — grouped under their phase */}
+            {phases.map((phase) => {
+              const phaseTasks = datedTasks.filter((t) => t.phase_id === phase.id);
+              if (phaseTasks.length === 0) return null;
+              return phaseTasks.map((task) => {
+                const tStart = parseDate(task.scheduled_start);
+                const tEnd   = parseDate(task.scheduled_end);
+                const tDue   = parseDate(task.due_date);
+                const hasBar = tStart !== null && tEnd !== null;
+                const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+                return (
+                  <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 20 }}>
+                    <div
+                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#64748b", paddingRight: 12, paddingLeft: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default" }}
+                      title={task.title}
+                      onClick={() => onClickTask?.(task.id, task.phase_id)}
+                    >
+                      {task.title}
+                    </div>
+                    <div style={{ flex: 1, position: "relative", height: 14 }}>
+                      {hasBar && (
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 1,
+                            left: `${pct(tStart!, minMs, totalMs)}%`,
+                            width: `${Math.max(pct(tEnd!, minMs, totalMs) - pct(tStart!, minMs, totalMs), 0.5)}%`,
+                            height: 12,
+                            borderRadius: 2,
+                            background: taskColor,
+                            opacity: 0.7,
+                            minWidth: 4,
+                            cursor: onClickTask ? "pointer" : "default",
+                          }}
+                          title={`${task.title}: ${task.scheduled_start} → ${task.scheduled_end}`}
+                          onClick={() => onClickTask?.(task.id, task.phase_id)}
+                        />
+                      )}
+                      {!hasBar && tDue && (
+                        <div
+                          style={{ position: "absolute", top: 2, left: `${pct(tDue, minMs, totalMs)}%`, transform: "translateX(-50%)", cursor: onClickTask ? "pointer" : "default" }}
+                          title={`${task.title} due: ${task.due_date}`}
+                          onClick={() => onClickTask?.(task.id, task.phase_id)}
+                        >
+                          <div style={{ width: 8, height: 8, background: taskColor, transform: "rotate(45deg)", borderRadius: 1 }} />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              });
+            })}
+
             {/* Recording markers */}
             {recordings.length > 0 && (
               <>
@@ -220,38 +289,23 @@ export default function ProjectTimeline({ phases, milestones, recordings = [], o
               </>
             )}
 
-            {/* Milestone markers */}
-            <div style={{ display: "flex", marginTop: 6, paddingLeft: LABEL_W }}>
-              <div style={{ flex: 1, position: "relative", height: 20 }}>
-                {milestones.map((ms) => {
-                  const msMs = parseDate(ms.target_date);
-                  if (!msMs) return null;
-                  return (
-                    <div
-                      key={ms.id}
-                      style={{ position: "absolute", left: `${pct(msMs, minMs, totalMs)}%`, transform: "translateX(-50%)", display: "flex", flexDirection: "column", alignItems: "center" }}
-                      title={`${ms.name}: ${ms.target_date}`}
-                    >
-                      <div style={{ width: 10, height: 10, background: ms.status === "completed" ? "#107c10" : "#ff8c00", transform: "rotate(45deg)", borderRadius: 2 }} />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
             {/* Legend */}
             <div style={{ display: "flex", gap: 20, marginTop: 10, paddingLeft: LABEL_W, fontSize: 11, color: "#64748b" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 4, background: "#0078d4", borderRadius: 2, display: "inline-block" }} />
-                Planned
+                Phase
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 4, background: "#107c10", borderRadius: 2, display: "inline-block" }} />
                 Actual
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 8, height: 8, background: "#ff8c00", transform: "rotate(45deg)", display: "inline-block", borderRadius: 1 }} />
-                Milestone
+                <span style={{ width: 16, height: 4, background: "#94a3b8", borderRadius: 2, display: "inline-block" }} />
+                Task
+              </span>
+              <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 8, height: 8, background: "#94a3b8", transform: "rotate(45deg)", display: "inline-block", borderRadius: 1 }} />
+                Due date
               </span>
               {recordings.length > 0 && (
                 <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
