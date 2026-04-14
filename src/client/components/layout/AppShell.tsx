@@ -158,7 +158,7 @@ export default function AppShell() {
             <SideLink to="/solutions" icon={NAV_ICONS.solutions} onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
             <SideLink to="/dashboard" icon={NAV_ICONS.projects} onClick={() => setDrawerOpen(false)}>Projects</SideLink>
             <SideLink to="/optimize" icon={NAV_ICONS.optimizations} onClick={() => setDrawerOpen(false)}>Optimizations</SideLink>
-            {canProspect && (
+            {false && canProspect && (
               <SideLink to="/prospecting" icon={NAV_ICONS.prospecting} onClick={() => setDrawerOpen(false)}>Prospecting</SideLink>
             )}
           </>

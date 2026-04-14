@@ -31,7 +31,7 @@ const MODULES: Module[] = [
     accent: "#7c3aed",
     glow: "rgba(124,58,237,0.22)",
     route: "/prospecting",
-    visibleTo: ["admin", "executive", "pf_ae", "partner_ae"],
+    visibleTo: [], // hidden from everyone
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
         <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6M8 11h6"/>
