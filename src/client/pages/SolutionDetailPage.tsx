@@ -100,6 +100,18 @@ export default function SolutionDetailPage() {
   // Labor Estimate
   const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
 
+  // Inline rename
+  const [renamingTitle, setRenamingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+
+  // Vendor AE modal
+  const [showVendorAeModal, setShowVendorAeModal] = useState(false);
+  const [vendorAeMode, setVendorAeMode] = useState<"existing" | "new">("existing");
+  const [vendorAeUserId, setVendorAeUserId] = useState("");
+  const [vendorAeNewName, setVendorAeNewName] = useState("");
+  const [vendorAeNewEmail, setVendorAeNewEmail] = useState("");
+  const [savingVendorAe, setSavingVendorAe] = useState(false);
+
   // Solution staff (kept for modal state only)
   const [showSolutionStaffModal, setShowSolutionStaffModal] = useState(false);
   const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
@@ -285,7 +297,38 @@ export default function SolutionDetailPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.name}</h1>
+          {renamingTitle ? (
+            <input
+              className="ms-input"
+              autoFocus
+              value={titleDraft}
+              style={{ fontSize: 20, fontWeight: 700, padding: "4px 8px", marginBottom: 0 }}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={async () => {
+                if (titleDraft.trim() && titleDraft.trim() !== solution.name) {
+                  await save({ name: titleDraft.trim() });
+                }
+                setRenamingTitle(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+                if (e.key === "Escape") setRenamingTitle(false);
+              }}
+            />
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.name}</h1>
+              {canEdit && (
+                <button
+                  onClick={() => { setTitleDraft(solution.name); setRenamingTitle(true); }}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
+                  title="Rename solution"
+                >
+                  ✏
+                </button>
+              )}
+            </div>
+          )}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
               {TYPE_LABELS[solution.solution_type]}
@@ -483,6 +526,49 @@ export default function SolutionDetailPage() {
             )}
           </div>
 
+          {/* ── Vendor AE ── */}
+          {(() => {
+            const vendorLabel =
+              solution.vendor === "zoom" ? "Zoom AE" :
+              solution.vendor === "ringcentral" ? "RingCentral AE" :
+              solution.vendor === "microsoft_teams" ? "Microsoft Teams AE" :
+              solution.vendor === "webex" ? "Webex AE" :
+              "Vendor AE";
+            const displayName = solution.vendor_ae_display_name ?? solution.vendor_ae_name;
+            const displayEmail = solution.vendor_ae_email;
+            return (
+              <div className="ms-card">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: displayName ? 14 : 0 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{vendorLabel}</h3>
+                  {canEdit && (
+                    <button className="ms-btn-secondary" onClick={() => {
+                      setVendorAeMode(solution.vendor_ae_user_id ? "existing" : "existing");
+                      setVendorAeUserId(solution.vendor_ae_user_id ?? "");
+                      setVendorAeNewName("");
+                      setVendorAeNewEmail("");
+                      setShowVendorAeModal(true);
+                    }}>
+                      {displayName ? "Change" : `+ Assign ${vendorLabel}`}
+                    </button>
+                  )}
+                </div>
+                {displayName ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, rgba(11,154,173,0.2), rgba(99,193,234,0.15))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#0b9aad" }}>
+                      {displayName.trim()[0]?.toUpperCase()}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{displayName}</div>
+                      {displayEmail && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{displayEmail}</div>}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginTop: canEdit ? 0 : 4 }}>No {vendorLabel} assigned.</div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* ── Customer Contacts ── */}
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
@@ -547,6 +633,91 @@ export default function SolutionDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Vendor AE Modal ── */}
+      {showVendorAeModal && (() => {
+        const vendorLabel =
+          solution.vendor === "zoom" ? "Zoom AE" :
+          solution.vendor === "ringcentral" ? "RingCentral AE" :
+          solution.vendor === "microsoft_teams" ? "Microsoft Teams AE" :
+          solution.vendor === "webex" ? "Webex AE" :
+          "Vendor AE";
+        const partnerAeUsers = users.filter((u) => u.role === "partner_ae");
+        async function saveVendorAe() {
+          setSavingVendorAe(true);
+          try {
+            if (vendorAeMode === "existing") {
+              await save({ vendor_ae_user_id: vendorAeUserId || null, vendor_ae_name: null, vendor_ae_email: null });
+            } else {
+              await save({ vendor_ae_name: vendorAeNewName.trim() || null, vendor_ae_email: vendorAeNewEmail.trim() || null, vendor_ae_user_id: null });
+            }
+            setShowVendorAeModal(false);
+          } finally {
+            setSavingVendorAe(false);
+          }
+        }
+        return (
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowVendorAeModal(false); }}>
+            <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Assign {vendorLabel}</h2>
+                <button onClick={() => setShowVendorAeModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+              </div>
+              <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {(["existing", "new"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setVendorAeMode(mode)}
+                      style={{
+                        flex: 1, padding: "6px 0", fontSize: 12, borderRadius: 4, cursor: "pointer",
+                        border: `1px solid ${vendorAeMode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
+                        background: vendorAeMode === mode ? "rgba(99,193,234,0.1)" : "transparent",
+                        color: vendorAeMode === mode ? "#63c1ea" : "#94a3b8",
+                      }}
+                    >
+                      {mode === "existing" ? "Existing User" : "Invite New"}
+                    </button>
+                  ))}
+                </div>
+                {vendorAeMode === "existing" ? (
+                  <label className="ms-label">
+                    <span>{vendorLabel}</span>
+                    <select className="ms-input" value={vendorAeUserId} onChange={(e) => setVendorAeUserId(e.target.value)}>
+                      <option value="">— None —</option>
+                      {partnerAeUsers.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div style={{ display: "grid", gap: 12 }}>
+                    <label className="ms-label">
+                      <span>Name</span>
+                      <input className="ms-input" placeholder="Full name" value={vendorAeNewName} onChange={(e) => setVendorAeNewName(e.target.value)} />
+                    </label>
+                    <label className="ms-label">
+                      <span>Email (sends invite)</span>
+                      <input className="ms-input" type="email" placeholder={`ae@${solution.vendor === "zoom" ? "zoom.us" : "vendor.com"}`} value={vendorAeNewEmail} onChange={(e) => setVendorAeNewEmail(e.target.value)} />
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+                <button
+                  className="ms-btn-primary"
+                  disabled={savingVendorAe || (vendorAeMode === "new" && (!vendorAeNewName.trim() || !vendorAeNewEmail.trim()))}
+                  onClick={saveVendorAe}
+                >
+                  {savingVendorAe ? "Saving…" : vendorAeMode === "new" ? "Invite & Assign" : "Assign"}
+                </button>
+                <button className="ms-btn-secondary" onClick={() => setShowVendorAeModal(false)}>Cancel</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Add Staff Modal ── */}
       {showSolutionStaffModal && (
