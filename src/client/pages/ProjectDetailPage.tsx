@@ -113,6 +113,7 @@ export default function ProjectDetailPage() {
   const [noteMessage, setNoteMessage] = useState<string | null>(null);
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [taskBlockerId, setTaskBlockerId] = useState<string>("");
   const [savingTask, setSavingTask] = useState(false);
   const [timeEntryTask, setTimeEntryTask] = useState<Task | null>(null);
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
@@ -264,6 +265,15 @@ export default function ProjectDetailPage() {
       return;
     }
     api.taskComments(project.id, editingTask.id).then(setTaskComments).catch(() => {});
+  }, [editingTask?.id]);
+
+  useEffect(() => {
+    if (editingTask?.id && editingTask.id !== "") {
+      const linked = risks.find((r) => r.task_id === editingTask.id);
+      setTaskBlockerId(linked?.id ?? "");
+    } else {
+      setTaskBlockerId("");
+    }
   }, [editingTask?.id]);
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading project...</div>;
@@ -454,6 +464,25 @@ export default function ProjectDetailPage() {
         status: editingTask.status as "not_started" | "in_progress" | "completed" | "blocked",
       });
       setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
+
+      // Sync blocker ↔ task link
+      const prevLinked = risks.find((r) => r.task_id === editingTask.id);
+      if (updated.status === "blocked" && taskBlockerId) {
+        if (prevLinked && prevLinked.id !== taskBlockerId) {
+          // Move link off old blocker
+          const cleared = await api.updateRisk(project.id, prevLinked.id, { task_id: null });
+          setRisks((prev) => prev.map((r) => r.id === cleared.id ? cleared : r));
+        }
+        if (!prevLinked || prevLinked.id !== taskBlockerId) {
+          const linked = await api.updateRisk(project.id, taskBlockerId, { task_id: editingTask.id });
+          setRisks((prev) => prev.map((r) => r.id === linked.id ? linked : r));
+        }
+      } else if (updated.status !== "blocked" && prevLinked) {
+        // Task is no longer blocked — clear the link
+        const cleared = await api.updateRisk(project.id, prevLinked.id, { task_id: null });
+        setRisks((prev) => prev.map((r) => r.id === cleared.id ? cleared : r));
+      }
+
       setEditingTask(null);
       showToast("Task updated.", "success");
     } catch (err) {
@@ -2138,6 +2167,19 @@ export default function ProjectDetailPage() {
                   </select>
                 </label>
               </div>
+
+              {/* Blocked by — only shown when status is blocked */}
+              {editingTask.status === "blocked" && canEdit && (
+                <label className="ms-label">
+                  <span>Blocked by</span>
+                  <select className="ms-input" value={taskBlockerId} onChange={(e) => setTaskBlockerId(e.target.value)}>
+                    <option value="">— Select blocker —</option>
+                    {risks.filter((r) => r.status === "open" || r.task_id === editingTask.id).map((r) => (
+                      <option key={r.id} value={r.id}>{r.title}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
 
               {/* Due Date + Assignee */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
