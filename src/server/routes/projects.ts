@@ -28,8 +28,8 @@ app.get("/", async (c) => {
   let bindings: string[] = [];
 
   if (auth.role === "pm") {
-    sql += " AND pm_user_id = ?";
-    bindings = [auth.user.id];
+    sql += " AND (pm_user_id = ? OR id IN (SELECT project_id FROM project_staff WHERE user_id = ? AND staff_role = 'pm'))";
+    bindings = [auth.user.id, auth.user.id];
   } else if (auth.role === "pf_ae") {
     const teamIds = await getTeamUserIds(auth.user.id, db);
     const ph = inPlaceholders(teamIds);

@@ -340,6 +340,11 @@ export default function ProjectDetailPage() {
     try {
       const added = await api.addProjectStaff(project.id, { user_id: addStaffUserId, staff_role: addStaffRole });
       setProjectStaff((prev) => [...prev, added]);
+      // When assigning a PM via staff, also set pm_user_id so it surfaces in their project list
+      if (addStaffRole === "pm") {
+        const updated = await api.updateProject(project.id, { pm_user_id: addStaffUserId });
+        setProject(updated);
+      }
       setAddStaffUserId("");
       setAddStaffRole("");
       setShowStaffModal(false);
