@@ -5,6 +5,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
+import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
@@ -1016,26 +1017,37 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {tab === "scope" && (
         <div style={{ display: "grid", gap: 20 }}>
+          {/* SOW document generator */}
+          <ScopeOfWorkDocument
+            solution={solution}
+            needsAssessment={needsAssessment}
+            laborEstimate={laborEstimate}
+            scopeText={scope}
+          />
+
+          {/* Scope notes textarea — feeds into the generated document */}
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Scope of Work</h3>
+            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Additional Scope Notes
+            </h3>
             <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-              Define what is included (and excluded) in this engagement. This document will accompany the project handoff.
+              Any additional context, exclusions, or special terms. This text is included in the generated SOW document.
             </p>
             <textarea
               className="ms-input"
-              rows={18}
+              rows={8}
               style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6 }}
               value={scope}
               onChange={(e) => setScope(e.target.value)}
-              placeholder="Define the scope of work, deliverables, exclusions, and any assumptions…"
+              placeholder="Out of scope items, special terms, exclusions…"
               disabled={!canEdit}
             />
+            {canEdit && (
+              <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ scope_of_work: scope })}>
+                {saving ? "Saving…" : "Save Notes"}
+              </button>
+            )}
           </div>
-          {canEdit && (
-            <button className="ms-btn-primary" disabled={saving} style={{ width: "fit-content" }} onClick={() => save({ scope_of_work: scope })}>
-              {saving ? "Saving…" : "Save Scope"}
-            </button>
-          )}
         </div>
       )}
 
