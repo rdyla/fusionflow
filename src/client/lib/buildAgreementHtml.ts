@@ -631,19 +631,6 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
     ${customSection}
     ${msoSection}
     ${inclusionsSection}
-    <div class="price-summary">
-      <div class="price-summary-cell accent">
-        <div class="ps-label">Total Annual Investment</div>
-        <div class="ps-value">${fmtFull(calc.annual)}</div>
-        <div class="ps-sub">Billed annually \u00b7 Auto-renewing</div>
-      </div>
-      <div class="price-summary-divider"></div>
-      <div class="price-summary-cell">
-        <div class="ps-label">Total Contract Value \u00b7 ${term}-Year Term</div>
-        <div class="ps-value" style="color:#0d1b2e;font-size:26px;">${fmtFull(calc.tcv)}</div>
-        <div class="ps-sub">${startDate} \u2013 ${endDate}</div>
-      </div>
-    </div>
     <div class="section-header">
       <div class="section-num">${secNum()}</div>
       <div class="section-title">What\u2019s Included in Your CloudSupport Plan</div>
@@ -699,6 +686,19 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       </div>
     </div>
     ${buildMsoSection(d, calc)}
+    <div class="price-summary">
+      <div class="price-summary-cell accent">
+        <div class="ps-label">Total Annual Investment</div>
+        <div class="ps-value">${fmtFull(calc.annual)}</div>
+        <div class="ps-sub">Billed annually \u00b7 Auto-renewing</div>
+      </div>
+      <div class="price-summary-divider"></div>
+      <div class="price-summary-cell">
+        <div class="ps-label">Total Contract Value \u00b7 ${term}-Year Term</div>
+        <div class="ps-value" style="color:#0d1b2e;font-size:26px;">${fmtFull(calc.tcv)}</div>
+        <div class="ps-sub">${startDate} \u2013 ${endDate}</div>
+      </div>
+    </div>
   </div>
   <div class="sig-band">
     <div class="sig-band-title">Authorization &amp; Agreement</div>
