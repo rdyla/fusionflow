@@ -157,7 +157,7 @@ function sharedStyles(): string {
         body { background: #fff; padding: 0; margin: 0; }
         .agreement-doc, .sig-doc { box-shadow: none !important; border-radius: 0 !important; }
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        .agreement-doc .section-header { break-after: avoid; page-break-after: avoid; }
+        .agreement-doc .section-header { break-inside: avoid; page-break-inside: avoid; break-after: avoid; page-break-after: avoid; }
         .agreement-doc .pricing-wrap, .agreement-doc .price-summary, .agreement-doc .coverage-grid,
         .agreement-doc .coverage-card, .agreement-doc .scope-block, .agreement-doc .term-panel,
         .agreement-doc .mac-item, .agreement-doc .pricing-note, .agreement-doc .doc-intro,
