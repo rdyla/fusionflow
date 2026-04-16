@@ -41,7 +41,13 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
   const showUcaas = form.oppType === "UCaaS Only" || form.oppType === "UCaaS + CCaaS";
   const showCcaas = form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS";
   const showImpl = form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS";
-  const showAdvApp = form.oppType === "Advanced Applications" || (form.oppType === "UCaaS Only" && form.advAppEnabled);
+  // Advanced Apps is "active" whenever the checkbox is on OR the standalone type is selected
+  const advAppActive = form.oppType === "Advanced Applications" || form.advAppEnabled;
+  // Priced when standalone or UCaaS Only add-on; included (no charge) when CCaaS is involved
+  const advAppPriced = form.oppType === "Advanced Applications" || form.oppType === "UCaaS Only";
+  const advAppIncluded = advAppActive && (form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS");
+  // SOW input lives here only when not already shown in the CCaaS section
+  const advAppShowSow = advAppActive && !showImpl;
 
   // ── Styles ──────────────────────────────────────────────────────────────────
   const S = {
@@ -79,12 +85,6 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
             </button>
           ))}
         </div>
-        {form.oppType === "UCaaS Only" && (
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13, color: "#475569", cursor: "pointer" }}>
-            <input type="checkbox" checked={form.advAppEnabled} onChange={(e) => setField("advAppEnabled", e.target.checked)} style={{ accentColor: "#03395f" }} />
-            Include Advanced Applications add-on
-          </label>
-        )}
       </div>
 
       {/* ── Customer & Deal Info ─────────────────────────────────────────────── */}
@@ -199,70 +199,129 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
       )}
 
       {/* ── Advanced Applications ─────────────────────────────────────────────── */}
-      {showAdvApp && (
-        <div style={S.section}>
-          <div style={S.sectionTitle}>Advanced Applications</div>
-          <div style={S.row}>
-            <label style={S.label}>
-              <span>Platform</span>
-              <select
-                className="ms-input"
-                value={form.advAppPlatform}
-                onChange={(e) => onChange({ advAppPlatform: e.target.value as OppFormData["advAppPlatform"], advAppProducts: [] })}
-              >
-                <option value="">Select platform…</option>
-                <option value="zoom">Zoom</option>
-                <option value="ringcentral">RingCentral</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            <label style={S.label}>
-              <span>Implementation SOW ($)</span>
-              <input className="ms-input" type="number" min={0} value={form.implSow || ""} onChange={(e) => setField("implSow", Number(e.target.value))} placeholder="0" />
-              <span style={S.calcPill}>$2,500 base + 20% of SOW</span>
-            </label>
-          </div>
-          {form.advAppPlatform && form.advAppPlatform !== "other" && (
-            <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 13, color: "#475569", fontWeight: 500, marginBottom: 8 }}>Products</div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}>
-                {(ADV_APP_PRODUCTS[form.advAppPlatform] ?? []).map((p) => (
-                  <label key={p} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer" }}>
-                    <input
-                      type="checkbox"
-                      checked={form.advAppProducts.includes(p)}
-                      onChange={(e) => setField("advAppProducts", e.target.checked ? [...form.advAppProducts, p] : form.advAppProducts.filter((x) => x !== p))}
-                      style={{ accentColor: "#03395f" }}
-                    />
-                    {p}
-                  </label>
-                ))}
-              </div>
+      <div style={S.section}>
+        <div style={S.sectionTitle}>Advanced Applications</div>
+
+        {/* Checkbox — shown for every type except the standalone "Advanced Applications" */}
+        {form.oppType !== "Advanced Applications" && (
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={form.advAppEnabled}
+              onChange={(e) => setField("advAppEnabled", e.target.checked)}
+              style={{ accentColor: "#03395f" }}
+            />
+            Include Advanced Applications add-on
+            {advAppIncluded && (
+              <span style={{ fontSize: 11, background: "rgba(34,197,94,0.12)", color: "#15803d", border: "1px solid rgba(34,197,94,0.3)", borderRadius: 4, padding: "1px 7px", fontWeight: 600 }}>
+                Included with CCaaS
+              </span>
+            )}
+          </label>
+        )}
+
+        {/* Full picker — visible whenever active */}
+        {advAppActive && (
+          <>
+            <div style={advAppShowSow ? S.row : { marginBottom: 14 }}>
+              <label style={S.label}>
+                <span>Platform</span>
+                <select
+                  className="ms-input"
+                  value={form.advAppPlatform}
+                  onChange={(e) => onChange({ advAppPlatform: e.target.value as OppFormData["advAppPlatform"], advAppProducts: [] })}
+                >
+                  <option value="">Select platform…</option>
+                  <option value="zoom">Zoom</option>
+                  <option value="ringcentral">RingCentral</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              {advAppShowSow && (
+                <label style={S.label}>
+                  <span>Implementation SOW ($)</span>
+                  <input
+                    className="ms-input"
+                    type="number"
+                    min={0}
+                    value={form.implSow || ""}
+                    onChange={(e) => setField("implSow", Number(e.target.value))}
+                    placeholder="0"
+                  />
+                  <span style={S.calcPill}>$2,500 base + 20% of SOW</span>
+                </label>
+              )}
             </div>
-          )}
-          {form.advAppPlatform === "other" && (
-            <label style={{ ...S.label, marginBottom: 14 }}>
-              <span>Description</span>
-              <input className="ms-input" value={form.advAppOtherDesc} onChange={(e) => setField("advAppOtherDesc", e.target.value)} placeholder="Describe the advanced application…" />
-            </label>
-          )}
-          {canOverride && (
-            <label style={S.ovr}>
-              <span>Override Advanced App Price <span style={S.overrideTag}>ADMIN</span></span>
-              <input
-                className="ms-input"
-                type="number"
-                min={0}
-                value={form.ovrAdvApp ?? ""}
-                onChange={(e) => setField("ovrAdvApp", e.target.value === "" ? null : Number(e.target.value))}
-                placeholder={`Calc: ${fmtFull(calc.advAppCalc)}`}
-                style={form.ovrAdvApp != null ? S.overrideActive : {}}
-              />
-              {form.ovrAdvApp != null && <button type="button" onClick={() => setField("ovrAdvApp", null)} style={{ fontSize: 11, color: "#f59e0b", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>Clear override</button>}
-            </label>
-          )}
-        </div>
-      )}
+
+            {/* Product checkboxes */}
+            {form.advAppPlatform && form.advAppPlatform !== "other" && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 13, color: "#475569", fontWeight: 500, marginBottom: 8 }}>Products</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px 20px" }}>
+                  {(ADV_APP_PRODUCTS[form.advAppPlatform] ?? []).map((p) => (
+                    <label key={p} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#475569", cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={form.advAppProducts.includes(p)}
+                        onChange={(e) => setField("advAppProducts", e.target.checked ? [...form.advAppProducts, p] : form.advAppProducts.filter((x) => x !== p))}
+                        style={{ accentColor: "#03395f" }}
+                      />
+                      {p}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {form.advAppPlatform === "other" && (
+              <label style={{ ...S.label, marginBottom: 14 }}>
+                <span>Description</span>
+                <input
+                  className="ms-input"
+                  value={form.advAppOtherDesc}
+                  onChange={(e) => setField("advAppOtherDesc", e.target.value)}
+                  placeholder="Describe the advanced application…"
+                />
+              </label>
+            )}
+
+            {/* "Included" info note when CCaaS is involved */}
+            {advAppIncluded && (
+              <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 8, padding: "10px 14px", fontSize: 12, color: "#166534", marginBottom: 14 }}>
+                Advanced Application support is included within your CCaaS engagement — no additional line item. The products selected above will be documented in the agreement.
+              </div>
+            )}
+
+            {/* Override — only when the price is actually being calculated */}
+            {canOverride && advAppPriced && (
+              <label style={S.ovr}>
+                <span>Override Advanced App Price <span style={S.overrideTag}>ADMIN</span></span>
+                <input
+                  className="ms-input"
+                  type="number"
+                  min={0}
+                  value={form.ovrAdvApp ?? ""}
+                  onChange={(e) => setField("ovrAdvApp", e.target.value === "" ? null : Number(e.target.value))}
+                  placeholder={`Calc: ${fmtFull(calc.advAppCalc)}`}
+                  style={form.ovrAdvApp != null ? S.overrideActive : {}}
+                />
+                {form.ovrAdvApp != null && (
+                  <button type="button" onClick={() => setField("ovrAdvApp", null)} style={{ fontSize: 11, color: "#f59e0b", background: "none", border: "none", cursor: "pointer", textAlign: "left", padding: 0 }}>
+                    Clear override
+                  </button>
+                )}
+              </label>
+            )}
+          </>
+        )}
+
+        {/* Prompt when not yet active */}
+        {!advAppActive && (
+          <div style={{ fontSize: 13, color: "#94a3b8" }}>
+            {form.oppType === "Advanced Applications" ? "Select a platform above to get started." : "Check the box above to add Advanced Applications to this proposal."}
+          </div>
+        )}
+      </div>
 
       {/* ── MSO ─────────────────────────────────────────────────────────────── */}
       <div style={S.section}>
