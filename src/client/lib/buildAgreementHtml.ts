@@ -398,7 +398,6 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
   const startDate = fmtDate(d.contractStart);
   const endDate = fmtDate(d.contractEnd);
   const users = d.ucaasUsers || 0;
-  const ccaasLic = d.ccaasLicensing || 0;
   const afterHours = d.afterHoursRate ?? 165;
   const advRate = d.advancedTaskRate ?? 145;
   const verStr = versionNum === 0 ? "Draft" : `v${versionNum}`;
@@ -461,7 +460,6 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       ${calc.minApplied ? '<div class="pricing-note">Annual minimum of $2,500.00 applied \u2014 seat count pricing falls below the baseline commitment.</div>' : ""}
   ` : "";
 
-  const implSow = d.implSow || 0;
   const ccaasTotal = calc.ccaasSup + calc.implSup;
   const ccaasSection = showCCaaS ? `
       <div class="section-header">
@@ -720,7 +718,6 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
   const startDate = fmtDate(d.contractStart);
   const endDate = fmtDate(d.contractEnd);
   const users = d.ucaasUsers || 0;
-  const ccaasLic = d.ccaasLicensing || 0;
   const afterHours = d.afterHoursRate ?? 165;
   const advRate = d.advancedTaskRate ?? 145;
   const refNum = `PF-${new Date().getFullYear()}-${String(versionNum).padStart(3, "0")}`;
@@ -743,7 +740,6 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
         <div class="sdli-price">${fmtFull(calc.ucaasSup)}/yr</div>
       </div>` : "";
 
-  const sigImplSow = d.implSow || 0;
   const sigCcaasTotal = calc.ccaasSup + calc.implSup;
   const ccaasLineItem = showCCaaS && sigCcaasTotal > 0 ? `
       <div class="sd-line-item">
