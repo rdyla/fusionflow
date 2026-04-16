@@ -115,11 +115,11 @@ function sharedStyles(): string {
       .sig-doc .sd-party-role { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
       .sig-doc .sd-party-name { font-size: 14px; font-weight: 700; color: #0d1b2e; }
       .sig-doc .sd-party-sub { font-size: 11px; color: #64748b; margin-top: 1px; }
-      .sig-doc .sd-body { padding: 28px 44px 36px; }
-      .sig-doc .sd-recital { font-size: 12.5px; color: #4a5568; line-height: 1.75; padding-bottom: 20px; margin-bottom: 20px; border-bottom: 1px solid #f0f4f8; }
+      .sig-doc .sd-body { padding: 20px 44px 28px; }
+      .sig-doc .sd-recital { font-size: 12.5px; color: #4a5568; line-height: 1.7; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 1px solid #f0f4f8; }
       .sig-doc .sd-recital strong { color: #0d1b2e; }
-      .sig-doc .sd-section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; margin-bottom: 10px; margin-top: 22px; padding-bottom: 5px; border-bottom: 1px solid #f0f4f8; }
-      .sig-doc .sd-line-item { display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f7fafc; gap: 12px; }
+      .sig-doc .sd-section-label { font-size: 9px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; margin-top: 16px; padding-bottom: 4px; border-bottom: 1px solid #f0f4f8; }
+      .sig-doc .sd-line-item { display: flex; align-items: center; padding: 10px 0; border-bottom: 1px solid #f7fafc; gap: 12px; }
       .sig-doc .sd-line-item:last-child { border-bottom: none; }
       .sig-doc .sdli-desc { flex: 1; }
       .sig-doc .sdli-name { font-size: 13px; font-weight: 600; color: #1e293b; }
@@ -135,7 +135,7 @@ function sharedStyles(): string {
       .sig-doc .sd-total-val { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: #0d1b2e; }
       .sig-doc .sd-total-row.grand .sd-total-val { font-family: 'DM Serif Display', serif; font-size: 26px; color: #4dd0c4; font-weight: 400; }
       .sig-doc .sd-coverage-list { list-style: none; padding: 0; margin: 0; }
-      .sig-doc .sd-coverage-list li { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #f7fafc; align-items: flex-start; font-size: 12.5px; color: #374151; }
+      .sig-doc .sd-coverage-list li { display: flex; gap: 12px; padding: 6px 0; border-bottom: 1px solid #f7fafc; align-items: flex-start; font-size: 12.5px; color: #374151; }
       .sig-doc .sd-coverage-list li:last-child { border-bottom: none; }
       .sig-doc .sd-cov-num { font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; color: #b0bec5; min-width: 20px; margin-top: 2px; }
       .sig-doc .sd-cov-body strong { color: #1e293b; }
@@ -143,13 +143,13 @@ function sharedStyles(): string {
       .sig-doc .sd-term { font-size: 12.5px; color: #374151; line-height: 1.8; }
       .sig-doc .sd-term strong { color: #0d1b2e; }
       .sig-doc .sd-term-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 16px; margin-top: 10px; font-size: 12.5px; color: #166534; font-weight: 500; line-height: 1.6; }
-      .sig-doc .sd-sig-section { margin-top: 28px; padding-top: 22px; border-top: 2px solid #0d1b2e; }
-      .sig-doc .sd-sig-preamble { font-size: 11.5px; color: #64748b; line-height: 1.7; margin-bottom: 28px; }
-      .sig-doc .sd-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+      .sig-doc .sd-sig-section { margin-top: 20px; padding-top: 16px; border-top: 2px solid #0d1b2e; }
+      .sig-doc .sd-sig-preamble { font-size: 11.5px; color: #64748b; line-height: 1.7; margin-bottom: 20px; }
+      .sig-doc .sd-sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
       .sig-doc .sd-sig-party-label { font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
       .sig-doc .sd-sig-party-name { font-size: 14px; font-weight: 700; color: #0d1b2e; margin-bottom: 18px; }
-      .sig-doc .sd-sig-field { margin-bottom: 18px; }
-      .sig-doc .sd-sig-line { height: 38px; border-bottom: 1px solid #1e293b; margin-bottom: 4px; }
+      .sig-doc .sd-sig-field { margin-bottom: 14px; }
+      .sig-doc .sd-sig-line { height: 30px; border-bottom: 1px solid #1e293b; margin-bottom: 4px; }
       .sig-doc .sd-sig-field-label { font-size: 9px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; }
       .sig-doc .sd-footer { margin-top: 20px; padding-top: 14px; border-top: 1px solid #f0f4f8; font-size: 10px; color: #b0bec5; text-align: center; line-height: 1.6; }
 
@@ -164,7 +164,7 @@ function sharedStyles(): string {
         .sig-doc .sd-parties, .sig-doc .sd-totals, .sig-doc .sd-recital, .sig-doc .sd-term-box, .sig-doc .sd-scope
         { break-inside: avoid; page-break-inside: avoid; }
         .agreement-doc .sig-band { break-inside: avoid; page-break-inside: avoid; break-before: avoid-page; page-break-before: avoid; }
-        .sig-doc .sd-sig-section { break-inside: avoid; page-break-inside: avoid; break-before: always; page-break-before: always; }
+        .sig-doc .sd-sig-section { break-inside: avoid; page-break-inside: avoid; }
         .mso-section, .mso-card, .mso-panels, .mso-sla-table, .mso-note { break-inside: avoid; page-break-inside: avoid; }
         .agreement-doc .pricing-table tr, .sig-doc .sd-line-item, .sig-doc .sd-total-row { break-inside: avoid; page-break-inside: avoid; }
       }
@@ -778,7 +778,7 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
       <div class="sd-total-row"><span class="sd-total-label">Term Length</span><span class="sd-total-val" style="font-family:'IBM Plex Sans',sans-serif;">${term} Year${term > 1 ? "s" : ""} &nbsp;(${startDate} \u2013 ${endDate})</span></div>
       <div class="sd-total-row grand"><span class="sd-total-label">Total Contract Value</span><span class="sd-total-val">${fmtFull(calc.tcv)}</span></div>
     </div>
-    <div class="sd-section-label" style="margin-top:26px;">Support Coverage</div>
+    <div class="sd-section-label" style="margin-top:18px;">Support Coverage</div>
     <ul class="sd-coverage-list">
       <li><span class="sd-cov-num">01</span><span class="sd-cov-body"><strong>Business Hours MACs (7am\u20135pm PST)</strong> \u2014 Simple adds, moves, and changes at no additional charge during standard business hours.</span></li>
       <li><span class="sd-cov-num">02</span><span class="sd-cov-body"><strong>After-Hours Labor at ${fmtFull(afterHours)}/hr</strong> \u2014 Discounted rate for support engagements over 30 minutes outside business hours.</span></li>
@@ -788,7 +788,7 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
       <li><span class="sd-cov-num">06</span><span class="sd-cov-body"><strong>Quarterly Optimization &amp; Coaching</strong> \u2014 System reviews, call flow audits, end-user training, and strategic planning sessions.</span></li>
       <li><span class="sd-cov-num">07</span><span class="sd-cov-body"><strong>Manufacturer Support Access</strong> \u2014 Option to engage directly with manufacturer support alongside Packet Fusion coverage.</span></li>
     </ul>
-    <div class="sd-section-label" style="margin-top:26px;">Outside Scope of Agreement</div>
+    <div class="sd-section-label" style="margin-top:18px;">Outside Scope of Agreement</div>
     <div class="sd-scope">
       <p style="font-size:12px;color:#64748b;margin-bottom:10px;">The following are available as separately scoped engagements at preferred partner rates:</p>
       <div style="display:flex;flex-direction:column;gap:7px;">
@@ -797,7 +797,7 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
       </div>
       <p style="font-size:11px;color:#94a3b8;margin-top:10px;margin-bottom:0;">Contact your Packet Fusion account team for a scoped proposal on either item.</p>
     </div>
-    <div class="sd-section-label" style="margin-top:26px;">Term &amp; Renewal</div>
+    <div class="sd-section-label" style="margin-top:18px;">Term &amp; Renewal</div>
     <div class="sd-term">
       <p>This Agreement co-terms with Customer\u2019s Packet Fusion Master Services Agreement and/or underlying provider subscription. Unless cancelled in writing${calc.msoEnabled ? " at least 30 days prior to renewal" : ""}, CloudSupport${calc.msoEnabled ? " and the MSO Add-On" : ""} will automatically renew for successive terms at the then-current renewal rate.</p>
       <div class="sd-term-box">
