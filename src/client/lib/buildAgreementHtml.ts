@@ -293,7 +293,7 @@ function buildMsoSection(d: OppFormData, calc: OppCalcResult): string {
 }
 
 const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
-  "Revenue Accelerator": {
+  "Zoom Revenue Accelerator (ZRA)": {
     title: "Zoom Revenue Accelerator (ZRA)",
     bullets: [
       "Support for call recording, transcription, and conversation intelligence features",
@@ -303,7 +303,7 @@ const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
       "Guidance on optimization of sales workflows and coaching metrics",
     ],
   },
-  "AI Expert Assist": {
+  "Zoom AI Expert Assist": {
     title: "Zoom AI Expert Assist",
     bullets: [
       "Support for real-time agent assist configuration, including knowledge surfacing and recommendations",
@@ -313,7 +313,7 @@ const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
       "Support for reporting and agent performance insights",
     ],
   },
-  "Virtual Agent": {
+  "Zoom Virtual Agent (ZVA)": {
     title: "Zoom Virtual Agent (ZVA)",
     bullets: [
       "Ongoing support for Virtual Agent configuration, including intents, flows, and routing logic",
@@ -323,7 +323,7 @@ const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
       "Assistance with reporting, analytics, and deflection optimization",
     ],
   },
-  "Quality Management (QM)": {
+  "Zoom Quality Management (QM)": {
     title: "Zoom Quality Management (QM)",
     bullets: [
       "Support for call evaluation forms, scoring models, and workflows",
@@ -333,7 +333,17 @@ const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
       "Guidance on best practices for agent performance management",
     ],
   },
-  air: {
+  "Zoom Workforce Management (WFM)": {
+    title: "Zoom Workforce Management (WFM)",
+    bullets: [
+      "Support for forecasting, scheduling, and adherence configuration",
+      "Assistance with shift planning, intraday management, and schedule adjustments",
+      "Troubleshooting WFM integrations with CCaaS and workforce data sources",
+      "Support for reporting dashboards and workforce analytics",
+      "Guidance on optimizing agent utilization and scheduling efficiency",
+    ],
+  },
+  "RingCX AI (RAIR)": {
     title: "RingCentral AIR \u2014 AI Receptionist",
     bullets: [
       "Ongoing support for AI Receptionist configuration, including call handling logic, greetings, and routing rules",
@@ -343,7 +353,17 @@ const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
       "Guidance on optimizing automation to improve caller experience and reduce misroutes",
     ],
   },
-  ava: {
+  "RingSense (AI Conversation Intelligence)": {
+    title: "RingSense \u2014 AI Conversation Intelligence",
+    bullets: [
+      "Support for call recording, transcription, and AI-driven conversation analysis features",
+      "Assistance with configuration of keywords, trackers, and coaching insights",
+      "Troubleshooting CRM integrations (e.g., Salesforce, HubSpot) related to RingSense",
+      "Support for reporting dashboards, scorecards, and performance analytics",
+      "Guidance on optimizing coaching workflows and agent performance programs",
+    ],
+  },
+  "RingCX AVA": {
     title: "RingCentral AVA \u2014 AI Virtual Agent",
     bullets: [
       "Ongoing support for Virtual Agent configuration, including intents, dialog flows, and escalation logic",
@@ -353,7 +373,7 @@ const PRODUCT_SCOPE: Record<string, { title: string; bullets: string[] }> = {
       "Assistance with analytics, reporting, and containment/deflection optimization",
     ],
   },
-  ace: {
+  "RingCX ACE": {
     title: "RingCentral ACE \u2014 Conversation Intelligence",
     bullets: [
       "Support for call recording, transcription, and AI-driven conversation analysis features",
@@ -441,6 +461,8 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       ${calc.minApplied ? '<div class="pricing-note">Annual minimum of $2,500.00 applied \u2014 seat count pricing falls below the baseline commitment.</div>' : ""}
   ` : "";
 
+  const implSow = d.implSow || 0;
+  const ccaasTotal = calc.ccaasSup + calc.implSup;
   const ccaasSection = showCCaaS ? `
       <div class="section-header">
         <div class="section-num">${secNum()}</div>
@@ -451,12 +473,20 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
         <table class="pricing-table">
           <thead><tr><th>Component</th><th class="price-col">Annual Investment</th></tr></thead>
           <tbody>
-            ${ccaasLic > 0
-              ? `<tr>
-              <td><div class="label-cell">Contact Center Support</div><div class="sub-cell">CCaaS CloudSupport</div></td>
+            ${ccaasLic > 0 || implSow > 0 ? `
+            ${ccaasLic > 0 ? `<tr>
+              <td><div class="label-cell">Contact Center Support</div><div class="sub-cell">30% of annual CCaaS licensing (${fmtFull(ccaasLic)}/yr)</div></td>
               <td class="price-col">${fmtFull(calc.ccaasSup)}</td>
-            </tr>`
-              : `<tr><td colspan="2" style="color:#94a3b8;font-style:italic;text-align:center;padding:20px;">No CCaaS components configured</td></tr>`}
+            </tr>` : ""}
+            ${implSow > 0 ? `<tr>
+              <td><div class="label-cell">Implementation Support</div><div class="sub-cell">20% of implementation SOW (${fmtFull(implSow)})</div></td>
+              <td class="price-col">${fmtFull(calc.implSup)}</td>
+            </tr>` : ""}
+            ${ccaasLic > 0 && implSow > 0 ? `<tr style="background:#f8fafc;">
+              <td style="font-weight:700;color:#0d1b2e;font-size:13px;">CCaaS CloudSupport Total</td>
+              <td class="price-col" style="font-size:15px;">${fmtFull(ccaasTotal)}</td>
+            </tr>` : ""}
+            ` : `<tr><td colspan="2" style="color:#94a3b8;font-style:italic;text-align:center;padding:20px;">No CCaaS components configured</td></tr>`}
           </tbody>
           <tfoot><tr><td colspan="2">Usage, consumption, DIDs, and telco charges are excluded from CCaaS licensing. Auto-renews and co-terms with Customer\u2019s Subscription Term.</td></tr></tfoot>
         </table>
@@ -701,15 +731,25 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
         <div class="sdli-price">${fmtFull(calc.ucaasSup)}/yr</div>
       </div>` : "";
 
-  const ccaasLineItem = (showCCaaS && ccaasLic > 0) ? `
-      <div class="sd-line-item">
+  const sigImplSow = d.implSow || 0;
+  const ccaasLineItem = showCCaaS && (ccaasLic > 0 || sigImplSow > 0) ? `
+      ${ccaasLic > 0 ? `<div class="sd-line-item">
         <div class="sdli-desc">
           <div class="sdli-name">CCaaS CloudSupport \u2014 Contact Center</div>
-          <div class="sdli-note">Base support</div>
+          <div class="sdli-note">30% of annual CCaaS licensing \u00b7 ${fmtFull(ccaasLic)}/yr</div>
         </div>
         <div class="sdli-qty">\u2014</div>
         <div class="sdli-price">${fmtFull(calc.ccaasSup)}/yr</div>
-      </div>` : "";
+      </div>` : ""}
+      ${sigImplSow > 0 ? `<div class="sd-line-item">
+        <div class="sdli-desc">
+          <div class="sdli-name">CCaaS CloudSupport \u2014 Implementation</div>
+          <div class="sdli-note">20% of implementation SOW \u00b7 ${fmtFull(sigImplSow)}</div>
+        </div>
+        <div class="sdli-qty">\u2014</div>
+        <div class="sdli-price">${fmtFull(calc.implSup)}/yr</div>
+      </div>` : ""}
+  ` : "";
 
   const customLineItems = (d.customLines && d.customLines.length > 0)
     ? d.customLines.map(l => `
