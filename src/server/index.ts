@@ -28,6 +28,7 @@ import customerRoutes from "./routes/customers";
 import prospectingRoutes from "./routes/prospecting";
 import myTasksRoutes from "./routes/myTasks";
 import supportRoutes from "./routes/support";
+import cloudSupportRoutes from "./routes/cloudSupport";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -71,6 +72,7 @@ app.route("/api/my-tasks", myTasksRoutes);
 app.route("/api/admin", templateRoutes);
 app.route("/api/projects", templateRoutes);
 app.route("/api/support", supportRoutes);
+app.route("/api/cloudsupport", cloudSupportRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means

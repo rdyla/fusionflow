@@ -21,6 +21,8 @@ import CustomersPage from "../pages/CustomersPage";
 import CustomerDetailPage from "../pages/CustomerDetailPage";
 import ProspectingPage from "../pages/ProspectingPage";
 import ProspectListDetailPage from "../pages/ProspectListDetailPage";
+import CloudSupportPage from "../pages/CloudSupportPage";
+import CloudSupportWorkspacePage from "../pages/CloudSupportWorkspacePage";
 import SupportWrapper from "../components/layout/SupportWrapper";
 import SupportCasesPage from "../pages/SupportCasesPage";
 import SupportCaseDetailPage from "../pages/SupportCaseDetailPage";
@@ -43,6 +45,8 @@ export default function Router() {
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/solutions" element={<SolutionsPage />} />
+          <Route path="/solutions/cloudsupport" element={<CloudSupportPage />} />
+          <Route path="/solutions/cloudsupport/:id" element={<CloudSupportWorkspacePage />} />
           <Route path="/solutions/:id" element={<SolutionDetailPage />} />
           <Route path="/optimize" element={<OptimizePage />} />
           <Route path="/optimize/:projectId" element={<OptimizeAccountPage />} />

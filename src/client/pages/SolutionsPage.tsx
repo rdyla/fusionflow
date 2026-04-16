@@ -260,7 +260,23 @@ export default function SolutionsPage() {
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <div className="ms-page-header">
-        <h1 className="ms-page-title">Solutions</h1>
+        <div>
+          <h1 className="ms-page-title">Solutions</h1>
+          {currentRole !== "client" && (
+            <div style={{ display: "flex", gap: 0, marginTop: 8, borderBottom: "1px solid #e2e8f0" }}>
+              <span style={{ padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#03395f", borderBottom: "2px solid #03395f", cursor: "default" }}>
+                Implementation
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate("/solutions/cloudsupport")}
+                style={{ padding: "8px 18px", fontSize: 13, fontWeight: 400, color: "#64748b", background: "none", border: "none", borderBottom: "2px solid transparent", cursor: "pointer" }}
+              >
+                Cloud Support
+              </button>
+            </div>
+          )}
+        </div>
         {currentRole !== "client" && (
           <button className="ms-btn-primary" onClick={() => setShowCreate(true)}>+ New Solution</button>
         )}
