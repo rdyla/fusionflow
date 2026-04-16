@@ -36,6 +36,7 @@ export default function SupportCasesPage() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isStaff = user?.isInternal ?? false;
+  const userReady = user !== null;
 
   const fetchCases = (searchTerm?: string, mine?: boolean) => {
     if (searchTerm) setSearching(true); else setLoading(true);
@@ -46,7 +47,10 @@ export default function SupportCasesPage() {
       .finally(() => { setLoading(false); setSearching(false); });
   };
 
-  useEffect(() => { fetchCases(); }, [mineOnly, isStaff]);
+  useEffect(() => {
+    if (!userReady) return;
+    fetchCases();
+  }, [mineOnly, isStaff, userReady]);
 
   const handleSearch = (value: string) => {
     setSearch(value);
