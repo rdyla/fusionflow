@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import logoUrl from "../../assets/fusion flow transparent logo.png";
 import { api, type User, type SystemStatusResponse, type Notification, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
@@ -50,7 +50,10 @@ export default function AppShell() {
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const isMobile = useIsMobile();
+
+  const moduleLabel = location.pathname.startsWith("/support") ? "Customer Support" : "Onboarding & Implementation";
 
   useEffect(() => { setDrawerOpen(false); }, [navigate]);
 
@@ -158,12 +161,14 @@ export default function AppShell() {
             {false && canProspect && (
               <SideLink to="/prospecting" icon={NAV_ICONS.prospecting} onClick={() => setDrawerOpen(false)}>Prospecting</SideLink>
             )}
+            <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
           </>
         )}
         {isClient && (
           <>
             <SideLink to="/projects" icon={NAV_ICONS.projects} onClick={() => setDrawerOpen(false)}>Projects</SideLink>
             <SideLink to="/solutions" icon={NAV_ICONS.solutions} onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
+            <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
           </>
         )}
         {isAdmin && (
@@ -278,7 +283,7 @@ export default function AppShell() {
               </>
             )}
             <span style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? 14 : 13, fontWeight: 700, color: "rgba(255,255,255,0.85)", letterSpacing: "0.02em" }}>
-              {isMobile ? "FusionFlow360" : "Onboarding & Implementation"}
+              {isMobile ? "FusionFlow360" : moduleLabel}
             </span>
           </div>
 
@@ -529,6 +534,11 @@ const NAV_ICONS = {
   adminUsers: (
     <I>
       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+    </I>
+  ),
+  support: (
+    <I>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
     </I>
   ),
 };

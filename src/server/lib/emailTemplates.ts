@@ -1,5 +1,14 @@
 const APP_NAME = "FusionFlow360";
 
+function escapeHtml(s: string | null | undefined): string {
+  return (s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function base(body: string, appUrl = ""): string {
   const logoUrl = appUrl ? `${appUrl}/logo.png` : "";
   return `<!DOCTYPE html>
@@ -60,23 +69,27 @@ export function userInvite(data: {
     partner_ae: "Partner AE",
   };
 
+  const recipientName = escapeHtml(data.recipientName);
+  const invitedByName = escapeHtml(data.invitedByName);
+  const roleDisplay = escapeHtml(roleLabel[data.role] ?? data.role);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Welcome to FusionFlow360</h2>
     <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);line-height:1.6;">
-      Hi ${data.recipientName},<br><br>
-      <strong style="color:rgba(240,246,255,0.9);">${data.invitedByName}</strong> has added you to
+      Hi ${recipientName},<br><br>
+      <strong style="color:rgba(240,246,255,0.9);">${invitedByName}</strong> has added you to
       <strong style="color:#00c8e0;">FusionFlow360</strong> — Packet Fusion's intelligence platform
       for managing projects, tracking risks, and keeping every stakeholder aligned in real time.
     </p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
-        ${detail("Your Role", pill(roleLabel[data.role] ?? data.role, "#0891b2"))}
+        ${detail("Your Role", pill(roleDisplay, "#0891b2"))}
         ${detail("Sign In", "Use your Packet Fusion SSO credentials")}
         ${detail("Access", "Available immediately — no additional setup required")}
       </table>
     </div>
     <p style="margin:12px 0 0;font-size:13px;color:rgba(240,246,255,0.45);">
-      If you have questions, reach out to ${data.invitedByName} or your team administrator.
+      If you have questions, reach out to ${invitedByName} or your team administrator.
     </p>
     ${ctaButton("Open FusionFlow360", data.appUrl)}
   `, data.appUrl);
@@ -96,15 +109,21 @@ export function taskAssigned(data: {
   const priorityColor: Record<string, string> = { high: "#d13438", medium: "#ff8c00", low: "#0891b2" };
   const pc = data.priority ? priorityColor[data.priority] ?? "#94a3b8" : "#94a3b8";
 
+  const assigneeName = escapeHtml(data.assigneeName);
+  const taskTitle = escapeHtml(data.taskTitle);
+  const projectName = escapeHtml(data.projectName);
+  const dueDate = escapeHtml(data.dueDate ?? "Not set");
+  const priority = escapeHtml(data.priority ?? "");
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a task</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.assigneeName}, a task has been assigned to you in FusionFlow360.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${assigneeName}, a task has been assigned to you in FusionFlow360.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${data.taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
-        ${detail("Due Date", data.dueDate ?? "Not set")}
-        ${detail("Priority", data.priority ? pill(data.priority, pc) : "—")}
+        ${detail("Project", projectName)}
+        ${detail("Due Date", dueDate)}
+        ${detail("Priority", priority ? pill(priority, pc) : "—")}
       </table>
     </div>
     ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
@@ -121,14 +140,19 @@ export function taskBlocked(data: {
   appUrl: string;
   projectId: string;
 }): string {
+  const pmName = escapeHtml(data.pmName);
+  const taskTitle = escapeHtml(data.taskTitle);
+  const projectName = escapeHtml(data.projectName);
+  const assigneeName = escapeHtml(data.assigneeName ?? "Unassigned");
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Task Blocked</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.pmName}, a task on your project has been marked as blocked and may need your attention.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a task on your project has been marked as blocked and may need your attention.</p>
     <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${data.taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
-        ${detail("Assignee", data.assigneeName ?? "Unassigned")}
+        ${detail("Project", projectName)}
+        ${detail("Assignee", assigneeName)}
         ${detail("Status", pill("Blocked", "#d13438"))}
       </table>
     </div>
@@ -162,15 +186,20 @@ export function pmTaskUpdate(data: {
   const sc = data.status ? statusColor[data.status] ?? "#94a3b8" : "#94a3b8";
   const sl = data.status ? statusLabel[data.status] ?? data.status : "—";
 
+  const pmName = escapeHtml(data.pmName);
+  const projectName = escapeHtml(data.projectName);
+  const updatedByName = escapeHtml(data.updatedByName);
+  const taskTitle = escapeHtml(data.taskTitle);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Task Updated</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.pmName}, a task on your project <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> was updated by <strong style="color:rgba(240,246,255,0.9);">${data.updatedByName}</strong>.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a task on your project <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> was updated by <strong style="color:rgba(240,246,255,0.9);">${updatedByName}</strong>.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${data.taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
+        ${detail("Project", projectName)}
         ${detail("Status", data.status ? pill(sl, sc) : "—")}
-        ${detail("Updated By", data.updatedByName)}
+        ${detail("Updated By", updatedByName)}
       </table>
     </div>
     ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
@@ -191,14 +220,19 @@ export function riskAssigned(data: {
   const severityColor: Record<string, string> = { high: "#d13438", medium: "#ff8c00", low: "#0891b2" };
   const sc = data.severity ? severityColor[data.severity] ?? "#94a3b8" : "#94a3b8";
 
+  const ownerName = escapeHtml(data.ownerName);
+  const projectName = escapeHtml(data.projectName);
+  const riskTitle = escapeHtml(data.riskTitle);
+  const riskDescription = escapeHtml(data.riskDescription);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a risk</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.ownerName}, you have been assigned as the owner of a risk on <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> in FusionFlow360.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${ownerName}, you have been assigned as the owner of a risk on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> in FusionFlow360.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${data.riskTitle}</div>
-      ${data.riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${data.riskDescription}</div>` : ""}
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${riskTitle}</div>
+      ${riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${riskDescription}</div>` : ""}
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
+        ${detail("Project", projectName)}
         ${detail("Severity", data.severity ? pill(data.severity, sc) : "—")}
       </table>
     </div>
@@ -224,14 +258,19 @@ export function pmRiskNotification(data: {
   const headerColor = data.severity === "high" ? "#ff8c00" : "#f0f6ff";
   const action = data.isNew ? "logged on" : "updated on";
 
+  const pmName = escapeHtml(data.pmName);
+  const projectName = escapeHtml(data.projectName);
+  const riskTitle = escapeHtml(data.riskTitle);
+  const riskDescription = escapeHtml(data.riskDescription);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:${headerColor};">Risk ${data.isNew ? "Added" : "Updated"}</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.pmName}, a risk has been ${action} <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong>.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a risk has been ${action} <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong>.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${data.riskTitle}</div>
-      ${data.riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${data.riskDescription}</div>` : ""}
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${riskTitle}</div>
+      ${riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${riskDescription}</div>` : ""}
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
+        ${detail("Project", projectName)}
         ${detail("Severity", data.severity ? pill(data.severity, sc) : "—")}
         ${detail("Status", data.status ? pill(data.status, "#94a3b8") : "—")}
       </table>
@@ -253,17 +292,21 @@ export function pmNoteAdded(data: {
 }): string {
   const visibilityColor: Record<string, string> = { internal: "#0891b2", partner: "#7c3aed", public: "#22c55e" };
   const vc = visibilityColor[data.visibility] ?? "#94a3b8";
-  const preview = data.noteBody.length > 200 ? data.noteBody.slice(0, 200) + "…" : data.noteBody;
+  const pmName = escapeHtml(data.pmName);
+  const authorName = escapeHtml(data.authorName);
+  const projectName = escapeHtml(data.projectName);
+  const raw = data.noteBody.length > 200 ? data.noteBody.slice(0, 200) + "…" : data.noteBody;
+  const preview = escapeHtml(raw);
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">New Note on Your Project</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.pmName}, <strong style="color:rgba(240,246,255,0.9);">${data.authorName}</strong> added a note to <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong>.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, <strong style="color:rgba(240,246,255,0.9);">${authorName}</strong> added a note to <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong>.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:13px;color:rgba(240,246,255,0.8);line-height:1.6;margin-bottom:12px;">${preview}</div>
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
+        ${detail("Project", projectName)}
         ${detail("Visibility", pill(data.visibility, vc))}
-        ${detail("Author", data.authorName)}
+        ${detail("Author", authorName)}
       </table>
     </div>
     ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
@@ -284,14 +327,19 @@ export function goLiveReminder(data: {
   const urgency = data.daysOut === 1 ? "tomorrow" : `in ${data.daysOut} days`;
   const color = data.daysOut === 1 ? "#d13438" : "#ff8c00";
 
+  const recipientName = escapeHtml(data.recipientName);
+  const projectName = escapeHtml(data.projectName);
+  const customerName = escapeHtml(data.customerName);
+  const goLiveDate = escapeHtml(data.goLiveDate);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:${color};">Go-Live ${data.daysOut === 1 ? "Tomorrow" : `in ${data.daysOut} Days`}</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.recipientName}, this is a reminder that <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> is scheduled to go live ${urgency}.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${recipientName}, this is a reminder that <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> is scheduled to go live ${urgency}.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
-        ${data.customerName ? detail("Customer", data.customerName) : ""}
-        ${detail("Go-Live Date", data.goLiveDate)}
+        ${detail("Project", projectName)}
+        ${customerName ? detail("Customer", customerName) : ""}
+        ${detail("Go-Live Date", goLiveDate)}
         ${detail("Days Out", pill(`${data.daysOut} day${data.daysOut !== 1 ? "s" : ""}`, color))}
       </table>
     </div>
@@ -308,13 +356,17 @@ export function projectAtRisk(data: {
   appUrl: string;
   projectId: string;
 }): string {
+  const recipientName = escapeHtml(data.recipientName);
+  const projectName = escapeHtml(data.projectName);
+  const customerName = escapeHtml(data.customerName);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#ff8c00;">Project Health: At Risk</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.recipientName}, the project <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> has been flagged as <strong style="color:#ff8c00;">At Risk</strong> and may need attention.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${recipientName}, the project <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> has been flagged as <strong style="color:#ff8c00;">At Risk</strong> and may need attention.</p>
     <div style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
-        ${data.customerName ? detail("Customer", data.customerName) : ""}
+        ${detail("Project", projectName)}
+        ${customerName ? detail("Customer", customerName) : ""}
         ${detail("Health", pill("At Risk", "#ff8c00"))}
       </table>
     </div>
@@ -332,16 +384,20 @@ export function partnerNotePosted(data: {
   appUrl: string;
   projectId: string;
 }): string {
-  const preview = data.noteBody.length > 200 ? data.noteBody.slice(0, 200) + "…" : data.noteBody;
+  const recipientName = escapeHtml(data.recipientName);
+  const authorName = escapeHtml(data.authorName);
+  const projectName = escapeHtml(data.projectName);
+  const raw = data.noteBody.length > 200 ? data.noteBody.slice(0, 200) + "…" : data.noteBody;
+  const preview = escapeHtml(raw);
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">New Comment on Your Project</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.recipientName}, <strong style="color:rgba(240,246,255,0.9);">${data.authorName}</strong> posted a comment on <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> that is visible to you.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${recipientName}, <strong style="color:rgba(240,246,255,0.9);">${authorName}</strong> posted a comment on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> that is visible to you.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:13px;color:rgba(240,246,255,0.8);line-height:1.6;margin-bottom:12px;">${preview}</div>
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
-        ${detail("Posted By", data.authorName)}
+        ${detail("Project", projectName)}
+        ${detail("Posted By", authorName)}
       </table>
     </div>
     ${ctaButton("View Project", `${data.appUrl}/projects/${data.projectId}`)}
@@ -359,14 +415,19 @@ export function milestoneOverdue(data: {
   appUrl: string;
   projectId: string;
 }): string {
+  const pmName = escapeHtml(data.pmName);
+  const projectName = escapeHtml(data.projectName);
+  const milestoneName = escapeHtml(data.milestoneName);
+  const targetDate = escapeHtml(data.targetDate);
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Milestone Overdue</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${data.pmName}, a milestone on <strong style="color:rgba(240,246,255,0.9);">${data.projectName}</strong> is past its target date.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a milestone on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> is past its target date.</p>
     <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${data.milestoneName}</div>
+      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${milestoneName}</div>
       <table style="border-collapse:collapse;">
-        ${detail("Project", data.projectName)}
-        ${detail("Target Date", data.targetDate)}
+        ${detail("Project", projectName)}
+        ${detail("Target Date", targetDate)}
         ${detail("Days Overdue", pill(`${data.daysOverdue} day${data.daysOverdue !== 1 ? "s" : ""}`, "#d13438"))}
       </table>
     </div>

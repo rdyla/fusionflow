@@ -21,7 +21,11 @@ import CustomersPage from "../pages/CustomersPage";
 import CustomerDetailPage from "../pages/CustomerDetailPage";
 import ProspectingPage from "../pages/ProspectingPage";
 import ProspectListDetailPage from "../pages/ProspectListDetailPage";
-
+import SupportWrapper from "../components/layout/SupportWrapper";
+import SupportCasesPage from "../pages/SupportCasesPage";
+import SupportCaseDetailPage from "../pages/SupportCaseDetailPage";
+import SupportNewCasePage from "../pages/SupportNewCasePage";
+import SupportCaseConfirmationPage from "../pages/SupportCaseConfirmationPage";
 
 export default function Router() {
   return (
@@ -54,6 +58,12 @@ export default function Router() {
           <Route path="/admin/optimize" element={<AdminOptimizePage />} />
           <Route path="/admin/labor" element={<AdminLaborPage />} />
           <Route path="/admin/templates" element={<AdminTemplatesPage />} />
+          <Route element={<SupportWrapper />}>
+            <Route path="/support/cases" element={<SupportCasesPage />} />
+            <Route path="/support/cases/new" element={<SupportNewCasePage />} />
+            <Route path="/support/cases/confirmation" element={<SupportCaseConfirmationPage />} />
+            <Route path="/support/cases/:id" element={<SupportCaseDetailPage />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

@@ -102,6 +102,9 @@ app.post("/verify", async (c) => {
   await c.env.KV.delete(otpKey(email));
 
   const auth = await resolveUserByEmail(c.env, email.trim().toLowerCase());
+  if (auth === "pending") {
+    return c.json({ error: "Your account is pending activation. A Packet Fusion admin will enable your access shortly." }, 403);
+  }
   if (!auth) {
     return c.json({ error: "No access found for this email. Contact your Packet Fusion team for help." }, 403);
   }
@@ -206,6 +209,7 @@ app.get("/sso/callback", async (c) => {
   if (!email) return c.redirect("/login?sso_error=no_email");
 
   const auth = await resolveUserByEmail(c.env, email.trim().toLowerCase());
+  if (auth === "pending") return c.redirect("/login?sso_error=pending");
   if (!auth) return c.redirect("/login?sso_error=no_access");
 
   const sessionId = crypto.randomUUID();

@@ -87,6 +87,22 @@ const MODULES: Module[] = [
       </svg>
     ),
   },
+  {
+    num: "04",
+    tag: "Support",
+    title: "Support",
+    subtitle: "Case Management",
+    desc: "Open, track, and resolve support cases directly with the Packet Fusion team — with full visibility into status, notes, and history.",
+    features: ["CRM-backed case tracking", "File attachments & notes", "Priority & status management", "Escalation engineer assignment"],
+    accent: "#0891b2",
+    glow: "rgba(8,145,178,0.25)",
+    route: "/support/cases",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    ),
+  },
 ];
 
 export default function ModuleSelectPage() {
@@ -113,7 +129,7 @@ export default function ModuleSelectPage() {
   const userRole = user?.role ?? "";
 
   const visibleModules = isClient
-    ? MODULES.filter((m) => m.route === "/dashboard" || m.route === "/solutions").map((m) =>
+    ? MODULES.filter((m) => m.route === "/dashboard" || m.route === "/solutions" || m.route === "/support/cases").map((m) =>
         m.route === "/dashboard" ? { ...m, route: "/projects" } : m
       )
     : MODULES.filter((m) => !m.visibleTo || m.visibleTo.includes(userRole));

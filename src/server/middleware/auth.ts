@@ -31,20 +31,22 @@ async function provisionUser(
   db: D1Database,
   email: string,
   organization: string,
-  role: import("../types").AppRole
+  role: import("../types").AppRole,
+  isActive = true
 ): Promise<AppUser> {
   const id = crypto.randomUUID();
   const namePart = email.split("@")[0];
+  const activeFlag = isActive ? 1 : 0;
 
   await db
     .prepare(
       `INSERT INTO users (id, email, name, organization_name, role, is_active)
-       VALUES (?, ?, ?, ?, ?, 1)`
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, email, namePart, organization, role)
+    .bind(id, email, namePart, organization, role, activeFlag)
     .run();
 
-  return { id, email, name: namePart, organization_name: organization, role, is_active: 1, dynamics_account_id: null, manager_id: null };
+  return { id, email, name: namePart, organization_name: organization, role, is_active: activeFlag, dynamics_account_id: null, manager_id: null };
 }
 
 /**
@@ -52,7 +54,7 @@ async function provisionUser(
  * Returns null if the email has no access.
  * Exported so the OTP verify route can use it to build the session.
  */
-export async function resolveUserByEmail(env: Bindings, email: string): Promise<AuthContext | null> {
+export async function resolveUserByEmail(env: Bindings, email: string): Promise<AuthContext | "pending" | null> {
   let user = await findUserByEmail(env.DB, email);
 
   if (!user) {
@@ -60,7 +62,8 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
     if (domain === "packetfusion.com") {
       user = await provisionUser(env.DB, email, "Packet Fusion", "pm");
     } else if (PARTNER_DOMAINS[domain]) {
-      user = await provisionUser(env.DB, email, PARTNER_DOMAINS[domain], "partner_ae");
+      await provisionUser(env.DB, email, PARTNER_DOMAINS[domain], "partner_ae", false);
+      return "pending";
     } else {
       const contact = await getPortalContact(env, email);
       if (contact) {
@@ -81,7 +84,10 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
     }
   }
 
-  if (!user.is_active) return null;
+  if (!user.is_active) {
+    const domain = email.split("@")[1] ?? "";
+    return PARTNER_DOMAINS[domain] ? "pending" : null;
+  }
 
   return { user, role: user.role, organization: user.organization_name };
 }
@@ -109,6 +115,7 @@ export const authMiddleware: AppMiddleware = async (c, next) => {
     if (impersonateEmail) {
       const target = await findUserByEmail(c.env.DB, impersonateEmail.trim().toLowerCase());
       if (target && target.is_active) {
+        console.log(`[AUDIT] Impersonation: admin=${auth.user.email} target=${target.email} path=${c.req.path} at=${new Date().toISOString()}`);
         c.set("auth", { user: target, role: target.role, organization: target.organization_name });
         await next();
         return;

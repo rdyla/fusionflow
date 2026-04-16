@@ -27,6 +27,7 @@ import inboxRoutes from "./routes/inbox";
 import customerRoutes from "./routes/customers";
 import prospectingRoutes from "./routes/prospecting";
 import myTasksRoutes from "./routes/myTasks";
+import supportRoutes from "./routes/support";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -35,7 +36,7 @@ import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-app.use("*", cors());
+app.use("*", cors({ origin: "https://fusionflow360.com" }));
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -69,6 +70,7 @@ app.route("/api/prospecting", prospectingRoutes);
 app.route("/api/my-tasks", myTasksRoutes);
 app.route("/api/admin", templateRoutes);
 app.route("/api/projects", templateRoutes);
+app.route("/api/support", supportRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means

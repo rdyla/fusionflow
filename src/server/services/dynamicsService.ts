@@ -73,6 +73,22 @@ async function getToken(env: Env): Promise<string> {
   return data.access_token;
 }
 
+/** Low-level authenticated fetch against the D365 Web API. Used by support routes. */
+export async function d365Fetch(env: Env, path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getToken(env);
+  return fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string> ?? {}),
+    },
+  });
+}
+
 async function dynamicsGet<T>(env: Env, path: string): Promise<T> {
   const token = await getToken(env);
   const res = await fetch(`${API_BASE}${path}`, {
