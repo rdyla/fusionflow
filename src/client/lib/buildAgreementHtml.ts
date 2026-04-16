@@ -836,7 +836,11 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
         This ${term}-year Agreement is billed annually at <strong>${fmtFull(calc.annual)}</strong> per year, for a total contract value of <strong>${fmtFull(calc.tcv)}</strong>.${calc.msoEnabled ? ` Includes CloudSupport base services plus the MSO Add-On (${escHtml(sigTierMeta?.label ?? "Custom")} \u2014 ${escHtml(sigTierMeta?.engineer ?? "As scoped")}).` : ""} Term: ${startDate} through ${endDate}.${term > 1 ? " Pricing is subject to escalation upon renewal." : ""}
       </div>
     </div>
-    ${buildMsoSection(d, calc)}
+    ${calc.msoEnabled ? `
+    <div class="sd-section-label" style="margin-top:18px;">MSO Add-On</div>
+    <div style="background:#f0faf8;border:1px solid rgba(0,184,160,0.25);border-radius:7px;padding:11px 14px;font-size:12px;color:#374151;line-height:1.6;">
+      The CloudSupport<sup style="font-size:9px;">+</sup> MSO Add-On (<strong>${escHtml(sigTierMeta?.label ?? "Custom")}</strong> \u2014 ${escHtml(sigTierMeta?.allocation ?? "\u2014")}) is billed annually at <strong>${fmtFull(calc.msoSup)}/yr</strong> and co-terms with this Agreement for the full ${term}-year term. Automatically renews unless cancelled in writing at least 30 days prior to renewal.
+    </div>` : ""}
     <div class="sd-sig-section">
       <p class="sd-sig-preamble">By signing below, each party agrees to the terms of this ${calc.msoEnabled ? "CloudSupport + MSO Agreement" : "CloudSupport Agreement"}. This Agreement is legally binding upon execution by both parties and is incorporated into the Customer\u2019s Master Services Agreement with Packet Fusion, Inc.</p>
       <div class="sd-sig-grid">
