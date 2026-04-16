@@ -671,6 +671,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       <div class="mac-item"><div class="mac-dot"></div>User questions and feature guidance</div>
       <div class="mac-item"><div class="mac-dot"></div>Activating new licenses or reassigning existing ones</div>
     </div>
+    ${!calc.msoEnabled ? `
     <div class="section-header" style="margin-top:28px;">
       <div class="section-num">${secNum()}</div>
       <div class="section-title">Outside Scope of Support</div>
@@ -680,7 +681,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       <div class="scope-intro">The following services fall outside the standard CloudSupport agreement and are available as separately scoped engagements at preferred partner rates.</div>
       <div class="scope-item"><div style="flex:1;"><div class="scope-label">Major Call Flow Overhauls</div><div class="scope-desc">Designing or implementing significant structural changes to existing call flow configurations.</div></div><div class="scope-tag">Separate SOW</div></div>
       <div class="scope-item"><div style="flex:1;"><div class="scope-label">New Integration Deployments</div><div class="scope-desc">Full deployment or integration of new solutions, such as transitioning to a provider contact center platform.</div></div><div class="scope-tag">Separate SOW</div></div>
-    </div>
+    </div>` : ""}
     <div class="section-header" style="margin-top:28px;">
       <div class="section-num">${secNum()}</div>
       <div class="section-title">Term &amp; Renewal</div>
@@ -828,6 +829,7 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
       <li><span class="sd-cov-num">06</span><span class="sd-cov-body"><strong>Quarterly Optimization &amp; Coaching</strong> \u2014 System reviews, call flow audits, end-user training, and strategic planning sessions.</span></li>
       <li><span class="sd-cov-num">07</span><span class="sd-cov-body"><strong>Manufacturer Support Access</strong> \u2014 Option to engage directly with manufacturer support alongside Packet Fusion coverage.</span></li>
     </ul>
+    ${!calc.msoEnabled ? `
     <div class="sd-section-label" style="margin-top:18px;">Outside Scope of Agreement</div>
     <div class="sd-scope">
       <p style="font-size:12px;color:#64748b;margin-bottom:10px;">The following are available as separately scoped engagements at preferred partner rates:</p>
@@ -836,7 +838,7 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
         <div style="display:flex;align-items:flex-start;gap:10px;font-size:12.5px;color:#374151;"><span style="width:18px;height:18px;border-radius:50%;background:#f1f5f9;border:1px solid #e2e8f0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#94a3b8;flex-shrink:0;margin-top:1px;">2</span><div><strong style="color:#1e293b;">New Integration or Solution Deployments</strong> \u2014 Full deployment of new platforms, such as transitioning to a new contact center solution.</div></div>
       </div>
       <p style="font-size:11px;color:#94a3b8;margin-top:10px;margin-bottom:0;">Contact your Packet Fusion account team for a scoped proposal on either item.</p>
-    </div>
+    </div>` : ""}
     ${d.customInclusions && d.customInclusions.length > 0 ? `
     <div class="sd-section-label" style="margin-top:18px;">Inclusions</div>
     <ul class="sd-coverage-list">
