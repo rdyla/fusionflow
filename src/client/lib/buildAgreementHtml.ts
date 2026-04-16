@@ -538,6 +538,22 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       ${advAppScopeHtml}
   ` : "";
 
+  const customSection = (d.customLines && d.customLines.length > 0) ? `
+      <div class="section-header">
+        <div class="section-num">${secNum()}</div>
+        <div class="section-title">Custom Pricing Adjustments</div>
+        <div class="section-divider"></div>
+      </div>
+      <div class="pricing-wrap">
+        <table class="pricing-table">
+          <thead><tr><th>Description</th><th class="price-col">Annual</th></tr></thead>
+          <tbody>
+            ${d.customLines.map(l => `<tr><td class="label-cell">${escHtml(l.label)}</td><td class="price-col">${fmtFull(l.price || 0)}</td></tr>`).join("")}
+          </tbody>
+        </table>
+      </div>
+  ` : "";
+
   const msoSection = calc.msoEnabled ? `
       <div class="section-header">
         <div class="section-num">${secNum()}</div>
@@ -553,22 +569,6 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
               <td style="font-size:12px;color:#64748b;">${escHtml((proposalTierMeta?.engineer ?? "As scoped").split(" (")[0])}</td>
               <td class="price-col" style="color:#007d6e;">${fmtFull(calc.msoSup)}</td>
             </tr>
-          </tbody>
-        </table>
-      </div>
-  ` : "";
-
-  const customSection = (d.customLines && d.customLines.length > 0) ? `
-      <div class="section-header">
-        <div class="section-num">${secNum()}</div>
-        <div class="section-title">Custom Pricing Adjustments</div>
-        <div class="section-divider"></div>
-      </div>
-      <div class="pricing-wrap">
-        <table class="pricing-table">
-          <thead><tr><th>Description</th><th class="price-col">Annual</th></tr></thead>
-          <tbody>
-            ${d.customLines.map(l => `<tr><td class="label-cell">${escHtml(l.label)}</td><td class="price-col">${fmtFull(l.price || 0)}</td></tr>`).join("")}
           </tbody>
         </table>
       </div>
@@ -629,8 +629,8 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
     ${ccaasSection}
     ${advAppSection}
     ${customSection}
-    ${inclusionsSection}
     ${msoSection}
+    ${inclusionsSection}
     <div class="price-summary">
       <div class="price-summary-cell accent">
         <div class="ps-label">Total Annual Investment</div>
