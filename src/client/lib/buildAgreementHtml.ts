@@ -463,6 +463,10 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
 
   const implSow = d.implSow || 0;
   const ccaasTotal = calc.ccaasSup + calc.implSup;
+  const ccaasSubCell = [
+    ccaasLic > 0 ? `30% of CCaaS licensing (${fmtFull(ccaasLic)}/yr)` : "",
+    implSow > 0  ? `20% of implementation SOW (${fmtFull(implSow)})` : "",
+  ].filter(Boolean).join(" + ");
   const ccaasSection = showCCaaS ? `
       <div class="section-header">
         <div class="section-num">${secNum()}</div>
@@ -473,20 +477,12 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
         <table class="pricing-table">
           <thead><tr><th>Component</th><th class="price-col">Annual Investment</th></tr></thead>
           <tbody>
-            ${ccaasLic > 0 || implSow > 0 ? `
-            ${ccaasLic > 0 ? `<tr>
-              <td><div class="label-cell">Contact Center Support</div><div class="sub-cell">30% of annual CCaaS licensing (${fmtFull(ccaasLic)}/yr)</div></td>
-              <td class="price-col">${fmtFull(calc.ccaasSup)}</td>
-            </tr>` : ""}
-            ${implSow > 0 ? `<tr>
-              <td><div class="label-cell">Implementation Support</div><div class="sub-cell">20% of implementation SOW (${fmtFull(implSow)})</div></td>
-              <td class="price-col">${fmtFull(calc.implSup)}</td>
-            </tr>` : ""}
-            ${ccaasLic > 0 && implSow > 0 ? `<tr style="background:#f8fafc;">
-              <td style="font-weight:700;color:#0d1b2e;font-size:13px;">CCaaS CloudSupport Total</td>
-              <td class="price-col" style="font-size:15px;">${fmtFull(ccaasTotal)}</td>
-            </tr>` : ""}
-            ` : `<tr><td colspan="2" style="color:#94a3b8;font-style:italic;text-align:center;padding:20px;">No CCaaS components configured</td></tr>`}
+            ${ccaasTotal > 0
+              ? `<tr>
+              <td><div class="label-cell">CCaaS CloudSupport</div><div class="sub-cell">${ccaasSubCell}</div></td>
+              <td class="price-col">${fmtFull(ccaasTotal)}</td>
+            </tr>`
+              : `<tr><td colspan="2" style="color:#94a3b8;font-style:italic;text-align:center;padding:20px;">No CCaaS components configured</td></tr>`}
           </tbody>
           <tfoot><tr><td colspan="2">Usage, consumption, DIDs, and telco charges are excluded from CCaaS licensing. Auto-renews and co-terms with Customer\u2019s Subscription Term.</td></tr></tfoot>
         </table>
@@ -732,24 +728,20 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
       </div>` : "";
 
   const sigImplSow = d.implSow || 0;
-  const ccaasLineItem = showCCaaS && (ccaasLic > 0 || sigImplSow > 0) ? `
-      ${ccaasLic > 0 ? `<div class="sd-line-item">
+  const sigCcaasTotal = calc.ccaasSup + calc.implSup;
+  const sigCcaasNote = [
+    ccaasLic > 0 ? `30% of CCaaS licensing (${fmtFull(ccaasLic)}/yr)` : "",
+    sigImplSow > 0  ? `20% of impl SOW (${fmtFull(sigImplSow)})` : "",
+  ].filter(Boolean).join(" + ");
+  const ccaasLineItem = showCCaaS && sigCcaasTotal > 0 ? `
+      <div class="sd-line-item">
         <div class="sdli-desc">
-          <div class="sdli-name">CCaaS CloudSupport \u2014 Contact Center</div>
-          <div class="sdli-note">30% of annual CCaaS licensing \u00b7 ${fmtFull(ccaasLic)}/yr</div>
+          <div class="sdli-name">CCaaS CloudSupport</div>
+          <div class="sdli-note">${sigCcaasNote}</div>
         </div>
         <div class="sdli-qty">\u2014</div>
-        <div class="sdli-price">${fmtFull(calc.ccaasSup)}/yr</div>
-      </div>` : ""}
-      ${sigImplSow > 0 ? `<div class="sd-line-item">
-        <div class="sdli-desc">
-          <div class="sdli-name">CCaaS CloudSupport \u2014 Implementation</div>
-          <div class="sdli-note">20% of implementation SOW \u00b7 ${fmtFull(sigImplSow)}</div>
-        </div>
-        <div class="sdli-qty">\u2014</div>
-        <div class="sdli-price">${fmtFull(calc.implSup)}/yr</div>
-      </div>` : ""}
-  ` : "";
+        <div class="sdli-price">${fmtFull(sigCcaasTotal)}/yr</div>
+      </div>` : "";
 
   const customLineItems = (d.customLines && d.customLines.length > 0)
     ? d.customLines.map(l => `
