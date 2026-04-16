@@ -479,7 +479,7 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
       {/* ── Custom Inclusions ────────────────────────────────────────────────── */}
       <div style={S.section}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <div style={S.sectionTitle}>Special Inclusions</div>
+          <div style={S.sectionTitle}>Inclusions</div>
           <button
             type="button"
             onClick={() => onChange({ customInclusions: [...(form.customInclusions ?? []), { label: "", blurb: "" }] })}
@@ -489,7 +489,7 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
           </button>
         </div>
         {(form.customInclusions ?? []).length === 0 && (
-          <div style={{ fontSize: 13, color: "#94a3b8" }}>No special inclusions. Add items to include in the agreement with a description blurb.</div>
+          <div style={{ fontSize: 13, color: "#94a3b8" }}>No inclusions. Add items to appear in the agreement with a description blurb.</div>
         )}
         {(form.customInclusions ?? []).map((item, i) => (
           <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", marginBottom: 10, background: "#fafafa" }}>
