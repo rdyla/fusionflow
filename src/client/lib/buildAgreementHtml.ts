@@ -560,6 +560,25 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       </div>
   ` : "";
 
+  const inclusionsSection = (d.customInclusions && d.customInclusions.length > 0) ? `
+      <div class="section-header">
+        <div class="section-num">${secNum()}</div>
+        <div class="section-title">Special Inclusions</div>
+        <div class="section-divider"></div>
+      </div>
+      <div class="scope-block">
+        <div class="scope-intro">The following items are included within the scope of this CloudSupport Agreement at no additional charge.</div>
+        ${d.customInclusions.map(item => `
+        <div class="scope-item">
+          <div style="flex:1;">
+            <div class="scope-label">${escHtml(item.label)}</div>
+            ${item.blurb ? `<div class="scope-desc">${escHtml(item.blurb)}</div>` : ""}
+          </div>
+          <div class="scope-tag">Included</div>
+        </div>`).join("")}
+      </div>
+  ` : "";
+
   const customSection = (d.customLines && d.customLines.length > 0) ? `
       <div class="section-header">
         <div class="section-num">${secNum()}</div>
@@ -612,6 +631,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
     ${ccaasSection}
     ${advAppSection}
     ${customSection}
+    ${inclusionsSection}
     ${msoSection}
     <div class="price-summary">
       <div class="price-summary-cell accent">
@@ -821,6 +841,15 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
       </div>
       <p style="font-size:11px;color:#94a3b8;margin-top:10px;margin-bottom:0;">Contact your Packet Fusion account team for a scoped proposal on either item.</p>
     </div>
+    ${d.customInclusions && d.customInclusions.length > 0 ? `
+    <div class="sd-section-label" style="margin-top:18px;">Special Inclusions</div>
+    <ul class="sd-coverage-list">
+      ${d.customInclusions.map((item, i) => `
+      <li>
+        <span class="sd-cov-num">${String(i + 1).padStart(2, "0")}</span>
+        <span class="sd-cov-body"><strong>${escHtml(item.label)}</strong>${item.blurb ? ` \u2014 ${escHtml(item.blurb)}` : ""}</span>
+      </li>`).join("")}
+    </ul>` : ""}
     <div class="sd-section-label" style="margin-top:18px;">Term &amp; Renewal</div>
     <div class="sd-term">
       <p>This Agreement co-terms with Customer\u2019s Packet Fusion Master Services Agreement and/or underlying provider subscription. Unless cancelled in writing${calc.msoEnabled ? " at least 30 days prior to renewal" : ""}, CloudSupport${calc.msoEnabled ? " and the MSO Add-On" : ""} will automatically renew for successive terms at the then-current renewal rate.</p>

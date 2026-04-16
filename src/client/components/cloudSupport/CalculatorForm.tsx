@@ -476,6 +476,64 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
         ))}
       </div>
 
+      {/* ── Custom Inclusions ────────────────────────────────────────────────── */}
+      <div style={S.section}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <div style={S.sectionTitle}>Special Inclusions</div>
+          <button
+            type="button"
+            onClick={() => onChange({ customInclusions: [...(form.customInclusions ?? []), { label: "", blurb: "" }] })}
+            style={{ fontSize: 12, color: "#0891b2", background: "none", border: "1px solid #bae6fd", borderRadius: 5, padding: "3px 10px", cursor: "pointer" }}
+          >
+            + Add Inclusion
+          </button>
+        </div>
+        {(form.customInclusions ?? []).length === 0 && (
+          <div style={{ fontSize: 13, color: "#94a3b8" }}>No special inclusions. Add items to include in the agreement with a description blurb.</div>
+        )}
+        {(form.customInclusions ?? []).map((item, i) => (
+          <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", marginBottom: 10, background: "#fafafa" }}>
+            <div style={{ display: "flex", gap: 10, marginBottom: 8, alignItems: "flex-start" }}>
+              <label style={{ ...S.label, flex: 1 }}>
+                {i === 0 && <span>Item Name</span>}
+                <input
+                  className="ms-input"
+                  value={item.label}
+                  onChange={(e) => {
+                    const items = [...(form.customInclusions ?? [])];
+                    items[i] = { ...items[i], label: e.target.value };
+                    onChange({ customInclusions: items });
+                  }}
+                  placeholder="e.g. Hardware Coverage, Dedicated Onboarding…"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => onChange({ customInclusions: (form.customInclusions ?? []).filter((_, idx) => idx !== i) })}
+                style={{ height: 38, marginTop: i === 0 ? 22 : 0, padding: "0 10px", background: "none", border: "1px solid #fecaca", borderRadius: 5, color: "#d13438", cursor: "pointer", fontSize: 16, flexShrink: 0 }}
+              >
+                ×
+              </button>
+            </div>
+            <label style={S.label}>
+              {i === 0 && <span>Description</span>}
+              <textarea
+                className="ms-input"
+                rows={3}
+                value={item.blurb}
+                onChange={(e) => {
+                  const items = [...(form.customInclusions ?? [])];
+                  items[i] = { ...items[i], blurb: e.target.value };
+                  onChange({ customInclusions: items });
+                }}
+                placeholder="Describe what's included…"
+                style={{ resize: "vertical" }}
+              />
+            </label>
+          </div>
+        ))}
+      </div>
+
       {/* ── Notes ─────────────────────────────────────────────────────────────── */}
       <div style={S.section}>
         <div style={S.sectionTitle}>Notes</div>

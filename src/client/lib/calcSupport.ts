@@ -21,6 +21,7 @@ export interface OppFormData {
   ovrMso: number | null;
   ovrAdvApp: number | null;
   customLines: { label: string; price: number }[];
+  customInclusions: { label: string; blurb: string }[];
   customerName: string;
   notes: string;
 }
@@ -149,6 +150,7 @@ export const DEFAULT_FORM_DATA: OppFormData = {
   ovrMso:    null,
   ovrAdvApp: null,
   customLines: [],
+  customInclusions: [],
   customerName: "",
   notes: "",
 };
