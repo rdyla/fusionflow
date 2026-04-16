@@ -53,12 +53,7 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
     ovr: { display: "flex", flexDirection: "column" as const, gap: 4, fontSize: 13, color: "#475569", fontWeight: 500, opacity: 0.8 },
     calcPill: { fontSize: 11, color: "#94a3b8", marginTop: 2 },
     overrideActive: { borderColor: "#f59e0b", background: "rgba(245,158,11,0.05)" },
-    summaryCard: { background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "20px 24px", marginTop: 24 } as React.CSSProperties,
-    lineRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "7px 0", borderBottom: "1px solid #e2e8f0", fontSize: 14 } as React.CSSProperties,
-    lineLabel: { color: "#475569" } as React.CSSProperties,
-    lineValue: { fontWeight: 600, color: "#1e293b" } as React.CSSProperties,
     overrideTag: { fontSize: 10, background: "rgba(245,158,11,0.15)", color: "#b45309", borderRadius: 4, padding: "1px 5px", marginLeft: 6, fontWeight: 600 },
-    totalRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0 0", marginTop: 8, borderTop: "2px solid #0891b2", fontSize: 16, fontWeight: 700 } as React.CSSProperties,
   };
 
   return (
@@ -406,63 +401,6 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
         />
       </div>
 
-      {/* ── Summary ──────────────────────────────────────────────────────────── */}
-      <div style={S.summaryCard}>
-        <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 14 }}>Pricing Summary</div>
-
-        {showUcaas && calc.ucaasSup > 0 && (
-          <div style={S.lineRow}>
-            <span style={S.lineLabel}>UCaaS Support{calc.minApplied ? " (min applied)" : ""}{calc.ucaasOverridden ? <span style={S.overrideTag}>OVR</span> : null}</span>
-            <span style={S.lineValue}>{fmt(calc.ucaasSup)}/yr</span>
-          </div>
-        )}
-        {showCcaas && calc.ccaasSup > 0 && (
-          <div style={S.lineRow}>
-            <span style={S.lineLabel}>CCaaS Support{calc.ccaasOverridden ? <span style={S.overrideTag}>OVR</span> : null}</span>
-            <span style={S.lineValue}>{fmt(calc.ccaasSup)}/yr</span>
-          </div>
-        )}
-        {showImpl && calc.implSup > 0 && (
-          <div style={S.lineRow}>
-            <span style={S.lineLabel}>Implementation Support{calc.implOverridden ? <span style={S.overrideTag}>OVR</span> : null}</span>
-            <span style={S.lineValue}>{fmt(calc.implSup)}/yr</span>
-          </div>
-        )}
-        {showAdvApp && calc.advAppSup > 0 && (
-          <div style={S.lineRow}>
-            <span style={S.lineLabel}>Advanced Applications{calc.advAppOverridden ? <span style={S.overrideTag}>OVR</span> : null}</span>
-            <span style={S.lineValue}>{fmt(calc.advAppSup)}/yr</span>
-          </div>
-        )}
-        {form.msoEnabled && calc.msoSup > 0 && (
-          <div style={S.lineRow}>
-            <span style={S.lineLabel}>MSO — {getMsoTier(form.msoTier)?.label ?? "Custom"}{calc.msoOverridden ? <span style={S.overrideTag}>OVR</span> : null}</span>
-            <span style={S.lineValue}>{fmt(calc.msoSup)}/yr</span>
-          </div>
-        )}
-        {(form.customLines ?? []).map((line, i) => (
-          line.price > 0 && (
-            <div key={i} style={S.lineRow}>
-              <span style={S.lineLabel}>{line.label || `Custom Line ${i + 1}`}</span>
-              <span style={S.lineValue}>{fmt(line.price)}/yr</span>
-            </div>
-          )
-        ))}
-        {calc.annual === 0 && (
-          <div style={{ color: "#94a3b8", fontSize: 13, padding: "12px 0" }}>Enter values above to see pricing.</div>
-        )}
-
-        <div style={S.totalRow}>
-          <span style={{ color: "#03395f" }}>Annual Total</span>
-          <span style={{ color: "#03395f" }}>{fmt(calc.annual)}</span>
-        </div>
-        {form.term > 1 && (
-          <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0", fontSize: 14, color: "#475569" }}>
-            <span>TCV ({form.term}-year)</span>
-            <span style={{ fontWeight: 600 }}>{fmt(calc.tcv)}</span>
-          </div>
-        )}
-      </div>
     </div>
   );
 }

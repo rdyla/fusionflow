@@ -1,14 +1,27 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { csApi } from "../lib/cloudSupportApi";
 import { calcSupport, DEFAULT_FORM_DATA, fmt } from "../lib/calcSupport";
 import type { CsProposalDetail, CsVersion, OppFormData, OppCalcResult } from "../lib/calcSupport";
 import { buildProposalHtml, buildSignatureHtml } from "../lib/buildAgreementHtml";
+import { getMsoTier } from "../lib/msoTiers";
 import { api } from "../lib/api";
 import CalculatorForm from "../components/cloudSupport/CalculatorForm";
 import { useToast } from "../components/ui/ToastProvider";
 
 type Tab = "calculator" | "agreement" | "signature" | "history";
+
+function SummaryLine({ label, value, overridden }: { label: string; value: number; overridden: boolean }) {
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13 }}>
+      <span style={{ color: "#475569", paddingRight: 8 }}>
+        {label}
+        {overridden && <span style={{ fontSize: 10, background: "rgba(245,158,11,0.15)", color: "#b45309", borderRadius: 4, padding: "1px 5px", marginLeft: 5, fontWeight: 600 }}>OVR</span>}
+      </span>
+      <span style={{ fontWeight: 600, color: "#1e293b", whiteSpace: "nowrap" }}>{fmt(value)}/yr</span>
+    </div>
+  );
+}
 
 export default function CloudSupportWorkspacePage() {
   const { id } = useParams<{ id: string }>();
@@ -30,6 +43,8 @@ export default function CloudSupportWorkspacePage() {
   const [signatureHtml, setSignatureHtml] = useState("");
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
+  const agreementIframeRef = useRef<HTMLIFrameElement>(null);
+  const signatureIframeRef = useRef<HTMLIFrameElement>(null);
 
   const calc: OppCalcResult = calcSupport(form);
 
@@ -130,13 +145,8 @@ export default function CloudSupportWorkspacePage() {
     }
   }
 
-  function handlePrint(html: string) {
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    setTimeout(() => win.print(), 500);
+  function handlePrint(ref: React.RefObject<HTMLIFrameElement | null>) {
+    ref.current?.contentWindow?.print();
   }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
@@ -150,7 +160,7 @@ export default function CloudSupportWorkspacePage() {
   ];
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto" }}>
+    <div style={{ maxWidth: 1100, margin: "0 auto" }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, gap: 16 }}>
         <div>
@@ -212,25 +222,78 @@ export default function CloudSupportWorkspacePage() {
 
       {/* Tab content */}
       {tab === "calculator" && (
-        <CalculatorForm
-          form={form}
-          calc={calc}
-          canOverride={canOverride}
-          onChange={handleFormChange}
-        />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 28, alignItems: "start" }}>
+          {/* Form */}
+          <CalculatorForm
+            form={form}
+            calc={calc}
+            canOverride={canOverride}
+            onChange={handleFormChange}
+          />
+
+          {/* Sticky summary panel */}
+          <div style={{ position: "sticky", top: 80 }}>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "20px 20px" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 14 }}>Pricing Summary</div>
+
+              {(form.oppType === "UCaaS Only" || form.oppType === "UCaaS + CCaaS") && calc.ucaasSup > 0 && (
+                <SummaryLine label={`UCaaS Support${calc.minApplied ? " (min)" : ""}`} value={calc.ucaasSup} overridden={calc.ucaasOverridden} />
+              )}
+              {(form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS") && calc.ccaasSup > 0 && (
+                <SummaryLine label="CCaaS Support" value={calc.ccaasSup} overridden={calc.ccaasOverridden} />
+              )}
+              {(form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS") && calc.implSup > 0 && (
+                <SummaryLine label="Implementation Support" value={calc.implSup} overridden={calc.implOverridden} />
+              )}
+              {(form.oppType === "Advanced Applications" || (form.oppType === "UCaaS Only" && form.advAppEnabled)) && calc.advAppSup > 0 && (
+                <SummaryLine label="Advanced Applications" value={calc.advAppSup} overridden={calc.advAppOverridden} />
+              )}
+              {form.msoEnabled && calc.msoSup > 0 && (
+                <SummaryLine label={`MSO — ${getMsoTier(form.msoTier)?.label ?? "Custom"}`} value={calc.msoSup} overridden={calc.msoOverridden} />
+              )}
+              {(form.customLines ?? []).filter(l => l.price > 0).map((line, i) => (
+                <SummaryLine key={i} label={line.label || `Custom Line ${i + 1}`} value={line.price} overridden={false} />
+              ))}
+              {calc.annual === 0 && (
+                <div style={{ color: "#94a3b8", fontSize: 13, padding: "10px 0" }}>Enter values to see pricing.</div>
+              )}
+
+              <div style={{ borderTop: "2px solid #0891b2", marginTop: 10, paddingTop: 12, display: "flex", justifyContent: "space-between", fontSize: 15, fontWeight: 700, color: "#03395f" }}>
+                <span>Annual Total</span>
+                <span>{fmt(calc.annual)}</span>
+              </div>
+              {form.term > 1 && (
+                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#475569" }}>
+                  <span>TCV ({form.term}-yr)</span>
+                  <span style={{ fontWeight: 600 }}>{fmt(calc.tcv)}</span>
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="ms-btn-primary"
+                style={{ width: "100%", marginTop: 16, justifyContent: "center" }}
+                onClick={() => setShowSaveModal(true)}
+              >
+                Save Version
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {tab === "agreement" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(agreementHtml)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(agreementIframeRef)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
+              ref={agreementIframeRef}
               srcDoc={agreementHtml}
               title="Proposal Preview"
               style={{ width: "100%", height: 900, border: "none", display: "block" }}
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-modals"
             />
           </div>
         </div>
@@ -239,14 +302,15 @@ export default function CloudSupportWorkspacePage() {
       {tab === "signature" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(signatureHtml)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(signatureIframeRef)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
+              ref={signatureIframeRef}
               srcDoc={signatureHtml}
               title="Signature Document"
               style={{ width: "100%", height: 900, border: "none", display: "block" }}
-              sandbox="allow-same-origin"
+              sandbox="allow-same-origin allow-modals"
             />
           </div>
         </div>
