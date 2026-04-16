@@ -4,27 +4,47 @@ import type { Bindings, Variables } from "../types/index";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Only internal (non-client) staff can access the calculator
-function requireInternal(role: string) {
-  return role !== "client";
+import type { AuthContext } from "../types/index";
+
+// ── Permission helpers ────────────────────────────────────────────────────────
+
+type CsPerm = "none" | "user" | "power_user";
+
+function csPerm(auth: AuthContext): CsPerm {
+  if (auth.role === "admin") return "power_user";
+  return (auth.user.cs_permission ?? "none") as CsPerm;
+}
+
+function canAccess(auth: AuthContext) { return csPerm(auth) !== "none"; }
+function canSeeAll(auth: AuthContext) { return csPerm(auth) === "power_user"; }
+function canEditProposal(auth: AuthContext, creatorId: string) {
+  return csPerm(auth) === "power_user" || auth.user.id === creatorId;
+}
+function canDeleteProposal(auth: AuthContext, creatorId: string) {
+  return csPerm(auth) === "power_user" || auth.user.id === creatorId;
 }
 
 // ── List all proposals ────────────────────────────────────────────────────────
 
 app.get("/", async (c) => {
   const auth = c.get("auth");
-  if (!requireInternal(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  if (!canAccess(auth)) return c.json({ error: "Forbidden" }, 403);
 
-  const rows = await c.env.DB
-    .prepare(`
+  const seeAll = canSeeAll(auth);
+
+  const baseSelect = `
       SELECT p.id, p.name, p.creator_id, p.created_at, p.updated_at,
         u.name as creator_name, u.email as creator_email,
         (SELECT COUNT(*) FROM cs_versions v WHERE v.proposal_id = p.id) as version_count,
         (SELECT v2.calc_result FROM cs_versions v2 WHERE v2.proposal_id = p.id ORDER BY v2.version_num DESC LIMIT 1) as latest_calc
       FROM cs_proposals p
-      LEFT JOIN users u ON u.id = p.creator_id
-      ORDER BY p.updated_at DESC
-    `)
+      LEFT JOIN users u ON u.id = p.creator_id`;
+
+  const stmt = seeAll
+    ? c.env.DB.prepare(`${baseSelect} ORDER BY p.updated_at DESC`)
+    : c.env.DB.prepare(`${baseSelect} WHERE p.creator_id = ? ORDER BY p.updated_at DESC`).bind(auth.user.id);
+
+  const rows = await stmt
     .all<{
       id: string; name: string; creator_id: string; created_at: string; updated_at: string;
       creator_name: string | null; creator_email: string | null;
@@ -51,7 +71,7 @@ const CreateSchema = z.object({ name: z.string().min(1).max(200) });
 
 app.post("/", async (c) => {
   const auth = c.get("auth");
-  if (!requireInternal(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  if (!canAccess(auth)) return c.json({ error: "Forbidden" }, 403);
 
   const body = await c.req.json().catch(() => null);
   const parsed = CreateSchema.safeParse(body);
@@ -71,7 +91,7 @@ app.post("/", async (c) => {
 
 app.get("/:id", async (c) => {
   const auth = c.get("auth");
-  if (!requireInternal(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  if (!canAccess(auth)) return c.json({ error: "Forbidden" }, 403);
 
   const { id } = c.req.param();
 
@@ -87,6 +107,8 @@ app.get("/:id", async (c) => {
     .first<{ id: string; name: string; creator_id: string; created_at: string; updated_at: string; creator_name: string | null; creator_email: string | null }>();
 
   if (!proposal) return c.json({ error: "Not found" }, 404);
+  // Users can only access their own proposals
+  if (!canSeeAll(auth) && proposal.creator_id !== auth.user.id) return c.json({ error: "Forbidden" }, 403);
 
   const versions = await c.env.DB
     .prepare(`
@@ -123,7 +145,7 @@ app.get("/:id", async (c) => {
 
 app.patch("/:id", async (c) => {
   const auth = c.get("auth");
-  if (!requireInternal(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  if (!canAccess(auth)) return c.json({ error: "Forbidden" }, 403);
 
   const { id } = c.req.param();
   const body = await c.req.json().catch(() => null);
@@ -136,9 +158,7 @@ app.patch("/:id", async (c) => {
     .first<{ creator_id: string }>();
   if (!proposal) return c.json({ error: "Not found" }, 404);
 
-  // Allow creator, admin, or pf_sa to rename
-  const canEdit = auth.role === "admin" || auth.role === "pf_sa" || proposal.creator_id === auth.user.id;
-  if (!canEdit) return c.json({ error: "Forbidden" }, 403);
+  if (!canEditProposal(auth, proposal.creator_id)) return c.json({ error: "Forbidden" }, 403);
 
   await c.env.DB
     .prepare("UPDATE cs_proposals SET name = ?, updated_at = ? WHERE id = ?")
@@ -152,7 +172,7 @@ app.patch("/:id", async (c) => {
 
 app.delete("/:id", async (c) => {
   const auth = c.get("auth");
-  if (!requireInternal(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  if (!canAccess(auth)) return c.json({ error: "Forbidden" }, 403);
 
   const { id } = c.req.param();
   const proposal = await c.env.DB
@@ -161,8 +181,7 @@ app.delete("/:id", async (c) => {
     .first<{ creator_id: string }>();
   if (!proposal) return c.json({ error: "Not found" }, 404);
 
-  const canDelete = auth.role === "admin" || proposal.creator_id === auth.user.id;
-  if (!canDelete) return c.json({ error: "Forbidden" }, 403);
+  if (!canDeleteProposal(auth, proposal.creator_id)) return c.json({ error: "Forbidden" }, 403);
 
   await c.env.DB.prepare("DELETE FROM cs_proposals WHERE id = ?").bind(id).run();
   return c.json({ ok: true });
@@ -178,7 +197,7 @@ const VersionSchema = z.object({
 
 app.post("/:id/versions", async (c) => {
   const auth = c.get("auth");
-  if (!requireInternal(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  if (!canAccess(auth)) return c.json({ error: "Forbidden" }, 403);
 
   const { id } = c.req.param();
   const body = await c.req.json().catch(() => null);
@@ -191,8 +210,7 @@ app.post("/:id/versions", async (c) => {
     .first<{ creator_id: string }>();
   if (!proposal) return c.json({ error: "Not found" }, 404);
 
-  const canEdit = auth.role === "admin" || auth.role === "pf_sa" || proposal.creator_id === auth.user.id;
-  if (!canEdit) return c.json({ error: "Forbidden" }, 403);
+  if (!canEditProposal(auth, proposal.creator_id)) return c.json({ error: "Forbidden" }, 403);
 
   // Get next version number
   const last = await c.env.DB

@@ -45,6 +45,7 @@ export type User = {
   manager_id?: string | null;
   zoom_user_id?: string | null;
   can_open_cases?: boolean;
+  cs_permission?: "none" | "user" | "power_user";
 };
 
 export type SolutionType = "ucaas" | "ccaas" | "ci" | "va" | (string & {});
@@ -1270,6 +1271,7 @@ export const api = {
       dynamics_account_id?: string | null;
       manager_id?: string | null;
       zoom_user_id?: string | null;
+      cs_permission?: "none" | "user" | "power_user";
     }
   ) =>
     request<User>(`/admin/users/${id}`, {

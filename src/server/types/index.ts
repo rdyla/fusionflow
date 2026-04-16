@@ -10,6 +10,7 @@ export interface AppUser {
   dynamics_account_id: string | null;
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions
+  cs_permission?: "none" | "user" | "power_user"; // cloud support calculator access
 }
 
 export interface AuthContext {

@@ -36,6 +36,18 @@ const ROLE_COLOR: Record<Role, string> = {
 
 const EMPTY_CREATE_FORM = { email: "", name: "", organization_name: "", role: "pm" as Role };
 
+type CsPerm = "none" | "user" | "power_user";
+const CS_PERM_LABELS: Record<CsPerm, string> = {
+  none: "No Access",
+  user: "User",
+  power_user: "Power User",
+};
+const CS_PERM_COLOR: Record<CsPerm, string> = {
+  none: "#94a3b8",
+  user: "#0891b2",
+  power_user: "#8764b8",
+};
+
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -117,6 +129,7 @@ export default function AdminUsersPage() {
       role: user.role as Role,
       manager_id: user.manager_id ?? null,
       zoom_user_id: user.zoom_user_id ?? null,
+      cs_permission: (user.cs_permission ?? "none") as CsPerm,
     });
   }
 
@@ -132,6 +145,7 @@ export default function AdminUsersPage() {
         role: editForm.role,
         manager_id: editForm.manager_id ?? null,
         zoom_user_id: typeof editForm.zoom_user_id === "string" ? editForm.zoom_user_id.trim() || null : null,
+        cs_permission: editForm.role === "admin" ? undefined : (editForm.cs_permission as CsPerm | undefined),
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setEditingUser(null);
@@ -183,15 +197,19 @@ export default function AdminUsersPage() {
               <th>Email</th>
               <th>Organization</th>
               <th>Role</th>
+              <th>Cloud Support</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {users.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users yet.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users yet.</td></tr>
             ) : (
-              users.map((user) => (
+              users.map((user) => {
+                const perm = (user.cs_permission ?? "none") as CsPerm;
+                const effectivePerm = user.role === "admin" ? "power_user" : perm;
+                return (
                 <tr key={user.id}>
                   <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
                   <td>{user.email}</td>
@@ -203,6 +221,18 @@ export default function AdminUsersPage() {
                     >
                       {ROLE_LABELS[user.role as Role] ?? user.role}
                     </span>
+                  </td>
+                  <td>
+                    {effectivePerm === "none" ? (
+                      <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                    ) : (
+                      <span
+                        className="ms-badge"
+                        style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
+                      >
+                        {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
+                      </span>
+                    )}
                   </td>
                   <td>
                     <span
@@ -247,7 +277,7 @@ export default function AdminUsersPage() {
                     )}
                   </td>
                 </tr>
-              ))
+              );})
             )}
           </tbody>
         </table>
@@ -368,6 +398,41 @@ export default function AdminUsersPage() {
                   onChange={(e) => setEditForm({ ...editForm, zoom_user_id: e.target.value || null })}
                 />
               </label>
+
+              {/* Cloud Support Calculator permission */}
+              <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 16px", background: "#f8fafc" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>Cloud Support Calculator</div>
+                {editForm.role === "admin" ? (
+                  <div style={{ fontSize: 13, color: "#8764b8" }}>Admin role always has full access.</div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                    {(["none", "user", "power_user"] as CsPerm[]).map((p) => {
+                      const active = (editForm.cs_permission ?? "none") === p;
+                      const descriptions: Record<CsPerm, string> = {
+                        none: "No access to the calculator",
+                        user: "Create & manage own proposals",
+                        power_user: "View and manage all proposals",
+                      };
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setEditForm({ ...editForm, cs_permission: p })}
+                          style={{
+                            padding: "10px 12px", borderRadius: 6, textAlign: "left", cursor: "pointer",
+                            border: `1.5px solid ${active ? CS_PERM_COLOR[p] : "#e2e8f0"}`,
+                            background: active ? CS_PERM_COLOR[p] + "15" : "#fff",
+                          }}
+                        >
+                          <div style={{ fontSize: 13, fontWeight: 600, color: active ? CS_PERM_COLOR[p] : "#1e293b", marginBottom: 3 }}>{CS_PERM_LABELS[p]}</div>
+                          <div style={{ fontSize: 11, color: active ? CS_PERM_COLOR[p] : "#94a3b8", lineHeight: 1.4 }}>{descriptions[p]}</div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
                 <button type="button" className="ms-btn-secondary" onClick={() => setEditingUser(null)}>Cancel</button>

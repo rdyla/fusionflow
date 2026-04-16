@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN cs_permission TEXT NOT NULL DEFAULT 'none';

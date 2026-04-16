@@ -36,7 +36,7 @@ app.get("/users", async (c) => {
   const db = c.env.DB;
   const rows = await db
     .prepare(
-      `SELECT id, email, name, organization_name, role, is_active, manager_id, zoom_user_id, created_at, updated_at
+      `SELECT id, email, name, organization_name, role, is_active, manager_id, zoom_user_id, cs_permission, created_at, updated_at
        FROM users
        ORDER BY name ASC`
     )
@@ -106,6 +106,7 @@ const updateUserSchema = z.object({
   dynamics_account_id: z.string().nullable().optional(),
   manager_id: z.string().nullable().optional(),
   zoom_user_id: z.string().nullable().optional(),
+  cs_permission: z.enum(["none", "user", "power_user"]).optional(),
 });
 
 app.patch("/users/:id", async (c) => {
