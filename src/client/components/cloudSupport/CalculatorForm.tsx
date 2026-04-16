@@ -17,6 +17,14 @@ interface Props {
 
 const OPP_TYPES = ["UCaaS Only", "CCaaS Only", "UCaaS + CCaaS", "Advanced Applications"] as const;
 
+function calcEndDate(start: string, term: number): string {
+  if (!start || !term) return "";
+  const d = new Date(start + "T00:00:00");
+  d.setFullYear(d.getFullYear() + term);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 export default function CalculatorForm({ form, calc, canOverride, onChange }: Props) {
   const msoTier = getMsoTier(form.msoTier);
 
@@ -97,13 +105,34 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
           </label>
           <label style={S.label}>
             <span>Term (years)</span>
-            <input className="ms-input" type="number" min={1} max={5} value={form.term || ""} onChange={(e) => setField("term", Number(e.target.value))} placeholder="1" />
+            <input
+              className="ms-input"
+              type="number"
+              min={1}
+              max={5}
+              value={form.term || ""}
+              onChange={(e) => {
+                const term = Number(e.target.value);
+                const end = calcEndDate(form.contractStart, term);
+                onChange({ term, ...(end ? { contractEnd: end } : {}) });
+              }}
+              placeholder="1"
+            />
           </label>
         </div>
         <div style={S.row}>
           <label style={S.label}>
             <span>Contract Start</span>
-            <input className="ms-input" type="date" value={form.contractStart} onChange={(e) => setField("contractStart", e.target.value)} />
+            <input
+              className="ms-input"
+              type="date"
+              value={form.contractStart}
+              onChange={(e) => {
+                const start = e.target.value;
+                const end = calcEndDate(start, form.term);
+                onChange({ contractStart: start, ...(end ? { contractEnd: end } : {}) });
+              }}
+            />
           </label>
           <label style={S.label}>
             <span>Contract End</span>
