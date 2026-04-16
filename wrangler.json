@@ -1,6 +1,7 @@
 {
   "$schema": "https://developers.cloudflare.com/workers/wrangler/config-schema.json",
   "name": "fusionflow",
+  "account_id": "521c322a89a17bb69f91f1e65177606e",
   "main": "./src/server/index.ts",
   "assets": {
     "directory": "./dist",
