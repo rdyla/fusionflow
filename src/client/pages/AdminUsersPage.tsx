@@ -214,16 +214,43 @@ export default function AdminUsersPage() {
   const visibleUsers =
     orgTab === "all" ? users : users.filter((u) => u.organization_name === orgTab);
 
-  // Group visible users by role in display order, sorted by name within each group
   const ROLE_ORDER: Role[] = ["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"];
-  const groupedUsers: { role: Role; users: User[] }[] = ROLE_ORDER
+
+  // Packet Fusion + All tabs: group by role
+  const roleGrouped: { label: string; color: string; users: User[] }[] = ROLE_ORDER
     .map((role) => ({
-      role,
+      label: `${ROLE_LABELS[role]}`,
+      color: ROLE_COLOR[role] ?? "#94a3b8",
       users: visibleUsers
         .filter((u) => u.role === role)
         .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
     }))
     .filter((g) => g.users.length > 0);
+
+  // Partner tabs (Zoom, RingCentral, etc.): group by manager (reports to)
+  const userById = Object.fromEntries(users.map((u) => [u.id, u]));
+  const managerIds = Array.from(new Set(visibleUsers.map((u) => u.manager_id ?? null)));
+  // Sort: managers with names first (alphabetically), then unassigned last
+  const sortedManagerIds = [
+    ...managerIds
+      .filter((id) => id !== null && userById[id!])
+      .sort((a, b) => (userById[a!]?.name ?? "").localeCompare(userById[b!]?.name ?? "")),
+    null,
+  ];
+  const managerGrouped: { label: string; color: string; users: User[] }[] = sortedManagerIds
+    .map((managerId) => ({
+      label: managerId && userById[managerId]
+        ? `Reports to: ${userById[managerId].name ?? userById[managerId].email}`
+        : "Unassigned",
+      color: managerId ? "#107c10" : "#94a3b8",
+      users: visibleUsers
+        .filter((u) => (u.manager_id ?? null) === managerId)
+        .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
+    }))
+    .filter((g) => g.users.length > 0);
+
+  const isPartnerTab = orgTab !== "all" && orgTab !== "Packet Fusion";
+  const groupedUsers = isPartnerTab ? managerGrouped : roleGrouped;
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading users...</div>;
 
