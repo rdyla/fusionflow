@@ -31,9 +31,23 @@ import SupportCaseConfirmationPage from "../pages/SupportCaseConfirmationPage";
 import RoadmapPage from "../pages/RoadmapPage";
 import AdminRoadmapPage from "../pages/AdminRoadmapPage";
 
+const IS_STAGING = window.location.hostname.includes("staging");
+
 export default function Router() {
   return (
     <BrowserRouter>
+      {IS_STAGING && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
+          background: "repeating-linear-gradient(135deg, #f59e0b 0px, #f59e0b 10px, #92400e 10px, #92400e 20px)",
+          color: "#fff", textAlign: "center", fontSize: 11, fontWeight: 700,
+          letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 0",
+          textShadow: "0 1px 2px rgba(0,0,0,0.4)",
+        }}>
+          ⚠ Staging Environment — Not Production ⚠
+        </div>
+      )}
+      <div style={IS_STAGING ? { paddingTop: 24 } : undefined}>
       <Routes>
         {/* Login — full page, no app shell, no auth required */}
         <Route path="/login" element={<LoginPage />} />
@@ -74,6 +88,7 @@ export default function Router() {
           </Route>
         </Route>
       </Routes>
+      </div>
     </BrowserRouter>
   );
 }
