@@ -37,6 +37,11 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: 521c322a89a17bb69f91f1e65177606e
 
+      - name: Smoke test
+        run: node scripts/smoke-test.mjs
+        env:
+          BASE_URL: https://staging.fusionflow360.com
+
       - name: Notify Zoom — Success
         if: success()
         env:
