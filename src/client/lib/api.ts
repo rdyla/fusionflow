@@ -93,6 +93,7 @@ export type Solution = {
   scope_of_work: string | null;
   handoff_notes: string | null;
   phd_data: string | null;
+  sow_data: string | null;
   gap_analysis: string | null;
   linked_project_id: string | null;
   customer_id: string | null;
@@ -1358,6 +1359,7 @@ export const api = {
       scope_of_work: string | null;
       handoff_notes: string | null;
       phd_data: string | null;
+      sow_data: string | null;
       gap_analysis: string | null;
       linked_project_id: string | null;
     }>

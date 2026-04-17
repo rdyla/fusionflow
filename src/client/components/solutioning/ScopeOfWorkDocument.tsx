@@ -1,4 +1,5 @@
 import type { NeedsAssessment, LaborEstimate, Solution } from "../../lib/api";
+import type { SowData } from "./SowSizingForm";
 import logoUrl from "../../assets/packetfusionlogo.png";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -81,6 +82,7 @@ function buildSowHtml(
   laborEstimate: LaborEstimate | null,
   scopeText: string,
   logo: string,
+  sowData?: SowData | null,
 ): string {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const logoAbsolute = logo.startsWith("http") ? logo : `${window.location.origin}${logo}`;
@@ -150,6 +152,71 @@ function buildSowHtml(
     : scopeText
     ? `<p>${esc(scopeText)}</p>`
     : `<p class="na-note">Scope details will be defined during the discovery and design phase.</p>`;
+
+  // ── Section 1.3: Confirmed Solution Sizing ───────────────────────────────
+  let sizingHtml = "";
+  if (sowData) {
+    const rows: string[] = [];
+
+    const hasUcaas = !!(sowData.ucaas.basic_users || sowData.ucaas.advanced_users || sowData.ucaas.common_area || sowData.ucaas.conference_rooms || sowData.ucaas.operators);
+    if (hasUcaas) {
+      if (sowData.ucaas.basic_users)          rows.push(dataRow("UCaaS · Basic Users",          sowData.ucaas.basic_users));
+      if (sowData.ucaas.advanced_users)       rows.push(dataRow("UCaaS · Advanced Users",       sowData.ucaas.advanced_users));
+      if (sowData.ucaas.common_area)          rows.push(dataRow("UCaaS · Common Area",           sowData.ucaas.common_area));
+      if (sowData.ucaas.conference_rooms)     rows.push(dataRow("UCaaS · Conference Rooms",      sowData.ucaas.conference_rooms));
+      if (sowData.ucaas.operators)            rows.push(dataRow("UCaaS · Operators",             sowData.ucaas.operators));
+      if (sowData.ucaas.additional_did)       rows.push(dataRow("UCaaS · Additional DIDs",       sowData.ucaas.additional_did));
+      if (sowData.ucaas.additional_toll_free) rows.push(dataRow("UCaaS · Toll Free Numbers",     sowData.ucaas.additional_toll_free));
+      if (sowData.ucaas.ms_teams_type && sowData.ucaas.ms_teams_type !== "none") {
+        rows.push(dataRow("UCaaS · MS Teams Integration", sowData.ucaas.ms_teams_type));
+      }
+    }
+
+    const hasCcaas = !!(sowData.ccaas.agents || sowData.ccaas.supervisors);
+    if (hasCcaas) {
+      if (sowData.ccaas.agents)      rows.push(dataRow("CCaaS · Agents",      sowData.ccaas.agents));
+      if (sowData.ccaas.supervisors) rows.push(dataRow("CCaaS · Supervisors", sowData.ccaas.supervisors));
+      if (sowData.ccaas.admin_only)  rows.push(dataRow("CCaaS · Admin Only",  sowData.ccaas.admin_only));
+      const ccChannels = (["voice","email","chat","sms","fax"] as const).filter(c => sowData.ccaas[c] === true).join(", ");
+      if (ccChannels) rows.push(dataRow("CCaaS · Channels (Phase 1)", ccChannels));
+      if (sowData.ccaas.byoc_carrier && sowData.ccaas.byoc_carrier !== "N/A") rows.push(dataRow("CCaaS · BYOC Carrier", sowData.ccaas.byoc_carrier));
+    }
+
+    if (sowData.ci.licensed_seats) {
+      rows.push(dataRow("CI · Licensed Seats",     sowData.ci.licensed_seats));
+      if (sowData.ci.recording_channels) rows.push(dataRow("CI · Recording Channels", sowData.ci.recording_channels));
+      if (sowData.ci.retention_months)   rows.push(dataRow("CI · Retention (months)", sowData.ci.retention_months));
+      if (sowData.ci.crm_integration && sowData.ci.crm_name) rows.push(dataRow("CI · CRM Integration", sowData.ci.crm_name));
+    }
+
+    if (sowData.va.intent_count || sowData.va.monthly_session_volume) {
+      const vaChannels = (["voice","chat","sms"] as const).filter(c => sowData.va[c] === true).join(", ");
+      if (vaChannels)                          rows.push(dataRow("VA · Channels",         vaChannels));
+      if (sowData.va.intent_count)             rows.push(dataRow("VA · Intents (Phase 1)", sowData.va.intent_count));
+      if (sowData.va.monthly_session_volume)   rows.push(dataRow("VA · Monthly Sessions",  sowData.va.monthly_session_volume));
+      if (sowData.va.crm_integration && sowData.va.crm_name) rows.push(dataRow("VA · CRM Integration", sowData.va.crm_name));
+      if (sowData.va.live_agent_escalation)    rows.push(dataRow("VA · Live Agent Escalation", "Yes"));
+    }
+
+    if (sowData.shared.sites_count)               rows.push(dataRow("Sites",                   sowData.shared.sites_count));
+    if (sowData.shared.phases_count)              rows.push(dataRow("Phases / Go-Lives",        sowData.shared.phases_count));
+    if (sowData.shared.implementation_strategy)   rows.push(dataRow("Implementation Strategy", sowData.shared.implementation_strategy));
+    if (sowData.shared.porting_required === true) {
+      const portingDetail = `Yes — Carrier: ${sowData.shared.porting_carrier || "TBD"}, DIDs: ${sowData.shared.porting_did_count || "TBD"}`;
+      rows.push(dataRow("Number Porting", portingDetail));
+    }
+    if (sowData.shared.fax_count)             rows.push(dataRow("Fax Machines",         sowData.shared.fax_count));
+    if (sowData.shared.ata_count)             rows.push(dataRow("ATA Adapters",          sowData.shared.ata_count));
+    if (sowData.shared.overhead_paging_count) rows.push(dataRow("Overhead Paging",       sowData.shared.overhead_paging_count));
+    if (sowData.shared.ip_paging_count)       rows.push(dataRow("IP Paging Speakers",    sowData.shared.ip_paging_count));
+    const sowCost = sowData.shared.sow_cost_after || sowData.shared.sow_cost_before;
+    if (sowCost)                              rows.push(dataRow("SOW Investment",         sowCost));
+    if (sowData.additional_notes)             rows.push(dataRow("Sizing Notes",           sowData.additional_notes));
+
+    if (rows.length > 0) {
+      sizingHtml = `<table><tbody>${rows.join("")}</tbody></table>`;
+    }
+  }
 
   // ── Section 3: Work Breakdown ─────────────────────────────────────────────
   const wbsRows = WORKSTREAM_ORDER
@@ -386,6 +453,7 @@ function buildSowHtml(
 
   ${section("1.1", "Engagement Objectives", objectivesHtml, 0)}
   ${section("1.2", "Scope of Work", scopeHtml, 1)}
+  ${sizingHtml ? section("1.3", "Confirmed Solution Sizing", sizingHtml, 2) : ""}
 
   <!-- Section heading: Delivery Plan -->
   <div class="section-heading">
@@ -440,11 +508,12 @@ type Props = {
   needsAssessment: NeedsAssessment | null;
   laborEstimate: LaborEstimate | null;
   scopeText: string;
+  sowData?: SowData | null;
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimate, scopeText }: Props) {
+export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimate, scopeText, sowData }: Props) {
   const customerName = solution.customer_name || "Customer";
   const solutionTypeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
   const vendorLabel = VENDOR_LABELS[solution.vendor] ?? solution.vendor ?? "";
@@ -455,7 +524,7 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
   const hasEstimate = laborEstimate !== null;
 
   function openPrintWindow() {
-    const html = buildSowHtml(solution, needsAssessment, laborEstimate, scopeText, logoUrl);
+    const html = buildSowHtml(solution, needsAssessment, laborEstimate, scopeText, logoUrl, sowData);
     const win = window.open("", "_blank", "width=960,height=750");
     if (!win) return;
     win.document.write(html);
