@@ -306,19 +306,19 @@ export default function AdminUsersPage() {
             {visibleUsers.length === 0 ? (
               <tr><td colSpan={orgTab === "all" ? 7 : 6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users in this org.</td></tr>
             ) : (
-              groupedUsers.flatMap(({ role, users: groupUsers }) => [
-                <tr key={`group-${role}`}>
+              groupedUsers.flatMap(({ label, color, users: groupUsers }) => [
+                <tr key={`group-${label}`}>
                   <td
                     colSpan={orgTab === "all" ? 7 : 6}
                     style={{
                       padding: "6px 16px", fontSize: 10, fontWeight: 700,
                       letterSpacing: "0.1em", textTransform: "uppercase",
-                      color: ROLE_COLOR[role] ?? "#94a3b8",
-                      background: (ROLE_COLOR[role] ?? "#94a3b8") + "0d",
-                      borderBottom: `1px solid ${(ROLE_COLOR[role] ?? "#94a3b8")}25`,
+                      color: color,
+                      background: color + "0d",
+                      borderBottom: `1px solid ${color}25`,
                     }}
                   >
-                    {ROLE_LABELS[role]} · {groupUsers.length}
+                    {label} · {groupUsers.length}
                   </td>
                 </tr>,
                 ...groupUsers.map((user) => {
@@ -338,7 +338,9 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td>
-                      {effectivePerm === "none" ? (
+                      {user.role === "partner_ae" ? (
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                      ) : effectivePerm === "none" ? (
                         <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
                       ) : (
                         <span
@@ -536,7 +538,7 @@ export default function AdminUsersPage() {
               </label>
 
               {/* Cloud Support Calculator permission */}
-              <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 16px", background: "#f8fafc" }}>
+              {editForm.role !== "partner_ae" && <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 16px", background: "#f8fafc" }}>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>Cloud Support Calculator</div>
                 {editForm.role === "admin" ? (
                   <div style={{ fontSize: 13, color: "#8764b8" }}>Admin role always has full access.</div>
