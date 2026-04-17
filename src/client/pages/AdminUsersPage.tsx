@@ -214,6 +214,17 @@ export default function AdminUsersPage() {
   const visibleUsers =
     orgTab === "all" ? users : users.filter((u) => u.organization_name === orgTab);
 
+  // Group visible users by role in display order, sorted by name within each group
+  const ROLE_ORDER: Role[] = ["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"];
+  const groupedUsers: { role: Role; users: User[] }[] = ROLE_ORDER
+    .map((role) => ({
+      role,
+      users: visibleUsers
+        .filter((u) => u.role === role)
+        .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
+    }))
+    .filter((g) => g.users.length > 0);
+
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading users...</div>;
 
   return (
@@ -268,10 +279,25 @@ export default function AdminUsersPage() {
             {visibleUsers.length === 0 ? (
               <tr><td colSpan={orgTab === "all" ? 7 : 6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users in this org.</td></tr>
             ) : (
-              visibleUsers.map((user) => {
-                const perm = (user.cs_permission ?? "none") as CsPerm;
-                const effectivePerm = user.role === "admin" ? "power_user" : perm;
-                return (
+              groupedUsers.flatMap(({ role, users: groupUsers }) => [
+                <tr key={`group-${role}`}>
+                  <td
+                    colSpan={orgTab === "all" ? 7 : 6}
+                    style={{
+                      padding: "6px 16px", fontSize: 10, fontWeight: 700,
+                      letterSpacing: "0.1em", textTransform: "uppercase",
+                      color: ROLE_COLOR[role] ?? "#94a3b8",
+                      background: (ROLE_COLOR[role] ?? "#94a3b8") + "0d",
+                      borderBottom: `1px solid ${(ROLE_COLOR[role] ?? "#94a3b8")}25`,
+                    }}
+                  >
+                    {ROLE_LABELS[role]} · {groupUsers.length}
+                  </td>
+                </tr>,
+                ...groupUsers.map((user) => {
+                  const perm = (user.cs_permission ?? "none") as CsPerm;
+                  const effectivePerm = user.role === "admin" ? "power_user" : perm;
+                  return (
                   <tr key={user.id}>
                     <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
                     <td>{user.email}</td>
@@ -339,8 +365,9 @@ export default function AdminUsersPage() {
                       )}
                     </td>
                   </tr>
-                );
-              })
+                  );
+                })
+              ])
             )}
           </tbody>
         </table>
