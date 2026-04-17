@@ -28,6 +28,8 @@ import SupportCasesPage from "../pages/SupportCasesPage";
 import SupportCaseDetailPage from "../pages/SupportCaseDetailPage";
 import SupportNewCasePage from "../pages/SupportNewCasePage";
 import SupportCaseConfirmationPage from "../pages/SupportCaseConfirmationPage";
+import RoadmapPage from "../pages/RoadmapPage";
+import AdminRoadmapPage from "../pages/AdminRoadmapPage";
 
 export default function Router() {
   return (
@@ -55,6 +57,7 @@ export default function Router() {
           <Route path="/prospecting" element={<ProspectingPage />} />
           <Route path="/prospecting/:id" element={<ProspectListDetailPage />} />
           <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/roadmap" element={<RoadmapPage />} />
 <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/access" element={<AdminAccessPage />} />
           <Route path="/admin/projects" element={<AdminProjectsPage />} />
@@ -62,6 +65,7 @@ export default function Router() {
           <Route path="/admin/optimize" element={<AdminOptimizePage />} />
           <Route path="/admin/labor" element={<AdminLaborPage />} />
           <Route path="/admin/templates" element={<AdminTemplatesPage />} />
+          <Route path="/admin/roadmap" element={<AdminRoadmapPage />} />
           <Route element={<SupportWrapper />}>
             <Route path="/support/cases" element={<SupportCasesPage />} />
             <Route path="/support/cases/new" element={<SupportNewCasePage />} />

@@ -903,6 +903,27 @@ export type Template = {
   updated_at: string;
 };
 
+export type FeatureStatus = "submitted" | "under_review" | "planned" | "in_progress" | "released" | "declined";
+export type FeaturePriority = "low" | "medium" | "high" | "critical";
+export type FeatureCategory = "ui_ux" | "performance" | "integration" | "reporting" | "security" | "other";
+
+export type FeatureRequest = {
+  id: string;
+  title: string;
+  description: string | null;
+  status: FeatureStatus;
+  priority: FeaturePriority;
+  category: FeatureCategory | null;
+  submitter_id: string | null;
+  submitter_name: string | null;
+  submitter_email: string | null;
+  admin_notes: string | null;
+  vote_count: number;
+  user_has_voted: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export const api = {
   me: () => request<MeResponse>("/me"),
   systemStatus: () => request<SystemStatusResponse>("/status"),
@@ -1673,5 +1694,17 @@ export const api = {
     request<{ ok: boolean }>(`/prospecting/prospects/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   prospectingAssignableUsers: () =>
     request<Array<{ id: string; name: string | null; email: string; organization_name: string | null }>>("/prospecting/assignable-users"),
+
+  // ── Feature Requests ─────────────────────────────────────────────────────
+  featureRequests: () =>
+    request<FeatureRequest[]>("/features"),
+  createFeatureRequest: (data: { title: string; description?: string; category?: FeatureCategory }) =>
+    request<FeatureRequest>("/features", { method: "POST", body: JSON.stringify(data) }),
+  updateFeatureRequest: (id: string, data: Partial<{ title: string; description: string | null; status: FeatureStatus; priority: FeaturePriority; category: FeatureCategory | null; admin_notes: string | null }>) =>
+    request<{ ok: boolean }>(`/features/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteFeatureRequest: (id: string) =>
+    request<{ ok: boolean }>(`/features/${id}`, { method: "DELETE" }),
+  toggleFeatureVote: (id: string) =>
+    request<{ voted: boolean }>(`/features/${id}/vote`, { method: "POST" }),
 
 };

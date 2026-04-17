@@ -162,6 +162,7 @@ export default function AppShell() {
               <SideLink to="/prospecting" icon={NAV_ICONS.prospecting} onClick={() => setDrawerOpen(false)}>Prospecting</SideLink>
             )}
             <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
+            <SideLink to="/roadmap" icon={NAV_ICONS.roadmap} onClick={() => setDrawerOpen(false)}>Roadmap</SideLink>
           </>
         )}
         {isClient && (
@@ -179,6 +180,7 @@ export default function AppShell() {
             <SideLink to="/admin/labor" icon={NAV_ICONS.adminLabor} onClick={() => setDrawerOpen(false)}>Admin: Labor</SideLink>
             <SideLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setDrawerOpen(false)}>Admin: Templates</SideLink>
             <SideLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setDrawerOpen(false)}>Admin: Users</SideLink>
+            <SideLink to="/admin/roadmap" icon={NAV_ICONS.adminRoadmap} onClick={() => setDrawerOpen(false)}>Admin: Roadmap</SideLink>
           </div>
         )}
       </nav>
@@ -539,6 +541,20 @@ const NAV_ICONS = {
   support: (
     <I>
       <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+    </I>
+  ),
+  roadmap: (
+    <I>
+      <rect x="3" y="4" width="18" height="4" rx="1"/>
+      <rect x="3" y="10" width="13" height="4" rx="1"/>
+      <rect x="3" y="16" width="8" height="4" rx="1"/>
+    </I>
+  ),
+  adminRoadmap: (
+    <I>
+      <rect x="3" y="3" width="5" height="18" rx="1"/>
+      <rect x="10" y="3" width="5" height="12" rx="1"/>
+      <rect x="17" y="3" width="5" height="7" rx="1"/>
     </I>
   ),
 };
