@@ -538,38 +538,40 @@ export default function AdminUsersPage() {
               </label>
 
               {/* Cloud Support Calculator permission */}
-              {editForm.role !== "partner_ae" && <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 16px", background: "#f8fafc" }}>
-                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>Cloud Support Calculator</div>
-                {editForm.role === "admin" ? (
-                  <div style={{ fontSize: 13, color: "#8764b8" }}>Admin role always has full access.</div>
-                ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
-                    {(["none", "user", "power_user"] as CsPerm[]).map((p) => {
-                      const active = (editForm.cs_permission ?? "none") === p;
-                      const descriptions: Record<CsPerm, string> = {
-                        none: "No access to the calculator",
-                        user: "Create & manage own proposals",
-                        power_user: "View and manage all proposals",
-                      };
-                      return (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => setEditForm({ ...editForm, cs_permission: p })}
-                          style={{
-                            padding: "10px 12px", borderRadius: 6, textAlign: "left", cursor: "pointer",
-                            border: `1.5px solid ${active ? CS_PERM_COLOR[p] : "#e2e8f0"}`,
-                            background: active ? CS_PERM_COLOR[p] + "15" : "#fff",
-                          }}
-                        >
-                          <div style={{ fontSize: 13, fontWeight: 600, color: active ? CS_PERM_COLOR[p] : "#1e293b", marginBottom: 3 }}>{CS_PERM_LABELS[p]}</div>
-                          <div style={{ fontSize: 11, color: active ? CS_PERM_COLOR[p] : "#94a3b8", lineHeight: 1.4 }}>{descriptions[p]}</div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              {editForm.role !== "partner_ae" && (
+                <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, padding: "14px 16px", background: "#f8fafc" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#03395f", marginBottom: 10 }}>Cloud Support Calculator</div>
+                  {editForm.role === "admin" ? (
+                    <div style={{ fontSize: 13, color: "#8764b8" }}>Admin role always has full access.</div>
+                  ) : (
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8 }}>
+                      {(["none", "user", "power_user"] as CsPerm[]).map((p) => {
+                        const active = (editForm.cs_permission ?? "none") === p;
+                        const descriptions: Record<CsPerm, string> = {
+                          none: "No access to the calculator",
+                          user: "Create & manage own proposals",
+                          power_user: "View and manage all proposals",
+                        };
+                        return (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setEditForm({ ...editForm, cs_permission: p })}
+                            style={{
+                              padding: "10px 12px", borderRadius: 6, textAlign: "left", cursor: "pointer",
+                              border: `1.5px solid ${active ? CS_PERM_COLOR[p] : "#e2e8f0"}`,
+                              background: active ? CS_PERM_COLOR[p] + "15" : "#fff",
+                            }}
+                          >
+                            <div style={{ fontSize: 13, fontWeight: 600, color: active ? CS_PERM_COLOR[p] : "#1e293b", marginBottom: 3 }}>{CS_PERM_LABELS[p]}</div>
+                            <div style={{ fontSize: 11, color: active ? CS_PERM_COLOR[p] : "#94a3b8", lineHeight: 1.4 }}>{descriptions[p]}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving}>{saving ? "Saving..." : "Save Changes"}</button>
