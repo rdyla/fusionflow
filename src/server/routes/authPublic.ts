@@ -137,6 +137,16 @@ app.get("/logout", async (c) => {
   });
 });
 
+// Temporary debug — remove after verifying staging secrets
+app.get("/sso/debug", (c) => {
+  return c.json({
+    has_tenant:  !!c.env.DYNAMICS_TENANT_ID,
+    has_client:  !!c.env.SSO_CLIENT_ID,
+    has_secret:  !!c.env.SSO_CLIENT_SECRET,
+    app_url:     c.env.APP_URL ?? "(not set)",
+  });
+});
+
 // GET /api/auth/sso — redirect to Microsoft login (for internal PF staff)
 app.get("/sso", async (c) => {
   const tenantId = c.env.DYNAMICS_TENANT_ID;
