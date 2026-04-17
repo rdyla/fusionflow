@@ -79,7 +79,18 @@ app.route("/api/features", featureRoutes);
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means
 // the Worker handles all requests before Cloudflare's asset handler.
-app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
+// HTML responses get no-store so Cloudflare's edge never caches index.html,
+// ensuring browsers always receive the latest hashed asset references.
+app.all("*", async (c) => {
+  const res = await c.env.ASSETS.fetch(c.req.raw);
+  const ct = res.headers.get("content-type") ?? "";
+  if (ct.includes("text/html")) {
+    const next = new Response(res.body, res);
+    next.headers.set("Cache-Control", "no-store");
+    return next;
+  }
+  return res;
+});
 
 async function runGoLiveReminders(env: Bindings): Promise<void> {
   const appUrl = env.APP_URL ?? "";
