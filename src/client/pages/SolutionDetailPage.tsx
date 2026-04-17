@@ -6,6 +6,7 @@ import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWiza
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
+import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
@@ -1054,36 +1055,26 @@ export default function SolutionDetailPage() {
       {/* ── Handoff Tab ── */}
       {tab === "handoff" && (
         <div style={{ display: "grid", gap: 20 }}>
-          {/* Summary */}
-          <div className="ms-card">
-            <h3 style={{ margin: "0 0 16px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Solution Summary</h3>
-            <table style={{ borderCollapse: "collapse", width: "100%" }}>
-              <tbody>
-                {[
-                  ["Customer", solution.customer_name],
-                  ["Vendor", solution.vendor === "zoom" ? "Zoom" : solution.vendor === "ringcentral" ? "RingCentral" : "— Not yet assigned —"],
-                  ["Technology", TYPE_LABELS[solution.solution_type] ?? solution.solution_type],
-                  ["Partner AE", solution.partner_ae_display_name ?? solution.partner_ae_name ?? "—"],
-                  ["Status", STATUS_LABELS[solution.status]],
-                ].map(([label, value]) => (
-                  <tr key={label}>
-                    <td style={{ padding: "7px 16px 7px 0", fontSize: 13, color: "#94a3b8", width: 180, whiteSpace: "nowrap" }}>{label}</td>
-                    <td style={{ padding: "7px 0", fontSize: 13, color: "#334155" }}>{value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
 
-          {/* Handoff notes */}
+          {/* Project Handoff Document */}
+          <ProjectHandoffDocument
+            solution={solution}
+            needsAssessment={needsAssessment}
+            laborEstimate={laborEstimate}
+            solutionContacts={solutionContacts}
+            canEdit={canEdit}
+            onSaved={load}
+          />
+
+          {/* Internal Notes (implementation team only) */}
           <div className="ms-card">
-            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Handoff Notes</h3>
+            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Internal Handoff Notes</h3>
             <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-              Any additional context, special instructions, or important notes for the project team.
+              Internal context and special instructions for the project team — not included in the handoff document.
             </p>
             <textarea
               className="ms-input"
-              rows={8}
+              rows={5}
               style={{ resize: "vertical", lineHeight: 1.6 }}
               value={handoffNotes}
               onChange={(e) => setHandoffNotes(e.target.value)}
@@ -1094,40 +1085,6 @@ export default function SolutionDetailPage() {
               <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ handoff_notes: handoffNotes })}>
                 {saving ? "Saving…" : "Save Notes"}
               </button>
-            )}
-          </div>
-
-          {/* Customer Contacts summary */}
-          <div className="ms-card">
-            <h3 style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
-            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 14px" }}>
-              Contacts tagged on this solution will be copied to the implementation project automatically.
-            </p>
-            {solutionContacts.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                No contacts added yet — use the Overview tab to add customer contacts.
-              </div>
-            ) : (
-              <div style={{ display: "grid", gap: 6 }}>
-                {solutionContacts.map((c) => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: "rgba(99,193,234,0.05)", border: "1px solid rgba(99,193,234,0.12)", borderRadius: 6 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>
-                      {c.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
-                        {c.contact_role && (
-                          <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>{c.contact_role}</span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
-                        {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
             )}
           </div>
 
