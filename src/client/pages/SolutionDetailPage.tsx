@@ -6,6 +6,7 @@ import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWiza
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
+import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
@@ -102,6 +103,9 @@ export default function SolutionDetailPage() {
   // Labor Estimate
   const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
 
+  // SOW Sizing
+  const [sowData, setSowData] = useState<SowData | null>(null);
+
   // Inline rename
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -138,6 +142,7 @@ export default function SolutionDetailPage() {
     });
     setScope(s.scope_of_work ?? "");
     setHandoffNotes(s.handoff_notes ?? "");
+    try { setSowData(s.sow_data ? JSON.parse(s.sow_data) as SowData : null); } catch { setSowData(null); }
 
     // Load needs assessment for all solution types
     api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
@@ -1018,12 +1023,21 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {tab === "scope" && (
         <div style={{ display: "grid", gap: 20 }}>
+          {/* Sizing confirmation form */}
+          <SowSizingForm
+            solution={solution}
+            needsAssessment={needsAssessment}
+            canEdit={canEdit}
+            onSaved={(saved) => setSowData(saved)}
+          />
+
           {/* SOW document generator */}
           <ScopeOfWorkDocument
             solution={solution}
             needsAssessment={needsAssessment}
             laborEstimate={laborEstimate}
             scopeText={scope}
+            sowData={sowData}
           />
 
           {/* Scope notes textarea — feeds into the generated document */}

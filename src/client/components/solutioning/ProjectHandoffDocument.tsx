@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api, type Solution, type NeedsAssessment, type LaborEstimate, type SolutionContact } from "../../lib/api";
+import type { SowData } from "./SowSizingForm";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -238,6 +239,68 @@ function seedFromAssessment(base: PhdData, answers: Record<string, unknown>, sol
   return d;
 }
 
+// ── Seed from confirmed sow_data sizing ──────────────────────────────────────
+
+function seedFromSowData(base: PhdData, sow: SowData): PhdData {
+  const d = JSON.parse(JSON.stringify(base)) as PhdData;
+
+  // UCaaS licenses — only fill if field still blank
+  if (sow.ucaas.basic_users       && !d.ucaas_licenses.basic_user)     d.ucaas_licenses.basic_user     = sow.ucaas.basic_users;
+  if (sow.ucaas.advanced_users    && !d.ucaas_licenses.advanced_user)  d.ucaas_licenses.advanced_user  = sow.ucaas.advanced_users;
+  if (sow.ucaas.common_area       && !d.ucaas_licenses.common_area)    d.ucaas_licenses.common_area    = sow.ucaas.common_area;
+  if (sow.ucaas.conference_rooms  && !d.ucaas_licenses.conference)     d.ucaas_licenses.conference     = sow.ucaas.conference_rooms;
+  if (sow.ucaas.operators         && !d.ucaas_licenses.operator)       d.ucaas_licenses.operator       = sow.ucaas.operators;
+  if (sow.ucaas.additional_did    && !d.ucaas_licenses.additional_did) d.ucaas_licenses.additional_did = sow.ucaas.additional_did;
+  if (sow.ucaas.ms_teams_type && sow.ucaas.ms_teams_type !== "none" && !d.ucaas_licenses.ms_teams_type) {
+    d.ucaas_licenses.ms_teams_type = sow.ucaas.ms_teams_type;
+  }
+
+  // CCaaS licenses
+  if (sow.ccaas.agents      && !d.ccaas_licenses.agents)      d.ccaas_licenses.agents      = sow.ccaas.agents;
+  if (sow.ccaas.supervisors && !d.ccaas_licenses.supervisors) d.ccaas_licenses.supervisors = sow.ccaas.supervisors;
+  if (sow.ccaas.admin_only  && !d.ccaas_licenses.admin_only)  d.ccaas_licenses.admin_only  = sow.ccaas.admin_only;
+
+  // CCaaS channels
+  if (sow.ccaas.voice !== null && d.ccaas_channels.voice === null) d.ccaas_channels.voice = sow.ccaas.voice;
+  if (sow.ccaas.email !== null && d.ccaas_channels.email === null) d.ccaas_channels.email = sow.ccaas.email;
+  if (sow.ccaas.chat  !== null && d.ccaas_channels.chat  === null) d.ccaas_channels.chat  = sow.ccaas.chat;
+  if (sow.ccaas.sms   !== null && d.ccaas_channels.sms   === null) d.ccaas_channels.sms   = sow.ccaas.sms;
+  if (sow.ccaas.fax   !== null && d.ccaas_channels.fax   === null) d.ccaas_channels.fax   = sow.ccaas.fax;
+
+  // BYOC
+  if (sow.ccaas.byoc_carrier && !d.byoc.carrier)    d.byoc.carrier    = sow.ccaas.byoc_carrier;
+  if (sow.ccaas.byoc_sbc     && !d.byoc.sbc_model)  d.byoc.sbc_model  = sow.ccaas.byoc_sbc;
+
+  // Deployment
+  if (sow.shared.sites_count  && !d.deployment.sites_count)  d.deployment.sites_count  = sow.shared.sites_count;
+  if (sow.shared.phases_count && !d.deployment.phases_count) d.deployment.phases_count = sow.shared.phases_count;
+
+  // Implementation strategy
+  const strat = sow.shared.implementation_strategy;
+  if (strat && d.implementation_strategy.cloudpro === null && d.implementation_strategy.advocacy === null && d.implementation_strategy.cloudcare === null) {
+    if (strat === "cloudpro")  d.implementation_strategy.cloudpro  = true;
+    if (strat === "advocacy")  d.implementation_strategy.advocacy  = true;
+    if (strat === "cloudcare") d.implementation_strategy.cloudcare = true;
+  }
+
+  // Porting
+  if (sow.shared.porting_carrier   && !d.porting.carrier)   d.porting.carrier   = sow.shared.porting_carrier;
+  if (sow.shared.porting_did_count && !d.porting.num_dids)  d.porting.num_dids  = sow.shared.porting_did_count;
+
+  // Analog devices
+  if (sow.shared.fax_count             && !d.analog_devices.fax_machines.qty)           d.analog_devices.fax_machines.qty           = sow.shared.fax_count;
+  if (sow.shared.overhead_paging_count && !d.analog_devices.analog_overhead_paging.qty) d.analog_devices.analog_overhead_paging.qty = sow.shared.overhead_paging_count;
+  if (sow.shared.ip_paging_count       && !d.analog_devices.ip_overhead_paging.qty)     d.analog_devices.ip_overhead_paging.qty     = sow.shared.ip_paging_count;
+
+  // SOW costs
+  if (sow.shared.sow_cost_before && !d.sow.cost_before) d.sow.cost_before = sow.shared.sow_cost_before;
+  if (sow.shared.sow_cost_after  && !d.sow.cost_after)  d.sow.cost_after  = sow.shared.sow_cost_after;
+
+  if (sow.additional_notes && !d.additional_notes) d.additional_notes = sow.additional_notes;
+
+  return d;
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 const TH_STYLE: React.CSSProperties = {
@@ -337,7 +400,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // Initialize from stored phd_data, then seed from assessment for any un-set fields
+  // Initialize from stored phd_data, then seed from assessment + confirmed sizing for any un-set fields
   useEffect(() => {
     let base: PhdData;
     try {
@@ -348,9 +411,15 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
     if (needsAssessment?.answers) {
       base = seedFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_type);
     }
+    if (solution.sow_data) {
+      try {
+        const sow = JSON.parse(solution.sow_data) as SowData;
+        base = seedFromSowData(base, sow);
+      } catch { /* ignore parse errors */ }
+    }
     setPhd(base);
     setDirty(false);
-  }, [solution.phd_data, needsAssessment, solution.solution_type]);
+  }, [solution.phd_data, solution.sow_data, needsAssessment, solution.solution_type]);
 
   const update = useCallback(<K extends keyof PhdData>(key: K, value: PhdData[K]) => {
     setPhd(prev => ({ ...prev, [key]: value }));
