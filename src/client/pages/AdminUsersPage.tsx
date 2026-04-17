@@ -432,7 +432,7 @@ export default function AdminUsersPage() {
                   <span>Organization</span>
                   <select
                     className="ms-input"
-                    value={ORGS.includes(editForm.organization_name as Org) ? editForm.organization_name : ""}
+                    value={ORGS.includes(editForm.organization_name as Org) ? (editForm.organization_name ?? "") : ""}
                     onChange={(e) => setEditForm({ ...editForm, organization_name: e.target.value })}
                   >
                     <option value="">— Select org —</option>
