@@ -1,0 +1,58 @@
+-- Seeds wrangler's d1_migrations tracking table with all migrations
+-- that were applied manually before automated migration tracking was enabled.
+-- Run once against production: wrangler d1 execute fusionflow --remote --file=migrations/seed_migration_history.sql
+
+CREATE TABLE IF NOT EXISTS d1_migrations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT UNIQUE,
+  applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+INSERT OR IGNORE INTO d1_migrations (name) VALUES
+  ('0001_initial.sql'),
+  ('0002_documents.sql'),
+  ('0003_project_archive.sql'),
+  ('0004_solutioning.sql'),
+  ('0005_project_contacts.sql'),
+  ('0006_contact_role.sql'),
+  ('0007_task_comments.sql'),
+  ('0008_solution_gap_analysis.sql'),
+  ('0009_solution_contacts.sql'),
+  ('0010_optimize.sql'),
+  ('0011_project_staff.sql'),
+  ('0012_user_avatar.sql'),
+  ('0013_client_role.sql'),
+  ('0014_asana.sql'),
+  ('0015_impact_assessments.sql'),
+  ('0016_needs_assessments.sql'),
+  ('0017_labor_estimates.sql'),
+  ('0018_labor_config.sql'),
+  ('0019_manager_hierarchy.sql'),
+  ('0020_health_override.sql'),
+  ('0021_templates.sql'),
+  ('0022_notifications.sql'),
+  ('0023_optimize_ae.sql'),
+  ('0024_solution_team.sql'),
+  ('0025_solution_tech_category.sql'),
+  ('0026_project_solution_link.sql'),
+  ('0027_customers.sql'),
+  ('0028_customer_address.sql'),
+  ('0029_project_crm_case.sql'),
+  ('0030_project_crm_opportunity.sql'),
+  ('0031_journeys.sql'),
+  ('0032_prospecting.sql'),
+  ('0033_clean_team_columns.sql'),
+  ('0034_drop_solution_id.sql'),
+  ('0034_zoom_recordings.sql'),
+  ('0035_user_zoom_id.sql'),
+  ('0036_zoom_recording_task.sql'),
+  ('0037_task_time_entry.sql'),
+  ('0038_task_time_entries.sql'),
+  ('0039_zoom_recording_password.sql'),
+  ('0040_solution_vendor_ae.sql'),
+  ('0041_drop_milestones.sql'),
+  ('0042_risk_task_id.sql'),
+  ('0043_zoom_recording_share_url.sql'),
+  ('0044_cloudsupport.sql'),
+  ('0045_cs_permission.sql'),
+  ('0046_feature_requests.sql');

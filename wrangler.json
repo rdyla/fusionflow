@@ -26,7 +26,8 @@
     {
       "binding": "DB",
       "database_name": "fusionflow",
-      "database_id": "92ff189b-31c3-419c-8504-1c39a369cc0f"
+      "database_id": "92ff189b-31c3-419c-8504-1c39a369cc0f",
+      "migrations_dir": "migrations"
     }
   ],
   "kv_namespaces": [
