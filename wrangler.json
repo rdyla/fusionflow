@@ -47,7 +47,7 @@
       "name": "fusionflow-staging",
       "account_id": "521c322a89a17bb69f91f1e65177606e",
       "vars": {
-        "APP_URL": "https://fusionflow-staging.rdyla.workers.dev",
+        "APP_URL": "https://staging.fusionflow360.com",
         "DEV_EMAIL": "rdyla@packetfusion.com"
       },
       "d1_databases": [
