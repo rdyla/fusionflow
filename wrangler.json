@@ -41,5 +41,35 @@
       "binding": "R2",
       "bucket_name": "fusionflow-docs"
     }
-  ]
+  ],
+  "env": {
+    "staging": {
+      "name": "fusionflow-staging",
+      "account_id": "521c322a89a17bb69f91f1e65177606e",
+      "vars": {
+        "APP_URL": "https://fusionflow-staging.rdyla.workers.dev",
+        "DEV_EMAIL": "rdyla@packetfusion.com"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "fusionflow-staging",
+          "database_id": "48523231-162d-4bb5-9130-fc8aadeb66ec",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "kv_namespaces": [
+        {
+          "binding": "KV",
+          "id": "b440d440223245729ef519290020ab6d"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "R2",
+          "bucket_name": "fusionflow-docs-staging"
+        }
+      ]
+    }
+  }
 }
