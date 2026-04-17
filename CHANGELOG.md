@@ -4,6 +4,165 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 2026-04-16
+
+### CI/CD Infrastructure — GitHub Actions, Staging, Automated Migrations
+
+Full production-grade deployment pipeline replacing Cloudflare Git integration.
+
+**GitHub Actions Workflows**
+- `pr-check.yml` — runs `tsc -b --noEmit` on every PR targeting `main` or `staging`; gate is enforced via branch protection rulesets
+- `deploy-staging.yml` — triggers on push to `staging`; applies D1 migrations, builds, deploys to staging Worker, runs smoke tests, sends Zoom notification
+- `deploy.yml` — triggers on push to `main`; same steps targeting production
+
+**Staging Environment**
+- New Cloudflare Worker: `fusionflow-staging` at `staging.fusionflow360.com`
+- Separate D1 (`fusionflow-staging`), KV, and R2 (`fusionflow-docs-staging`) bindings in `wrangler.json`
+- Branch protection rulesets on both `main` and `staging` require the PR type-check to pass before merge
+
+**Automated D1 Migrations**
+- Switched from manual `wrangler d1 execute` to `wrangler d1 migrations apply` (tracking via `d1_migrations` table)
+- `scripts/seed_migration_history.sql` registers all 46 pre-existing manually-applied migrations before handing off to automated tracking
+- Migration 0047: formalizes `dynamics_account_id` column on `projects` (existed in production but was never in a migration file)
+
+**Smoke Test Script**
+- `scripts/smoke-test.mjs` — 9 checks: health endpoint (`/api/health`), frontend HTML, and 7 protected routes returning 401
+- Accepts `BASE_URL` env var; defaults to staging; exits non-zero if any check fails
+
+**Zoom Team Chat Notifications**
+- Staging deploys notify with 🟡 (success) / 🔴 (failure)
+- Production deploys notify with ✅ (success) / ❌ (failure)
+- Uses incoming webhook `Authorization` header with `ZOOM_WEBHOOK_VERIFICATION_TOKEN` secret
+
+**Deployment & UAT Plan Document**
+- `docs/fusionflow-deployment-uat-plan.md` — comprehensive doc covering environments, branch strategy, build pipeline, migration process, deployment checklist, 4-phase UAT protocol, gaps table, and key scripts reference
+
+---
+
+### Roadmap & Feature Request Tracking
+
+New module for collecting and managing product feedback across user roles.
+
+**User-Facing Roadmap (`/roadmap`)**
+- Status tabs: All, Submitted, Under Review, Planned, In Progress, Released
+- Feature cards with upvote button (optimistic update), status badge, category chip, submitter name, and vote count
+- Submit modal: title, description, category
+- Visible to all non-client authenticated users
+
+**Admin Kanban (`/admin/roadmap`)**
+- Six-column board: Submitted / Under Review / Planned / In Progress / Released / Declined
+- ← → arrow buttons on each card for inline status moves (optimistic update, rollback on API error)
+- Click-to-edit modal: status pill selector, priority (low/medium/high/critical), category, admin notes, delete
+- "Show/Hide Declined" toggle
+- Create modal for admin-initiated requests
+
+**Backend**
+- `GET /api/features` — all requests with vote counts and `user_has_voted` flag
+- `POST /api/features` — any authenticated user can submit
+- `PATCH /api/features/:id` — admin only
+- `DELETE /api/features/:id` — admin only
+- `POST /api/features/:id/vote` — toggle vote (idempotent)
+
+**Database**: `feature_requests` and `feature_request_votes` tables (migration 0046)
+
+**Navigation**: Roadmap link added to sidebar for non-client users; Admin Roadmap link added for admin users
+
+---
+
+### Admin Users — Org Tabs, Partner AE Cleanup, Role/Manager Grouping
+
+**Organizational Tabs**
+- Admin Users page split into tabbed view: Packet Fusion, Partners, Clients (and inactive users)
+- Each tab shows only the relevant user groups for that organization context
+
+**Partner AE UI Cleanup**
+- Cloud Support role chip hidden in the users table for `partner_ae` role (not applicable)
+- Cloud Support permission block hidden in the partner AE edit modal
+
+**Role/Manager Grouping**
+- Users now grouped by role label + manager in the table
+- Fixed group header rendering bug: destructures `{ label, color, users }` from grouped items (was incorrectly reading `role` which was always `undefined`)
+
+---
+
+### Cloud Support Calculator — Document Improvements
+
+- Renamed "Special Inclusions" section to "Inclusions"
+- Fixed section numbering to maintain consistent order across custom, MSO, and inclusions sections
+- Fixed section number alignment between definition arrays and render order
+- Added custom inclusions: named line items with blurbs, no pricing impact
+- Removed CCaaS pricing formula from agreement doc sub-labels
+
+---
+
+## 2026-04-15
+
+### Cloud Support Calculator
+
+New module for creating, versioning, and managing managed services support proposals with financial calculations.
+
+**Core Functionality**
+- Create proposals by name; each proposal can have multiple saved versions (full snapshots of form inputs and calculated results)
+- Each version stores `form_data` (inputs) and `calc_result` (Annual Value + TCV) as JSON snapshots — older versions remain intact when a new one is saved
+- Proposals list shows version count, latest Annual Value, TCV, creator, and last updated date
+- Click-through to proposal detail page where versions are listed and can be loaded back into the calculator
+
+**Permissions**
+- Access is gated per-user via a new `cs_permission` column on `users` (default: `none`)
+  - `none` — no access; module not visible
+  - `user` — can create and manage their own proposals
+  - `power_user` — can view all proposals and edit/delete any
+- Admin can set `cs_permission` per user from the Admin Users edit modal
+- `admin` role always has full access
+
+**Backend**
+- `GET /api/cloudsupport` — list proposals (own only, or all for power_user/admin)
+- `POST /api/cloudsupport` — create proposal
+- `GET /api/cloudsupport/:id` — proposal detail with all versions
+- `PATCH /api/cloudsupport/:id` — rename proposal
+- `DELETE /api/cloudsupport/:id` — delete proposal and all versions
+- `POST /api/cloudsupport/:id/versions` — save a new version snapshot
+
+**Database**: `cs_proposals`, `cs_versions` tables (migration 0044); `cs_permission` column on `users` (migration 0045)
+
+---
+
+### Inbox & Direct Messaging
+
+Unified notification center and peer-to-peer messaging for all FusionFlow users.
+
+**Notifications**
+- System-generated notifications for: task assigned, task blocked, risk assigned, risk added, note added, go-live reminder
+- Each notification links to the relevant project entity (task, risk, note, project page)
+- Color-coded by type (cyan = task, red = blocked, orange = risk, indigo = note, green = go-live, teal = DM)
+- Unread dot badge on notification icon in the top bar; updates on `GET /api/inbox/unread-count`
+
+**Direct Messages**
+- Compose panel with recipient search (by name or email, up to 8 suggestions)
+- 2000-character message body
+- Cannot message yourself
+- Messages appear in the recipient's inbox as a `direct_message` notification with sender attribution
+
+**UI**
+- Three tabs: All, Notifications, Messages
+- Items sorted: unread first, then newest
+- Per-item actions: navigate to entity (marks read), mark read, delete
+- "Mark all read" bulk action
+- "Load more" pagination (30 per page)
+- Relative timestamps ("just now", "5m", "2h", "3d")
+
+**Backend**
+- `GET /api/inbox` — paginated list with tab filter
+- `GET /api/inbox/unread-count` — badge count
+- `PATCH /api/inbox/:id/read` — mark single read
+- `POST /api/inbox/read-all` — bulk mark all read
+- `DELETE /api/inbox/:id` — delete notification
+- `POST /api/inbox/messages` — send direct message
+
+**Database**: `notifications` table (migration 0022); `createNotification()` helper used by task, risk, and note routes to fan out notifications on creation/assignment
+
+---
+
 ## 2026-04-02 (continued)
 
 ### Prospecting — Contact Targeting & Apollo API Fixes

@@ -22,6 +22,14 @@ It is purpose-built for the way Ring and Packet Fusion AEs, SAs, PMs, Engineers,
 
 ## Core Modules
 
+### Roadmap & Feature Requests
+User-facing roadmap and internal kanban for tracking product feedback and release planning.
+
+- **User Roadmap** (`/roadmap`) — all authenticated non-client users can browse feature requests, filter by status tab (All / Submitted / Under Review / Planned / In Progress / Released), upvote items with optimistic feedback, and submit new requests (title, description, category)
+- **Admin Kanban** (`/admin/roadmap`) — six-column board (Submitted → Under Review → Planned → In Progress → Released → Declined) with ← → arrow buttons for inline status moves, click-to-edit modal for setting priority, category, and admin notes, and a Show/Hide Declined toggle
+- Categories: General, Solutioning, Implementation, Optimize, Integrations, Reporting, Admin
+- **Database**: `feature_requests` and `feature_request_votes` tables (migration 0046)
+
 ### Solutioning
 Manage opportunities from first conversation to signed deal.
 
@@ -267,6 +275,30 @@ A low confidence score does not change the Expected hours — it widens the rang
 ## Deployment
 
 FusionFlow is live at **[fusionflow360.com](https://fusionflow360.com)**, deployed on Cloudflare Workers with a D1 database, KV store for sessions and credentials, and R2 for document storage.
+
+### Environments
+
+| Environment | URL | Branch | Database |
+|---|---|---|---|
+| **Production** | fusionflow360.com | `main` | D1 `fusionflow` |
+| **Staging** | staging.fusionflow360.com | `staging` | D1 `fusionflow-staging` |
+
+### CI/CD Pipeline (GitHub Actions)
+
+All deployment is handled by GitHub Actions workflows:
+
+| Workflow | Trigger | Steps |
+|---|---|---|
+| **PR Check** | PR → `main` or `staging` | TypeScript check (`tsc -b --noEmit`) |
+| **Deploy Staging** | Push to `staging` | Migrations → Build → Deploy → Smoke Test → Zoom notification |
+| **Deploy Production** | Push to `main` | Migrations → Build → Deploy → Zoom notification |
+
+- D1 migrations are applied automatically via `wrangler d1 migrations apply` before each deploy
+- Smoke tests hit 9 endpoints on staging after every deploy (health check, HTML, 7 protected routes)
+- Zoom Team Chat receives success/failure notifications for every staging and production deploy
+- Branch protection rulesets enforce PR type-checks on both `main` and `staging`
+
+See `docs/fusionflow-deployment-uat-plan.md` for the full deployment and UAT protocol.
 
 ---
 
