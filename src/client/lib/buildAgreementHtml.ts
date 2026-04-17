@@ -1,6 +1,37 @@
 import type { OppFormData, OppCalcResult } from "./calcSupport";
 import { getMsoTier } from "./msoTiers";
 
+const MSO_PLATFORM_COVERAGE: Record<string, { area: string; scope: string }[]> = {
+  zoom: [
+    { area: "Zoom Admin Management", scope: "Full administrative oversight of the Zoom environment including users, licenses, groups, and policies. User provisioning, deprovisioning, and role management handled by the assigned engineer." },
+    { area: "Call Flow Optimization", scope: "Regular review and tuning of auto receptionists, call queues, hunt groups, and routing logic. Configuration changes executed without separate scoping or T&M charges." },
+    { area: "Contact Center Routing Support", scope: "Zoom Contact Center queue, skill, and flow management including IVR configuration, routing logic, and overflow handling. Ongoing optimization aligned to business operating requirements." },
+    { area: "Zoom Policy Governance", scope: "Enforcement and maintenance of security, recording, compliance, and feature-access policies across the platform. Policy change management documented and executed within SLA." },
+    { area: "Emergency Change SLA", scope: "Priority handling of urgent Zoom configuration changes with defined response windows. Emergency changes are included in MSO — no T&M fees or callback scheduling required." },
+    { area: "SBC Support", scope: "Session Border Controller configuration support, monitoring, and troubleshooting included within the MSO engagement at no additional charge." },
+  ],
+  ringcentral: [
+    { area: "RingCentral Admin Management", scope: "Full administrative oversight of the RingCentral environment including users, licenses, groups, and policies. User provisioning, deprovisioning, and role management handled by the assigned engineer." },
+    { area: "Call Flow Optimization", scope: "Regular review and tuning of auto-attendants, call queues, hunt groups, and routing logic. Configuration changes executed without separate scoping or T&M charges." },
+    { area: "Contact Center Routing Support", scope: "RingCX queue, skill, and flow management including IVR configuration, routing logic, and overflow handling. Ongoing optimization aligned to business operating requirements." },
+    { area: "RingCentral Policy Governance", scope: "Enforcement and maintenance of security, recording, compliance, and feature-access policies across the platform. Policy change management documented and executed within SLA." },
+    { area: "Emergency Change SLA", scope: "Priority handling of urgent RingCentral configuration changes with defined response windows. Emergency changes are included in MSO — no T&M fees or callback scheduling required." },
+    { area: "SBC Support", scope: "Session Border Controller configuration support, monitoring, and troubleshooting included within the MSO engagement at no additional charge." },
+  ],
+};
+
+const MSO_ADV_APP_SCOPE: Record<string, string> = {
+  "Zoom Revenue Accelerator (ZRA)": "Call recording, transcription, and conversation intelligence configuration. Tracker and keyword setup, coaching insights, CRM integration support (Salesforce, HubSpot), and reporting dashboard optimization.",
+  "Zoom AI Expert Assist": "Real-time agent assist configuration, knowledge surfacing, AI-driven suggestion workflows, knowledge base connections, content tuning, and model optimization based on usage.",
+  "Zoom Virtual Agent (ZVA)": "Virtual Agent intent, flow, and routing configuration. Ongoing optimization of conversational experiences, bot behavior, escalation paths, and knowledge base integrations.",
+  "Zoom Quality Management (QM)": "Call evaluation forms, scoring models, calibration sessions, recording access, evaluator workflows, QM dashboards, and agent performance reporting.",
+  "Zoom Workforce Management (WFM)": "Forecasting, scheduling, adherence configuration, shift planning, intraday management, WFM integrations with CCaaS data sources, and workforce analytics.",
+  "RingCX AI (RAIR)": "AI Receptionist configuration including call handling logic, greetings, routing rules, business hours, escalation paths, directory updates, and intent recognition tuning.",
+  "RingSense (AI Conversation Intelligence)": "Call recording, transcription, and AI-driven conversation analysis. Tracker and keyword configuration, coaching insights, CRM integration support, and analytics optimization.",
+  "RingCX AVA": "Virtual Agent intent, dialog flow, and escalation logic configuration. Optimization of conversational experiences across voice and digital channels, knowledge base integrations.",
+  "RingCX ACE": "Conversation intelligence configuration including call recording, transcription, trackers, coaching insights, CRM integrations, and performance analytics.",
+};
+
 function escHtml(s: string | number | boolean): string {
   return String(s)
     .replace(/&/g, "&amp;")
@@ -708,6 +739,358 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
     </div>
   </div>
 </div>
+</body>
+</html>`;
+}
+
+export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
+  const customer = d.customerName || oppName || "[Customer Name]";
+  const term = d.term || 3;
+  const startDate = fmtDate(d.contractStart);
+  const endDate = fmtDate(d.contractEnd);
+  const advRate = d.advancedTaskRate ?? 145;
+  const verStr = versionNum === 0 ? "Draft" : `v${versionNum}`;
+  const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+
+  const tierMeta = getMsoTier(d.msoTier || "");
+  const tierLabel = tierMeta?.label ?? "Custom";
+  const tierEngineer = tierMeta?.engineer ?? "As scoped per SOW";
+  const tierAlloc = tierMeta?.allocation ?? "\u2014";
+  const tierFeatures = tierMeta?.features ?? [];
+  const tierDeliverables = tierMeta?.deliverables ?? [];
+  const tierSLA = tierMeta?.sla ?? "P1: 15 min \u00b7 P2: 1 hr \u00b7 P3: 4 hrs";
+  const slaParts = tierSLA.split(" \u00b7 ").slice(0, 3).map(p => p.split(": ")[1] ?? p);
+
+  const platform = d.advAppPlatform || "";
+  const platformLabel =
+    platform === "zoom" ? "Zoom" :
+    platform === "ringcentral" ? "RingCentral" :
+    d.advAppOtherDesc || "Platform";
+  const platformCovRows = MSO_PLATFORM_COVERAGE[platform] ?? [];
+  const advAppProducts = d.advAppProducts ?? [];
+  const hasAdvApp = advAppProducts.length > 0 || platform === "other";
+
+  const showUCaaS = d.oppType !== "CCaaS Only" && d.oppType !== "Advanced Applications";
+  const showCCaaS = d.oppType !== "UCaaS Only" && d.oppType !== "Advanced Applications";
+  const ucaasUsers = d.ucaasUsers || 0;
+  const ucaasTierLabel =
+    ucaasUsers <= 0 ? "\u2014" :
+    ucaasUsers <= 100 ? "Starter" :
+    ucaasUsers <= 500 ? "Business" :
+    ucaasUsers <= 2000 ? "Professional" : "Enterprise";
+  const ccaasTotal = calc.ccaasSup + calc.implSup;
+
+  // Advanced app rows for section 07
+  const advAppRows: { name: string; scope: string }[] = advAppProducts.map(p => ({
+    name: p,
+    scope: MSO_ADV_APP_SCOPE[p] ?? "Support includes configuration, optimization, troubleshooting, and ongoing guidance.",
+  }));
+  if (platform === "zoom") {
+    advAppRows.push({ name: "Custom API / Integration Support", scope: "Support for existing custom API workflows and integrations on a best-effort basis. Net-new API builds or major integration deployments are scoped separately via SOW." });
+  }
+
+  let secN = 0;
+  const sec = (title: string) => {
+    secN++;
+    return `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;margin-top:40px;">
+      <div style="width:26px;height:26px;border-radius:50%;background:#e8f5f2;border:1.5px solid #00b8a0;color:#007d6e;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;flex-shrink:0;">${String(secN).padStart(2, "0")}</div>
+      <div style="font-size:15px;font-weight:700;color:#0d1b2e;">${title}</div>
+      <div style="flex:1;height:1px;background:#e4eaf2;"></div>
+    </div>`;
+  };
+
+  const bullet = (text: string) =>
+    `<div style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;font-size:12.5px;color:#374151;">
+      <span style="width:14px;height:2px;background:#00b8a0;flex-shrink:0;margin-top:9px;border-radius:1px;"></span>
+      <span>${escHtml(text)}</span>
+    </div>`;
+
+  const tableStyles = `width:100%;border-collapse:collapse;font-size:12.5px;`;
+  const thStyle = `padding:10px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;color:#fff;background:#0d1b2e;`;
+  const tdStyle = `padding:12px 14px;color:#374151;border-bottom:1px solid #f1f5f9;vertical-align:top;`;
+  const tdBoldStyle = `padding:12px 14px;font-weight:700;color:#1e293b;border-bottom:1px solid #f1f5f9;vertical-align:top;`;
+
+  // Section 07 (adv apps) — only included if hasAdvApp
+  const advAppSection = hasAdvApp && advAppRows.length > 0 ? `
+    ${sec(`Advanced Applications Coverage \u2014 ${escHtml(platformLabel)}`)}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;">The following ${escHtml(platformLabel)} advanced applications are covered within this MSO engagement. Support includes configuration, optimization, troubleshooting, and ongoing guidance.</p>
+    <table style="${tableStyles}border:1px solid #e4eaf2;border-radius:8px;overflow:hidden;">
+      <thead><tr><th style="${thStyle}width:200px;">Application</th><th style="${thStyle}">Scope of Support</th></tr></thead>
+      <tbody>
+        ${advAppRows.map(r => `<tr><td style="${tdBoldStyle}">${escHtml(r.name)}</td><td style="${tdStyle}">${escHtml(r.scope)}</td></tr>`).join("")}
+      </tbody>
+    </table>
+    <p style="font-size:11px;color:#94a3b8;font-style:italic;margin-top:10px;">Advanced application support is included within the MSO engagement. Net-new builds, major redesigns, or new integration deployments may require a separate Statement of Work (SOW).</p>
+  ` : "";
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MSO Standalone Agreement \u2014 ${escHtml(customer)}</title>
+  ${sharedStyles()}
+  <style>
+    .mso-sa { background:#fff;color:#1c2333;font-family:'IBM Plex Sans',sans-serif;font-size:13px;line-height:1.75;max-width:900px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,0.18); }
+    .mso-sa-letterhead { padding:18px 48px;border-bottom:3px solid #0d1b2e;display:flex;align-items:center;justify-content:space-between;gap:20px;background:#fff; }
+    .mso-sa-hero { background:#0d1b2e;padding:32px 48px;display:flex;align-items:flex-start;justify-content:space-between;gap:24px; }
+    .mso-sa-body { padding:32px 48px 56px; }
+    @media print {
+      body { background:#fff;padding:0;margin:0; }
+      .mso-sa { box-shadow:none!important;border-radius:0!important; }
+      * { -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important; }
+    }
+  </style>
+</head>
+<body>
+<div class="mso-sa">
+
+  <!-- Letterhead -->
+  <div class="mso-sa-letterhead">
+    <div>
+      <div style="font-family:'DM Serif Display',serif;font-size:22px;color:#0d1b2e;letter-spacing:0.01em;">Packet Fusion</div>
+      <div style="font-size:10px;color:#94a3b8;letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;">Cloud Communications</div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;font-weight:700;color:#00b8a0;letter-spacing:0.06em;">${escHtml(verStr)} \u00b7 ${escHtml(today)}</div>
+      <div style="font-size:11px;color:#64748b;margin-top:2px;">MSO Standalone Agreement</div>
+    </div>
+  </div>
+
+  <!-- Hero -->
+  <div class="mso-sa-hero">
+    <div style="flex:1;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#00b8a0;margin-bottom:8px;">Prepared For</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:32px;color:#fff;line-height:1.15;margin-bottom:10px;">${escHtml(customer)}</div>
+      <div style="font-size:12.5px;color:rgba(255,255,255,0.55);line-height:1.65;max-width:520px;">CloudSupport is included as the basis of the underlying support engagement. This MSO Agreement governs all layered Managed Services terms.</div>
+    </div>
+    <div style="background:#00b8a0;color:#fff;font-size:10px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;padding:8px 14px;border-radius:6px;white-space:nowrap;align-self:flex-start;">MSO Agreement</div>
+  </div>
+
+  <div class="mso-sa-body">
+
+    <!-- About callout -->
+    <div style="background:#f8fafc;border:1px solid #e4eaf2;border-left:4px solid #00b8a0;border-radius:8px;padding:18px 22px;margin-bottom:8px;font-size:12.5px;color:#374151;line-height:1.75;">
+      <strong style="color:#0d1b2e;">About This Agreement.</strong> Packet Fusion\u2019s CloudSupport serves as the foundational layer of day-to-day operational support for ${escHtml(customer)}\u2019s ${showUCaaS && showCCaaS ? "UCaaS and CCaaS" : showUCaaS ? "UCaaS" : "CCaaS"} environment. This Managed Services Offering (MSO) Agreement establishes the complete terms, service scope, SLA commitments, engineering resource model, and governance that layer on top of that CloudSupport foundation. All MSO terms, deliverables, and obligations are defined herein and are incorporated by reference into the CloudSupport Agreement. In the event of any conflict between the two documents regarding MSO scope, SLAs, or deliverables, this document controls.
+    </div>
+
+    <!-- 01: Managed Services Overview -->
+    ${sec("Managed Services Overview")}
+    <p style="font-size:13px;color:#374151;line-height:1.8;margin-bottom:12px;">Packet Fusion\u2019s Managed Services Offering (MSO) is a proactive, engineer-led managed environment built on top of the CloudSupport base plan. MSO provides ${escHtml(customer)} with a named engineering resource, SLA-backed 24/7/365 response, continuous platform optimization, vendor relationship management, and executive-level reporting \u2014 transforming reactive support into a fully managed communications operation.</p>
+    <p style="font-size:13px;color:#374151;line-height:1.8;margin-bottom:16px;">MSO covers the full ${showUCaaS && showCCaaS ? "UCaaS and CCaaS" : showUCaaS ? "UCaaS" : "CCaaS"} environment${platform === "zoom" ? " including Zoom Phone, Zoom Contact Center, and all associated applications" : platform === "ringcentral" ? " including RingCentral UCaaS, RingCX, and all associated applications" : ""} under the CloudSupport Agreement. The MSO engineer is responsible for the ongoing health, configuration integrity, and strategic alignment of the platform.</p>
+    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:16px 20px;font-size:12.5px;color:#166534;line-height:1.7;">
+      <strong>${showUCaaS && showCCaaS ? "UCaaS &amp; CCaaS" : showUCaaS ? "UCaaS" : "CCaaS"} CloudSupport \u2014 Embedded Within This Offering:</strong> ${showUCaaS && showCCaaS ? "UCaaS and CCaaS" : showUCaaS ? "UCaaS" : "CCaaS"} CloudSupport ${showUCaaS && showCCaaS ? "are" : "is"} embedded components of this MSO engagement. Day-to-day operational support, MACD handling, portal access, and base SLA coverage are included as the foundational layer upon which all MSO services are delivered. There is no separate CloudSupport engagement \u2014 it is fully incorporated herein.
+    </div>
+
+    <!-- 02: Engineering Resource Model -->
+    ${sec("Engineering Resource Model")}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:16px;">The MSO engineering model defines the level of dedicated engineer time, access, and accountability assigned to ${escHtml(customer)}\u2019s environment. Three tiers are available; ${escHtml(customer)}\u2019s engaged tier is indicated below.</p>
+    <div style="border:2px solid #00b8a0;border-radius:12px;padding:24px 28px;background:#f0fdf9;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#00b8a0;margin-bottom:12px;">\u25cf Active Tier</div>
+      <div style="font-family:'DM Serif Display',serif;font-size:28px;color:#0d1b2e;margin-bottom:4px;">${escHtml(tierLabel)}</div>
+      <div style="font-size:12.5px;color:#64748b;margin-bottom:20px;">${escHtml(tierEngineer)} \u00b7 ${escHtml(tierAlloc)}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 32px;margin-bottom:20px;">
+        ${tierFeatures.map(f => bullet(f)).join("")}
+      </div>
+      <div style="border-top:1px solid #b2dfdb;padding-top:16px;display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;gap:0;">
+        ${slaParts.map((val, i) => `
+        <div style="text-align:center;padding:0 12px;${i > 0 ? "" : ""}">
+          <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#64748b;margin-bottom:6px;">P${i + 1} Response</div>
+          <div style="font-size:20px;font-weight:800;color:#0d1b2e;font-family:'IBM Plex Mono',monospace;">${escHtml(val)}</div>
+        </div>${i < 2 ? `<div style="width:1px;background:#b2dfdb;"></div>` : ""}`).join("")}
+      </div>
+    </div>
+
+    <!-- 03: Engineer Deliverables -->
+    ${sec(`Engineer Deliverables \u2014 ${escHtml(tierLabel)} Tier`)}
+    ${tierDeliverables.length > 0 ? `
+    <table style="${tableStyles}border:1px solid #e4eaf2;border-radius:8px;overflow:hidden;">
+      <thead><tr>
+        <th style="${thStyle}width:200px;">Deliverable</th>
+        <th style="${thStyle}">Description</th>
+        <th style="${thStyle}width:110px;text-align:center;">Cadence</th>
+      </tr></thead>
+      <tbody>
+        ${tierDeliverables.map(del => `
+        <tr style="break-inside:avoid;page-break-inside:avoid;">
+          <td style="${tdBoldStyle}">${escHtml(del.name)}</td>
+          <td style="${tdStyle}">${escHtml(del.description)}${del.name.includes("Semi-Dedicated") || del.name.includes("Fractional") ? ` Hours beyond the monthly allocation are available at <strong>$${advRate}/hr</strong>.` : ""}</td>
+          <td style="${tdStyle}text-align:center;color:#64748b;">${escHtml(del.cadence)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : `<p style="font-size:12.5px;color:#94a3b8;font-style:italic;">Deliverables to be defined per agreed scope of work.</p>`}
+
+    <!-- 04: MSO Service Scope -->
+    ${sec("MSO Service Scope")}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:18px;">MSO delivers an end-to-end managed environment across four service pillars. All items below are included in ${escHtml(customer)}\u2019s engagement at no additional charge.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      ${[
+        ["01 \u00b7 Operational Excellence", "Day-to-Day Operations", ["Ticket intake and MACD management","Configuration updates and change execution","Platform health checks and monitoring","Escalation management and ownership","Incident response and root cause analysis","After-hours support (included, no T&M)","Emergency change handling (Priority SLA)","License and user administration"]],
+        ["02 \u00b7 Proactive Optimization", "Continuous Improvement", ["Quarterly Business Reviews (QBRs)","Monthly performance and health reporting","Usage and feature adoption analysis","Cost optimization and licensing review","Call quality trend analysis","Configuration drift remediation","Platform best-practice alignment","Proactive recommendations and remediation"]],
+        ["03 \u00b7 Strategic Advisory", "Platform Roadmap & Growth", ["Quarterly roadmap planning sessions","Expansion and multi-site strategy","Feature adoption planning and enablement","Compliance alignment guidance","New technology and integration advisory","Renewal strategy and lifecycle planning","Executive briefings on platform direction"]],
+        ["04 \u00b7 Vendor & Platform Governance", "Full Vendor Accountability", ["Packet Fusion CS and carrier relationship management","Case escalation ownership across all vendors","Integration partner coordination","Renewal strategy and contract alignment","Executive reporting on vendor performance","SLA accountability tracking and documentation","Single escalation path \u2014 no runaround"]],
+      ].map(([label, title, items]) => `
+      <div style="border:1px solid #e4eaf2;border-radius:10px;padding:20px;break-inside:avoid;page-break-inside:avoid;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#00b8a0;margin-bottom:8px;">${label}</div>
+        <div style="font-size:14px;font-weight:700;color:#0d1b2e;margin-bottom:12px;">${title}</div>
+        ${(items as string[]).map(item => bullet(item)).join("")}
+      </div>`).join("")}
+    </div>
+
+    <!-- 05: Platform Coverage -->
+    ${platformCovRows.length > 0 ? `
+    ${sec(`Platform Coverage \u2014 ${escHtml(platformLabel)} ${showUCaaS && showCCaaS ? "UCaaS &amp; CCaaS" : showUCaaS ? "UCaaS" : "CCaaS"}`)}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;">The MSO engineer has full administrative oversight of ${escHtml(customer)}\u2019s ${escHtml(platformLabel)} environment. All items below are included within the MSO engagement.</p>
+    <table style="${tableStyles}border:1px solid #e4eaf2;border-radius:8px;overflow:hidden;">
+      <thead><tr>
+        <th style="${thStyle}width:210px;">Coverage Area</th>
+        <th style="${thStyle}">Scope of Responsibility</th>
+      </tr></thead>
+      <tbody>
+        ${platformCovRows.map(r => `
+        <tr style="break-inside:avoid;page-break-inside:avoid;">
+          <td style="${tdBoldStyle}">${escHtml(r.area)}</td>
+          <td style="${tdStyle}">${escHtml(r.scope)}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>` : `
+    ${sec("Platform Coverage")}
+    <p style="font-size:12.5px;color:#64748b;">The MSO engineer has full administrative oversight of ${escHtml(customer)}\u2019s environment. Platform coverage includes all configuration, routing, policy governance, and emergency change handling within the scope of the engaged CloudSupport Agreement.</p>`}
+
+    <!-- 06: Advanced Applications Coverage (conditional) -->
+    ${advAppSection}
+
+    <!-- 07 (or 06 if no adv app): Onboarding & Implementation Plan -->
+    ${sec("Onboarding &amp; Implementation Plan")}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:18px;">From the moment ${escHtml(customer)} signs, a structured onboarding plan with defined milestones, named ownership, and clear deliverables is activated. The following outlines the first 90 days and the ongoing engagement cadence.</p>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;">
+      ${[
+        ["01 \u00b7 Onboarding", "Foundation", "Days 1\u201330", ["Named CSM and engineer assigned on Day 1","Environment discovery and documentation","Existing ticket queue and open issues reviewed","Vendor contacts and escalation paths established","Customer portal access provisioned","Stakeholder alignment meeting scheduled"]],
+        ["02 \u00b7 Stabilization", "Baseline", "Days 31\u201360", ["First health check completed and documented","Open issues resolved or actively managed","Call flow and configuration audit delivered","Initial MACD backlog addressed","First monthly report delivered","Vendor escalation paths validated"]],
+        ["03 \u00b7 Optimization", "Enhancement", "Days 61\u201390", ["First optimization session with engineer","Usage and adoption analysis presented","Roadmap planning session scheduled","Cost and licensing review completed","QBR cadence established with leadership","Success metrics and KPIs agreed"]],
+        ["04 \u00b7 Ongoing", "Engagement", "Post Day 90", ["Monthly reporting on all agreed KPIs","Quarterly Business Reviews with leadership","Proactive health checks every cycle","Continuous MACD management","Annual roadmap and renewal alignment","Ongoing vendor relationship oversight"]],
+      ].map(([phase, title, days, items]) => `
+      <div style="border-radius:8px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;">
+        <div style="background:#0d1b2e;padding:14px 14px 10px;color:#fff;">
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#00b8a0;margin-bottom:4px;">${phase}</div>
+          <div style="font-size:14px;font-weight:700;line-height:1.2;">${title}</div>
+          <div style="font-size:10.5px;color:rgba(255,255,255,0.5);margin-top:4px;">${days}</div>
+        </div>
+        <div style="border:1px solid #e4eaf2;border-top:none;border-radius:0 0 8px 8px;padding:12px 14px;">
+          ${(items as string[]).map(item => bullet(item)).join("")}
+        </div>
+      </div>`).join("")}
+    </div>
+
+    <!-- Out of Scope -->
+    ${sec("Out of Scope \u2014 Separately Scoped Engagements")}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;">The following services are outside the standard MSO engagement. They are available as separately scoped engagements at preferred partner rates.</p>
+    <table style="${tableStyles}border:1px solid #e4eaf2;border-radius:8px;overflow:hidden;">
+      <thead><tr>
+        <th style="${thStyle}width:210px;">Item</th>
+        <th style="${thStyle}">Description</th>
+      </tr></thead>
+      <tbody>
+        <tr><td style="${tdBoldStyle}">Major Call Flow Overhauls</td><td style="${tdStyle}">Designing or implementing significant structural changes to existing call flow configurations \u2014 beyond optimization of the deployed environment.</td></tr>
+        <tr><td style="${tdBoldStyle}">New Integration Deployments</td><td style="${tdStyle}">Full deployment or integration of new solutions not currently in the environment, including new CCaaS platform transitions or net-new third-party integrations.</td></tr>
+        <tr><td style="${tdBoldStyle}">Net-New Custom Development</td><td style="${tdStyle}">New API builds, custom application development, or automation workflows not currently deployed \u2014 beyond support of existing custom integrations.</td></tr>
+        <tr style="break-inside:avoid;page-break-inside:avoid;"><td style="${tdBoldStyle}border-bottom:none;">Platform Migrations</td><td style="${tdStyle}border-bottom:none;">Migration of users, data, or configurations between platforms, tenants, or providers not included in the existing environment baseline.</td></tr>
+      </tbody>
+    </table>
+
+    <!-- Term & Renewal -->
+    ${sec("Term &amp; Renewal")}
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:22px;">
+      ${[["Start Date", startDate], ["End Date", endDate], ["Term Length", `${term} Year${term > 1 ? "s" : ""}`]].map(([lbl, val]) => `
+      <div style="background:#0d1b2e;border-radius:8px;padding:16px 20px;break-inside:avoid;page-break-inside:avoid;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:#00b8a0;margin-bottom:8px;">${lbl}</div>
+        <div style="font-size:18px;font-weight:800;color:#fff;font-family:'IBM Plex Mono',monospace;">${escHtml(val)}</div>
+      </div>`).join("")}
+    </div>
+    <div style="display:grid;gap:14px;font-size:13px;color:#374151;line-height:1.8;">
+      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Co-Termination</strong>This MSO Agreement is sold to co-term with ${escHtml(customer)}\u2019s associated CloudSupport Agreement and underlying provider subscription term. The MSO engagement begins and ends concurrent with those agreements unless otherwise specified in writing.</div>
+      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Automatic Renewal</strong>This Agreement automatically renews for successive one-year terms at the end of each term period unless either party provides written notice of cancellation at least <strong>30 days prior to the renewal date</strong>. Pricing is subject to annual escalation upon each renewal.</div>
+      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Billing</strong>MSO services are billed as part of the total annual investment of <strong>${fmtFull(calc.annual)} per year</strong>${showUCaaS ? ", which includes UCaaS CloudSupport" : ""}${showCCaaS ? (showUCaaS ? ", CCaaS CloudSupport" : ", which includes CCaaS CloudSupport") : ""}${hasAdvApp ? ", Advanced Applications Support" : ""}, and the MSO Add-On. For a ${term}-year term, the total contract value is <strong>${fmtFull(calc.tcv)}</strong>. Invoices are issued at the start of each annual period and are due Net 30.</div>
+      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Modifications to Scope</strong>Changes to the MSO tier, engineering resource model, or covered platforms require a written amendment executed by both parties. Mid-term tier upgrades are available and will be pro-rated to the remaining term. Downgrades take effect at the next renewal date.</div>
+      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Governing Document</strong>This MSO Standalone Agreement governs all managed services terms and takes precedence over any MSO references in the associated CloudSupport Agreement. Both documents are incorporated together as the complete agreement between the parties for CloudSupport + MSO services.</div>
+    </div>
+
+    <!-- Investment Summary -->
+    ${sec("Investment Summary")}
+    <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;">Complete pricing for ${escHtml(customer)}\u2019s CloudSupport + MSO engagement. All components are billed annually and co-term with the Agreement dates.</p>
+    <table style="${tableStyles}border:1px solid #e4eaf2;border-radius:8px;overflow:hidden;margin-bottom:16px;">
+      <thead><tr>
+        <th style="${thStyle}">Component</th>
+        <th style="${thStyle}width:200px;">Detail</th>
+        <th style="${thStyle}width:160px;text-align:right;">Annual Investment</th>
+      </tr></thead>
+      <tbody>
+        ${showUCaaS && calc.ucaasSup > 0 ? `
+        <tr>
+          <td style="${tdStyle}"><div style="font-weight:700;color:#1e293b;">UCaaS CloudSupport</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${ucaasTierLabel} \u00b7 Annual, auto-renewing</div></td>
+          <td style="${tdStyle}">${ucaasUsers > 0 ? `${ucaasUsers.toLocaleString("en-US")} active seats` : "\u2014"}</td>
+          <td style="${tdStyle}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(calc.ucaasSup)}</td>
+        </tr>` : ""}
+        ${showCCaaS && ccaasTotal > 0 ? `
+        <tr>
+          <td style="${tdStyle}"><div style="font-weight:700;color:#1e293b;">CCaaS CloudSupport</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${showUCaaS ? "Additional to UCaaS \u00b7 " : ""}Annual, auto-renewing</div></td>
+          <td style="${tdStyle}">Contact Center Support</td>
+          <td style="${tdStyle}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(ccaasTotal)}</td>
+        </tr>` : ""}
+        ${hasAdvApp ? `
+        <tr>
+          <td style="${tdStyle}"><div style="font-weight:700;color:#1e293b;">Advanced Applications \u2014 ${escHtml(platformLabel)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${advAppProducts.slice(0, 4).map(p => p.split(" (")[0].split(" \u2014")[0]).join(" \u00b7 ")}</div></td>
+          <td style="${tdStyle}">${calc.advAppSup > 0 ? "Advanced Applications Support" : `Included within ${showCCaaS ? "CCaaS" : "MSO"} CloudSupport`}</td>
+          <td style="${tdStyle}text-align:right;">${calc.advAppSup > 0 ? `<span style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(calc.advAppSup)}</span>` : `<span style="display:inline-block;background:#e8f5f2;color:#007d6e;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:4px;border:1px solid #b2dfdb;">Included</span>`}</td>
+        </tr>` : ""}
+        ${(d.customLines ?? []).map(l => `
+        <tr>
+          <td style="${tdStyle}"><div style="font-weight:700;color:#1e293b;">${escHtml(l.label)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Custom line item</div></td>
+          <td style="${tdStyle}">\u2014</td>
+          <td style="${tdStyle}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(l.price || 0)}</td>
+        </tr>`).join("")}
+        <tr>
+          <td style="${tdStyle}border-bottom:none;"><div style="font-weight:700;color:#007d6e;">MSO Add-On \u2014 ${escHtml(tierLabel)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(tierEngineer)} \u00b7 Annual, auto-renewing</div></td>
+          <td style="${tdStyle}border-bottom:none;">Named primary + backup engineer</td>
+          <td style="${tdStyle}border-bottom:none;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#007d6e;">${fmtFull(calc.msoSup)}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <!-- Price summary -->
+    <div style="background:#0d1b2e;border-radius:10px;padding:24px 28px;display:grid;grid-template-columns:1fr 1px 1fr;gap:0;margin-bottom:36px;">
+      <div style="padding-right:28px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:8px;">Total Annual Investment</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:32px;color:#4dd0c4;line-height:1.1;">${fmtFull(calc.annual)}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;">Billed annually \u00b7 Auto-renewing</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.1);"></div>
+      <div style="padding-left:28px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.45);margin-bottom:8px;">Total Contract Value \u00b7 ${term}-Year Term</div>
+        <div style="font-family:'DM Serif Display',serif;font-size:32px;color:#fff;line-height:1.1;">${fmtFull(calc.tcv)}</div>
+        <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;">${startDate} \u2013 ${endDate}</div>
+      </div>
+    </div>
+
+    <!-- Signature block -->
+    <div style="border-top:2px solid #0d1b2e;padding-top:28px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#94a3b8;text-align:center;margin-bottom:28px;">Authorization &amp; Agreement</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:48px;">
+        ${["Packet Fusion, Inc.", escHtml(customer)].map(party => `
+        <div>
+          <div style="font-size:16px;font-weight:700;color:#0d1b2e;margin-bottom:20px;padding-bottom:8px;border-bottom:2px solid #0d1b2e;">${party}</div>
+          ${[["Authorized Signature"], ["Printed Name"], ["Title"], ["Date"]].map(([lbl]) => `
+          <div style="margin-bottom:20px;">
+            <div style="height:30px;border-bottom:1px solid #cbd5e1;margin-bottom:4px;"></div>
+            <div style="font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#94a3b8;">${lbl}</div>
+          </div>`).join("")}
+        </div>`).join("")}
+      </div>
+    </div>
+
+  </div><!-- /body -->
+</div><!-- /mso-sa -->
 </body>
 </html>`;
 }

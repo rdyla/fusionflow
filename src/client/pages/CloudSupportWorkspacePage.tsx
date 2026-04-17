@@ -3,13 +3,13 @@ import { useNavigate, useParams } from "react-router-dom";
 import { csApi } from "../lib/cloudSupportApi";
 import { calcSupport, DEFAULT_FORM_DATA, fmt } from "../lib/calcSupport";
 import type { CsProposalDetail, CsVersion, OppFormData, OppCalcResult } from "../lib/calcSupport";
-import { buildProposalHtml, buildSignatureHtml } from "../lib/buildAgreementHtml";
+import { buildProposalHtml, buildSignatureHtml, buildMsoStandaloneHtml } from "../lib/buildAgreementHtml";
 import { getMsoTier } from "../lib/msoTiers";
 import { api } from "../lib/api";
 import CalculatorForm from "../components/cloudSupport/CalculatorForm";
 import { useToast } from "../components/ui/ToastProvider";
 
-type Tab = "calculator" | "agreement" | "signature" | "history";
+type Tab = "calculator" | "agreement" | "signature" | "mso" | "history";
 
 function SummaryLine({ label, value, overridden }: { label: string; value: number; overridden: boolean }) {
   return (
@@ -41,10 +41,12 @@ export default function CloudSupportWorkspacePage() {
   const [canOverride, setCanOverride] = useState(false);
   const [agreementHtml, setAgreementHtml] = useState("");
   const [signatureHtml, setSignatureHtml] = useState("");
+  const [msoHtml, setMsoHtml] = useState("");
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const agreementIframeRef = useRef<HTMLIFrameElement>(null);
   const signatureIframeRef = useRef<HTMLIFrameElement>(null);
+  const msoIframeRef = useRef<HTMLIFrameElement>(null);
 
   const calc: OppCalcResult = calcSupport(form);
 
@@ -75,6 +77,9 @@ export default function CloudSupportWorkspacePage() {
     } else if (tab === "signature") {
       const versionNum = proposal.versions.length + 1;
       setSignatureHtml(buildSignatureHtml(proposal.name, form, calc, versionNum));
+    } else if (tab === "mso") {
+      const versionNum = proposal.versions.length + 1;
+      setMsoHtml(buildMsoStandaloneHtml(proposal.name, form, calc, versionNum));
     }
   }, [tab, proposal]);
 
@@ -156,6 +161,7 @@ export default function CloudSupportWorkspacePage() {
     ["calculator", "Calculator"],
     ["agreement", "Proposal Preview"],
     ["signature", "Signature Doc"],
+    ...(calc.msoEnabled ? [["mso", "MSO Doc"] as [Tab, string]] : []),
     ["history", `History (${proposal.versions.length})`],
   ];
 
@@ -309,6 +315,23 @@ export default function CloudSupportWorkspacePage() {
               ref={signatureIframeRef}
               srcDoc={signatureHtml}
               title="Signature Document"
+              style={{ width: "100%", height: 900, border: "none", display: "block" }}
+              sandbox="allow-same-origin allow-modals"
+            />
+          </div>
+        </div>
+      )}
+
+      {tab === "mso" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(msoIframeRef)}>Print / Save PDF</button>
+          </div>
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+            <iframe
+              ref={msoIframeRef}
+              srcDoc={msoHtml}
+              title="MSO Standalone Agreement"
               style={{ width: "100%", height: 900, border: "none", display: "block" }}
               sandbox="allow-same-origin allow-modals"
             />

@@ -1,5 +1,11 @@
 export type MsoTierKey = "essentials" | "professional" | "advanced" | "enterprise";
 
+export interface MsoDeliverable {
+  name: string;
+  description: string;
+  cadence: string;
+}
+
 export interface MsoTier {
   fee: number;
   label: string;
@@ -10,6 +16,8 @@ export interface MsoTier {
   includes: string;
   coverage: string;
   panels: [string, string][];
+  features: string[];
+  deliverables: MsoDeliverable[];
 }
 
 export const MSO_TIERS: Record<MsoTierKey, MsoTier> = {
@@ -32,6 +40,26 @@ export const MSO_TIERS: Record<MsoTierKey, MsoTier> = {
       ["Vendor Escalation Support", "Engineer coordinates with Zoom, carrier, and integration vendors on your behalf for escalated issues."],
       ["Engineering Response SLA", "P1: 30 min · P2: 2 hrs · P3: Next business day. Escalation through team-wide coverage."],
     ],
+    features: [
+      "Shared engineer pool — no single point of failure",
+      "Business-hours MACD execution",
+      "Core platform configuration management",
+      "Monthly environment health reports",
+      "Annual platform review",
+      "Vendor escalation coordination",
+      "Portal-based ticket management",
+      "Team-wide escalation outside business hours",
+    ],
+    deliverables: [
+      { name: "Shared Engineer Pool", description: "Pooled team of certified engineers assigned to your environment with business-hours priority coverage and team-wide escalation outside those windows.", cadence: "Ongoing" },
+      { name: "MACD Execution", description: "Standard adds, moves, changes, and deletes handled by certified engineers through the Packet Fusion customer portal.", cadence: "As needed" },
+      { name: "Platform Configuration", description: "Core call flow, queue, and routing configuration maintained to vendor-recommended standards.", cadence: "Ongoing" },
+      { name: "Environment Health Monitoring", description: "Periodic health checks covering call quality, licensing utilization, and configuration integrity. Issues flagged and addressed as identified.", cadence: "Monthly" },
+      { name: "Monthly Environment Report", description: "Change log, open item summary, and platform health snapshot delivered each month.", cadence: "Monthly" },
+      { name: "Annual Platform Review", description: "Once-per-year strategic session to align your platform to current business objectives and upcoming renewals.", cadence: "Annually" },
+      { name: "Vendor Escalation Support", description: "Engineer coordinates with platform vendors and carriers for escalated issues and ticket management on your behalf.", cadence: "As needed" },
+      { name: "Portal-Based Ticket Management", description: "All requests submitted and tracked through the Packet Fusion customer portal with real-time status updates.", cadence: "Ongoing" },
+    ],
   },
   professional: {
     fee: 24000,
@@ -51,6 +79,26 @@ export const MSO_TIERS: Record<MsoTierKey, MsoTier> = {
       ["Semi-Annual QBR", "Your engineer leads a bi-annual business review to present platform performance, align roadmap priorities, and plan ahead."],
       ["Direct Vendor Escalation Ownership", "Your engineer owns the Zoom TAM relationship and carrier escalation path. You never navigate vendor support alone."],
       ["24/7 Engineering Response SLA", "P1: 15 min · P2: 1 hr · P3: 4 hrs — direct to your assigned engineer, not a general queue. Backup coverage guaranteed."],
+    ],
+    features: [
+      "Named primary engineer + backup coverage",
+      "Fractional assignment — 5–10 hrs/week dedicated",
+      "24/7/365 direct engineer access",
+      "Same-day MACD execution",
+      "Proactive configuration management",
+      "Monthly engineering reports",
+      "Semi-annual QBR",
+      "Direct vendor escalation ownership",
+    ],
+    deliverables: [
+      { name: "Fractional Engineer Assignment", description: "Named primary engineer fractionally dedicated to your account, with backup coverage ensuring continuity. Assigned engineer maintains deep knowledge of your platform, team, and business cadence.", cadence: "Ongoing" },
+      { name: "MACD Execution", description: "Your assigned engineer personally executes all adds, moves, changes, and deletes. Same-day turnaround on standard requests.", cadence: "As needed" },
+      { name: "Proactive Configuration Management", description: "Engineer reviews and tunes call flows, auto-attendants, queues, and routing logic on a rolling basis — not just when problems surface.", cadence: "Ongoing" },
+      { name: "Platform Health Monitoring", description: "Engineer-led monitoring of call quality metrics, utilization trends, and configuration drift. Issues addressed before users feel them.", cadence: "Ongoing" },
+      { name: "Monthly Engineering Report", description: "Detailed report covering MACD volume, call quality trends, open issues, and recommended actions — delivered by your assigned engineer.", cadence: "Monthly" },
+      { name: "Semi-Annual QBR", description: "Bi-annual business review led by your engineer covering platform performance, roadmap priorities, and forward-looking planning.", cadence: "Semi-Annual" },
+      { name: "Direct Vendor Escalation Ownership", description: "Your engineer owns the vendor TAM relationship and carrier escalation path. You never navigate vendor support alone.", cadence: "Ongoing" },
+      { name: "Emergency Change Management", description: "Priority handling of urgent configuration changes with defined SLA response windows and no T&M surcharges.", cadence: "As needed" },
     ],
   },
   advanced: {
@@ -72,6 +120,28 @@ export const MSO_TIERS: Record<MsoTierKey, MsoTier> = {
       ["Full Vendor Coordination", "Engineer owns all vendor relationships — Zoom, carrier, integration partners. Escalations, renewals, and roadmap alignment managed on your behalf."],
       ["24/7 Engineering Response SLA", "P1: 15 min · P2: 1 hr · P3: 4 hrs — direct to your semi-dedicated team. Both your primary and backup engineer are briefed on all active issues."],
     ],
+    features: [
+      "Named primary engineer + backup assigned",
+      "Deep familiarity with your architecture and users",
+      "24/7/365 direct engineer access",
+      "Unlimited MACD execution",
+      "Active configuration optimization",
+      "Weekly environment monitoring",
+      "Monthly + quarterly reporting",
+      "Full vendor coordination",
+      "QBR cadence with PF leadership",
+      "Emergency changes — Priority SLA, no T&M",
+    ],
+    deliverables: [
+      { name: "Semi-Dedicated Engineer", description: "Named primary and backup engineer allocated to your account. Both engineers maintain deep familiarity with your architecture, users, and business cadence. Monthly allocation monitored proactively; overages flagged in advance and available at the advanced task rate.", cadence: "Ongoing" },
+      { name: "MACD Execution", description: "All adds, moves, changes, and deletes included without a per-request volume cap. Requests requiring significant effort are flagged for acknowledgment before execution and may be evaluated for separate scoping on a recurring basis.", cadence: "As needed" },
+      { name: "Active Configuration Optimization", description: "Continuous review and improvement of call flows, integrations, contact center routing, and platform policies.", cadence: "Ongoing" },
+      { name: "Weekly Environment Monitoring", description: "Weekly checks on call quality, feature adoption, licensing, and configuration integrity with direct remediation on identified issues.", cadence: "Weekly" },
+      { name: "Monthly Engineering Report", description: "Concise report covering ticket trends, MAC volumes, open items, platform health, and licensing status.", cadence: "Monthly" },
+      { name: "Quarterly Business Review (QBR)", description: "Leadership-facing review covering platform ROI, adoption metrics, forward-looking recommendations, and roadmap alignment — led by your engineer and supported by Packet Fusion leadership.", cadence: "Quarterly" },
+      { name: "Full Vendor Coordination", description: "Client Success owns all vendor relationships including platform vendors, carrier, and integration partners. Escalations, renewals, and roadmap alignment managed on your behalf.", cadence: "Ongoing" },
+      { name: "Emergency Change Management", description: "Priority handling of urgent configuration changes with defined SLA response windows and no T&M surcharges.", cadence: "As needed" },
+    ],
   },
   enterprise: {
     fee: 90000,
@@ -91,6 +161,28 @@ export const MSO_TIERS: Record<MsoTierKey, MsoTier> = {
       ["Embedded QBR & Roadmap Leadership", "Your engineer runs quarterly business reviews and leads the annual platform roadmap process, coordinating with your IT leadership directly."],
       ["End-to-End Vendor Accountability", "Your engineer owns every vendor relationship — Zoom, carrier, SBC, integration partners. SLA accountability and renewal strategy managed on your behalf."],
       ["24/7 Engineering Response SLA + Credits", "P1: 15 min · P2: 1 hr · P3: 4 hrs — direct to your dedicated engineer. SLA miss triggers service credits. Emergency change SLA available."],
+    ],
+    features: [
+      "Fully dedicated engineer — 30–40 hrs/week",
+      "Embedded within your organization",
+      "24/7/365 direct engineer access",
+      "Unlimited MACD — no scope constraints",
+      "Continuous platform engineering",
+      "Real-time environment monitoring",
+      "Full executive reporting suite",
+      "QBR & roadmap leadership",
+      "End-to-end vendor accountability",
+      "Emergency SLA with service credits",
+    ],
+    deliverables: [
+      { name: "Fully Dedicated Engineer", description: "One Packet Fusion engineer working your account exclusively. Functions as an embedded UC engineer within your organization with full end-to-end ownership of your environment.", cadence: "Ongoing" },
+      { name: "Unlimited MACD — No Boundaries", description: "Your engineer handles all configuration work with no scope constraints. Complex integrations, API development, and custom call flows are within standard engagement scope.", cadence: "As needed" },
+      { name: "Continuous Platform Engineering", description: "Engineer actively improves, documents, and future-proofs your environment on an ongoing basis — optimization is daily practice, not a periodic deliverable.", cadence: "Ongoing" },
+      { name: "Real-Time Environment Monitoring", description: "Continuous oversight of call quality, platform health, and configuration integrity. Your engineer is watching before tickets are submitted.", cadence: "Ongoing" },
+      { name: "Full Executive Reporting Suite", description: "Monthly engineering deep-dive plus quarterly executive summary covering platform performance, licensing efficiency, adoption metrics, and strategic recommendations.", cadence: "Monthly / Quarterly" },
+      { name: "Embedded QBR & Roadmap Leadership", description: "Your engineer runs quarterly business reviews and leads the annual platform roadmap process, coordinating with your IT leadership directly.", cadence: "Quarterly" },
+      { name: "End-to-End Vendor Accountability", description: "Your engineer owns every vendor relationship. SLA accountability and renewal strategy managed on your behalf. SLA miss triggers service credits.", cadence: "Ongoing" },
+      { name: "Emergency Change Management with SLA Credits", description: "Priority handling of urgent configuration changes. SLA miss triggers service credits. Emergency change SLA available for mission-critical situations.", cadence: "As needed" },
     ],
   },
 };
