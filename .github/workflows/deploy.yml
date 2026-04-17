@@ -39,46 +39,20 @@ jobs:
         if: success()
         env:
           ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
+          ZOOM_AUTH_TOKEN: ${{ secrets.ZOOM_WEBHOOK_VERIFICATION_TOKEN }}
         run: |
-          jq -n \
-            --arg branch "${{ github.ref_name }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg msg "${{ github.event.head_commit.message }}" \
-            --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            '{
-              content: {
-                head: { text: "✅ FusionFlow deploy succeeded" },
-                body: [
-                  { type: "message", text: ("Branch: " + $branch) },
-                  { type: "message", text: ("By: " + $actor) },
-                  { type: "message", text: $msg },
-                  { type: "message", text: ("Run: " + $run_url) }
-                ]
-              }
-            }' | curl -s -X POST "$ZOOM_WEBHOOK_URL" \
-                  -H "Content-Type: application/json" \
-                  -d @-
+          curl -s -X POST "$ZOOM_WEBHOOK_URL" \
+            -H "Authorization: $ZOOM_AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "✅ FusionFlow deploy succeeded | Branch: ${{ github.ref_name }} | By: ${{ github.actor }} | ${{ github.event.head_commit.message }}"
 
       - name: Notify Zoom — Failure
         if: failure()
         env:
           ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
+          ZOOM_AUTH_TOKEN: ${{ secrets.ZOOM_WEBHOOK_VERIFICATION_TOKEN }}
         run: |
-          jq -n \
-            --arg branch "${{ github.ref_name }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg msg "${{ github.event.head_commit.message }}" \
-            --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            '{
-              content: {
-                head: { text: "❌ FusionFlow deploy failed" },
-                body: [
-                  { type: "message", text: ("Branch: " + $branch) },
-                  { type: "message", text: ("By: " + $actor) },
-                  { type: "message", text: $msg },
-                  { type: "message", text: ("Details: " + $run_url) }
-                ]
-              }
-            }' | curl -s -X POST "$ZOOM_WEBHOOK_URL" \
-                  -H "Content-Type: application/json" \
-                  -d @-
+          curl -s -X POST "$ZOOM_WEBHOOK_URL" \
+            -H "Authorization: $ZOOM_AUTH_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "❌ FusionFlow deploy FAILED | Branch: ${{ github.ref_name }} | By: ${{ github.actor }} | ${{ github.event.head_commit.message }} | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
