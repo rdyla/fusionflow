@@ -38,7 +38,7 @@ jobs:
       - name: Notify Zoom — Success
         if: success()
         env:
-          ZOOM_WEBHOOK_URL: ${{ secrets.ZOOM_WEBHOOK_URL }}
+          ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
         run: |
           jq -n \
             --arg branch "${{ github.ref_name }}" \
@@ -62,7 +62,7 @@ jobs:
       - name: Notify Zoom — Failure
         if: failure()
         env:
-          ZOOM_WEBHOOK_URL: ${{ secrets.ZOOM_WEBHOOK_URL }}
+          ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
         run: |
           jq -n \
             --arg branch "${{ github.ref_name }}" \
