@@ -34,7 +34,18 @@ const ROLE_COLOR: Record<Role, string> = {
   client: "#d97706",
 };
 
-const EMPTY_CREATE_FORM = { email: "", name: "", organization_name: "", role: "pm" as Role };
+const ORGS = ["Packet Fusion", "Zoom", "RingCentral"] as const;
+type Org = (typeof ORGS)[number];
+
+// Email domain → org auto-detection (mirrors server-side PARTNER_DOMAINS)
+const ORG_DOMAINS: Record<string, Org> = {
+  "packetfusion.com": "Packet Fusion",
+  "zoom.com": "Zoom",
+  "zoom.us": "Zoom",
+  "ringcentral.com": "RingCentral",
+};
+
+const EMPTY_CREATE_FORM = { email: "", name: "", organization_name: "" as Org | "", role: "pm" as Role };
 
 type CsPerm = "none" | "user" | "power_user";
 const CS_PERM_LABELS: Record<CsPerm, string> = {
@@ -48,10 +59,12 @@ const CS_PERM_COLOR: Record<CsPerm, string> = {
   power_user: "#8764b8",
 };
 
+type OrgTab = "all" | Org;
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [orgTab, setOrgTab] = useState<OrgTab>("all");
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE_FORM);
@@ -98,6 +111,17 @@ export default function AdminUsersPage() {
     }
   }
 
+  // Auto-detect org from email domain when creating a user
+  function handleCreateEmailChange(email: string) {
+    const domain = email.split("@")[1]?.toLowerCase() ?? "";
+    const detected = ORG_DOMAINS[domain] ?? "";
+    setCreateForm((prev) => ({
+      ...prev,
+      email,
+      organization_name: detected || prev.organization_name,
+    }));
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!createForm.email.trim()) return;
@@ -106,7 +130,7 @@ export default function AdminUsersPage() {
       const created = await api.adminCreateUser({
         email: createForm.email.trim(),
         name: createForm.name.trim() || undefined,
-        organization_name: createForm.organization_name.trim() || undefined,
+        organization_name: createForm.organization_name || undefined,
         role: createForm.role,
       });
       setUsers((prev) => [...prev, created].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")));
@@ -180,6 +204,16 @@ export default function AdminUsersPage() {
     }
   }
 
+  const tabCounts: Record<OrgTab, number> = {
+    all: users.length,
+    "Packet Fusion": users.filter((u) => u.organization_name === "Packet Fusion").length,
+    Zoom: users.filter((u) => u.organization_name === "Zoom").length,
+    RingCentral: users.filter((u) => u.organization_name === "RingCentral").length,
+  };
+
+  const visibleUsers =
+    orgTab === "all" ? users : users.filter((u) => u.organization_name === orgTab);
+
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading users...</div>;
 
   return (
@@ -189,13 +223,41 @@ export default function AdminUsersPage() {
         <button className="ms-btn-primary" onClick={() => setShowCreateModal(true)}>+ New User</button>
       </div>
 
+      {/* Org tabs */}
+      <div style={{ display: "flex", gap: 0, borderBottom: "1px solid #e2e8f0", marginBottom: 20 }}>
+        {(["all", ...ORGS] as OrgTab[]).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setOrgTab(tab)}
+            style={{
+              padding: "9px 18px", fontSize: 13, fontWeight: orgTab === tab ? 600 : 400,
+              border: "none", borderBottom: `2px solid ${orgTab === tab ? "#03395f" : "transparent"}`,
+              background: "none", color: orgTab === tab ? "#03395f" : "#64748b",
+              cursor: "pointer", transition: "all 0.15s",
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            {tab === "all" ? "All" : tab}
+            <span style={{
+              fontSize: 11, fontWeight: 600,
+              background: orgTab === tab ? "#03395f" : "#f1f5f9",
+              color: orgTab === tab ? "#fff" : "#64748b",
+              borderRadius: 10, padding: "1px 7px", minWidth: 20, textAlign: "center",
+            }}>
+              {tabCounts[tab]}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <div className="ms-card" style={{ overflow: "hidden" }}>
         <table className="ms-table">
           <thead>
             <tr>
               <th>Name</th>
               <th>Email</th>
-              <th>Organization</th>
+              {orgTab === "all" && <th>Organization</th>}
               <th>Role</th>
               <th>Cloud Support</th>
               <th>Status</th>
@@ -203,81 +265,82 @@ export default function AdminUsersPage() {
             </tr>
           </thead>
           <tbody>
-            {users.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users yet.</td></tr>
+            {visibleUsers.length === 0 ? (
+              <tr><td colSpan={orgTab === "all" ? 7 : 6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users in this org.</td></tr>
             ) : (
-              users.map((user) => {
+              visibleUsers.map((user) => {
                 const perm = (user.cs_permission ?? "none") as CsPerm;
                 const effectivePerm = user.role === "admin" ? "power_user" : perm;
                 return (
-                <tr key={user.id}>
-                  <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
-                  <td>{user.email}</td>
-                  <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>
-                  <td>
-                    <span
-                      className="ms-badge"
-                      style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
-                    >
-                      {ROLE_LABELS[user.role as Role] ?? user.role}
-                    </span>
-                  </td>
-                  <td>
-                    {effectivePerm === "none" ? (
-                      <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                    ) : (
+                  <tr key={user.id}>
+                    <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
+                    <td>{user.email}</td>
+                    {orgTab === "all" && <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>}
+                    <td>
                       <span
                         className="ms-badge"
-                        style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
+                        style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
                       >
-                        {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
+                        {ROLE_LABELS[user.role as Role] ?? user.role}
                       </span>
-                    )}
-                  </td>
-                  <td>
-                    <span
-                      className="ms-badge"
-                      style={{ background: user.is_active ? "#dff6dd" : "#fde7e9", color: user.is_active ? "#107c10" : "#d13438", border: `1px solid ${user.is_active ? "#107c10" : "#d13438"}40` }}
-                    >
-                      {user.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      onClick={(e) => toggleMenu(e, user.id)}
-                      style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
-                    >
-                      ⋮
-                    </button>
-                    {openMenu?.id === user.id && (
-                      <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
-                        <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
-                        <MenuItem
-                          onClick={() => { toggleActive(user); setOpenMenu(null); }}
-                          color={user.is_active ? "#d13438" : "#107c10"}
+                    </td>
+                    <td>
+                      {effectivePerm === "none" ? (
+                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+                      ) : (
+                        <span
+                          className="ms-badge"
+                          style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
                         >
-                          {user.is_active ? "Deactivate" : "Activate"}
-                        </MenuItem>
-                        {user.role !== "admin" && user.is_active && (
-                          <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
-                            View As
+                          {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span
+                        className="ms-badge"
+                        style={{ background: user.is_active ? "#dff6dd" : "#fde7e9", color: user.is_active ? "#107c10" : "#d13438", border: `1px solid ${user.is_active ? "#107c10" : "#d13438"}40` }}
+                      >
+                        {user.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        onClick={(e) => toggleMenu(e, user.id)}
+                        style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
+                      >
+                        ⋮
+                      </button>
+                      {openMenu?.id === user.id && (
+                        <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+                          <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
+                          <MenuItem
+                            onClick={() => { toggleActive(user); setOpenMenu(null); }}
+                            color={user.is_active ? "#d13438" : "#107c10"}
+                          >
+                            {user.is_active ? "Deactivate" : "Activate"}
                           </MenuItem>
-                        )}
-                        {user.role !== "admin" && (
-                          <>
-                            <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
-                            <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
-                              Delete
+                          {user.role !== "admin" && user.is_active && (
+                            <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
+                              View As
                             </MenuItem>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              );})
+                          )}
+                          {user.role !== "admin" && (
+                            <>
+                              <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
+                              <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
+                                Delete
+                              </MenuItem>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -291,7 +354,12 @@ export default function AdminUsersPage() {
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 14 }}>
               <label className="ms-label">
                 <span>Email *</span>
-                <input autoFocus required type="email" className="ms-input" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} placeholder="user@example.com" />
+                <input
+                  autoFocus required type="email" className="ms-input"
+                  value={createForm.email}
+                  onChange={(e) => handleCreateEmailChange(e.target.value)}
+                  placeholder="user@example.com"
+                />
               </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <label className="ms-label">
@@ -300,7 +368,14 @@ export default function AdminUsersPage() {
                 </label>
                 <label className="ms-label">
                   <span>Organization</span>
-                  <input className="ms-input" value={createForm.organization_name} onChange={(e) => setCreateForm({ ...createForm, organization_name: e.target.value })} placeholder="Company name" />
+                  <select
+                    className="ms-input"
+                    value={createForm.organization_name}
+                    onChange={(e) => setCreateForm({ ...createForm, organization_name: e.target.value as Org | "" })}
+                  >
+                    <option value="">— Select org —</option>
+                    {ORGS.map((org) => <option key={org} value={org}>{org}</option>)}
+                  </select>
                 </label>
                 <label className="ms-label">
                   <span>Role *</span>
@@ -355,7 +430,14 @@ export default function AdminUsersPage() {
                 </label>
                 <label className="ms-label">
                   <span>Organization</span>
-                  <input className="ms-input" value={editForm.organization_name ?? ""} onChange={(e) => setEditForm({ ...editForm, organization_name: e.target.value })} />
+                  <select
+                    className="ms-input"
+                    value={ORGS.includes(editForm.organization_name as Org) ? editForm.organization_name : ""}
+                    onChange={(e) => setEditForm({ ...editForm, organization_name: e.target.value })}
+                  >
+                    <option value="">— Select org —</option>
+                    {ORGS.map((org) => <option key={org} value={org}>{org}</option>)}
+                  </select>
                 </label>
                 <label className="ms-label">
                   <span>Role *</span>
