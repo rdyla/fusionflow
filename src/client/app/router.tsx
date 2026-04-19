@@ -31,8 +31,6 @@ import SupportCaseConfirmationPage from "../pages/SupportCaseConfirmationPage";
 import RoadmapPage from "../pages/RoadmapPage";
 import AdminRoadmapPage from "../pages/AdminRoadmapPage";
 
-const IS_STAGING = window.location.hostname.includes("staging");
-
 export default function Router() {
   const isStaging = typeof window !== "undefined" && window.location.hostname.includes("staging");
   return (
