@@ -39,18 +39,6 @@
           "type": "date",
           "label": "Assessment Date",
           "required": true
-        },
-        {
-          "id": "pf_ae_name",
-          "type": "text",
-          "label": "Packet Fusion AE",
-          "required": false
-        },
-        {
-          "id": "pf_sa_name",
-          "type": "text",
-          "label": "Packet Fusion SA / CSM",
-          "required": false
         }
       ]
     },
