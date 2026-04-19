@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
 import { d365Fetch } from "../services/dynamicsService";
+import { notifyZoomNewCase } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -280,9 +281,24 @@ app.post("/cases", async (c) => {
     }),
   });
 
-  const fetchRes = await d365Fetch(c.env, `/incidents(${newId})?$select=incidentid,ticketnumber`);
+  const fetchRes = await d365Fetch(c.env, `/incidents(${newId})?$select=incidentid,ticketnumber&$expand=customerid_account($select=name)`);
   const created = fetchRes.ok ? await fetchRes.json() as any : {};
-  return c.json({ id: newId, ticketNumber: created.ticketnumber ?? "" }, 201);
+  const ticketNumber = created.ticketnumber ?? "";
+  const accountName = created.customerid_account?.name ?? null;
+
+  if (c.env.ZOOM_WEBHOOK_URL && c.env.ZOOM_WEBHOOK_SECRET) {
+    c.executionCtx.waitUntil(
+      notifyZoomNewCase(c.env.ZOOM_WEBHOOK_URL, c.env.ZOOM_WEBHOOK_SECRET, {
+        ticketNumber,
+        caseId: newId,
+        accountName,
+        submittedBy: auth.user.name ?? auth.user.email,
+        title: body.title,
+      })
+    );
+  }
+
+  return c.json({ id: newId, ticketNumber }, 201);
 });
 
 // POST /api/support/cases/:id/notes
