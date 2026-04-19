@@ -48,6 +48,9 @@ export type Bindings = {
   DEV_EMAIL?: string;
   // Zoom Team Chat incoming webhook URL for the SA channel
   ZOOM_CHAT_WEBHOOK_URL?: string;
+  // Zoom Custom App webhook + shared secret for support-case notifications (HMAC-signed)
+  ZOOM_SUPPORT_WEBHOOK_URL?: string;
+  ZOOM_SUPPORT_WEBHOOK_SECRET?: string;
 };
 
 export type Variables = {

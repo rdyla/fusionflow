@@ -55,6 +55,51 @@ export async function notifyZoomChat(
   });
 }
 
+export async function notifyZoomNewCase(
+  webhookUrl: string,
+  webhookSecret: string,
+  opts: {
+    ticketNumber: string;
+    caseId: string;
+    accountName: string | null;
+    submittedBy: string;
+    title: string;
+  }
+): Promise<void> {
+  try {
+    const crmLink = `https://packetfusioncrm.crm.dynamics.com/main.aspx?etn=incident&id=${opts.caseId}&pagetype=entityrecord`;
+    const customer = opts.accountName ?? opts.submittedBy;
+    const message = `New support case opened — ${opts.ticketNumber}: ${opts.title}\nCustomer: ${customer} | Submitted by: ${opts.submittedBy}\n${crmLink}`;
+    const timestamp = Date.now().toString();
+    const url = `${webhookUrl}?format=message&timestamp=${timestamp}`;
+
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(webhookSecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(`message&${timestamp}&${message}`));
+    const bytes = new Uint8Array(sig);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const authorization = btoa(binary);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: authorization, "Content-Type": "application/json" },
+      body: message,
+    });
+    if (!res.ok) {
+      console.error("[zoom-support] failed:", res.status, await res.text());
+    }
+  } catch (err) {
+    console.error("[zoom-support] error:", err);
+  }
+}
+
 export async function createNotification(
   db: D1Database,
   opts: {
