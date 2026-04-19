@@ -7,6 +7,7 @@ import { userInvite } from "../lib/emailTemplates";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { notifyZoomChat } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -222,6 +223,16 @@ app.post("/", async (c) => {
     .run();
 
   const created = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(id).first();
+
+  if (c.env.ZOOM_CHAT_WEBHOOK_URL) {
+    c.executionCtx.waitUntil(notifyZoomChat(c.env.ZOOM_CHAT_WEBHOOK_URL, c.env.APP_URL ?? "", {
+      event: "solution_created",
+      solutionId: id,
+      solutionName: name,
+      actorName: auth.user.name ?? auth.user.email,
+    }));
+  }
+
   return c.json(created, 201);
 });
 
@@ -266,10 +277,14 @@ const updateSolutionSchema = z.object({
 });
 
 app.patch("/:id", async (c) => {
+  const auth = c.get("auth");
   const db = c.env.DB;
   const solutionId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM solutions WHERE id = ? LIMIT 1").bind(solutionId).first();
+  const existing = await db
+    .prepare("SELECT id, name FROM solutions WHERE id = ? LIMIT 1")
+    .bind(solutionId)
+    .first<{ id: string; name: string }>();
   if (!existing) throw new HTTPException(404, { message: "Solution not found" });
 
   const parsed = updateSolutionSchema.safeParse(await c.req.json());
@@ -301,6 +316,17 @@ app.patch("/:id", async (c) => {
     .run();
 
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
+
+  if (c.env.ZOOM_CHAT_WEBHOOK_URL && updates.status) {
+    c.executionCtx.waitUntil(notifyZoomChat(c.env.ZOOM_CHAT_WEBHOOK_URL, c.env.APP_URL ?? "", {
+      event: "solution_status_changed",
+      solutionId,
+      solutionName: existing.name,
+      actorName: auth.user.name ?? auth.user.email,
+      newStatus: updates.status,
+    }));
+  }
+
   return c.json(updated);
 });
 

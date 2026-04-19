@@ -1021,14 +1021,17 @@ export default function SolutionDetailPage() {
       )}
 
       {/* ── Scope Tab ── */}
-      {tab === "scope" && (
-        <div style={{ display: "grid", gap: 20 }}>
+      {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
+      <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
           {/* Sizing confirmation form */}
           <SowSizingForm
             solution={solution}
             needsAssessment={needsAssessment}
             canEdit={canEdit}
-            onSaved={(saved) => setSowData(saved)}
+            onSaved={(saved) => {
+              setSowData(saved);
+              setSolution(prev => prev ? { ...prev, sow_data: JSON.stringify(saved) } : prev);
+            }}
           />
 
           {/* SOW document generator */}
@@ -1064,7 +1067,6 @@ export default function SolutionDetailPage() {
             )}
           </div>
         </div>
-      )}
 
       {/* ── Handoff Tab ── */}
       {tab === "handoff" && (
