@@ -34,9 +34,10 @@ import AdminRoadmapPage from "../pages/AdminRoadmapPage";
 const IS_STAGING = window.location.hostname.includes("staging");
 
 export default function Router() {
+  const isStaging = typeof window !== "undefined" && window.location.hostname.includes("staging");
   return (
     <BrowserRouter>
-      {IS_STAGING && (
+      {isStaging && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999,
           background: "repeating-linear-gradient(135deg, #f59e0b 0px, #f59e0b 10px, #92400e 10px, #92400e 20px)",
@@ -47,7 +48,7 @@ export default function Router() {
           ⚠ Staging Environment — Not Production ⚠
         </div>
       )}
-      <div style={IS_STAGING ? { paddingTop: 24 } : undefined}>
+      <div style={isStaging ? { paddingTop: 24 } : undefined}>
       <Routes>
         {/* Login — full page, no app shell, no auth required */}
         <Route path="/login" element={<LoginPage />} />

@@ -9,22 +9,18 @@ function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-function base(body: string, appUrl = ""): string {
-  const logoUrl = appUrl ? `${appUrl}/logo.png` : "";
+function base(body: string, _appUrl = ""): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${APP_NAME}</title></head>
 <body style="margin:0;padding:0;background:#0d1b2e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:600px;margin:40px auto;background:#142236;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
-    <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);display:flex;align-items:center;gap:14px;">
-      ${logoUrl ? `<img src="${logoUrl}" alt="FusionFlow360" style="height:36px;width:auto;display:block;" />` : ""}
-      <div>
-        <div style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;line-height:1.1;">
-          Fusion<span style="color:#00c8e0;">Flow</span><span style="color:rgba(240,246,255,0.6);font-weight:400;">360</span>
-        </div>
-        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:rgba(240,246,255,0.35);margin-top:2px;">
-          Intelligence Platform
-        </div>
+    <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);">
+      <div style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;line-height:1.1;">
+        Fusion<span style="color:#00c8e0;">Flow</span><span style="color:rgba(240,246,255,0.6);font-weight:400;">360</span>
+      </div>
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:rgba(240,246,255,0.35);margin-top:2px;">
+        Intelligence Platform
       </div>
     </div>
     <div style="padding:28px 28px 24px;">
