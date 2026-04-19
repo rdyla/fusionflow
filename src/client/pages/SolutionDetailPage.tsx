@@ -242,9 +242,9 @@ export default function SolutionDetailPage() {
     { key: "overview",    label: "Overview"         },
     { key: "assessment",  label: hasOther && !hasUcCc ? "Discovery" : "Needs Assessment" },
     ...(hasOther && hasUcCc ? [{ key: "other_discovery" as const, label: "Other Discovery" }] : []),
+    ...(!isClient ? [{ key: "labor" as const, label: "Labor Estimate" }] : []),
     { key: "scope",       label: "Scope of Work"    },
     ...(!isClient ? [{ key: "handoff" as const, label: "Handoff" }] : []),
-    ...(!isClient ? [{ key: "labor" as const, label: "Labor Estimate" }] : []),
     ...(solution?.dynamics_account_id ? [{ key: "sharepoint" as const, label: "SharePoint" }] : []),
   ];
 
