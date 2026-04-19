@@ -286,9 +286,9 @@ app.post("/cases", async (c) => {
   const ticketNumber = created.ticketnumber ?? "";
   const accountName = created.customerid_account?.name ?? null;
 
-  if (c.env.ZOOM_SUPPORT_WEBHOOK_URL && c.env.ZOOM_SUPPORT_WEBHOOK_SECRET) {
+  if (c.env.ZOOM_WEBHOOK_URL && c.env.ZOOM_WEBHOOK_SECRET) {
     c.executionCtx.waitUntil(
-      notifyZoomNewCase(c.env.ZOOM_SUPPORT_WEBHOOK_URL, c.env.ZOOM_SUPPORT_WEBHOOK_SECRET, {
+      notifyZoomNewCase(c.env.ZOOM_WEBHOOK_URL, c.env.ZOOM_WEBHOOK_SECRET, {
         ticketNumber,
         caseId: newId,
         accountName,

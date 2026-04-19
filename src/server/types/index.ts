@@ -46,11 +46,11 @@ export type Bindings = {
   // Dev override: when set, ALL outbound emails are redirected to this address
   // Remove this var from wrangler.json when going to production
   DEV_EMAIL?: string;
-  // Zoom Team Chat incoming webhook URL for the SA channel
+  // Zoom Team Chat incoming webhook URL for the SA channel (JSON payload, URL-gated)
   ZOOM_CHAT_WEBHOOK_URL?: string;
   // Zoom Custom App webhook + shared secret for support-case notifications (HMAC-signed)
-  ZOOM_SUPPORT_WEBHOOK_URL?: string;
-  ZOOM_SUPPORT_WEBHOOK_SECRET?: string;
+  ZOOM_WEBHOOK_URL?: string;
+  ZOOM_WEBHOOK_SECRET?: string;
 };
 
 export type Variables = {
