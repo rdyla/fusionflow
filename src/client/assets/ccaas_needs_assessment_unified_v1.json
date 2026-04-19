@@ -1,12 +1,12 @@
 {
   "id": "ccaas_needs_assessment_unified_v1",
   "name": "CCaaS Needs Assessment",
-  "version": "1.0.0",
-  "description": "Pre-solution needs assessment for contact center and omnichannel solutions used to define business, operational, technical, integration, workforce, quality, security, and migration requirements prior to design and quoting.",
+  "version": "2.0.0",
+  "description": "Pre-solution needs assessment for contact center and omnichannel solutions used to define scope, routing, integrations, workforce, quality, security, and migration requirements prior to design and quoting.",
   "appliesTo": [
     "ccaas"
   ],
-  "estimatedCompletionMinutes": 20,
+  "estimatedCompletionMinutes": 12,
   "solutionScope": {
     "category": "contact_center",
     "supportedPlatforms": [
@@ -35,107 +35,15 @@
       "scored": false,
       "fields": [
         {
-          "id": "customer_name",
-          "type": "text",
-          "label": "Customer Name",
-          "required": true
-        },
-        {
-          "id": "assessment_date",
-          "type": "date",
-          "label": "Assessment Date",
-          "required": true
-        },
-        {
-          "id": "platforms_under_consideration",
-          "type": "multi_select",
-          "label": "Platform(s) Under Consideration",
-          "required": true,
-          "options": [
-            {
-              "value": "zoom_contact_center",
-              "label": "Zoom Contact Center"
-            },
-            {
-              "value": "ringcx",
-              "label": "RingCX"
-            },
-            {
-              "value": "genesys",
-              "label": "Genesys"
-            },
-            {
-              "value": "nice_incontact",
-              "label": "NICE inContact"
-            },
-            {
-              "value": "five9",
-              "label": "Five9"
-            },
-            {
-              "value": "vonage_contact_center",
-              "label": "Vonage Contact Center"
-            },
-            {
-              "value": "dialpad_contact_center",
-              "label": "Dialpad Contact Center"
-            },
-            {
-              "value": "other_ccaas_platform",
-              "label": "Other / TBD"
-            }
-          ]
-        },
-        {
-          "id": "project_stage",
-          "type": "single_select",
-          "label": "Current Project Stage",
-          "required": true,
-          "options": [
-            {
-              "value": "discovery",
-              "label": "Discovery"
-            },
-            {
-              "value": "requirements_definition",
-              "label": "Requirements definition"
-            },
-            {
-              "value": "evaluation",
-              "label": "Evaluation"
-            },
-            {
-              "value": "budgetary_quote",
-              "label": "Budgetary quote"
-            },
-            {
-              "value": "migration_planning",
-              "label": "Migration planning"
-            }
-          ]
-        },
-        {
           "id": "deployment_type",
           "type": "single_select",
           "label": "What type of project is this?",
           "required": true,
           "options": [
-            {
-              "value": "new_deployment",
-              "label": "New deployment"
-            },
-            {
-              "value": "migration",
-              "label": "Migration / replacement"
-            },
-            {
-              "value": "expansion",
-              "label": "Expansion of current environment"
-            },
-            {
-              "value": "optimization_redesign",
-              "label": "Optimization / redesign"
-            }
+            { "value": "new_deployment",       "label": "New deployment"                  },
+            { "value": "migration",            "label": "Migration / replacement"         },
+            { "value": "expansion",            "label": "Expansion of current environment"},
+            { "value": "optimization_redesign","label": "Optimization / redesign"         }
           ]
         },
         {
@@ -146,18 +54,8 @@
           "showIf": {
             "field": "deployment_type",
             "operator": "containsAny",
-            "value": [
-              "migration",
-              "expansion",
-              "optimization_redesign"
-            ]
+            "value": ["migration", "expansion", "optimization_redesign"]
           }
-        },
-        {
-          "id": "why_now",
-          "type": "textarea",
-          "label": "Why is the customer evaluating this now?",
-          "required": false
         },
         {
           "id": "phase_1_scope_summary",
@@ -168,8 +66,27 @@
         {
           "id": "future_phase_scope_summary",
           "type": "textarea",
-          "label": "Describe future-phase scope",
+          "label": "Describe future-phase scope (if known)",
           "required": false
+        },
+        {
+          "id": "target_go_live_date",
+          "type": "date",
+          "label": "Target go-live date",
+          "required": false
+        },
+        {
+          "id": "program_owner_function",
+          "type": "single_select",
+          "label": "Which team is driving this project?",
+          "required": true,
+          "options": [
+            { "value": "it",                    "label": "IT / Technology"          },
+            { "value": "contact_center_ops",    "label": "Contact Center Operations"},
+            { "value": "executive_initiative",  "label": "Executive initiative"     },
+            { "value": "vendor_driven",         "label": "Vendor-driven / renewal"  },
+            { "value": "other",                 "label": "Other"                    }
+          ]
         }
       ]
     },
@@ -185,64 +102,21 @@
           "label": "What are the top business goals for this solution?",
           "required": true,
           "options": [
-            {
-              "value": "reduce_wait_time",
-              "label": "Reduce wait time / queue time"
-            },
-            {
-              "value": "improve_sla",
-              "label": "Improve SLA / service level"
-            },
-            {
-              "value": "improve_csat",
-              "label": "Improve CSAT / customer experience"
-            },
-            {
-              "value": "reduce_abandonment",
-              "label": "Reduce abandonment rate"
-            },
-            {
-              "value": "improve_agent_productivity",
-              "label": "Improve agent productivity"
-            },
-            {
-              "value": "reduce_cost_to_serve",
-              "label": "Reduce cost to serve"
-            },
-            {
-              "value": "expand_digital_channels",
-              "label": "Expand digital / omnichannel support"
-            },
-            {
-              "value": "improve_reporting_visibility",
-              "label": "Improve reporting / supervisor visibility"
-            },
-            {
-              "value": "improve_wfm",
-              "label": "Improve workforce management"
-            },
-            {
-              "value": "improve_qm",
-              "label": "Improve quality management / coaching"
-            }
+            { "value": "reduce_wait_time",          "label": "Reduce wait time / queue time"       },
+            { "value": "improve_sla",               "label": "Improve SLA / service level"         },
+            { "value": "improve_csat",              "label": "Improve CSAT / customer experience"  },
+            { "value": "reduce_abandonment",        "label": "Reduce abandonment rate"             },
+            { "value": "improve_agent_productivity","label": "Improve agent productivity"          },
+            { "value": "reduce_cost_to_serve",      "label": "Reduce cost to serve"                },
+            { "value": "expand_digital_channels",   "label": "Expand digital / omnichannel support"},
+            { "value": "improve_reporting_visibility","label": "Improve reporting / supervisor visibility"},
+            { "value": "improve_wfm",               "label": "Improve workforce management"        },
+            { "value": "improve_qm",                "label": "Improve quality management / coaching"}
           ],
           "scoring": {
             "method": "count_band",
-            "scoreMap": {
-              "0": 1,
-              "1": 2,
-              "2_3": 3,
-              "4_5": 4,
-              "6_plus": 5
-            }
+            "scoreMap": { "0": 1, "1": 2, "2_3": 3, "4_5": 4, "6_plus": 5 }
           }
-        },
-        {
-          "id": "top_3_priorities_ranked",
-          "type": "ranked_select",
-          "label": "Rank the top 3 priorities",
-          "required": false,
-          "optionsSourceField": "business_goals"
         },
         {
           "id": "current_problems_to_solve",
@@ -268,76 +142,23 @@
           "label": "Which KPIs does the customer expect to improve?",
           "required": false,
           "options": [
-            {
-              "value": "asa",
-              "label": "ASA"
-            },
-            {
-              "value": "sla",
-              "label": "Service level"
-            },
-            {
-              "value": "aht",
-              "label": "AHT"
-            },
-            {
-              "value": "csat",
-              "label": "CSAT"
-            },
-            {
-              "value": "fcr",
-              "label": "First contact resolution"
-            },
-            {
-              "value": "occupancy",
-              "label": "Occupancy"
-            },
-            {
-              "value": "adherence",
-              "label": "Adherence"
-            },
-            {
-              "value": "abandonment_rate",
-              "label": "Abandonment rate"
-            },
-            {
-              "value": "cost_per_contact",
-              "label": "Cost per contact"
-            },
-            {
-              "value": "agent_utilization",
-              "label": "Agent utilization"
-            }
-          ]
-        },
-        {
-          "id": "kpi_baseline_available",
-          "type": "single_select",
-          "label": "Are KPI baselines available today?",
-          "required": true,
-          "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "partial",
-              "label": "Partial",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "asa",              "label": "ASA"                  },
+            { "value": "sla",              "label": "Service level"        },
+            { "value": "aht",              "label": "AHT"                  },
+            { "value": "csat",             "label": "CSAT"                 },
+            { "value": "fcr",              "label": "First contact resolution"},
+            { "value": "occupancy",        "label": "Occupancy"            },
+            { "value": "adherence",        "label": "Adherence"            },
+            { "value": "abandonment_rate", "label": "Abandonment rate"     },
+            { "value": "cost_per_contact", "label": "Cost per contact"     },
+            { "value": "agent_utilization","label": "Agent utilization"    }
           ]
         }
       ]
     },
     {
       "id": "scope_and_channels",
-      "title": "Scope, Sites & Channel Requirements",
+      "title": "Scope, Agents & Channel Requirements",
       "sectionCategory": "scopeChannels",
       "scored": true,
       "fields": [
@@ -353,31 +174,11 @@
           "label": "Approximate number of agents in scope",
           "required": true,
           "options": [
-            {
-              "value": "1_25",
-              "label": "1-25",
-              "score": 1
-            },
-            {
-              "value": "26_100",
-              "label": "26-100",
-              "score": 2
-            },
-            {
-              "value": "101_250",
-              "label": "101-250",
-              "score": 3
-            },
-            {
-              "value": "251_500",
-              "label": "251-500",
-              "score": 4
-            },
-            {
-              "value": "500_plus",
-              "label": "500+",
-              "score": 5
-            }
+            { "value": "1_25",    "label": "1-25",   "score": 1 },
+            { "value": "26_100",  "label": "26-100", "score": 2 },
+            { "value": "101_250", "label": "101-250","score": 3 },
+            { "value": "251_500", "label": "251-500","score": 4 },
+            { "value": "500_plus","label": "500+",   "score": 5 }
           ]
         },
         {
@@ -386,26 +187,10 @@
           "label": "Approximate number of supervisors in scope",
           "required": false,
           "options": [
-            {
-              "value": "1_5",
-              "label": "1-5",
-              "score": 1
-            },
-            {
-              "value": "6_20",
-              "label": "6-20",
-              "score": 2
-            },
-            {
-              "value": "21_50",
-              "label": "21-50",
-              "score": 3
-            },
-            {
-              "value": "51_plus",
-              "label": "51+",
-              "score": 4
-            }
+            { "value": "1_5",    "label": "1-5",  "score": 1 },
+            { "value": "6_20",   "label": "6-20", "score": 2 },
+            { "value": "21_50",  "label": "21-50","score": 3 },
+            { "value": "51_plus","label": "51+",  "score": 4 }
           ]
         },
         {
@@ -414,30 +199,12 @@
           "label": "Which channels are required in phase 1?",
           "required": true,
           "options": [
-            {
-              "value": "voice",
-              "label": "Voice"
-            },
-            {
-              "value": "chat",
-              "label": "Chat / web chat"
-            },
-            {
-              "value": "sms",
-              "label": "SMS"
-            },
-            {
-              "value": "email",
-              "label": "Email"
-            },
-            {
-              "value": "social",
-              "label": "Social / messaging apps"
-            },
-            {
-              "value": "video",
-              "label": "Video"
-            }
+            { "value": "voice",  "label": "Voice"                   },
+            { "value": "chat",   "label": "Chat / web chat"         },
+            { "value": "sms",    "label": "SMS"                     },
+            { "value": "email",  "label": "Email"                   },
+            { "value": "social", "label": "Social / messaging apps" },
+            { "value": "video",  "label": "Video"                   }
           ]
         },
         {
@@ -446,137 +213,19 @@
           "label": "Which channels are planned for future phases?",
           "required": false,
           "options": [
-            {
-              "value": "voice",
-              "label": "Voice"
-            },
-            {
-              "value": "chat",
-              "label": "Chat / web chat"
-            },
-            {
-              "value": "sms",
-              "label": "SMS"
-            },
-            {
-              "value": "email",
-              "label": "Email"
-            },
-            {
-              "value": "social",
-              "label": "Social / messaging apps"
-            },
-            {
-              "value": "video",
-              "label": "Video"
-            }
+            { "value": "voice",  "label": "Voice"                   },
+            { "value": "chat",   "label": "Chat / web chat"         },
+            { "value": "sms",    "label": "SMS"                     },
+            { "value": "email",  "label": "Email"                   },
+            { "value": "social", "label": "Social / messaging apps" },
+            { "value": "video",  "label": "Video"                   }
           ]
-        },
-        {
-          "id": "async_vs_realtime_requirements",
-          "type": "multi_select",
-          "label": "What interaction models are required?",
-          "required": false,
-          "options": [
-            {
-              "value": "realtime_voice",
-              "label": "Real-time voice"
-            },
-            {
-              "value": "realtime_chat",
-              "label": "Real-time chat"
-            },
-            {
-              "value": "async_messaging",
-              "label": "Async messaging"
-            },
-            {
-              "value": "email_case_handling",
-              "label": "Email case handling"
-            }
-          ]
-        },
-        {
-          "id": "channel_specific_slas",
-          "type": "textarea",
-          "label": "Describe any channel-specific SLAs or response expectations",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "current_state_operations",
-      "title": "Current-State Contact Center Environment",
-      "sectionCategory": "currentState",
-      "scored": true,
-      "fields": [
-        {
-          "id": "channels_in_use_today",
-          "type": "multi_select",
-          "label": "Which channels are in use today?",
-          "required": true,
-          "options": [
-            {
-              "value": "voice",
-              "label": "Voice"
-            },
-            {
-              "value": "chat",
-              "label": "Chat / web chat"
-            },
-            {
-              "value": "sms",
-              "label": "SMS"
-            },
-            {
-              "value": "email",
-              "label": "Email"
-            },
-            {
-              "value": "social",
-              "label": "Social / messaging apps"
-            },
-            {
-              "value": "video",
-              "label": "Video"
-            }
-          ]
-        },
-        {
-          "id": "current_routing_model",
-          "type": "textarea",
-          "label": "Describe the current routing / queue model",
-          "required": true
-        },
-        {
-          "id": "current_reporting_gaps",
-          "type": "textarea",
-          "label": "What are the biggest reporting or visibility gaps today?",
-          "required": false
-        },
-        {
-          "id": "current_staffing_and_forecast_process",
-          "type": "textarea",
-          "label": "How are staffing, forecasting, and scheduling handled today?",
-          "required": false
-        },
-        {
-          "id": "current_quality_process",
-          "type": "textarea",
-          "label": "How is quality monitoring and coaching handled today?",
-          "required": false
-        },
-        {
-          "id": "current_state_pain_points",
-          "type": "textarea",
-          "label": "What are the biggest current-state pain points?",
-          "required": true
         }
       ]
     },
     {
       "id": "routing_and_flow_design",
-      "title": "Routing, IVR, Queue & Flow Design Requirements",
+      "title": "Routing, IVR & Flow Design",
       "sectionCategory": "routingFlow",
       "scored": true,
       "fields": [
@@ -592,38 +241,14 @@
           "label": "Which routing capabilities are required?",
           "required": true,
           "options": [
-            {
-              "value": "skill_based_routing",
-              "label": "Skill-based routing"
-            },
-            {
-              "value": "language_based_routing",
-              "label": "Language-based routing"
-            },
-            {
-              "value": "priority_vip_routing",
-              "label": "Priority / VIP routing"
-            },
-            {
-              "value": "overflow_routing",
-              "label": "Overflow / backup routing"
-            },
-            {
-              "value": "business_hours_routing",
-              "label": "Business hours / holiday routing"
-            },
-            {
-              "value": "callback",
-              "label": "Callback / queue callback"
-            },
-            {
-              "value": "last_agent_or_relationship_routing",
-              "label": "Last agent / relationship-based routing"
-            },
-            {
-              "value": "omnichannel_routing",
-              "label": "Unified omnichannel routing"
-            }
+            { "value": "skill_based_routing",              "label": "Skill-based routing"               },
+            { "value": "language_based_routing",           "label": "Language-based routing"            },
+            { "value": "priority_vip_routing",             "label": "Priority / VIP routing"            },
+            { "value": "overflow_routing",                 "label": "Overflow / backup routing"         },
+            { "value": "business_hours_routing",           "label": "Business hours / holiday routing"  },
+            { "value": "callback",                         "label": "Callback / queue callback"         },
+            { "value": "last_agent_or_relationship_routing","label": "Last agent / relationship routing" },
+            { "value": "omnichannel_routing",              "label": "Unified omnichannel routing"       }
           ]
         },
         {
@@ -632,21 +257,9 @@
           "label": "Is IVR or self-service required?",
           "required": true,
           "options": [
-            {
-              "value": "yes_phase_1",
-              "label": "Yes, in phase 1",
-              "score": 5
-            },
-            {
-              "value": "yes_future_phase",
-              "label": "Yes, future phase",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes_phase_1",    "label": "Yes, in phase 1",  "score": 5 },
+            { "value": "yes_future_phase","label": "Yes, future phase","score": 3 },
+            { "value": "no",             "label": "No",               "score": 1 }
           ]
         },
         {
@@ -676,103 +289,46 @@
     },
     {
       "id": "agent_supervisor_experience",
-      "title": "Agent & Supervisor Experience Requirements",
+      "title": "Agent & Supervisor Experience",
       "sectionCategory": "agentSupervisorExperience",
       "scored": true,
       "fields": [
         {
-          "id": "agent_desktop_requirements",
-          "type": "textarea",
-          "label": "Describe agent desktop requirements",
-          "required": true
-        },
-        {
           "id": "agent_features_required",
           "type": "multi_select",
           "label": "Which agent capabilities are required?",
-          "required": false,
+          "required": true,
           "options": [
-            {
-              "value": "screen_pop",
-              "label": "Screen pop / contextual view"
-            },
-            {
-              "value": "knowledge_access",
-              "label": "Knowledge access"
-            },
-            {
-              "value": "disposition_codes",
-              "label": "Disposition codes"
-            },
-            {
-              "value": "after_call_work",
-              "label": "After-call work controls"
-            },
-            {
-              "value": "internal_consult_transfer",
-              "label": "Consult / transfer"
-            },
-            {
-              "value": "blended_work",
-              "label": "Blended multichannel work"
-            },
-            {
-              "value": "agent_notes",
-              "label": "Agent notes / wrap-up notes"
-            }
+            { "value": "screen_pop",             "label": "Screen pop / contextual view"  },
+            { "value": "knowledge_access",        "label": "Knowledge access"              },
+            { "value": "disposition_codes",       "label": "Disposition codes"             },
+            { "value": "after_call_work",         "label": "After-call work controls"      },
+            { "value": "internal_consult_transfer","label": "Consult / transfer"           },
+            { "value": "blended_work",            "label": "Blended multichannel work"     },
+            { "value": "agent_notes",             "label": "Agent notes / wrap-up notes"   }
           ]
         },
         {
           "id": "supervisor_capabilities_required",
           "type": "multi_select",
           "label": "Which supervisor capabilities are required?",
-          "required": false,
+          "required": true,
           "options": [
-            {
-              "value": "live_dashboards",
-              "label": "Live dashboards"
-            },
-            {
-              "value": "real_time_monitoring",
-              "label": "Real-time monitoring"
-            },
-            {
-              "value": "whisper",
-              "label": "Whisper"
-            },
-            {
-              "value": "barge",
-              "label": "Barge"
-            },
-            {
-              "value": "intercept",
-              "label": "Intercept / takeover"
-            },
-            {
-              "value": "alerting",
-              "label": "Operational alerts"
-            },
-            {
-              "value": "queue_monitoring",
-              "label": "Queue monitoring"
-            },
-            {
-              "value": "agent_state_monitoring",
-              "label": "Agent state monitoring"
-            }
+            { "value": "live_dashboards",      "label": "Live dashboards"          },
+            { "value": "real_time_monitoring", "label": "Real-time monitoring"     },
+            { "value": "whisper",              "label": "Whisper"                  },
+            { "value": "barge",                "label": "Barge"                    },
+            { "value": "intercept",            "label": "Intercept / takeover"     },
+            { "value": "alerting",             "label": "Operational alerts"       },
+            { "value": "queue_monitoring",     "label": "Queue monitoring"         },
+            { "value": "agent_state_monitoring","label": "Agent state monitoring"  }
           ]
-        },
-        {
-          "id": "knowledge_or_assist_requirements",
-          "type": "textarea",
-          "label": "Describe knowledge, scripting, or assist requirements",
-          "required": false
         }
       ]
     },
     {
       "id": "reporting_analytics",
-      "title": "Reporting & Analytics Requirements",
+      "title": "Reporting & Analytics",
       "sectionCategory": "reportingAnalytics",
       "scored": true,
       "fields": [
@@ -782,89 +338,13 @@
           "label": "What reporting levels are required?",
           "required": true,
           "options": [
-            {
-              "value": "real_time_operational",
-              "label": "Real-time operational dashboards"
-            },
-            {
-              "value": "historical_reporting",
-              "label": "Historical reporting"
-            },
-            {
-              "value": "supervisor_reporting",
-              "label": "Supervisor reporting"
-            },
-            {
-              "value": "executive_reporting",
-              "label": "Executive reporting"
-            },
-            {
-              "value": "scheduled_reports",
-              "label": "Scheduled reports"
-            },
-            {
-              "value": "raw_data_export",
-              "label": "Raw data export / BI feed"
-            }
+            { "value": "real_time_operational","label": "Real-time operational dashboards"},
+            { "value": "historical_reporting", "label": "Historical reporting"            },
+            { "value": "supervisor_reporting", "label": "Supervisor reporting"            },
+            { "value": "executive_reporting",  "label": "Executive reporting"             },
+            { "value": "scheduled_reports",    "label": "Scheduled reports"              },
+            { "value": "raw_data_export",      "label": "Raw data export / BI feed"      }
           ]
-        },
-        {
-          "id": "metrics_required",
-          "type": "multi_select",
-          "label": "Which metrics are required?",
-          "required": false,
-          "options": [
-            {
-              "value": "sla",
-              "label": "Service level"
-            },
-            {
-              "value": "asa",
-              "label": "ASA"
-            },
-            {
-              "value": "aht",
-              "label": "AHT"
-            },
-            {
-              "value": "abandonment",
-              "label": "Abandonment"
-            },
-            {
-              "value": "occupancy",
-              "label": "Occupancy"
-            },
-            {
-              "value": "utilization",
-              "label": "Utilization"
-            },
-            {
-              "value": "adherence",
-              "label": "Adherence"
-            },
-            {
-              "value": "fcr",
-              "label": "FCR"
-            },
-            {
-              "value": "csat",
-              "label": "CSAT"
-            },
-            {
-              "value": "channel_mix",
-              "label": "Channel mix"
-            },
-            {
-              "value": "queue_performance",
-              "label": "Queue performance"
-            }
-          ]
-        },
-        {
-          "id": "interval_reporting_requirements",
-          "type": "textarea",
-          "label": "Describe interval or granularity requirements (e.g. 15-min, 30-min)",
-          "required": false
         },
         {
           "id": "custom_dashboards_required",
@@ -872,21 +352,9 @@
           "label": "Are custom dashboards required?",
           "required": true,
           "options": [
-            {
-              "value": "yes_phase_1",
-              "label": "Yes, in phase 1",
-              "score": 5
-            },
-            {
-              "value": "yes_future_phase",
-              "label": "Yes, future phase",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes_phase_1",    "label": "Yes, in phase 1",  "score": 5 },
+            { "value": "yes_future_phase","label": "Yes, future phase","score": 3 },
+            { "value": "no",             "label": "No",               "score": 1 }
           ]
         },
         {
@@ -895,21 +363,9 @@
           "label": "Is BI or data warehouse integration required?",
           "required": true,
           "options": [
-            {
-              "value": "yes_phase_1",
-              "label": "Yes, in phase 1",
-              "score": 5
-            },
-            {
-              "value": "yes_future_phase",
-              "label": "Yes, future phase",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes_phase_1",    "label": "Yes, in phase 1",  "score": 5 },
+            { "value": "yes_future_phase","label": "Yes, future phase","score": 3 },
+            { "value": "no",             "label": "No",               "score": 1 }
           ]
         }
       ]
@@ -926,41 +382,13 @@
           "label": "Which CRM is in use?",
           "required": true,
           "options": [
-            {
-              "value": "salesforce",
-              "label": "Salesforce",
-              "score": 5
-            },
-            {
-              "value": "dynamics",
-              "label": "Dynamics",
-              "score": 4
-            },
-            {
-              "value": "hubspot",
-              "label": "HubSpot",
-              "score": 4
-            },
-            {
-              "value": "zendesk",
-              "label": "Zendesk",
-              "score": 3
-            },
-            {
-              "value": "service_now",
-              "label": "ServiceNow",
-              "score": 3
-            },
-            {
-              "value": "other",
-              "label": "Other",
-              "score": 2
-            },
-            {
-              "value": "none",
-              "label": "None",
-              "score": 1
-            }
+            { "value": "salesforce",  "label": "Salesforce",  "score": 5 },
+            { "value": "dynamics",    "label": "Dynamics",    "score": 4 },
+            { "value": "hubspot",     "label": "HubSpot",     "score": 4 },
+            { "value": "zendesk",     "label": "Zendesk",     "score": 3 },
+            { "value": "service_now", "label": "ServiceNow",  "score": 3 },
+            { "value": "other",       "label": "Other",       "score": 2 },
+            { "value": "none",        "label": "None",        "score": 1 }
           ]
         },
         {
@@ -969,53 +397,9 @@
           "label": "Is CRM integration required in phase 1?",
           "required": true,
           "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "future_phase",
-              "label": "Future phase",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
-          ]
-        },
-        {
-          "id": "crm_use_cases_required",
-          "type": "multi_select",
-          "label": "Which CRM use cases are required?",
-          "required": false,
-          "options": [
-            {
-              "value": "screen_pop",
-              "label": "Screen pop"
-            },
-            {
-              "value": "case_lookup",
-              "label": "Case / ticket lookup"
-            },
-            {
-              "value": "case_creation",
-              "label": "Case / ticket creation"
-            },
-            {
-              "value": "activity_logging",
-              "label": "Activity logging"
-            },
-            {
-              "value": "disposition_writeback",
-              "label": "Disposition writeback"
-            },
-            {
-              "value": "embedded_agent_desktop",
-              "label": "Embedded agent desktop"
-            }
+            { "value": "yes",          "label": "Yes",         "score": 5 },
+            { "value": "future_phase", "label": "Future phase","score": 3 },
+            { "value": "no",           "label": "No",          "score": 1 }
           ]
         },
         {
@@ -1024,49 +408,16 @@
           "label": "What other integrations are required?",
           "required": false,
           "options": [
-            {
-              "value": "ticketing",
-              "label": "Ticketing system"
-            },
-            {
-              "value": "knowledge_base",
-              "label": "Knowledge base"
-            },
-            {
-              "value": "identity_sso",
-              "label": "Identity / SSO"
-            },
-            {
-              "value": "wfm",
-              "label": "WFM"
-            },
-            {
-              "value": "qm",
-              "label": "QM"
-            },
-            {
-              "value": "bi_warehouse",
-              "label": "BI / warehouse"
-            },
-            {
-              "value": "payment_system",
-              "label": "Payment / PCI workflow"
-            },
-            {
-              "value": "erp_backoffice",
-              "label": "ERP / back-office system"
-            },
-            {
-              "value": "custom_api",
-              "label": "Custom API / middleware"
-            }
+            { "value": "ticketing",     "label": "Ticketing system"         },
+            { "value": "knowledge_base","label": "Knowledge base"           },
+            { "value": "identity_sso",  "label": "Identity / SSO"           },
+            { "value": "wfm",           "label": "WFM"                      },
+            { "value": "qm",            "label": "QM"                       },
+            { "value": "bi_warehouse",  "label": "BI / warehouse"           },
+            { "value": "payment_system","label": "Payment / PCI workflow"   },
+            { "value": "erp_backoffice","label": "ERP / back-office system" },
+            { "value": "custom_api",    "label": "Custom API / middleware"  }
           ]
-        },
-        {
-          "id": "integration_constraints",
-          "type": "textarea",
-          "label": "Describe any integration constraints, dependencies, or custom requirements",
-          "required": false
         },
         {
           "id": "sandbox_testing_required",
@@ -1074,31 +425,18 @@
           "label": "Is sandbox / test environment validation required?",
           "required": true,
           "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "maybe",
-              "label": "Maybe",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes",  "label": "Yes",  "score": 5 },
+            { "value": "maybe","label": "Maybe","score": 3 },
+            { "value": "no",   "label": "No",   "score": 1 }
           ]
         }
       ]
     },
     {
-      "id": "wfm_requirements",
-      "title": "Workforce Management Requirements",
-      "sectionCategory": "wfm",
+      "id": "wfm_qm_requirements",
+      "title": "Workforce & Quality Management",
+      "sectionCategory": "wfmQm",
       "scored": true,
-      "showIfModuleEnabled": "wfm",
       "fields": [
         {
           "id": "wfm_required",
@@ -1106,21 +444,9 @@
           "label": "Is WFM required?",
           "required": true,
           "options": [
-            {
-              "value": "yes_phase_1",
-              "label": "Yes, in phase 1",
-              "score": 5
-            },
-            {
-              "value": "yes_future_phase",
-              "label": "Yes, future phase",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes_phase_1",    "label": "Yes, in phase 1",  "score": 5 },
+            { "value": "yes_future_phase","label": "Yes, future phase","score": 3 },
+            { "value": "no",             "label": "No",               "score": 1 }
           ]
         },
         {
@@ -1128,83 +454,31 @@
           "type": "multi_select",
           "label": "Which WFM capabilities are required?",
           "required": false,
+          "showIf": {
+            "field": "wfm_required",
+            "operator": "notEquals",
+            "value": "no"
+          },
           "options": [
-            {
-              "value": "forecasting",
-              "label": "Forecasting"
-            },
-            {
-              "value": "scheduling",
-              "label": "Scheduling"
-            },
-            {
-              "value": "intraday_management",
-              "label": "Intraday management"
-            },
-            {
-              "value": "adherence_tracking",
-              "label": "Adherence tracking"
-            },
-            {
-              "value": "shrinkage_management",
-              "label": "Shrinkage management"
-            },
-            {
-              "value": "pto_workflows",
-              "label": "PTO / exception workflows"
-            },
-            {
-              "value": "multi_skill_planning",
-              "label": "Multi-skill planning"
-            },
-            {
-              "value": "approval_workflows",
-              "label": "Supervisor approval workflows"
-            }
+            { "value": "forecasting",          "label": "Forecasting"                   },
+            { "value": "scheduling",           "label": "Scheduling"                    },
+            { "value": "intraday_management",  "label": "Intraday management"           },
+            { "value": "adherence_tracking",   "label": "Adherence tracking"            },
+            { "value": "shrinkage_management", "label": "Shrinkage management"          },
+            { "value": "pto_workflows",        "label": "PTO / exception workflows"     },
+            { "value": "multi_skill_planning", "label": "Multi-skill planning"          },
+            { "value": "approval_workflows",   "label": "Supervisor approval workflows" }
           ]
         },
-        {
-          "id": "current_wfm_process",
-          "type": "textarea",
-          "label": "Describe the current WFM process",
-          "required": false
-        },
-        {
-          "id": "wfm_must_haves",
-          "type": "textarea",
-          "label": "Describe any WFM must-haves or non-negotiables",
-          "required": false
-        }
-      ]
-    },
-    {
-      "id": "qm_requirements",
-      "title": "Quality Management Requirements",
-      "sectionCategory": "qm",
-      "scored": true,
-      "showIfModuleEnabled": "qm",
-      "fields": [
         {
           "id": "qm_required",
           "type": "single_select",
           "label": "Is QM required?",
           "required": true,
           "options": [
-            {
-              "value": "yes_phase_1",
-              "label": "Yes, in phase 1",
-              "score": 5
-            },
-            {
-              "value": "yes_future_phase",
-              "label": "Yes, future phase",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes_phase_1",    "label": "Yes, in phase 1",  "score": 5 },
+            { "value": "yes_future_phase","label": "Yes, future phase","score": 3 },
+            { "value": "no",             "label": "No",               "score": 1 }
           ]
         },
         {
@@ -1212,48 +486,20 @@
           "type": "multi_select",
           "label": "Which QM capabilities are required?",
           "required": false,
+          "showIf": {
+            "field": "qm_required",
+            "operator": "notEquals",
+            "value": "no"
+          },
           "options": [
-            {
-              "value": "evaluation_scorecards",
-              "label": "Evaluation scorecards"
-            },
-            {
-              "value": "calibration",
-              "label": "Calibration workflows"
-            },
-            {
-              "value": "coaching",
-              "label": "Coaching workflows"
-            },
-            {
-              "value": "acknowledgement",
-              "label": "Agent acknowledgement"
-            },
-            {
-              "value": "dispute_process",
-              "label": "Dispute / appeal process"
-            },
-            {
-              "value": "sampling",
-              "label": "Call / interaction sampling"
-            },
-            {
-              "value": "auto_evaluation",
-              "label": "Automated evaluation / AI assist"
-            }
+            { "value": "evaluation_scorecards","label": "Evaluation scorecards"          },
+            { "value": "calibration",          "label": "Calibration workflows"          },
+            { "value": "coaching",             "label": "Coaching workflows"             },
+            { "value": "acknowledgement",      "label": "Agent acknowledgement"          },
+            { "value": "dispute_process",      "label": "Dispute / appeal process"       },
+            { "value": "sampling",             "label": "Call / interaction sampling"    },
+            { "value": "auto_evaluation",      "label": "Automated evaluation / AI assist"}
           ]
-        },
-        {
-          "id": "qm_scorecard_requirements",
-          "type": "textarea",
-          "label": "Describe scorecard, evaluation, or calibration requirements",
-          "required": false
-        },
-        {
-          "id": "current_qm_process",
-          "type": "textarea",
-          "label": "Describe the current QM process",
-          "required": false
         }
       ]
     },
@@ -1269,53 +515,23 @@
           "label": "Are call / interaction recording requirements defined?",
           "required": true,
           "options": [
-            {
-              "value": "yes_defined",
-              "label": "Yes, defined",
-              "score": 5
-            },
-            {
-              "value": "partial",
-              "label": "Partial / needs clarification",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes_defined",        "label": "Yes, defined",                "score": 5 },
+            { "value": "partial",            "label": "Partial / needs clarification","score": 3 },
+            { "value": "no",                 "label": "No",                          "score": 1 }
           ]
         },
         {
-          "id": "compliance_needs",
+          "id": "compliance_requirements",
           "type": "multi_select",
           "label": "Which compliance requirements are relevant?",
           "required": false,
           "options": [
-            {
-              "value": "pci",
-              "label": "PCI"
-            },
-            {
-              "value": "hipaa",
-              "label": "HIPAA"
-            },
-            {
-              "value": "pii",
-              "label": "PII"
-            },
-            {
-              "value": "gdpr",
-              "label": "GDPR / regional privacy"
-            },
-            {
-              "value": "financial_regulated",
-              "label": "Financial services regulation"
-            },
-            {
-              "value": "none_identified",
-              "label": "None identified"
-            }
+            { "value": "pci",                 "label": "PCI"                          },
+            { "value": "hipaa",               "label": "HIPAA"                        },
+            { "value": "pii",                 "label": "PII"                          },
+            { "value": "gdpr",                "label": "GDPR / regional privacy"      },
+            { "value": "financial_regulated", "label": "Financial services regulation"},
+            { "value": "none_identified",     "label": "None identified"              }
           ]
         },
         {
@@ -1324,21 +540,9 @@
           "label": "Are retention requirements defined?",
           "required": true,
           "options": [
-            {
-              "value": "yes_defined",
-              "label": "Yes, defined",
-              "score": 5
-            },
-            {
-              "value": "yes_not_defined",
-              "label": "Yes, but not yet defined",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No / none known",
-              "score": 1
-            }
+            { "value": "yes_defined",    "label": "Yes, defined",            "score": 5 },
+            { "value": "yes_not_defined","label": "Yes, but not yet defined","score": 3 },
+            { "value": "no",             "label": "No / none known",         "score": 1 }
           ]
         },
         {
@@ -1347,21 +551,9 @@
           "label": "Are redaction, masking, or pause/resume controls required?",
           "required": true,
           "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "maybe",
-              "label": "Maybe",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes",  "label": "Yes",  "score": 5 },
+            { "value": "maybe","label": "Maybe","score": 3 },
+            { "value": "no",   "label": "No",   "score": 1 }
           ]
         },
         {
@@ -1370,21 +562,9 @@
           "label": "Are role-based access controls required?",
           "required": true,
           "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "partial",
-              "label": "Partial",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes",    "label": "Yes",    "score": 5 },
+            { "value": "partial","label": "Partial","score": 3 },
+            { "value": "no",     "label": "No",     "score": 1 }
           ]
         },
         {
@@ -1393,21 +573,9 @@
           "label": "Is security or procurement review required before purchase?",
           "required": true,
           "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "unknown",
-              "label": "Unknown",
-              "score": 2
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes",    "label": "Yes",    "score": 5 },
+            { "value": "unknown","label": "Unknown","score": 2 },
+            { "value": "no",     "label": "No",     "score": 1 }
           ]
         }
       ]
@@ -1424,62 +592,27 @@
           "label": "Is migration from an existing platform required?",
           "required": true,
           "options": [
-            {
-              "value": "yes",
-              "label": "Yes",
-              "score": 5
-            },
-            {
-              "value": "partial",
-              "label": "Partial / phased",
-              "score": 3
-            },
-            {
-              "value": "no",
-              "label": "No",
-              "score": 1
-            }
+            { "value": "yes",    "label": "Yes",             "score": 5 },
+            { "value": "partial","label": "Partial / phased","score": 3 },
+            { "value": "no",     "label": "No",              "score": 1 }
           ]
         },
         {
-          "id": "migration_scope",
+          "id": "migration_scope_summary",
           "type": "textarea",
           "label": "Describe what must be migrated",
-          "required": false
+          "required": false,
+          "showIf": {
+            "field": "migration_required",
+            "operator": "notEquals",
+            "value": "no"
+          }
         },
         {
-          "id": "telephony_or_number_porting_dependencies",
+          "id": "carrier_or_number_dependencies",
           "type": "textarea",
           "label": "Describe telephony, carrier, or number porting dependencies",
           "required": false
-        },
-        {
-          "id": "testing_requirements",
-          "type": "multi_select",
-          "label": "Which testing activities are required?",
-          "required": true,
-          "options": [
-            {
-              "value": "unit_testing",
-              "label": "Unit testing"
-            },
-            {
-              "value": "integration_testing",
-              "label": "Integration testing"
-            },
-            {
-              "value": "uat",
-              "label": "UAT"
-            },
-            {
-              "value": "pilot",
-              "label": "Pilot / phased rollout"
-            },
-            {
-              "value": "load_or_volume_testing",
-              "label": "Load / volume testing"
-            }
-          ]
         },
         {
           "id": "customer_prerequisites_before_design",
@@ -1487,42 +620,15 @@
           "label": "What must the customer provide before design can proceed?",
           "required": true,
           "options": [
-            {
-              "value": "current_call_flows",
-              "label": "Current call flows / IVR maps"
-            },
-            {
-              "value": "queue_and_skill_definitions",
-              "label": "Queue / skill definitions"
-            },
-            {
-              "value": "business_hours_holidays",
-              "label": "Business hours / holidays"
-            },
-            {
-              "value": "reporting_requirements",
-              "label": "Reporting requirements"
-            },
-            {
-              "value": "integration_contacts",
-              "label": "Integration owners / contacts"
-            },
-            {
-              "value": "crm_access",
-              "label": "CRM / platform access for discovery"
-            },
-            {
-              "value": "security_requirements",
-              "label": "Security / compliance requirements"
-            },
-            {
-              "value": "wfm_requirements",
-              "label": "WFM requirements / process inputs"
-            },
-            {
-              "value": "qm_scorecards",
-              "label": "QM scorecards / evaluation criteria"
-            }
+            { "value": "current_call_flows",       "label": "Current call flows / IVR maps"        },
+            { "value": "queue_and_skill_definitions","label": "Queue / skill definitions"           },
+            { "value": "business_hours_holidays",  "label": "Business hours / holidays"            },
+            { "value": "reporting_requirements",   "label": "Reporting requirements"               },
+            { "value": "integration_contacts",     "label": "Integration owners / contacts"        },
+            { "value": "crm_access",               "label": "CRM / platform access for discovery"  },
+            { "value": "security_requirements",    "label": "Security / compliance requirements"   },
+            { "value": "wfm_requirements",         "label": "WFM requirements / process inputs"    },
+            { "value": "qm_scorecards",            "label": "QM scorecards / evaluation criteria"  }
           ]
         },
         {
@@ -1531,38 +637,14 @@
           "label": "Who must approve the Statement of Requirements before design / quote?",
           "required": true,
           "options": [
-            {
-              "value": "contact_center_leadership",
-              "label": "Contact center leadership"
-            },
-            {
-              "value": "operations",
-              "label": "Operations"
-            },
-            {
-              "value": "it",
-              "label": "IT"
-            },
-            {
-              "value": "security",
-              "label": "Security / compliance"
-            },
-            {
-              "value": "crm_owner",
-              "label": "CRM owner"
-            },
-            {
-              "value": "wfm_owner",
-              "label": "WFM owner"
-            },
-            {
-              "value": "qm_owner",
-              "label": "QM owner"
-            },
-            {
-              "value": "executive_sponsor",
-              "label": "Executive sponsor"
-            }
+            { "value": "contact_center_leadership","label": "Contact center leadership"},
+            { "value": "operations",               "label": "Operations"               },
+            { "value": "it",                       "label": "IT"                       },
+            { "value": "security",                 "label": "Security / compliance"    },
+            { "value": "crm_owner",                "label": "CRM owner"                },
+            { "value": "wfm_owner",                "label": "WFM owner"                },
+            { "value": "qm_owner",                 "label": "QM owner"                 },
+            { "value": "executive_sponsor",        "label": "Executive sponsor"        }
           ]
         }
       ]
@@ -1577,7 +659,6 @@
         "title": "Business Objectives & Success Outcomes",
         "sourceFields": [
           "business_goals",
-          "top_3_priorities_ranked",
           "current_problems_to_solve",
           "success_90_days",
           "success_6_12_months",
@@ -1594,8 +675,7 @@
           "agent_count_band",
           "supervisor_count_band",
           "channels_required_phase_1",
-          "channels_future_phase",
-          "channel_specific_slas"
+          "channels_future_phase"
         ]
       },
       {
@@ -1614,10 +694,8 @@
         "id": "sor_agent_supervisor_experience",
         "title": "Agent & Supervisor Experience Requirements",
         "sourceFields": [
-          "agent_desktop_requirements",
           "agent_features_required",
-          "supervisor_capabilities_required",
-          "knowledge_or_assist_requirements"
+          "supervisor_capabilities_required"
         ]
       },
       {
@@ -1625,8 +703,6 @@
         "title": "Reporting & Analytics Requirements",
         "sourceFields": [
           "reporting_levels_required",
-          "metrics_required",
-          "interval_reporting_requirements",
           "custom_dashboards_required",
           "bi_or_data_warehouse_integration_required"
         ]
@@ -1637,30 +713,18 @@
         "sourceFields": [
           "crm_in_use",
           "crm_integration_required_phase_1",
-          "crm_use_cases_required",
           "other_integrations_required",
-          "integration_constraints",
           "sandbox_testing_required"
         ]
       },
       {
-        "id": "sor_wfm",
-        "title": "Workforce Management Requirements",
+        "id": "sor_wfm_qm",
+        "title": "Workforce & Quality Management Requirements",
         "sourceFields": [
           "wfm_required",
           "wfm_capabilities_required",
-          "current_wfm_process",
-          "wfm_must_haves"
-        ]
-      },
-      {
-        "id": "sor_qm",
-        "title": "Quality Management Requirements",
-        "sourceFields": [
           "qm_required",
-          "qm_capabilities_required",
-          "qm_scorecard_requirements",
-          "current_qm_process"
+          "qm_capabilities_required"
         ]
       },
       {
@@ -1668,7 +732,7 @@
         "title": "Security, Compliance & Governance Requirements",
         "sourceFields": [
           "recording_requirements",
-          "compliance_needs",
+          "compliance_requirements",
           "retention_requirements",
           "redaction_or_pause_resume_required",
           "rbac_required",
@@ -1679,9 +743,9 @@
         "id": "sor_customer_responsibilities",
         "title": "Dependencies, Assumptions & Customer Responsibilities",
         "sourceFields": [
-          "migration_scope",
-          "telephony_or_number_porting_dependencies",
-          "testing_requirements",
+          "migration_required",
+          "migration_scope_summary",
+          "carrier_or_number_dependencies",
           "customer_prerequisites_before_design",
           "signoff_roles"
         ]
@@ -1717,7 +781,7 @@
         "condition": "crm_integration_required_phase_1 == 'yes'",
         "category": "integration",
         "priority": "must",
-        "statementTemplate": "CRM integration is required in phase 1, including the required CRM use cases defined by the customer."
+        "statementTemplate": "CRM integration is required in phase 1."
       },
       {
         "id": "reporting_requirement",
@@ -1765,8 +829,7 @@
           "business_goals",
           "current_problems_to_solve",
           "success_90_days",
-          "success_6_12_months",
-          "kpi_baseline_available"
+          "success_6_12_months"
         ]
       },
       "operationalDesignReadiness": {
@@ -1776,7 +839,7 @@
           "channels_required_phase_1",
           "queue_and_skill_requirements",
           "routing_capabilities_required",
-          "agent_desktop_requirements"
+          "ivr_or_self_service_required"
         ]
       },
       "integrationReadiness": {
@@ -1784,7 +847,6 @@
         "inputs": [
           "crm_in_use",
           "crm_integration_required_phase_1",
-          "crm_use_cases_required",
           "other_integrations_required",
           "sandbox_testing_required"
         ]
@@ -1802,7 +864,7 @@
         "weight": 0.1,
         "inputs": [
           "recording_requirements",
-          "compliance_needs",
+          "compliance_requirements",
           "retention_requirements",
           "rbac_required",
           "security_review_required"
@@ -1812,41 +874,17 @@
         "weight": 0.1,
         "inputs": [
           "migration_required",
-          "migration_scope",
-          "testing_requirements",
+          "migration_scope_summary",
           "customer_prerequisites_before_design",
           "signoff_roles"
         ]
       }
     },
     "statusBands": [
-      {
-        "label": "ready",
-        "min": 80,
-        "max": 100
-      },
-      {
-        "label": "conditionally_ready",
-        "min": 60,
-        "max": 79
-      },
-      {
-        "label": "not_ready",
-        "min": 0,
-        "max": 59
-      }
+      { "label": "ready",               "min": 80, "max": 100 },
+      { "label": "conditionally_ready", "min": 60, "max": 79  },
+      { "label": "not_ready",           "min": 0,  "max": 59  }
     ]
-  },
-  "calculationRules": {
-    "ignoreUnansweredOptionalFields": true,
-    "scoredFieldsOnly": true,
-    "defaultSectionFormula": "((averageRawScore - 1) / 4) * 100",
-    "overallReadinessFormula": "sum(dimensionScore * dimensionWeight)",
-    "rounding": {
-      "sectionScores": "nearest_integer",
-      "dimensionScores": "nearest_integer",
-      "overallReadiness": "nearest_integer"
-    }
   },
   "decisionModel": {
     "enabled": true,
@@ -1867,238 +905,5 @@
         "recommendedAction": "Do not proceed to design / quote until discovery gaps and prerequisites are resolved."
       }
     ]
-  },
-  "responseShape": {
-    "assessmentId": "string",
-    "surveyId": "ccaas_needs_assessment_unified_v1",
-    "customerId": "string",
-    "submittedAt": "ISO-8601 datetime",
-    "submittedBy": {
-      "name": "string",
-      "role": "string",
-      "email": "string"
-    },
-    "answers": {},
-    "generated": {
-      "requirements": [],
-      "statementOfRequirements": {},
-      "sectionScores": {},
-      "readinessDimensions": {},
-      "overallReadiness": 0,
-      "status": "ready | conditionally_ready | not_ready",
-      "recommendedAction": "string"
-    }
-  },
-  "exampleResponse": {
-    "assessmentId": "ccaas_na_1001",
-    "surveyId": "ccaas_needs_assessment_unified_v1",
-    "customerId": "cust_3001",
-    "submittedAt": "2026-03-20T12:00:00Z",
-    "submittedBy": {
-      "name": "Jane Smith",
-      "role": "Director of Customer Operations",
-      "email": "jane@example.com"
-    },
-    "answers": {
-      "customer_name": "Example Co",
-      "assessment_date": "2026-03-20",
-      "platforms_under_consideration": [
-        "zoom_contact_center",
-        "ringcx"
-      ],
-      "project_stage": "requirements_definition",
-      "deployment_type": "migration",
-      "current_platform": "Legacy PBX + separate chat tool",
-      "phase_1_scope_summary": "North America support organization with voice and chat.",
-      "future_phase_scope_summary": "Email, SMS, WFM, and QM in later phases.",
-      "business_goals": [
-        "reduce_wait_time",
-        "improve_sla",
-        "improve_csat",
-        "improve_reporting_visibility"
-      ],
-      "current_problems_to_solve": "Long queue times, fragmented reporting, and no unified agent experience.",
-      "success_90_days": "Voice and chat are live with better queue visibility and supervisor controls.",
-      "success_6_12_months": "SLA and CSAT improve while staffing decisions become more data-driven.",
-      "target_kpis": [
-        "sla",
-        "asa",
-        "csat",
-        "abandonment_rate"
-      ],
-      "kpi_baseline_available": "partial",
-      "sites_or_business_units_in_scope": "US and Canada customer support teams.",
-      "agent_count_band": "101_250",
-      "supervisor_count_band": "6_20",
-      "channels_required_phase_1": [
-        "voice",
-        "chat"
-      ],
-      "channels_future_phase": [
-        "email",
-        "sms"
-      ],
-      "channel_specific_slas": "Voice calls answered in 80/20, chat initial response within 30 seconds.",
-      "channels_in_use_today": [
-        "voice",
-        "chat",
-        "email"
-      ],
-      "current_routing_model": "Skill-based voice queues and basic web chat assignment.",
-      "current_state_pain_points": "Too many tools, poor visibility, limited overflow logic, and manual reporting.",
-      "queue_and_skill_requirements": "Tier 1, Tier 2, billing, technical support, and Spanish language queues.",
-      "routing_capabilities_required": [
-        "skill_based_routing",
-        "language_based_routing",
-        "overflow_routing",
-        "business_hours_routing",
-        "callback",
-        "omnichannel_routing"
-      ],
-      "ivr_or_self_service_required": "yes_phase_1",
-      "ivr_requirements": "Business hours menu, language selection, billing and support menu branches, callback option.",
-      "transfer_and_escalation_requirements": "Warm transfer to Tier 2 and supervisor escalation path.",
-      "agent_desktop_requirements": "Single pane of glass with customer context and embedded CRM.",
-      "agent_features_required": [
-        "screen_pop",
-        "knowledge_access",
-        "disposition_codes",
-        "after_call_work"
-      ],
-      "supervisor_capabilities_required": [
-        "live_dashboards",
-        "real_time_monitoring",
-        "whisper",
-        "barge",
-        "queue_monitoring"
-      ],
-      "reporting_levels_required": [
-        "real_time_operational",
-        "historical_reporting",
-        "supervisor_reporting",
-        "executive_reporting"
-      ],
-      "metrics_required": [
-        "sla",
-        "asa",
-        "aht",
-        "abandonment",
-        "csat",
-        "queue_performance"
-      ],
-      "custom_dashboards_required": "yes_phase_1",
-      "bi_or_data_warehouse_integration_required": "yes_future_phase",
-      "crm_in_use": "salesforce",
-      "crm_integration_required_phase_1": "yes",
-      "crm_use_cases_required": [
-        "screen_pop",
-        "case_lookup",
-        "case_creation",
-        "activity_logging"
-      ],
-      "other_integrations_required": [
-        "knowledge_base",
-        "identity_sso",
-        "bi_warehouse"
-      ],
-      "sandbox_testing_required": "yes",
-      "wfm_required": "yes_future_phase",
-      "wfm_capabilities_required": [
-        "forecasting",
-        "scheduling",
-        "adherence_tracking"
-      ],
-      "qm_required": "yes_future_phase",
-      "qm_capabilities_required": [
-        "evaluation_scorecards",
-        "calibration",
-        "coaching"
-      ],
-      "recording_requirements": "yes_defined",
-      "compliance_needs": [
-        "pii"
-      ],
-      "retention_requirements": "yes_defined",
-      "redaction_or_pause_resume_required": "maybe",
-      "rbac_required": "yes",
-      "security_review_required": "yes",
-      "migration_required": "yes",
-      "migration_scope": "Inbound voice queues and web chat phase 1, email later.",
-      "telephony_or_number_porting_dependencies": "Existing carrier numbers must port during cutover.",
-      "testing_requirements": [
-        "integration_testing",
-        "uat",
-        "pilot"
-      ],
-      "customer_prerequisites_before_design": [
-        "current_call_flows",
-        "queue_and_skill_definitions",
-        "business_hours_holidays",
-        "reporting_requirements",
-        "integration_contacts",
-        "security_requirements"
-      ],
-      "signoff_roles": [
-        "contact_center_leadership",
-        "operations",
-        "it",
-        "security",
-        "crm_owner"
-      ]
-    },
-    "generated": {
-      "requirements": [
-        {
-          "category": "channels",
-          "priority": "must",
-          "statement": "The solution must support the following channels in phase 1: voice and chat."
-        },
-        {
-          "category": "routing",
-          "priority": "must",
-          "statement": "The solution must support the following routing capabilities: skill-based routing, language-based routing, overflow routing, business-hours routing, callback, and omnichannel routing."
-        },
-        {
-          "category": "integration",
-          "priority": "must",
-          "statement": "CRM integration is required in phase 1, including the required CRM use cases defined by the customer."
-        }
-      ],
-      "statementOfRequirements": {
-        "title": "CCaaS Statement of Requirements",
-        "sections": {
-          "businessOutcomes": "Customer seeks to reduce wait times, improve SLA, improve CSAT, and improve reporting visibility.",
-          "scopeChannels": "Phase 1 includes North America support teams with voice and chat; email and SMS are planned later.",
-          "routingFlow": "The solution must support skill-based, language-based, overflow, business-hours, and callback routing with IVR in phase 1.",
-          "agentSupervisorExperience": "Agents require a unified desktop with CRM context; supervisors require live dashboards and monitoring controls.",
-          "integrations": "Salesforce integration is required in phase 1 for screen pop, case handling, and activity logging.",
-          "customerResponsibilities": "Customer must provide current flows, queue definitions, reporting requirements, integration contacts, and security requirements before design."
-        }
-      },
-      "sectionScores": {
-        "businessObjectives": 76,
-        "scopeChannels": 72,
-        "currentState": 74,
-        "routingFlow": 86,
-        "agentSupervisorExperience": 82,
-        "reportingAnalytics": 84,
-        "integrations": 83,
-        "wfm": 60,
-        "qm": 60,
-        "securityCompliance": 78,
-        "migrationDependencies": 85
-      },
-      "readinessDimensions": {
-        "businessClarity": 75,
-        "operationalDesignReadiness": 84,
-        "integrationReadiness": 82,
-        "workforceQualityReadiness": 60,
-        "complianceReadiness": 77,
-        "migrationReadiness": 85
-      },
-      "overallReadiness": 78,
-      "status": "conditionally_ready",
-      "recommendedAction": "Proceed only after dependencies, scope gaps, or unresolved requirements are addressed."
-    }
   }
 }
