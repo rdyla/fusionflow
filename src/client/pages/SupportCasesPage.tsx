@@ -1,14 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { supportApi, formatSupportDate, type SupportCase, type SupportUser } from "../lib/supportApi";
+import { supportApi, formatSupportDate, severityColor, type SupportCase, type SupportUser } from "../lib/supportApi";
 
-const STATUS_OPTIONS = ["Active", "All Statuses", "In Progress", "On Hold", "Resolved", "Cancelled"];
-const PRIORITY_OPTIONS = ["All Priorities", "High", "Normal", "Low"];
+const STATUS_OPTIONS = ["Active", "All Statuses", "Resolved", "Cancelled"];
+const SEVERITY_OPTIONS = ["All Severities", "P1", "P2", "P3", "E1", "E2"];
 const PAGE_SIZE = 50;
 
-function priorityColor(p: string) {
-  return p === "High" ? "#d13438" : p === "Low" ? "#94a3b8" : "#0891b2";
-}
 function stateColor(s: string) {
   return s === "Resolved" ? "#22c55e" : s === "Cancelled" ? "#94a3b8" : "#0891b2";
 }
@@ -30,7 +27,7 @@ export default function SupportCasesPage() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Active");
-  const [priorityFilter, setPriorityFilter] = useState("All Priorities");
+  const [severityFilter, setSeverityFilter] = useState("All Severities");
   const [mineOnly, setMineOnly] = useState(true);
   const [page, setPage] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -60,10 +57,9 @@ export default function SupportCasesPage() {
   };
 
   const filtered = cases.filter((c) => {
-    const matchStatus = statusFilter === "All Statuses" ||
-      (statusFilter === "Active" ? (c.status === "In Progress" || c.status === "On Hold") : c.status === statusFilter);
-    const matchPriority = priorityFilter === "All Priorities" || c.priority === priorityFilter;
-    return matchStatus && matchPriority;
+    const matchStatus = statusFilter === "All Statuses" || c.state === statusFilter;
+    const matchSeverity = severityFilter === "All Severities" || c.severity === severityFilter;
+    return matchStatus && matchSeverity;
   });
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -106,12 +102,12 @@ export default function SupportCasesPage() {
           style={{ padding: "0.4rem 0.6rem", border: "1px solid #cbd5e1", borderRadius: 6, fontSize: 13 }}>
           {STATUS_OPTIONS.map((o) => <option key={o}>{o}</option>)}
         </select>
-        <select value={priorityFilter} onChange={(e) => { setPriorityFilter(e.target.value); setPage(0); }}
+        <select value={severityFilter} onChange={(e) => { setSeverityFilter(e.target.value); setPage(0); }}
           style={{ padding: "0.4rem 0.6rem", border: "1px solid #cbd5e1", borderRadius: 6, fontSize: 13 }}>
-          {PRIORITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
+          {SEVERITY_OPTIONS.map((o) => <option key={o}>{o}</option>)}
         </select>
-        {(search || statusFilter !== "Active" || priorityFilter !== "All Priorities") && (
-          <button onClick={() => { setSearch(""); setStatusFilter("Active"); setPriorityFilter("All Priorities"); setPage(0); fetchCases(undefined, mineOnly); }}
+        {(search || statusFilter !== "Active" || severityFilter !== "All Severities") && (
+          <button onClick={() => { setSearch(""); setStatusFilter("Active"); setSeverityFilter("All Severities"); setPage(0); fetchCases(undefined, mineOnly); }}
             style={{ padding: "0.35rem 0.75rem", border: "1px solid #cbd5e1", borderRadius: 6, fontSize: 13, cursor: "pointer", background: "#fff" }}>
             Clear
           </button>
@@ -138,7 +134,7 @@ export default function SupportCasesPage() {
                 <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Ticket #</th>
                 <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Title</th>
                 {isStaff && <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Account</th>}
-                <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Priority</th>
+                <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Severity</th>
                 <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Status</th>
                 {isStaff && <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Owner</th>}
                 <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Opened</th>
@@ -156,7 +152,11 @@ export default function SupportCasesPage() {
                   <td style={{ padding: "10px 16px", fontWeight: 500, color: "#1e293b" }}>{c.title}</td>
                   {isStaff && <td style={{ padding: "10px 16px", fontSize: 13, color: "#64748b" }}>{c.accountName ?? "—"}</td>}
                   <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
-                    <Badge label={c.priority} color={priorityColor(c.priority)} />
+                    {c.severity ? (
+                      <Badge label={c.severity} color={severityColor(c.severity)} />
+                    ) : (
+                      <span style={{ color: "#94a3b8" }}>—</span>
+                    )}
                   </td>
                   <td style={{ padding: "10px 16px", whiteSpace: "nowrap" }}>
                     <Badge label={c.status} color={stateColor(c.state)} />

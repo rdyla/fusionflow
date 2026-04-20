@@ -1,14 +1,12 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { severityColor } from "../lib/supportApi";
 
 interface ConfirmationState {
   id: string;
   ticketNumber: string;
   title: string;
-  prioritycode: number;
+  severityLabel: string;
 }
-
-const PRIORITY_LABEL: Record<number, string> = { 1: "High", 2: "Normal", 3: "Low" };
-const PRIORITY_COLOR: Record<number, string> = { 1: "#d13438", 2: "#0891b2", 3: "#94a3b8" };
 
 export default function SupportCaseConfirmationPage() {
   const navigate = useNavigate();
@@ -20,8 +18,8 @@ export default function SupportCaseConfirmationPage() {
     return null;
   }
 
-  const { id, ticketNumber, title, prioritycode } = state;
-  const color = PRIORITY_COLOR[prioritycode] ?? "#0891b2";
+  const { id, ticketNumber, title, severityLabel } = state;
+  const color = severityColor(severityLabel);
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto" }}>
@@ -42,9 +40,9 @@ export default function SupportCaseConfirmationPage() {
             <span style={{ maxWidth: "70%", textAlign: "right", fontSize: 14, color: "#1e293b" }}>{title}</span>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Priority</span>
+            <span style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Severity</span>
             <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 10, fontSize: 11, fontWeight: 600, background: `${color}18`, color, border: `1px solid ${color}40` }}>
-              {PRIORITY_LABEL[prioritycode] ?? "Normal"}
+              {severityLabel}
             </span>
           </div>
         </div>

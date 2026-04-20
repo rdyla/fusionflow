@@ -1,6 +1,7 @@
 const ORG_URL = "https://packetfusioncrm.crm.dynamics.com";
 const API_BASE = `${ORG_URL}/api/data/v9.2`;
 const TOKEN_CACHE_KEY = "dynamics_token";
+const SUPPORT_TOKEN_CACHE_KEY = "dynamics_token_support";
 
 type TokenCache = {
   access_token: string;
@@ -31,23 +32,29 @@ type Env = {
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;
   DYNAMICS_CLIENT_SECRET?: string;
+  DYNAMICS_SUPPORT_CLIENT_ID?: string;
+  DYNAMICS_SUPPORT_CLIENT_SECRET?: string;
 };
 
 function isConfigured(env: Env): boolean {
   return !!(env.DYNAMICS_TENANT_ID && env.DYNAMICS_CLIENT_ID && env.DYNAMICS_CLIENT_SECRET);
 }
 
-async function getToken(env: Env): Promise<string> {
-  // Try cache first
-  const cached = await env.KV.get<TokenCache>(TOKEN_CACHE_KEY, "json");
+async function getTokenFor(
+  env: Env,
+  clientId: string,
+  clientSecret: string,
+  cacheKey: string,
+): Promise<string> {
+  const cached = await env.KV.get<TokenCache>(cacheKey, "json");
   if (cached && cached.expires_at > Date.now() + 60_000) {
     return cached.access_token;
   }
 
   const params = new URLSearchParams({
     grant_type: "client_credentials",
-    client_id: env.DYNAMICS_CLIENT_ID!,
-    client_secret: env.DYNAMICS_CLIENT_SECRET!,
+    client_id: clientId,
+    client_secret: clientSecret,
     scope: `${ORG_URL}/.default`,
   });
 
@@ -67,15 +74,47 @@ async function getToken(env: Env): Promise<string> {
     expires_at: Date.now() + data.expires_in * 1000,
   };
 
-  // Cache for slightly less than the token lifetime
-  await env.KV.put(TOKEN_CACHE_KEY, JSON.stringify(cache), { expirationTtl: data.expires_in - 60 });
+  await env.KV.put(cacheKey, JSON.stringify(cache), { expirationTtl: data.expires_in - 60 });
 
   return data.access_token;
 }
 
-/** Low-level authenticated fetch against the D365 Web API. Used by support routes. */
+async function getToken(env: Env): Promise<string> {
+  return getTokenFor(env, env.DYNAMICS_CLIENT_ID!, env.DYNAMICS_CLIENT_SECRET!, TOKEN_CACHE_KEY);
+}
+
+// Support portal uses a dedicated app registration so cases are owned by the
+// "pfsupport portal" user in D365 (preserving existing dashboards/alerts).
+// Falls back to the main app creds if support-specific secrets are not set.
+async function getSupportToken(env: Env): Promise<string> {
+  const clientId = env.DYNAMICS_SUPPORT_CLIENT_ID;
+  const clientSecret = env.DYNAMICS_SUPPORT_CLIENT_SECRET;
+  if (clientId && clientSecret) {
+    return getTokenFor(env, clientId, clientSecret, SUPPORT_TOKEN_CACHE_KEY);
+  }
+  return getToken(env);
+}
+
+/** Low-level authenticated fetch against the D365 Web API. */
 export async function d365Fetch(env: Env, path: string, options: RequestInit = {}): Promise<Response> {
   const token = await getToken(env);
+  return fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string> ?? {}),
+    },
+  });
+}
+
+/** Same as d365Fetch, but authenticates as the support-portal app user so
+ *  cases, notes, and attachments are owned by "pfsupport portal" in D365. */
+export async function d365FetchSupport(env: Env, path: string, options: RequestInit = {}): Promise<Response> {
+  const token = await getSupportToken(env);
   return fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
