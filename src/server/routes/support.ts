@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { d365Fetch } from "../services/dynamicsService";
+import { d365FetchSupport } from "../services/dynamicsService";
 import { notifyZoomNewCase } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -36,7 +36,7 @@ const DEFAULT_SEVERITY = 173590001; // P3
 
 /** Resolve the D365 account ID for a contact (used for client users when dynamics_account_id is missing). */
 async function resolveAccountId(contactId: string, env: Bindings): Promise<string | null> {
-  const res = await d365Fetch(env, `/contacts(${contactId})?$select=_parentcustomerid_value`);
+  const res = await d365FetchSupport(env, `/contacts(${contactId})?$select=_parentcustomerid_value`);
   if (!res.ok) return null;
   const data = await res.json() as { _parentcustomerid_value: string };
   return data._parentcustomerid_value ?? null;
@@ -68,7 +68,7 @@ app.get("/me/contacts", async (c) => {
   }
   if (!accountId) return c.json([]);
 
-  const res = await d365Fetch(
+  const res = await d365FetchSupport(
     c.env,
     `/contacts?$filter=_parentcustomerid_value eq '${accountId}'&$select=contactid,fullname,emailaddress1&$orderby=fullname`
   );
@@ -123,7 +123,7 @@ app.get("/cases", async (c) => {
   const top = search ? 100 : 500;
   const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,_customerid_value";
   const expand = "owninguser($select=fullname)";
-  const res = await d365Fetch(
+  const res = await d365FetchSupport(
     c.env,
     `/incidents?$filter=${encodeURIComponent(filter)}&$select=${select}&$expand=${expand}&$orderby=createdon desc&$top=${top}`,
     { headers: { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' } }
@@ -154,7 +154,7 @@ app.get("/cases/:id", async (c) => {
 
   const select = "incidentid,ticketnumber,title,description,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value,_primarycontactid_value,_amc_notificationcontact1_value,_am_escalationengineer_value";
   const expand = "owninguser($select=fullname,systemuserid)";
-  const res = await d365Fetch(c.env, `/incidents(${id})?$select=${select}&$expand=${expand}`,
+  const res = await d365FetchSupport(c.env, `/incidents(${id})?$select=${select}&$expand=${expand}`,
     { headers: { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' } });
 
   if (!res.ok) {
@@ -189,9 +189,9 @@ app.get("/cases/:id", async (c) => {
   };
 
   const [caseNoteRes, attachmentRes, emailRes] = await Promise.all([
-    d365Fetch(c.env, `/vtx_casenotes?$filter=_regardingobjectid_value eq '${id}'&$select=subject,description,createdon&$expand=createdby($select=fullname)&$orderby=createdon asc`),
-    d365Fetch(c.env, `/annotations?$filter=_objectid_value eq '${id}' and isdocument eq true&$select=annotationid,subject,filename,mimetype,filesize,createdon&$expand=createdby($select=fullname)&$orderby=createdon asc`),
-    d365Fetch(c.env, `/emails?$filter=_regardingobjectid_value eq '${id}'&$select=activityid,subject,description,createdon,sender,directioncode&$orderby=createdon asc`),
+    d365FetchSupport(c.env, `/vtx_casenotes?$filter=_regardingobjectid_value eq '${id}'&$select=subject,description,createdon&$expand=createdby($select=fullname)&$orderby=createdon asc`),
+    d365FetchSupport(c.env, `/annotations?$filter=_objectid_value eq '${id}' and isdocument eq true&$select=annotationid,subject,filename,mimetype,filesize,createdon&$expand=createdby($select=fullname)&$orderby=createdon asc`),
+    d365FetchSupport(c.env, `/emails?$filter=_regardingobjectid_value eq '${id}'&$select=activityid,subject,description,createdon,sender,directioncode&$orderby=createdon asc`),
   ]);
 
   const notes: any[] = [];
@@ -261,7 +261,7 @@ app.post("/cases", async (c) => {
     }
   }
 
-  const res = await d365Fetch(c.env, "/incidents", { method: "POST", body: JSON.stringify(payload) });
+  const res = await d365FetchSupport(c.env, "/incidents", { method: "POST", body: JSON.stringify(payload) });
   if (!res.ok) {
     const error = await res.text();
     return c.json({ error }, res.status as any);
@@ -273,13 +273,13 @@ app.post("/cases", async (c) => {
   const newId = match[1];
 
   // PATCH title + description — CRM plugin on create clears these fields
-  await d365Fetch(c.env, `/incidents(${newId})`, {
+  await d365FetchSupport(c.env, `/incidents(${newId})`, {
     method: "PATCH",
     body: JSON.stringify({ title: payload.title, description: payload.description }),
   });
 
   // Record who submitted via portal
-  await d365Fetch(c.env, "/annotations", {
+  await d365FetchSupport(c.env, "/annotations", {
     method: "POST",
     body: JSON.stringify({
       subject: "Case submitted via FusionFlow360",
@@ -288,7 +288,7 @@ app.post("/cases", async (c) => {
     }),
   });
 
-  const fetchRes = await d365Fetch(c.env, `/incidents(${newId})?$select=incidentid,ticketnumber&$expand=customerid_account($select=name)`);
+  const fetchRes = await d365FetchSupport(c.env, `/incidents(${newId})?$select=incidentid,ticketnumber&$expand=customerid_account($select=name)`);
   const created = fetchRes.ok ? await fetchRes.json() as any : {};
   const ticketNumber = created.ticketnumber ?? "";
   const accountName = created.customerid_account?.name ?? null;
@@ -316,7 +316,7 @@ app.post("/cases/:id/notes", async (c) => {
 
   if (!body.text?.trim()) return c.json({ error: "Note text is required" }, 400);
 
-  const res = await d365Fetch(c.env, "/vtx_casenotes", {
+  const res = await d365FetchSupport(c.env, "/vtx_casenotes", {
     method: "POST",
     body: JSON.stringify({
       subject: `Note from ${auth.user.name ?? auth.user.email}`,
@@ -340,7 +340,7 @@ app.post("/cases/:id/attachments", async (c) => {
 
   if (!body.filename || !body.documentbody) return c.json({ error: "filename and documentbody are required" }, 400);
 
-  const res = await d365Fetch(c.env, "/annotations", {
+  const res = await d365FetchSupport(c.env, "/annotations", {
     method: "POST",
     body: JSON.stringify({
       subject: `Attachment from ${auth.user.name ?? auth.user.email}`,
@@ -372,7 +372,7 @@ app.post("/cases/:id/status", async (c) => {
     if (body.action !== "reopen") {
       return c.json({ error: "Forbidden" }, 403);
     }
-    const check = await d365Fetch(c.env, `/incidents(${id})?$select=statecode,modifiedon`);
+    const check = await d365FetchSupport(c.env, `/incidents(${id})?$select=statecode,modifiedon`);
     if (!check.ok) {
       return c.json({ error: await check.text() }, check.status as any);
     }
@@ -388,7 +388,7 @@ app.post("/cases/:id/status", async (c) => {
 
   let res: Response;
   if (body.action === "resolve") {
-    res = await d365Fetch(c.env, "/CloseIncident", {
+    res = await d365FetchSupport(c.env, "/CloseIncident", {
       method: "POST",
       body: JSON.stringify({
         IncidentResolution: {
@@ -400,11 +400,11 @@ app.post("/cases/:id/status", async (c) => {
       }),
     });
   } else if (body.action === "reopen") {
-    res = await d365Fetch(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify({ statecode: 0, statuscode: 1 }) });
+    res = await d365FetchSupport(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify({ statecode: 0, statuscode: 1 }) });
   } else if (body.action === "in-progress") {
-    res = await d365Fetch(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify({ statuscode: 1 }) });
+    res = await d365FetchSupport(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify({ statuscode: 1 }) });
   } else if (body.action === "cancel" && internal) {
-    res = await d365Fetch(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify({ statecode: 2, statuscode: 6 }) });
+    res = await d365FetchSupport(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify({ statecode: 2, statuscode: 6 }) });
   } else {
     return c.json({ error: "Invalid action" }, 400);
   }
@@ -415,7 +415,7 @@ app.post("/cases/:id/status", async (c) => {
   }
 
   if (body.comment) {
-    await d365Fetch(c.env, "/vtx_casenotes", {
+    await d365FetchSupport(c.env, "/vtx_casenotes", {
       method: "POST",
       body: JSON.stringify({
         subject: `Status updated by ${auth.user.name ?? auth.user.email}`,
@@ -455,7 +455,7 @@ app.patch("/cases/:id/contacts", async (c) => {
     payload["ownerid@odata.bind"] = `/systemusers(${body.ownerId})`;
   }
 
-  const res = await d365Fetch(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify(payload) });
+  const res = await d365FetchSupport(c.env, `/incidents(${id})`, { method: "PATCH", body: JSON.stringify(payload) });
   if (!res.ok) {
     const error = await res.text();
     return c.json({ error }, res.status as any);
@@ -466,7 +466,7 @@ app.patch("/cases/:id/contacts", async (c) => {
 // GET /api/support/cases/:id/contacts
 app.get("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
-  const res = await d365Fetch(c.env, `/incidents(${id})/incident_customer_contacts?$select=contactid,fullname,emailaddress1&$orderby=fullname`);
+  const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts?$select=contactid,fullname,emailaddress1&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
   return c.json(data.value.map((ct: any) => ({ id: ct.contactid, name: ct.fullname, email: ct.emailaddress1 })));
@@ -478,7 +478,7 @@ app.post("/cases/:id/contacts", async (c) => {
   const body = await c.req.json() as { contactId: string };
   if (!body.contactId) return c.json({ error: "contactId required" }, 400);
 
-  const res = await d365Fetch(c.env, `/incidents(${id})/incident_customer_contacts/$ref`, {
+  const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts/$ref`, {
     method: "POST",
     body: JSON.stringify({ "@odata.id": `https://packetfusioncrm.crm.dynamics.com/api/data/v9.2/contacts(${body.contactId})` }),
   });
@@ -492,7 +492,7 @@ app.post("/cases/:id/contacts", async (c) => {
 // DELETE /api/support/cases/:id/contacts/:contactId
 app.delete("/cases/:id/contacts/:contactId", async (c) => {
   const { id, contactId } = c.req.param();
-  const res = await d365Fetch(c.env, `/incidents(${id})/incident_customer_contacts(${contactId})/$ref`, { method: "DELETE" });
+  const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts(${contactId})/$ref`, { method: "DELETE" });
   if (!res.ok) {
     const error = await res.text();
     return c.json({ error }, res.status as any);
@@ -503,7 +503,7 @@ app.delete("/cases/:id/contacts/:contactId", async (c) => {
 // GET /api/support/cases/:id/attachments/:annotId/download
 app.get("/cases/:id/attachments/:annotId/download", async (c) => {
   const { annotId } = c.req.param();
-  const res = await d365Fetch(c.env, `/annotations(${annotId})?$select=filename,mimetype,documentbody`);
+  const res = await d365FetchSupport(c.env, `/annotations(${annotId})?$select=filename,mimetype,documentbody`);
   if (!res.ok) return c.json({ error: "Not found" }, 404);
 
   const data = await res.json() as { filename: string; mimetype: string; documentbody: string };
@@ -527,7 +527,7 @@ app.get("/accounts", async (c) => {
   const search = c.req.query("search") ?? "";
   if (search.length < 2) return c.json([]);
 
-  const res = await d365Fetch(c.env, `/accounts?$filter=${encodeURIComponent(`contains(name,'${search.replace(/'/g, "''")}')`)}&$select=accountid,name&$top=15&$orderby=name`);
+  const res = await d365FetchSupport(c.env, `/accounts?$filter=${encodeURIComponent(`contains(name,'${search.replace(/'/g, "''")}')`)}&$select=accountid,name&$top=15&$orderby=name`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
   return c.json(data.value.map((a: any) => ({ id: a.accountid, name: a.name })));
@@ -539,7 +539,7 @@ app.get("/accounts/:id/contacts", async (c) => {
   if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
 
   const { id } = c.req.param();
-  const res = await d365Fetch(c.env, `/contacts?$filter=_parentcustomerid_value eq '${id}'&$select=contactid,fullname,emailaddress1&$orderby=fullname`);
+  const res = await d365FetchSupport(c.env, `/contacts?$filter=_parentcustomerid_value eq '${id}'&$select=contactid,fullname,emailaddress1&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
   return c.json(data.value.map((ct: any) => ({ id: ct.contactid, name: ct.fullname, email: ct.emailaddress1 })));
@@ -556,7 +556,7 @@ app.get("/users", async (c) => {
   if (search.length < 2) return c.json([]);
 
   const filter = `contains(fullname,'${search.replace(/'/g, "''")}') and isdisabled eq false`;
-  const res = await d365Fetch(c.env, `/systemusers?$filter=${encodeURIComponent(filter)}&$select=systemuserid,fullname,internalemailaddress&$top=15&$orderby=fullname`);
+  const res = await d365FetchSupport(c.env, `/systemusers?$filter=${encodeURIComponent(filter)}&$select=systemuserid,fullname,internalemailaddress&$top=15&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
   return c.json(data.value.map((u: any) => ({ id: u.systemuserid, name: u.fullname, email: u.internalemailaddress })));

@@ -28,6 +28,11 @@ export type Bindings = {
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;
   DYNAMICS_CLIENT_SECRET?: string;
+  // Support portal uses a separate app registration so cases are owned by
+  // "pfsupport portal" in D365 — keeps existing dashboards/alerts intact.
+  // Falls back to DYNAMICS_CLIENT_ID/SECRET when unset.
+  DYNAMICS_SUPPORT_CLIENT_ID?: string;
+  DYNAMICS_SUPPORT_CLIENT_SECRET?: string;
   // SSO app registration (fusionflow-sso, separate from Dynamics)
   SSO_CLIENT_ID?: string;
   SSO_CLIENT_SECRET?: string;
