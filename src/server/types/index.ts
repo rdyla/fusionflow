@@ -35,8 +35,11 @@ export type Bindings = {
   ZOOM_ORG_ACCOUNT_ID?: string;
   ZOOM_ORG_CLIENT_ID?: string;
   ZOOM_ORG_CLIENT_SECRET?: string;
-  // Email (set via wrangler secret put RESEND_API_KEY)
-  RESEND_API_KEY?: string;
+  // Email via Microsoft Graph (CloudConnect Mail Sender app reg, sends as MAIL_SENDER_UPN shared mailbox)
+  GRAPH_TENANT_ID?: string;
+  GRAPH_CLIENT_ID?: string;
+  GRAPH_CLIENT_SECRET?: string;
+  MAIL_SENDER_UPN?: string;
   // Apollo.io prospecting API key
   APOLLO_API_KEY?: string;
   // Anthropic API key for AI content generation
