@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useOutletContext } from "react-router-dom";
-import { supportApi, supportAccounts, type AccountResult, type ContactResult, type SupportUser, type UserResult } from "../lib/supportApi";
+import { supportApi, supportAccounts, SEVERITY, CUSTOMER_SEVERITY_OPTIONS, STAFF_SEVERITY_OPTIONS, type AccountResult, type ContactResult, type SupportUser, type UserResult } from "../lib/supportApi";
 import AccountSearch from "../components/support/AccountSearch";
 import UserSearch from "../components/support/UserSearch";
 
@@ -9,7 +9,8 @@ export default function SupportNewCasePage() {
   const navigate = useNavigate();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [prioritycode, setPrioritycode] = useState(2);
+  const [severitycode, setSeveritycode] = useState<number>(SEVERITY.P3);
+  const severityOptions = user?.isInternal ? STAFF_SEVERITY_OPTIONS : CUSTOMER_SEVERITY_OPTIONS;
   const [account, setAccount] = useState<AccountResult | null>(null);
   const [accountContacts, setAccountContacts] = useState<ContactResult[]>([]);
   const [primaryContactId, setPrimaryContactId] = useState("");
@@ -35,14 +36,15 @@ export default function SupportNewCasePage() {
       const result = await supportApi.createCase({
         title,
         description,
-        prioritycode,
+        severitycode,
         ...(user?.isInternal && account ? { accountId: account.id } : {}),
         ...(primaryContactId ? { primaryContactId } : {}),
         ...(notificationContactId ? { notificationContactId } : {}),
         ...(escalationEngineer ? { escalationEngineerId: escalationEngineer.id } : {}),
       });
+      const severityLabel = severityOptions.find((o) => o.value === severitycode)?.label ?? "P3";
       navigate("/support/cases/confirmation", {
-        state: { id: result.id, ticketNumber: result.ticketNumber, title, prioritycode },
+        state: { id: result.id, ticketNumber: result.ticketNumber, title, severityLabel },
       });
     } catch (e: any) {
       setError(e.message);
@@ -75,11 +77,11 @@ export default function SupportNewCasePage() {
           </div>
 
           <div>
-            <label htmlFor="priority" style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Priority</label>
-            <select id="priority" value={prioritycode} onChange={(e) => setPrioritycode(Number(e.target.value))} style={selectStyle}>
-              <option value={1}>High</option>
-              <option value={2}>Normal</option>
-              <option value={3}>Low</option>
+            <label htmlFor="severity" style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Severity</label>
+            <select id="severity" value={severitycode} onChange={(e) => setSeveritycode(Number(e.target.value))} style={selectStyle}>
+              {severityOptions.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
             </select>
           </div>
 

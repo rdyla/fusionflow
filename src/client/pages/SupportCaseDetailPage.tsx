@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { supportApi, supportAccounts, formatSupportDate, fileToBase64, type SupportCaseDetail, type ContactResult, type SupportUser, type UserResult } from "../lib/supportApi";
+import { supportApi, supportAccounts, formatSupportDate, fileToBase64, severityColor, type SupportCaseDetail, type ContactResult, type SupportUser, type UserResult } from "../lib/supportApi";
 import UserSearch from "../components/support/UserSearch";
 
 function Badge({ label, color }: { label: string; color: string }) {
@@ -11,7 +11,6 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-function priorityColor(p: string) { return p === "High" ? "#d13438" : p === "Low" ? "#94a3b8" : "#0891b2"; }
 function stateColor(s: string) { return s === "Resolved" ? "#22c55e" : s === "Cancelled" ? "#94a3b8" : "#0891b2"; }
 
 const COLLAPSE = 300;
@@ -134,7 +133,12 @@ export default function SupportCaseDetailPage() {
 
   const isActive = caseData.statecode === 0;
   const isResolved = caseData.statecode === 1;
-  const isOnHold = caseData.statuscode === 2;
+  const isCancelled = caseData.statecode === 2;
+
+  const daysSinceClosed = caseData.modifiedOn
+    ? (Date.now() - new Date(caseData.modifiedOn).getTime()) / (1000 * 60 * 60 * 24)
+    : Infinity;
+  const canCustomerReopen = !user?.isInternal && (isResolved || isCancelled) && daysSinceClosed <= 30;
 
   const inputStyle = { width: "100%", padding: "0.5rem 0.75rem", border: "1px solid #cbd5e1", borderRadius: 6, fontSize: 14, outline: "none", boxSizing: "border-box" as const };
   const selectStyle = { ...inputStyle, background: "#fff" };
@@ -221,8 +225,28 @@ export default function SupportCaseDetailPage() {
               </div>
             )}
 
-            {/* Status update */}
-            {(isActive || isResolved) && (
+            {/* Customer reopen panel — only for closed cases within 30 days */}
+            {canCustomerReopen && (
+              <div style={{ padding: "16px 20px", borderTop: "1px solid #f1f5f9" }}>
+                <h4 style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700, color: "#374151" }}>Reopen Case</h4>
+                <p style={{ margin: "0 0 8px", fontSize: 12, color: "#64748b" }}>
+                  This case was closed {Math.floor(daysSinceClosed)} day{Math.floor(daysSinceClosed) === 1 ? "" : "s"} ago. You can reopen it within 30 days of closure.
+                </p>
+                <textarea value={statusComment} onChange={(e) => setStatusComment(e.target.value)} rows={2}
+                  placeholder="Reason for reopening…"
+                  style={{ ...inputStyle, resize: "vertical", fontSize: 13 }} />
+                {statusError && <div style={{ color: "#d13438", fontSize: 12, marginTop: 4 }}>{statusError}</div>}
+                <div style={{ marginTop: 10 }}>
+                  <button onClick={() => updateStatus("reopen")} disabled={statusSubmitting}
+                    style={{ ...btnSm, background: "#eff6ff", color: "#0891b2", borderColor: "#bae6fd" }}>
+                    {statusSubmitting ? "Updating…" : "Reopen Case"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Staff status update */}
+            {user?.isInternal && (isActive || isResolved) && (
               <div style={{ padding: "16px 20px", borderTop: "1px solid #f1f5f9" }}>
                 <h4 style={{ margin: "0 0 10px", fontSize: 13, fontWeight: 700, color: "#374151" }}>Update Status</h4>
                 <textarea value={statusComment} onChange={(e) => setStatusComment(e.target.value)} rows={2}
@@ -230,11 +254,7 @@ export default function SupportCaseDetailPage() {
                   style={{ ...inputStyle, resize: "vertical", fontSize: 13 }} />
                 {statusError && <div style={{ color: "#d13438", fontSize: 12, marginTop: 4 }}>{statusError}</div>}
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 10 }}>
-                  {isActive && !isOnHold && (
-                    <button onClick={() => updateStatus("hold")} disabled={statusSubmitting}
-                      style={{ ...btnSm, background: "#fff7ed", color: "#ff8c00", borderColor: "#fed7aa" }}>Put On Hold</button>
-                  )}
-                  {isActive && isOnHold && (
+                  {isActive && caseData.statuscode === 2 && (
                     <button onClick={() => updateStatus("in-progress")} disabled={statusSubmitting}
                       style={{ ...btnSm, background: "#eff6ff", color: "#0891b2", borderColor: "#bae6fd" }}>Mark In Progress</button>
                   )}
@@ -250,7 +270,7 @@ export default function SupportCaseDetailPage() {
                       {statusSubmitting ? "Updating…" : "Reopen Case"}
                     </button>
                   )}
-                  {user?.isInternal && isActive && (
+                  {isActive && (
                     <button onClick={() => updateStatus("cancel")} disabled={statusSubmitting}
                       style={{ ...btnSm, background: "#fef2f2", color: "#d13438", borderColor: "#fecaca" }}>Cancel Case</button>
                   )}
@@ -272,7 +292,9 @@ export default function SupportCaseDetailPage() {
             )}
             {[
               { label: "Status", value: <Badge label={caseData.status} color={stateColor(caseData.state)} /> },
-              { label: "Priority", value: <Badge label={caseData.priority} color={priorityColor(caseData.priority)} /> },
+              { label: "Severity", value: caseData.severity
+                ? <Badge label={caseData.severity} color={severityColor(caseData.severity)} />
+                : <span style={{ fontSize: 13, color: "#94a3b8" }}>—</span> },
               { label: "Assigned To", value: <span style={{ fontSize: 13, color: "#475569" }}>{caseData.owner ?? "Unassigned"}</span> },
               { label: "Opened", value: <span style={{ fontSize: 13, color: "#475569" }}>{formatSupportDate(caseData.createdOn)}</span> },
               { label: "Ticket #", value: <span style={{ fontSize: 12, fontFamily: "monospace", color: "#475569", background: "#f1f5f9", padding: "2px 6px", borderRadius: 4 }}>{caseData.ticketNumber}</span> },
