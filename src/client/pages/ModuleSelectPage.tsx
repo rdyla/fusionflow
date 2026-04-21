@@ -42,7 +42,7 @@ const MODULES: Module[] = [
     num: "01",
     tag: "Discovery",
     title: "Solutioning",
-    subtitle: "Needs Assessment",
+    subtitle: "Evaluate and Recommend",
     desc: "Capture requirements, map pain points, and architect the right solution before a single line of code is written.",
     features: ["Stakeholder intake forms", "Requirements matrix builder", "Gap & risk analysis", "Solution scope documentation"],
     accent: "#2563eb",
@@ -56,7 +56,7 @@ const MODULES: Module[] = [
   },
   {
     num: "02",
-    tag: "Onboarding",
+    tag: "CloudPro",
     title: "Implementation",
     subtitle: "Onboarding & Setup",
     desc: "Structured onboarding workflows that get clients live fast — with full visibility into every milestone and handoff.",
@@ -89,7 +89,7 @@ const MODULES: Module[] = [
   },
   {
     num: "04",
-    tag: "Support",
+    tag: "CloudSupport",
     title: "Support",
     subtitle: "Case Management",
     desc: "Open, track, and resolve support cases directly with the Packet Fusion team — with full visibility into status, notes, and history.",
