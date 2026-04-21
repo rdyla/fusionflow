@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api, type User, type SystemStatusResponse, type Notification, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
@@ -49,7 +49,6 @@ export default function AppShell() {
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const location = useLocation();
   const isMobile = useIsMobile();
 
   useEffect(() => { setDrawerOpen(false); }, [navigate]);
