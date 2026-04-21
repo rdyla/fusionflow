@@ -157,7 +157,7 @@ export default function ModuleSelectPage() {
       </header>
 
       {/* Hero — PF blue band */}
-      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "24px 24px 20px" : "32px 48px 28px", background: "#03395f" }}>
+      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "24px 24px 20px" : "32px 48px 28px", background: "#021e34" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? 14 : 18 }}>
           <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: isMobile ? "70%" : 490, maxWidth: 490, height: "auto", display: "block" }} />
         </div>
