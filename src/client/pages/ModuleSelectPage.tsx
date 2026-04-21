@@ -146,7 +146,7 @@ export default function ModuleSelectPage() {
   const isMobile = useIsMobile();
 
   return (
-    <div style={{ minHeight: "100vh", background: "#ffffff", color: "#1e293b", fontFamily: "'Jost', sans-serif", overflowX: "hidden", position: "relative" }}>
+    <div style={{ minHeight: "100vh", background: "#ffffff", color: "#1e293b", fontFamily: "'avenir-lt-pro', sans-serif", overflowX: "hidden", position: "relative" }}>
 
       {/* Header — dark navy */}
       <header style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "flex-end", padding: "0 48px", height: 64, background: "#021e34" }}>
@@ -158,10 +158,13 @@ export default function ModuleSelectPage() {
 
       {/* Hero — PF blue band */}
       <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "24px 24px 20px" : "32px 48px 28px", background: "#021e34" }}>
-        <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? 14 : 18 }}>
-          <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: isMobile ? "70%" : 490, maxWidth: 490, height: "auto", display: "block" }} />
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: isMobile ? 12 : 20, marginBottom: isMobile ? 14 : 18 }}>
+          <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ height: isMobile ? 44 : 100, width: "auto", display: "block" }} />
+          <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? 28 : "clamp(40px, 4.5vw, 64px)", fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: "#ffffff", whiteSpace: "nowrap" }}>
+            Cloud<span style={{ color: "#22c55e" }}>Connect</span>
+          </div>
         </div>
-        <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? "26px" : "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
+        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
           Where Every Engagement<br />
           <span style={{ color: "#63c1ea" }}>Finds Its Flow</span>
         </h1>
@@ -211,7 +214,7 @@ export default function ModuleSelectPage() {
                       Soon
                     </span>
                   )}
-                  <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "#94a3b8" }}>
+                  <span style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", color: "#94a3b8" }}>
                     {mod.num}
                   </span>
                 </div>
@@ -227,9 +230,9 @@ export default function ModuleSelectPage() {
                 </div>
 
                 {/* Title */}
-                <div style={{ fontFamily: "'Jost', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>
+                <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", lineHeight: 1.2, marginBottom: 12 }}>
                   {mod.title}
-                  <span style={{ display: "block", color: "#64748b", fontWeight: 400, fontSize: 15, fontFamily: "'Jost', sans-serif", marginTop: 3 }}>{mod.subtitle}</span>
+                  <span style={{ display: "block", color: "#64748b", fontWeight: 400, fontSize: 15, fontFamily: "'avenir-lt-pro', sans-serif", marginTop: 3 }}>{mod.subtitle}</span>
                 </div>
 
                 {/* Desc */}
@@ -249,7 +252,7 @@ export default function ModuleSelectPage() {
 
                 {/* CTA */}
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 20, borderTop: "1px solid #e2e8f0" }}>
-                  <span style={{ fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 600, color: isActive ? mod.accent : "#94a3b8", letterSpacing: "0.02em", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 13, fontWeight: 600, color: isActive ? mod.accent : "#94a3b8", letterSpacing: "0.02em", display: "flex", alignItems: "center", gap: 6 }}>
                     {isActive ? "Enter Module" : "Coming Soon"}
                     {isActive && (
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" style={{ width: 14, height: 14 }}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
@@ -287,7 +290,7 @@ export default function ModuleSelectPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(2,26,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(99,193,234,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'Jost', sans-serif", fontSize: 14, fontWeight: 600, color: "#63c1ea", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
+        <div style={{ position: "fixed", bottom: 32, left: "50%", transform: "translateX(-50%)", background: "rgba(2,26,46,0.95)", backdropFilter: "blur(12px)", border: "1px solid rgba(99,193,234,0.4)", borderRadius: 12, padding: "14px 24px", fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 14, fontWeight: 600, color: "#63c1ea", zIndex: 100, whiteSpace: "nowrap", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}>
           ↗ {toast}
         </div>
       )}
