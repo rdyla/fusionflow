@@ -73,22 +73,6 @@ const MODULES: Module[] = [
   },
   {
     num: "03",
-    tag: "Growth",
-    title: "Optimization",
-    subtitle: "Continuous Improvement",
-    desc: "Post-launch health checks, performance reviews, and proactive expansion opportunities to drive lasting client value.",
-    features: ["QBR & review scheduling", "Usage analytics dashboards", "Expansion opportunity tracking", "SLA & KPI monitoring"],
-    accent: "#059669",
-    glow: "rgba(5,150,105,0.25)",
-    route: "/optimize",
-    icon: (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
-        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-      </svg>
-    ),
-  },
-  {
-    num: "04",
     tag: "CloudSupport",
     title: "Support",
     subtitle: "Case Management",
@@ -100,6 +84,22 @@ const MODULES: Module[] = [
     icon: (
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </svg>
+    ),
+  },
+  {
+    num: "04",
+    tag: "Growth",
+    title: "Optimization",
+    subtitle: "Continuous Improvement",
+    desc: "Post-launch health checks, performance reviews, and proactive expansion opportunities to drive lasting client value.",
+    features: ["QBR & review scheduling", "Usage analytics dashboards", "Expansion opportunity tracking", "SLA & KPI monitoring"],
+    accent: "#059669",
+    glow: "rgba(5,150,105,0.25)",
+    route: "/optimize",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" style={{ width: 26, height: 26 }}>
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
       </svg>
     ),
   },
