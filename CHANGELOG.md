@@ -1,4 +1,4 @@
-# FusionFlow Changelog
+# CloudConnect Changelog
 
 All notable changes are documented here, newest first.
 

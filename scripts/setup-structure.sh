@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Creating FusionFlow folder structure..."
+echo "Creating CloudConnect folder structure..."
 
 mkdir -p src/client/app
 mkdir -p src/client/components/layout
@@ -66,4 +66,4 @@ touch src/client/pages/ProjectDetailPage.tsx
 touch src/client/pages/AdminUsersPage.tsx
 touch src/client/pages/AdminAccessPage.tsx
 
-echo "FusionFlow structure created!"
+echo "CloudConnect structure created!"

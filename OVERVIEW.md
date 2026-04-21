@@ -1,14 +1,14 @@
-# FusionFlow — Product Overview
+# CloudConnect — Product Overview
 
-**fusionflow360.com**
+**cloudconnect.packetfusion.com**
 
 ---
 
 ## What It Is
 
-FusionFlow is an internal operations platform built specifically for Packet Fusion. It manages the full lifecycle of a customer engagement — from the first pre-sales conversation through implementation delivery and long-term customer success — in a single, purpose-built tool.
+CloudConnect is an internal operations platform built specifically for Packet Fusion. It manages the full lifecycle of a customer engagement — from the first pre-sales conversation through implementation delivery and long-term customer success — in a single, purpose-built tool.
 
-Rather than stitching together generic project management software, spreadsheets, and manual CRM updates, FusionFlow gives every role on the team a unified view of where every deal and every project stands, at any moment.
+Rather than stitching together generic project management software, spreadsheets, and manual CRM updates, CloudConnect gives every role on the team a unified view of where every deal and every project stands, at any moment.
 
 ---
 
@@ -16,7 +16,7 @@ Rather than stitching together generic project management software, spreadsheets
 
 Today, the information needed to run a UCaaS or CCaaS engagement lives in too many places: Dynamics for account info, Asana or email threads for project tasks, spreadsheets for labor estimates, and tribal knowledge for everything else. This creates gaps — risks get missed, handoffs are rough, customers don't always know what's happening, and leadership has no reliable portfolio view.
 
-FusionFlow brings all of that into one place, purpose-built for the way Packet Fusion actually works.
+CloudConnect brings all of that into one place, purpose-built for the way Packet Fusion actually works.
 
 ---
 
@@ -45,7 +45,7 @@ Critically, Optimize pulls **live utilization data** directly from the customer'
 
 ---
 
-## FusionFlow 360 — Lifecycle Chain
+## CloudConnect — Lifecycle Chain
 
 All three modules are linked into a single customer journey chain: **Solution → Project → Optimization**.
 
@@ -61,7 +61,7 @@ All three modules are linked into a single customer journey chain: **Solution �
 ## Live Platform Integrations
 
 ### RingCentral
-Connect any customer's RingCentral tenant to see, directly within FusionFlow:
+Connect any customer's RingCentral tenant to see, directly within CloudConnect:
 
 - **Service plan and billing type** — what they're contracted for
 - **Seat utilization** — how many of their included lines are actually provisioned, with a visual progress bar
@@ -75,7 +75,7 @@ This gives an AE or CSM an immediate, data-driven picture of customer health and
 Live license and utilization data for Zoom customers — licenses purchased vs. assigned, active user counts, and usage trends — pulled directly into the Optimize module.
 
 ### Microsoft Dynamics 365
-FusionFlow connects to Packet Fusion's Dynamics instance to search and link accounts when creating projects and solutions, pull contact information, and automatically provision customer portal users. When a customer user signs in, their access is scoped to their account by looking them up in Dynamics.
+CloudConnect connects to Packet Fusion's Dynamics instance to search and link accounts when creating projects and solutions, pull contact information, and automatically provision customer portal users. When a customer user signs in, their access is scoped to their account by looking them up in Dynamics.
 
 ### Asana *(optional)*
 For teams that run their day-to-day task work in Asana, projects can be linked to sync phases and tasks bidirectionally.
@@ -84,7 +84,7 @@ For teams that run their day-to-day task work in Asana, projects can be linked t
 
 ## Who Uses It
 
-| Role | How They Use FusionFlow |
+| Role | How They Use CloudConnect |
 |------|------------------------|
 | AE (PF or Partner) | Run assessments, estimate labor, track solutions through pipeline |
 | Solution Architect | Review readiness scores, scope projects, conduct QBRs |
@@ -98,4 +98,4 @@ For teams that run their day-to-day task work in Asana, projects can be linked t
 
 ## Where It Lives
 
-FusionFlow is live at **[fusionflow360.com](https://fusionflow360.com)**. It runs on Cloudflare's global edge network — no servers to manage, fast everywhere, and built to scale. New users from `@packetfusion.com` are automatically provisioned when they first sign in. Partner users (`@ringcentral.com`, `@zoom.com`) are provisioned as Partner AEs. Customer users are identified via Dynamics.
+CloudConnect is live at **[cloudconnect.packetfusion.com](https://cloudconnect.packetfusion.com)**. It runs on Cloudflare's global edge network — no servers to manage, fast everywhere, and built to scale. New users from `@packetfusion.com` are automatically provisioned when they first sign in. Partner users (`@ringcentral.com`, `@zoom.com`) are provisioned as Partner AEs. Customer users are identified via Dynamics.
