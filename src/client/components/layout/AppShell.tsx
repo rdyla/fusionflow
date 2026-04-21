@@ -284,7 +284,7 @@ export default function AppShell() {
                 <span style={{ color: "rgba(255,255,255,0.3)" }}>›</span>
               </>
             )}
-            <span style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? 14 : 13, fontWeight: 700, color: "rgba(255,255,255,0.85)", letterSpacing: "0.02em" }}>
+            <span style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? 14 : 13, fontWeight: 700, color: "rgba(255,255,255,0.85)", letterSpacing: "0.02em" }}>
               {isMobile ? "CloudConnect" : moduleLabel}
             </span>
           </div>

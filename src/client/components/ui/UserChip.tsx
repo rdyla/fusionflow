@@ -63,7 +63,7 @@ export function UserChip({ user, popout = "up", compact = false }: { user: User;
               width: 44, height: 44, borderRadius: "50%",
               background: "linear-gradient(135deg, #63c1ea, #17c662)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontFamily: "'Jost', sans-serif", fontSize: 16, fontWeight: 700,
+              fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 16, fontWeight: 700,
               color: "#fff", flexShrink: 0, letterSpacing: "0.04em",
               border: "2px solid rgba(255,255,255,0.25)",
             }}>
@@ -129,7 +129,7 @@ export function UserChip({ user, popout = "up", compact = false }: { user: User;
             width: 32, height: 32, borderRadius: "50%",
             background: "linear-gradient(135deg, #63c1ea, #17c662)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "'Jost', sans-serif", fontSize: 12, fontWeight: 700,
+            fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 12, fontWeight: 700,
             color: "#fff", letterSpacing: "0.04em",
             boxShadow: open ? "0 0 0 2px rgba(255,255,255,0.4)" : "none",
           }}>
@@ -152,7 +152,7 @@ export function UserChip({ user, popout = "up", compact = false }: { user: User;
             width: 34, height: 34, borderRadius: "50%",
             background: "linear-gradient(135deg, #63c1ea, #17c662)",
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "'Jost', sans-serif", fontSize: 13, fontWeight: 700,
+            fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 13, fontWeight: 700,
             color: "#fff", flexShrink: 0, letterSpacing: "0.04em",
           }}>
             {abbr}
