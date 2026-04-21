@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api, type User, type SystemStatusResponse, type Notification, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
@@ -49,10 +49,7 @@ export default function AppShell() {
   const [notifLoading, setNotifLoading] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
-  const location = useLocation();
   const isMobile = useIsMobile();
-
-  const moduleLabel = location.pathname.startsWith("/support") ? "Customer Support" : "Onboarding & Implementation";
 
   useEffect(() => { setDrawerOpen(false); }, [navigate]);
 
@@ -267,29 +264,23 @@ export default function AppShell() {
           borderBottom: "1px solid rgba(0,0,0,0.2)",
           justifyContent: "space-between",
         }}>
-          {/* Left: mobile hamburger or module label */}
-          <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 12 : 10 }}>
+          {/* Left: mobile hamburger + wordmark (empty on desktop — sidebar handles identity/nav) */}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {isMobile && (
-              <button
-                onClick={() => setDrawerOpen(true)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.8)", padding: 4, display: "flex", marginRight: 4 }}
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 22, height: 22 }}>
-                  <path d="M3 12h18M3 6h18M3 18h18"/>
-                </svg>
-              </button>
-            )}
-            {!isMobile && (
               <>
-                <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-                  Module
+                <button
+                  onClick={() => setDrawerOpen(true)}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.8)", padding: 4, display: "flex", marginRight: 4 }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 22, height: 22 }}>
+                    <path d="M3 12h18M3 6h18M3 18h18"/>
+                  </svg>
+                </button>
+                <span style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 16, fontWeight: 800, letterSpacing: "-0.02em", color: "#ffffff", whiteSpace: "nowrap" }}>
+                  Cloud<span style={{ color: "#22c55e" }}>Connect</span>
                 </span>
-                <span style={{ color: "rgba(255,255,255,0.3)" }}>›</span>
               </>
             )}
-            <span style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? 14 : 13, fontWeight: 700, color: "rgba(255,255,255,0.85)", letterSpacing: "0.02em" }}>
-              {isMobile ? "CloudConnect" : moduleLabel}
-            </span>
           </div>
 
           {/* Right: inbox bell + user avatar */}
