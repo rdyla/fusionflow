@@ -49,21 +49,25 @@ Aggressive ~72-hour solo timeline vs. the original ~2-week estimate — delivere
 - Deployed to staging and production; real delivery from `cloudconnect@packetfusion.com` validated in both.
 - `RESEND_API_KEY` secret left in Cloudflare as a rollback safety net — **scheduled for deletion ~24h after Phase 3 cutover soak.**
 
-### Phase 3 — Rebrand sweep ⏸ (paused pending boss input)
+### Phase 3 — Rebrand sweep ▶️ (active as of 2026-04-20 — full go-ahead received)
 
-Open questions before proceeding:
+**Resolved decisions:**
 
-1. **CORS posture during cutover** — dual-origin allowlist (support both `fusionflow360.com` and `cloudconnect.packetfusion.com` for a grace period) vs. hard flip on cutover day.
-2. **Logo strategy** — new CloudConnect mark, reuse `packetfusionlogo.png`, or text-only treatment.
-3. **`fusionflow360_customer_journey.html`** — rename + rewrite scope (content stays? brand strings only? full refresh?).
-4. **Graph `from` display name override** — do we present as "CloudConnect" in the envelope `from` even though the mailbox UPN is `cloudconnect@packetfusion.com`?
+| Question | Decision |
+|---|---|
+| Official app title | **"CloudConnect by Packet Fusion"** — use wherever a human-readable product name appears (page titles, headers, email sender display name, metadata) |
+| Logo | Reuse the existing standard Packet Fusion logo (`packetfusionlogo.png`) — no new mark, no text-only treatment |
+| CORS cutover posture | **Dual-origin for 7 days** — allowlist accepts both `fusionflow360.com` and `cloudconnect.packetfusion.com`; hard flip removes the old origin after the grace period |
+| `fusionflow360_customer_journey.html` | **Leave as-is** — not project-relevant; retained only as a design reference |
+| Graph `from` display name | **"CloudConnect by Packet Fusion"** (matches the official app title) |
 
-Once those are settled, Phase 3 work expected to include:
-- UI copy sweep (page titles, navigation, buttons, email templates, metadata).
-- Logo + brand assets.
-- Auth redirect URLs, CORS allowlists.
-- Domain/env configuration for the new subdomain.
-- Customer-facing journey page rewrite.
+**Scope:**
+- UI copy sweep (page titles, navigation, buttons, email templates, metadata) — replace FusionFlow / FusionFlow360 with the official title where human-visible.
+- Logo references updated to use `packetfusionlogo.png` where a FusionFlow-specific asset is in use.
+- Auth redirect URLs and CORS allowlist updated for the new subdomain (dual-origin posture per above).
+- Domain / env configuration for the new subdomain (Cloudflare Worker routes, `APP_URL`, etc.).
+- Email templates updated with the new title + Graph `from` display name.
+- **Identifiers in code** (variable names, function names, package name, repo directory) are *not* swept in this phase — renamed only where they leak into human-visible output. Identifier sweep + repo directory rename deferred per §4.
 
 ---
 
