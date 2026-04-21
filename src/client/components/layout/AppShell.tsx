@@ -202,7 +202,7 @@ export default function AppShell() {
           flexShrink: 0,
           display: "flex",
           flexDirection: "column",
-          background: "#03395f",
+          background: "#021e34",
           borderRight: "1px solid rgba(255,255,255,0.1)",
         }}>
           <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
@@ -225,7 +225,7 @@ export default function AppShell() {
               position: "absolute", top: 0, left: 0, bottom: 0,
               width: 280,
               display: "flex", flexDirection: "column",
-              background: "#03395f",
+              background: "#021e34",
             }}
             onClick={e => e.stopPropagation()}
           >
