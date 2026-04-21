@@ -158,16 +158,14 @@ export default function ModuleSelectPage() {
 
       {/* Hero — PF blue band */}
       <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "32px 24px 26px" : "48px 48px 36px", background: "#021e34" }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 22 : 28 }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 14 : 18 }}>
           <img src={logoUrl} alt="Packet Fusion" style={{ height: isMobile ? 34 : 52, width: "auto", display: "block" }} />
           <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? 34 : "clamp(44px, 5vw, 72px)", fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: "#ffffff", whiteSpace: "nowrap" }}>
             Cloud<span style={{ color: "#22c55e" }}>Connect</span>
           </div>
         </div>
-        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "#ffffff" }}>
-          <span style={{ color: "#63c1ea" }}>Engage.</span>{" "}
-          <span style={{ color: "#ffffff" }}>Deliver.</span>{" "}
-          <span style={{ color: "#22c55e" }}>Grow.</span>
+        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "rgba(240,246,255,0.78)" }}>
+          Engage. Deliver. Grow.
         </h1>
         {!isMobile && (
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", maxWidth: 500, margin: "0 auto", lineHeight: 1.65, fontWeight: 300 }}>
