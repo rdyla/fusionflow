@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logoUrl from "../assets/packetfusionlogo.png";
+import logoUrl from "../assets/white logo transparency.png";
 import { api, type User, type SystemStatusResponse } from "../lib/api";
 import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
 import { UserChip } from "../components/ui/UserChip";
