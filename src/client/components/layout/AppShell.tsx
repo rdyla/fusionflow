@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import logoUrl from "../../assets/white logo transparency.png";
 import { api, type User, type SystemStatusResponse, type Notification, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
@@ -207,7 +206,9 @@ export default function AppShell() {
         }}>
           <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
             <Link to="/" style={{ textDecoration: "none", display: "block" }}>
-              <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: 180, height: "auto", display: "block" }} />
+              <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 26, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: "#ffffff", whiteSpace: "nowrap" }}>
+                Cloud<span style={{ color: "#22c55e" }}>Connect</span>
+              </div>
             </Link>
           </div>
           {navContent}
@@ -231,7 +232,9 @@ export default function AppShell() {
           >
             <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <Link to="/" style={{ textDecoration: "none", display: "block" }} onClick={() => setDrawerOpen(false)}>
-                <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: 160, height: "auto", display: "block" }} />
+                <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: 24, fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: "#ffffff", whiteSpace: "nowrap" }}>
+                  Cloud<span style={{ color: "#22c55e" }}>Connect</span>
+                </div>
               </Link>
               <button
                 onClick={() => setDrawerOpen(false)}
