@@ -1,6 +1,6 @@
-# FusionFlow
+# CloudConnect
 
-FusionFlow is an internal platform for Packet Fusion teams that manages the full lifecycle of unified communications and contact center implementations — from pre-sales solutioning through delivery and post-go-live customer success.
+CloudConnect is an internal platform for Packet Fusion teams that manages the full lifecycle of unified communications and contact center implementations — from pre-sales solutioning through delivery and post-go-live customer success.
 
 It is purpose-built for the way Ring and Packet Fusion AEs, SAs, PMs, Engineers, and CSMs actually work, with live integrations into RingCentral, Zoom, and Microsoft Dynamics 365.
 
@@ -78,7 +78,7 @@ Post-go-live account management and customer success tracking.
 ## Integrations
 
 ### RingCentral
-Connect a customer's RingCentral tenant to pull live account data directly into FusionFlow.
+Connect a customer's RingCentral tenant to pull live account data directly into CloudConnect.
 
 **Setup** — Create a Private App in the customer's RingCentral developer console with JWT auth and the following scopes: **Read Account**, **Read Call Log**, **Analytics**. Enter the Client ID, Client Secret, and JWT Token in the project's RingCentral tab.
 
@@ -274,14 +274,14 @@ A low confidence score does not change the Expected hours — it widens the rang
 
 ## Deployment
 
-FusionFlow is live at **[fusionflow360.com](https://fusionflow360.com)**, deployed on Cloudflare Workers with a D1 database, KV store for sessions and credentials, and R2 for document storage.
+CloudConnect is live at **[cloudconnect.packetfusion.com](https://cloudconnect.packetfusion.com)**, deployed on Cloudflare Workers with a D1 database, KV store for sessions and credentials, and R2 for document storage.
 
 ### Environments
 
 | Environment | URL | Branch | Database |
 |---|---|---|---|
-| **Production** | fusionflow360.com | `main` | D1 `fusionflow` |
-| **Staging** | staging.fusionflow360.com | `staging` | D1 `fusionflow-staging` |
+| **Production** | cloudconnect.packetfusion.com | `main` | D1 `fusionflow` |
+| **Staging** | staging.cloudconnect.packetfusion.com | `staging` | D1 `fusionflow-staging` |
 
 ### CI/CD Pipeline (GitHub Actions)
 

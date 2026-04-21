@@ -1,7 +1,7 @@
-# FusionFlow — Deployment & UAT Plan
+# CloudConnect — Deployment & UAT Plan
 
 **Stack:** React 19 + TypeScript + Vite · Hono on Cloudflare Workers · D1 SQLite · KV + R2 · Resend · `wrangler` CLI  
-**Domain:** fusionflow360.com  
+**Domain:** cloudconnect.packetfusion.com  
 **Last Updated:** April 16 2026
 
 ---
@@ -11,7 +11,7 @@
 | Environment | URL | Trigger | Database |
 |---|---|---|---|
 | **Local Dev** | `localhost:5173` (Vite) / `localhost:8787` (Worker) | Manual — `npm run dev` | Local D1 replica via `wrangler dev` |
-| **Production** | fusionflow360.com | Push to `main` via Cloudflare CI | D1 `fusionflow` (live) |
+| **Production** | cloudconnect.packetfusion.com | Push to `main` via Cloudflare CI | D1 `fusionflow` (live) |
 
 > **Gap:** No dedicated staging environment currently exists. Recommendation: create a `staging` Cloudflare Workers environment with a separate D1 database and Worker name (`fusionflow-staging`) to gate production releases. This is the highest-priority infrastructure item.
 

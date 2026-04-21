@@ -198,7 +198,7 @@ app.post("/", async (c) => {
       const appUrl = c.env.APP_URL ?? "";
       c.executionCtx.waitUntil(sendEmail(c.env, {
         to: partner_ae_email,
-        subject: "You've been invited to FusionFlow360",
+        subject: "You've been invited to CloudConnect",
         html: userInvite({
           recipientName: partner_ae_name,
           invitedByName: auth.user.name ?? auth.user.email,

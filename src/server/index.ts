@@ -38,7 +38,15 @@ import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-app.use("*", cors({ origin: "https://fusionflow360.com" }));
+// Dual-origin window during CloudConnect cutover — remove fusionflow360.com entries ~2026-04-29 (7 days post go-live)
+app.use("*", cors({
+  origin: [
+    "https://cloudconnect.packetfusion.com",
+    "https://staging.cloudconnect.packetfusion.com",
+    "https://fusionflow360.com",
+    "https://staging.fusionflow360.com",
+  ],
+}));
 
 app.get("/api/health", (c) => c.json({ ok: true }));
 

@@ -64,6 +64,12 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
     message: {
       subject,
       body: { contentType: "HTML", content: payload.html },
+      from: {
+        emailAddress: {
+          name: "CloudConnect by Packet Fusion",
+          address: env.MAIL_SENDER_UPN,
+        },
+      },
       toRecipients: finalRecipients.map(r => ({ emailAddress: { address: r } })),
     },
     saveToSentItems: "true",

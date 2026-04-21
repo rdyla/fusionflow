@@ -30,13 +30,13 @@ function otpEmailHtml(code: string): string {
   <div style="max-width:560px;margin:40px auto;background:#142236;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
     <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);">
       <div style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;">
-        Fusion<span style="color:#00c8e0;">Flow</span><span style="color:rgba(240,246,255,0.6);font-weight:400;">360</span>
+        Cloud<span style="color:#00c8e0;">Connect</span>
       </div>
     </div>
     <div style="padding:28px 28px 24px;">
       <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#f0f6ff;">Your sign-in code</h2>
       <p style="margin:0 0 24px;color:rgba(240,246,255,0.65);font-size:15px;line-height:1.5;">
-        Use the code below to sign in to FusionFlow360. It expires in <strong style="color:#f0f6ff;">10 minutes</strong>.
+        Use the code below to sign in to CloudConnect. It expires in <strong style="color:#f0f6ff;">10 minutes</strong>.
       </p>
       <div style="background:rgba(0,200,224,0.08);border:1px solid rgba(0,200,224,0.25);border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
         <span style="font-size:40px;font-weight:700;letter-spacing:10px;color:#00c8e0;">${code}</span>
@@ -46,7 +46,7 @@ function otpEmailHtml(code: string): string {
       </p>
     </div>
     <div style="padding:14px 28px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(240,246,255,0.3);">
-      FusionFlow360 &middot; Packet Fusion &middot; This is an automated sign-in notification.
+      CloudConnect by Packet Fusion &middot; This is an automated sign-in notification.
     </div>
   </div>
 </body>
@@ -71,7 +71,7 @@ app.post("/send-otp", async (c) => {
 
   await sendEmail(c.env, {
     to: email,
-    subject: "Your FusionFlow360 Sign-In Code",
+    subject: "Your CloudConnect Sign-In Code",
     html: otpEmailHtml(code),
   });
 
@@ -146,7 +146,7 @@ app.get("/sso", async (c) => {
     return c.redirect("/login?sso_error=not_configured");
   }
 
-  const appUrl = (c.env.APP_URL ?? "https://fusionflow360.com").replace(/\/$/, "");
+  const appUrl = (c.env.APP_URL ?? "https://cloudconnect.packetfusion.com").replace(/\/$/, "");
   const redirectUri = `${appUrl}/api/auth/sso/callback`;
 
   const state = crypto.randomUUID();

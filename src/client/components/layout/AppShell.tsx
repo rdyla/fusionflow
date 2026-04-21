@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
-import logoUrl from "../../assets/fusion flow transparent logo.png";
+import logoUrl from "../../assets/packetfusionlogo.png";
 import { api, type User, type SystemStatusResponse, type Notification, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
@@ -207,7 +207,7 @@ export default function AppShell() {
         }}>
           <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }}>
             <Link to="/" style={{ textDecoration: "none", display: "block" }}>
-              <img src={logoUrl} alt="FusionFlow360" style={{ width: 180, height: "auto", display: "block" }} />
+              <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: 180, height: "auto", display: "block" }} />
             </Link>
           </div>
           {navContent}
@@ -231,7 +231,7 @@ export default function AppShell() {
           >
             <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0,0,0,0.1)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <Link to="/" style={{ textDecoration: "none", display: "block" }} onClick={() => setDrawerOpen(false)}>
-                <img src={logoUrl} alt="FusionFlow360" style={{ width: 160, height: "auto", display: "block" }} />
+                <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: 160, height: "auto", display: "block" }} />
               </Link>
               <button
                 onClick={() => setDrawerOpen(false)}
@@ -285,7 +285,7 @@ export default function AppShell() {
               </>
             )}
             <span style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? 14 : 13, fontWeight: 700, color: "rgba(255,255,255,0.85)", letterSpacing: "0.02em" }}>
-              {isMobile ? "FusionFlow360" : moduleLabel}
+              {isMobile ? "CloudConnect" : moduleLabel}
             </span>
           </div>
 

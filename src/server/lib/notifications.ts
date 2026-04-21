@@ -37,7 +37,7 @@ export async function notifyZoomChat(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       content: {
-        head: { text: "FusionFlow", sub_head: { text: headText } },
+        head: { text: "CloudConnect", sub_head: { text: headText } },
         body: [
           { type: "message", text: bodyText },
           {

@@ -275,7 +275,7 @@ app.post("/cases", async (c) => {
   await d365Fetch(c.env, "/annotations", {
     method: "POST",
     body: JSON.stringify({
-      subject: "Case submitted via FusionFlow360",
+      subject: "Case submitted via CloudConnect",
       notetext: `Submitted by ${auth.user.name ?? auth.user.email} (${auth.user.email})`,
       "objectid_incident@odata.bind": `/incidents(${newId})`,
     }),
@@ -367,7 +367,7 @@ app.post("/cases/:id/status", async (c) => {
       body: JSON.stringify({
         IncidentResolution: {
           "incidentid@odata.bind": `/incidents(${id})`,
-          subject: "Resolved via FusionFlow360",
+          subject: "Resolved via CloudConnect",
           description: body.comment || "",
         },
         Status: -1,

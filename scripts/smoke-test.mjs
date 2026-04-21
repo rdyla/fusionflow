@@ -3,13 +3,13 @@
  *
  * Usage:
  *   node scripts/smoke-test.mjs                          # tests staging (default)
- *   BASE_URL=https://fusionflow360.com node scripts/smoke-test.mjs   # tests production
+ *   BASE_URL=https://cloudconnect.packetfusion.com node scripts/smoke-test.mjs   # tests production
  *
  * Exit code 0 = all checks passed
  * Exit code 1 = one or more checks failed
  */
 
-const BASE_URL = process.env.BASE_URL ?? "https://staging.fusionflow360.com";
+const BASE_URL = process.env.BASE_URL ?? "https://staging.cloudconnect.packetfusion.com";
 
 let passed = 0;
 let failed = 0;
