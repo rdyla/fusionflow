@@ -1,4 +1,4 @@
-const APP_NAME = "FusionFlow360";
+const APP_NAME = "CloudConnect by Packet Fusion";
 
 function escapeHtml(s: string | null | undefined): string {
   return (s ?? "")
@@ -17,7 +17,7 @@ function base(body: string, _appUrl = ""): string {
   <div style="max-width:600px;margin:40px auto;background:#142236;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
     <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);">
       <div style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;line-height:1.1;">
-        Fusion<span style="color:#00c8e0;">Flow</span><span style="color:rgba(240,246,255,0.6);font-weight:400;">360</span>
+        Cloud<span style="color:#00c8e0;">Connect</span>
       </div>
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:rgba(240,246,255,0.35);margin-top:2px;">
         Intelligence Platform
@@ -27,7 +27,7 @@ function base(body: string, _appUrl = ""): string {
       ${body}
     </div>
     <div style="padding:14px 28px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(240,246,255,0.3);">
-      FusionFlow360 &middot; Packet Fusion &middot; This is an automated notification.
+      CloudConnect by Packet Fusion &middot; This is an automated notification.
     </div>
   </div>
 </body>
@@ -70,11 +70,11 @@ export function userInvite(data: {
   const roleDisplay = escapeHtml(roleLabel[data.role] ?? data.role);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Welcome to FusionFlow360</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Welcome to CloudConnect</h2>
     <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);line-height:1.6;">
       Hi ${recipientName},<br><br>
       <strong style="color:rgba(240,246,255,0.9);">${invitedByName}</strong> has added you to
-      <strong style="color:#00c8e0;">FusionFlow360</strong> — Packet Fusion's intelligence platform
+      <strong style="color:#00c8e0;">CloudConnect</strong> — Packet Fusion's intelligence platform
       for managing projects, tracking risks, and keeping every stakeholder aligned in real time.
     </p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
@@ -87,7 +87,7 @@ export function userInvite(data: {
     <p style="margin:12px 0 0;font-size:13px;color:rgba(240,246,255,0.45);">
       If you have questions, reach out to ${invitedByName} or your team administrator.
     </p>
-    ${ctaButton("Open FusionFlow360", data.appUrl)}
+    ${ctaButton("Open CloudConnect", data.appUrl)}
   `, data.appUrl);
 }
 
@@ -113,7 +113,7 @@ export function taskAssigned(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a task</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${assigneeName}, a task has been assigned to you in FusionFlow360.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${assigneeName}, a task has been assigned to you in CloudConnect.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
@@ -223,7 +223,7 @@ export function riskAssigned(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a risk</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${ownerName}, you have been assigned as the owner of a risk on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> in FusionFlow360.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${ownerName}, you have been assigned as the owner of a risk on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> in CloudConnect.</p>
     <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${riskTitle}</div>
       ${riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${riskDescription}</div>` : ""}

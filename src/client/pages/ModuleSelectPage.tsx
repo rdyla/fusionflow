@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import logoUrl from "../assets/fusion flow transparent logo.png";
+import logoUrl from "../assets/packetfusionlogo.png";
 import { api, type User, type SystemStatusResponse } from "../lib/api";
 import { SystemStatusBadge } from "../components/ui/SystemStatusBadge";
 import { UserChip } from "../components/ui/UserChip";
@@ -159,7 +159,7 @@ export default function ModuleSelectPage() {
       {/* Hero — PF blue band */}
       <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "24px 24px 20px" : "32px 48px 28px", background: "#03395f" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: isMobile ? 14 : 18 }}>
-          <img src={logoUrl} alt="FusionFlow360" style={{ width: isMobile ? "70%" : 490, maxWidth: 490, height: "auto", display: "block" }} />
+          <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ width: isMobile ? "70%" : 490, maxWidth: 490, height: "auto", display: "block" }} />
         </div>
         <h1 style={{ fontFamily: "'Jost', sans-serif", fontSize: isMobile ? "26px" : "clamp(26px, 3.5vw, 40px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "-0.03em", marginBottom: 14, color: "#ffffff" }}>
           Where Every Engagement<br />

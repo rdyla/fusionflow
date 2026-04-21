@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import logoUrl from "../assets/fusion flow transparent logo.png";
+import logoUrl from "../assets/packetfusionlogo.png";
 
 type Step = "email" | "code";
 
@@ -19,7 +19,7 @@ export default function LoginPage() {
     if (ssoError) {
       const messages: Record<string, string> = {
         not_configured: "Microsoft SSO is not configured. Use email sign-in below.",
-        no_access: "Your Microsoft account doesn't have access to FusionFlow360. Contact your admin.",
+        no_access: "Your Microsoft account doesn't have access to CloudConnect. Contact your admin.",
         token_failed: "Microsoft sign-in failed. Please try again.",
         state_mismatch: "Sign-in session expired. Please try again.",
         no_email: "Could not read your email from Microsoft. Please try again.",
@@ -93,7 +93,7 @@ export default function LoginPage() {
         flexShrink: 0,
         borderBottom: "1px solid rgba(255,255,255,0.07)",
       }}>
-        <img src={logoUrl} alt="FusionFlow360" style={{ height: 40, display: "block" }} />
+        <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ height: 40, display: "block" }} />
       </header>
 
       {/* Body */}
@@ -152,7 +152,7 @@ function EmailStep({
   return (
     <form onSubmit={onSubmit}>
       <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#021e34", marginBottom: "0.4rem" }}>
-        Sign in to FusionFlow360
+        Sign in to CloudConnect
       </div>
       <div style={{ fontSize: 14, color: "#718096", marginBottom: "1.75rem", lineHeight: 1.5 }}>
         Enter your work email and we'll send you a sign-in code.
@@ -245,7 +245,7 @@ function CodeStep({
       </div>
 
       <div style={{ fontSize: 14, color: "#718096", marginBottom: "1.75rem", lineHeight: 1.5 }}>
-        The email will come from <strong>FusionFlow360</strong> (noreply@fusionflow360.com) — check your inbox and spam folder.
+        The email will come from <strong>CloudConnect</strong> (cloudconnect@packetfusion.com) — check your inbox and spam folder.
       </div>
 
       <label style={labelStyle}>Sign-in code</label>

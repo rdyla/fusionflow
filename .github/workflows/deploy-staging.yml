@@ -1,4 +1,4 @@
-name: Deploy FusionFlow (Staging)
+name: Deploy CloudConnect (Staging)
 
 on:
   push:
@@ -40,7 +40,7 @@ jobs:
       - name: Smoke test
         run: node scripts/smoke-test.mjs
         env:
-          BASE_URL: https://staging.fusionflow360.com
+          BASE_URL: https://staging.cloudconnect.packetfusion.com
 
       - name: Notify Zoom — Success
         if: success()
@@ -51,7 +51,7 @@ jobs:
           curl -s -X POST "$ZOOM_WEBHOOK_URL" \
             -H "Authorization: $ZOOM_AUTH_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "🟡 FusionFlow STAGING deploy succeeded | By: ${{ github.actor }} | ${{ github.event.head_commit.message }}"
+            -d "🟡 CloudConnect STAGING deploy succeeded | By: ${{ github.actor }} | ${{ github.event.head_commit.message }}"
 
       - name: Notify Zoom — Failure
         if: failure()
@@ -62,4 +62,4 @@ jobs:
           curl -s -X POST "$ZOOM_WEBHOOK_URL" \
             -H "Authorization: $ZOOM_AUTH_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "🔴 FusionFlow STAGING deploy FAILED | By: ${{ github.actor }} | ${{ github.event.head_commit.message }} | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            -d "🔴 CloudConnect STAGING deploy FAILED | By: ${{ github.actor }} | ${{ github.event.head_commit.message }} | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
