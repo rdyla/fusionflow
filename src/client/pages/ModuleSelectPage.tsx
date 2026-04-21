@@ -164,10 +164,8 @@ export default function ModuleSelectPage() {
             Cloud<span style={{ color: "#22c55e" }}>Connect</span>
           </div>
         </div>
-        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 800, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "#ffffff" }}>
-          <span style={{ color: "#63c1ea" }}>Engage.</span>{" "}
-          <span style={{ color: "#ffffff" }}>Deliver.</span>{" "}
-          <span style={{ color: "#22c55e" }}>Grow.</span>
+        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "rgba(240,246,255,0.78)" }}>
+          Engage. Deliver. Grow.
         </h1>
         {!isMobile && (
           <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", maxWidth: 500, margin: "0 auto", lineHeight: 1.65, fontWeight: 300 }}>
