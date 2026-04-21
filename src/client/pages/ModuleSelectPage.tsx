@@ -157,10 +157,10 @@ export default function ModuleSelectPage() {
       </header>
 
       {/* Hero — PF blue band */}
-      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "24px 24px 20px" : "32px 48px 28px", background: "#021e34" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: isMobile ? 12 : 20, marginBottom: isMobile ? 14 : 18 }}>
-          <img src={logoUrl} alt="CloudConnect by Packet Fusion" style={{ height: isMobile ? 44 : 100, width: "auto", display: "block" }} />
-          <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? 28 : "clamp(40px, 4.5vw, 64px)", fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: "#ffffff", whiteSpace: "nowrap" }}>
+      <section style={{ position: "relative", zIndex: 5, textAlign: "center", padding: isMobile ? "32px 24px 26px" : "48px 48px 36px", background: "#021e34" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: isMobile ? 10 : 14, marginBottom: isMobile ? 22 : 28 }}>
+          <img src={logoUrl} alt="Packet Fusion" style={{ height: isMobile ? 34 : 52, width: "auto", display: "block" }} />
+          <div style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? 34 : "clamp(44px, 5vw, 72px)", fontWeight: 800, letterSpacing: "-0.02em", lineHeight: 1, color: "#ffffff", whiteSpace: "nowrap" }}>
             Cloud<span style={{ color: "#22c55e" }}>Connect</span>
           </div>
         </div>
