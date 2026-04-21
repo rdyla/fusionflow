@@ -71,7 +71,7 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState<Partial<User & { role: Role; manager_id: string | null }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
-  const [openMenu, setOpenMenu] = useState<{ id: string; top: number; right: number } | null>(null);
+  const [openMenu, setOpenMenu] = useState<{ id: string; top?: number; bottom?: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -89,7 +89,15 @@ export default function AdminUsersPage() {
   function toggleMenu(e: React.MouseEvent<HTMLButtonElement>, userId: string) {
     if (openMenu?.id === userId) { setOpenMenu(null); return; }
     const rect = e.currentTarget.getBoundingClientRect();
-    setOpenMenu({ id: userId, top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    // Flip menu upward if it would overflow the viewport bottom. 200px covers the tallest variant (4 items + divider + padding).
+    const MENU_HEIGHT_ESTIMATE = 200;
+    const flipUp = rect.bottom + MENU_HEIGHT_ESTIMATE + 8 > window.innerHeight;
+    setOpenMenu({
+      id: userId,
+      top: flipUp ? undefined : rect.bottom + 4,
+      bottom: flipUp ? window.innerHeight - rect.top + 4 : undefined,
+      right: window.innerWidth - rect.right,
+    });
   }
 
   useEffect(() => { loadUsers(); }, []);
@@ -369,7 +377,7 @@ export default function AdminUsersPage() {
                         ⋮
                       </button>
                       {openMenu?.id === user.id && (
-                        <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+                        <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, bottom: openMenu.bottom, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
                           <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
                           <MenuItem
                             onClick={() => { toggleActive(user); setOpenMenu(null); }}
