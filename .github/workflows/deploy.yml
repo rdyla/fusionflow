@@ -40,19 +40,26 @@ jobs:
         env:
           ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
           ZOOM_AUTH_TOKEN: ${{ secrets.ZOOM_WEBHOOK_VERIFICATION_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
           curl -s -X POST "$ZOOM_WEBHOOK_URL" \
             -H "Authorization: $ZOOM_AUTH_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "✅ CloudConnect deploy succeeded | Branch: ${{ github.ref_name }} | By: ${{ github.actor }} | ${{ github.event.head_commit.message }}"
+            -d "✅ CloudConnect deploy succeeded | Branch: $BRANCH | By: $ACTOR | $COMMIT_MSG"
 
       - name: Notify Zoom — Failure
         if: failure()
         env:
           ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
           ZOOM_AUTH_TOKEN: ${{ secrets.ZOOM_WEBHOOK_VERIFICATION_TOKEN }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           curl -s -X POST "$ZOOM_WEBHOOK_URL" \
             -H "Authorization: $ZOOM_AUTH_TOKEN" \
             -H "Content-Type: application/json" \
-            -d "❌ CloudConnect deploy FAILED | Branch: ${{ github.ref_name }} | By: ${{ github.actor }} | ${{ github.event.head_commit.message }} | ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            -d "❌ CloudConnect deploy FAILED | Branch: $BRANCH | By: $ACTOR | $COMMIT_MSG | $RUN_URL"
