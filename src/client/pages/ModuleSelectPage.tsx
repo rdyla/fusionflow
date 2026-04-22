@@ -89,9 +89,9 @@ const MODULES: Module[] = [
   },
   {
     num: "04",
-    tag: "Growth",
+    tag: "Business Improvement",
     title: "Optimization",
-    subtitle: "Continuous Improvement",
+    subtitle: "Continuous Enhancement",
     desc: "Post-launch health checks, performance reviews, and proactive expansion opportunities to drive lasting client value.",
     features: ["QBR & review scheduling", "Usage analytics dashboards", "Expansion opportunity tracking", "SLA & KPI monitoring"],
     accent: "#059669",
