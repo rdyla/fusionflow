@@ -188,10 +188,12 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
               <textarea className="ms-input" rows={5} value={pmCustomNote} onChange={(e) => setPmCustomNote(e.target.value)} placeholder="Add a personal note to kick things off. Line breaks preserved." style={{ resize: "vertical", fontFamily: "inherit" }} />
             </div>
 
-            {/* Kickoff meeting */}
+            {/* Kickoff meeting — free-form so Zoom / RingCentral / 8x8 / Dialpad / dial-ins all fit */}
             <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Kickoff Meeting URL</div>
-              <input className="ms-input" placeholder="https://zoom.us/j/..." value={kickoffMeetingUrl} onChange={(e) => setKickoffMeetingUrl(e.target.value)} />
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Kickoff Meeting Details</div>
+              <textarea className="ms-input" rows={3} value={kickoffMeetingUrl} onChange={(e) => setKickoffMeetingUrl(e.target.value)}
+                placeholder="Meeting link, dial-in, access code, or mix — any http/https URLs are auto-linked."
+                style={{ resize: "vertical", fontFamily: "inherit" }} />
               <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Saved to the project on send.</div>
             </div>
 
