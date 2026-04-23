@@ -498,10 +498,25 @@ export function welcomePackage(data: {
     detail("Project Manager", pmName),
   ].filter(Boolean).join("");
 
-  const kickoffBlock = data.kickoffMeetingUrl
-    ? `<div style="background:rgba(0,200,224,0.08);border:1px solid rgba(0,200,224,0.25);border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#00c8e0;margin-bottom:6px;">Kickoff Meeting</div>
-        <a href="${escapeHtml(data.kickoffMeetingUrl)}" style="color:#00c8e0;font-size:14px;text-decoration:none;word-break:break-all;">${escapeHtml(data.kickoffMeetingUrl)}</a>
+  const kickoffContent = (() => {
+    if (!data.kickoffMeetingUrl) return "";
+    const raw = data.kickoffMeetingUrl.trim();
+    if (!raw) return "";
+    // Auto-linkify standalone http(s) URLs; render everything else as-is with
+    // line breaks preserved so dial-ins, access codes, and mixed free-form
+    // text (RingCentral / 8x8 / Dialpad / Zoom / etc.) all render cleanly.
+    const urlRe = /https?:\/\/[^\s<>"]+/g;
+    const escaped = escapeHtml(raw);
+    const linkified = escaped.replace(urlRe, (m) =>
+      `<a href="${m}" style="color:#7de3f3;text-decoration:underline;word-break:break-all;">${m}</a>`
+    );
+    return linkified.replace(/\r?\n/g, "<br>");
+  })();
+
+  const kickoffBlock = kickoffContent
+    ? `<div style="background:#14323c;border:1px solid #2a6d7e;border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:6px;">Kickoff Meeting</div>
+        <div style="color:#e8eef7;font-size:14px;line-height:1.55;word-break:break-word;">${kickoffContent}</div>
       </div>`
     : "";
 
