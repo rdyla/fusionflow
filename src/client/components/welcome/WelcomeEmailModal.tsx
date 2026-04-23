@@ -23,6 +23,10 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
   const [pmCustomNote, setPmCustomNote] = useState("");
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
   const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
+  const [distributionListEmail, setDistributionListEmail] = useState(options.project.suggestedDistributionListEmail ?? "");
+  const [sectionAdminAccess, setSectionAdminAccess] = useState(true);
+  const [sectionPorting, setSectionPorting] = useState(true);
+  const [sectionTimeline, setSectionTimeline] = useState(true);
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [staffUserIds, setStaffUserIds] = useState<Set<string>>(new Set());
   const [includeZoomRep, setIncludeZoomRep] = useState(false);
@@ -61,6 +65,12 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
     pmCustomNote,
     kickoffMeetingUrl: kickoffMeetingUrl.trim() || null,
     kickoffWhen: kickoffWhen.trim() || null,
+    distributionListEmail: distributionListEmail.trim() || null,
+    sections: {
+      adminAccess: sectionAdminAccess,
+      porting: sectionPorting,
+      timeline: sectionTimeline,
+    },
     recipients: {
       contactIds: Array.from(contactIds),
       staffUserIds: Array.from(staffUserIds),
@@ -204,6 +214,31 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Your Note (PM Intro)</div>
               <textarea className="ms-input" rows={5} value={pmCustomNote} onChange={(e) => setPmCustomNote(e.target.value)} placeholder="Add a personal note to kick things off. Line breaks preserved." style={{ resize: "vertical", fontFamily: "inherit" }} />
+            </div>
+
+            {/* PS boilerplate sections — togglable; admin access exposes the DL address */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8 }}>Standard Sections</div>
+              {[
+                { label: "Admin Access for Packet Fusion", checked: sectionAdminAccess, onChange: () => setSectionAdminAccess((v) => !v) },
+                { label: "Porting Information", checked: sectionPorting, onChange: () => setSectionPorting((v) => !v) },
+                { label: "Timeline", checked: sectionTimeline, onChange: () => setSectionTimeline((v) => !v) },
+              ].map((s) => (
+                <label key={s.label} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", cursor: "pointer", borderRadius: 4, fontSize: 13, color: "#1e293b" }}>
+                  <input type="checkbox" checked={s.checked} onChange={s.onChange} />
+                  {s.label}
+                </label>
+              ))}
+              {sectionAdminAccess && (
+                <div style={{ marginTop: 10, paddingLeft: 24 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>Distribution list address</div>
+                  <input className="ms-input" value={distributionListEmail} onChange={(e) => setDistributionListEmail(e.target.value)}
+                    placeholder="zm-customerslug@packetfusion.com" />
+                  <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                    Auto-computed from project vendor + customer name. Edit if the actual DL differs.
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Kickoff meeting — free-form so Zoom / RingCentral / 8x8 / Dialpad / dial-ins all fit */}
