@@ -53,6 +53,28 @@ function partnerLabel(vendor: string | null): string {
   return vendor && vendor.trim() ? `${vendor.trim()} Partner AE` : "Partner AE";
 }
 
+// Map project vendor → short prefix used in our per-project distribution list
+// naming convention: {prefix}-{customerSlug}@packetfusion.com
+// zoom=zm, ringcentral=rc, 8x8=8x8, dialpad=dp; fallback=ps (Professional Services)
+function vendorPrefix(vendor: string | null): string {
+  const v = (vendor ?? "").toLowerCase().replace(/[\s_-]/g, "");
+  if (v.includes("zoom")) return "zm";
+  if (v.includes("ringcentral") || v === "rc") return "rc";
+  if (v.includes("8x8")) return "8x8";
+  if (v.includes("dialpad")) return "dp";
+  return "ps";
+}
+
+function slugifyCustomer(name: string | null): string {
+  return (name ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function computeDistributionListEmail(vendor: string | null, customerName: string | null): string | null {
+  const slug = slugifyCustomer(customerName);
+  if (!slug) return null;
+  return `${vendorPrefix(vendor)}-${slug}@packetfusion.com`;
+}
+
 function displayRoleFor(s: StaffRow, vendor: string | null): string {
   if (s.staff_role === "partner_ae") return partnerLabel(vendor);
   return staffRoleLabel(s);
@@ -136,6 +158,7 @@ app.get("/:projectId/welcome/options", async (c) => {
       targetGoLiveDate: project.target_go_live_date,
       kickoffMeetingUrl: project.kickoff_meeting_url,
       welcomeSentAt: project.welcome_sent_at,
+      suggestedDistributionListEmail: computeDistributionListEmail(project.vendor, project.customer_name),
     },
     recipients: {
       contacts: contacts.map((ct) => ({ id: ct.id, name: ct.name, email: ct.email, jobTitle: ct.job_title })),
@@ -159,6 +182,12 @@ const draftSchema = z.object({
   // scheme-less Zoom links and we don't want strict URL validation to 400.
   kickoffMeetingUrl: z.string().nullable().optional(),
   kickoffWhen: z.string().max(200).nullable().optional(),
+  distributionListEmail: z.string().max(200).nullable().optional(),
+  sections: z.object({
+    adminAccess: z.boolean().default(true),
+    porting: z.boolean().default(true),
+    timeline: z.boolean().default(true),
+  }).default({ adminAccess: true, porting: true, timeline: true }),
   recipients: z.object({
     contactIds: z.array(z.string()).default([]),
     staffUserIds: z.array(z.string()).default([]),
@@ -240,6 +269,9 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
 
   const portalUrl = `${c.env.APP_URL ?? ""}/projects/${project.id}`;
 
+  const distributionListEmail = draft.distributionListEmail?.trim()
+    || computeDistributionListEmail(project.vendor, project.customer_name);
+
   const html = welcomePackage({
     projectName: project.name,
     customerName: project.customer_name,
@@ -252,6 +284,8 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     targetGoLiveDate: project.target_go_live_date,
     solution: project.solution_type,
     teamSections,
+    distributionListEmail,
+    sections: draft.sections,
   });
 
   const subject = `Welcome to ${project.name}${project.customer_name ? ` · ${project.customer_name}` : ""}`;

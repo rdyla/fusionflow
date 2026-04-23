@@ -1744,6 +1744,7 @@ export type WelcomeOptions = {
     targetGoLiveDate: string | null;
     kickoffMeetingUrl: string | null;
     welcomeSentAt: string | null;
+    suggestedDistributionListEmail: string | null;
   };
   recipients: {
     contacts: Array<{ id: string; name: string; email: string; jobTitle: string | null }>;
@@ -1759,6 +1760,12 @@ export type WelcomeDraft = {
   pmCustomNote: string;
   kickoffMeetingUrl?: string | null;
   kickoffWhen?: string | null;
+  distributionListEmail?: string | null;
+  sections: {
+    adminAccess: boolean;
+    porting: boolean;
+    timeline: boolean;
+  };
   recipients: {
     contactIds: string[];
     staffUserIds: string[];

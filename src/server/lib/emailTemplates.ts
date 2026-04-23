@@ -476,6 +476,12 @@ function teamMemberRow(m: { name: string; role: string; photoUrl: string | null;
 type WelcomeTeamMember = { name: string; role: string; photoUrl: string | null; email: string | null };
 type WelcomeTeamSection = { label: string; members: WelcomeTeamMember[] };
 
+type WelcomeSections = {
+  adminAccess: boolean;
+  porting: boolean;
+  timeline: boolean;
+};
+
 export function welcomePackage(data: {
   projectName: string;
   customerName: string | null;
@@ -488,6 +494,8 @@ export function welcomePackage(data: {
   targetGoLiveDate: string | null;
   solution: string | null;
   teamSections: WelcomeTeamSection[];
+  distributionListEmail: string | null;
+  sections: WelcomeSections;
 }): string {
   const projectName = escapeHtml(data.projectName);
   const customerName = escapeHtml(data.customerName ?? "");
@@ -541,6 +549,42 @@ export function welcomePackage(data: {
       `).join("")
     : "";
 
+  // ── Optional PS sections (admin access / porting / timeline) ────────────────
+  // Shared card styling for the three optional boilerplate blocks — solid dark
+  // backgrounds survive email-client dark-mode normalization (Zoom web app etc.)
+  const psCard = (heading: string, innerHtml: string) => `
+    <div style="background:#1a2a3e;border:1px solid #2a3a51;border-radius:6px;padding:16px 18px;margin:18px 0 6px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:10px;">${escapeHtml(heading)}</div>
+      <div style="font-size:13.5px;color:#e8eef7;line-height:1.6;">${innerHtml}</div>
+    </div>`;
+
+  const adminAccessBlock = data.sections.adminAccess && data.distributionListEmail
+    ? psCard(
+        "Admin Access for Packet Fusion",
+        `To configure and support your platform, please grant administrator access in your cloud portal to
+         <a href="mailto:${escapeHtml(data.distributionListEmail)}" style="color:#7de3f3;text-decoration:underline;">${escapeHtml(data.distributionListEmail)}</a>.
+         This covers the implementation and ongoing support after your transition. We'll walk through the steps with your Implementation Engineer during the first technical meeting.`
+      )
+    : "";
+
+  const portingBlock = data.sections.porting
+    ? psCard(
+        "Porting Information",
+        `<ul style="margin:0;padding-left:18px;">
+          <li style="margin:0 0 8px;">Request a <strong>Customer Service Record (CSR)</strong> from your voice carrier(s). Carriers typically return it within a couple of business days — it lists every number and service on the account.</li>
+          <li style="margin:0 0 8px;">Send us a copy of your most recent phone bill(s) and identify the <strong>authorized contact</strong> on the account.</li>
+          <li style="margin:0;">Send us the list of numbers to port (analog, fax, back-office — anything that rings). Excel, CSV, or plain text works.</li>
+        </ul>`
+      )
+    : "";
+
+  const timelineBlock = data.sections.timeline
+    ? psCard(
+        "Timeline",
+        `Please be prepared to discuss target go-live date(s) and production timing at kickoff so we can plan resourcing accordingly.`
+      )
+    : "";
+
   return base(`
     <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f6ff;">Welcome to ${projectName}</h2>
     <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.6);line-height:1.6;">
@@ -553,7 +597,10 @@ export function welcomePackage(data: {
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Project Summary</div>
       <table style="border-collapse:collapse;">${summaryRows}</table>
     </div>
+    ${adminAccessBlock}
     ${kickoffBlock}
+    ${portingBlock}
+    ${timelineBlock}
     ${teamBlock}
     ${ctaButton("Open Project Portal", data.portalUrl)}
   `, data.portalUrl);
