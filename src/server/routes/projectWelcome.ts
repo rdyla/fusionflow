@@ -136,14 +136,16 @@ app.get("/:projectId/welcome/options", async (c) => {
 
 const draftSchema = z.object({
   pmCustomNote: z.string().max(5000).default(""),
-  kickoffMeetingUrl: z.string().url().nullable().optional(),
+  // Allow any string for the kickoff URL — PMs often paste shortened or
+  // scheme-less Zoom links and we don't want strict URL validation to 400.
+  kickoffMeetingUrl: z.string().nullable().optional(),
   recipients: z.object({
     contactIds: z.array(z.string()).default([]),
     staffUserIds: z.array(z.string()).default([]),
     zoomRep: z.object({ name: z.string(), email: z.string().email() }).nullable().optional(),
     extraEmails: z.array(z.string().email()).default([]),
   }),
-  attachmentUrls: z.array(z.string().url()).default([]),
+  attachmentUrls: z.array(z.string()).default([]),
 });
 
 type Draft = z.infer<typeof draftSchema>;
@@ -226,11 +228,20 @@ app.post("/:projectId/welcome/preview", async (c) => {
   const project = await loadProject(c.env.DB, projectId);
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
-  const parsed = draftSchema.safeParse(await c.req.json());
-  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  const body = await c.req.json();
+  const parsed = draftSchema.safeParse(body);
+  if (!parsed.success) {
+    console.error("[welcome/preview] validation failed:", JSON.stringify(parsed.error.issues));
+    return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
+  }
 
-  const { html, subject, recipientEmails } = await buildTemplateContext(c, project, parsed.data);
-  return c.json({ subject, html, recipientCount: recipientEmails.length });
+  try {
+    const { html, subject, recipientEmails } = await buildTemplateContext(c, project, parsed.data);
+    return c.json({ subject, html, recipientCount: recipientEmails.length });
+  } catch (err) {
+    console.error("[welcome/preview] buildTemplateContext failed:", err);
+    return c.json({ error: err instanceof Error ? err.message : "Preview failed" }, 500);
+  }
 });
 
 // ── Attachment download ───────────────────────────────────────────────────────
@@ -273,19 +284,28 @@ app.post("/:projectId/welcome/test", async (c) => {
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
   const parsed = draftSchema.safeParse(await c.req.json());
-  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  if (!parsed.success) {
+    console.error("[welcome/test] validation failed:", JSON.stringify(parsed.error.issues));
+    return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
+  }
 
-  const { html, subject } = await buildTemplateContext(c, project, parsed.data);
-  const attachments = await fetchAttachments(c.env, parsed.data.attachmentUrls);
+  try {
+    const { html, subject } = await buildTemplateContext(c, project, parsed.data);
+    const attachments = await fetchAttachments(c.env, parsed.data.attachmentUrls);
 
-  await sendEmail(c.env, {
-    to: auth.user.email,
-    subject: `[TEST] ${subject}`,
-    html,
-    attachments,
-  });
+    await sendEmail(c.env, {
+      to: auth.user.email,
+      subject: `[TEST] ${subject}`,
+      html,
+      attachments,
+    });
 
-  return c.json({ ok: true, sentTo: auth.user.email });
+    return c.json({ ok: true, sentTo: auth.user.email });
+  } catch (err) {
+    if (err instanceof HTTPException) throw err;
+    console.error("[welcome/test] send failed:", err);
+    return c.json({ error: err instanceof Error ? err.message : "Test send failed" }, 500);
+  }
 });
 
 // ── POST /api/projects/:projectId/welcome/send ────────────────────────────────
@@ -300,9 +320,20 @@ app.post("/:projectId/welcome/send", async (c) => {
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
   const parsed = draftSchema.safeParse(await c.req.json());
-  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.message });
+  if (!parsed.success) {
+    console.error("[welcome/send] validation failed:", JSON.stringify(parsed.error.issues));
+    return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
+  }
 
-  const { html, subject, recipientEmails } = await buildTemplateContext(c, project, parsed.data);
+  let html: string;
+  let subject: string;
+  let recipientEmails: string[];
+  try {
+    ({ html, subject, recipientEmails } = await buildTemplateContext(c, project, parsed.data));
+  } catch (err) {
+    console.error("[welcome/send] buildTemplateContext failed:", err);
+    return c.json({ error: err instanceof Error ? err.message : "Send failed" }, 500);
+  }
   if (recipientEmails.length === 0) {
     throw new HTTPException(400, { message: "No recipients selected" });
   }
