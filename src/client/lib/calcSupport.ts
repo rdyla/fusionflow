@@ -20,7 +20,13 @@ export interface OppFormData {
   ovrImpl: number | null;
   ovrMso: number | null;
   ovrAdvApp: number | null;
-  customLines: { label: string; price: number }[];
+  // Additional line items. kind defaults to "charge" when absent (backward compat
+  // with pre-discount saved versions).
+  //   charge           → price is a positive dollar amount added to annual
+  //   discount_amount  → price is a dollar amount subtracted from annual
+  //   discount_percent → price is a percentage (0-100) applied to the pre-custom
+  //                      annual subtotal and subtracted
+  customLines: { label: string; price: number; kind?: "charge" | "discount_amount" | "discount_percent" }[];
   customInclusions: { label: string; blurb: string }[];
   customerName: string;
   notes: string;
@@ -101,8 +107,15 @@ export function calcSupport(d: OppFormData): OppCalcResult {
   const advAppSup = d.ovrAdvApp != null ? d.ovrAdvApp : advAppCalc;
   const msoSup    = d.ovrMso    != null ? d.ovrMso    : msoCalc;
 
-  const customTotal = (d.customLines ?? []).reduce((sum, l) => sum + (Number(l.price) || 0), 0);
-  const annual = ucaasSup + ccaasSup + implSup + advAppSup + (msoEnabled ? msoSup : 0) + customTotal;
+  const preCustomAnnual = ucaasSup + ccaasSup + implSup + advAppSup + (msoEnabled ? msoSup : 0);
+  const customTotal = (d.customLines ?? []).reduce((sum, l) => {
+    const n = Number(l.price) || 0;
+    const kind = l.kind ?? "charge";
+    if (kind === "discount_percent") return sum - preCustomAnnual * (n / 100);
+    if (kind === "discount_amount")  return sum - n;
+    return sum + n;
+  }, 0);
+  const annual = preCustomAnnual + customTotal;
   const tcv    = annual * term;
 
   return {
@@ -125,6 +138,26 @@ export function fmt(n: number): string {
 
 export function fmtFull(n: number): string {
   return "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/** Formats a signed currency: negative numbers render as "-$1,234.56" (sign
+ *  before the dollar symbol) instead of fmtFull's "$-1,234.56". */
+export function fmtSigned(n: number): string {
+  const abs = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (n < 0 ? "-$" : "$") + abs;
+}
+
+/** Dollar impact of a single custom line against a pre-custom annual subtotal.
+ *  Charges are positive; discounts are negative. */
+export function customLineDollar(
+  line: { price: number; kind?: "charge" | "discount_amount" | "discount_percent" },
+  preCustomAnnual: number,
+): number {
+  const n = Number(line.price) || 0;
+  const kind = line.kind ?? "charge";
+  if (kind === "discount_percent") return -preCustomAnnual * (n / 100);
+  if (kind === "discount_amount")  return -n;
+  return n;
 }
 
 export const DEFAULT_FORM_DATA: OppFormData = {
