@@ -1739,6 +1739,7 @@ export type WelcomeOptions = {
     name: string;
     customerName: string | null;
     solutionType: string | null;
+    vendor: string | null;
     kickoffDate: string | null;
     targetGoLiveDate: string | null;
     kickoffMeetingUrl: string | null;
@@ -1746,7 +1747,7 @@ export type WelcomeOptions = {
   };
   recipients: {
     contacts: Array<{ id: string; name: string; email: string; jobTitle: string | null }>;
-    staff: Array<{ id: string; name: string; email: string; role: string }>;
+    staff: Array<{ id: string; name: string; email: string; role: string; isPartner: boolean }>;
   };
   sharepoint: {
     folderUrl: string | null;
@@ -1757,6 +1758,7 @@ export type WelcomeOptions = {
 export type WelcomeDraft = {
   pmCustomNote: string;
   kickoffMeetingUrl?: string | null;
+  kickoffWhen?: string | null;
   recipients: {
     contactIds: string[];
     staffUserIds: string[];

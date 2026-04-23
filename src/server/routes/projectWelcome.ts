@@ -30,6 +30,7 @@ type ProjectRow = {
   customer_name: string | null;
   customer_id: string | null;
   solution_type: string | null;
+  vendor: string | null;
   kickoff_date: string | null;
   target_go_live_date: string | null;
   kickoff_meeting_url: string | null;
@@ -39,11 +40,22 @@ type ProjectRow = {
 
 async function loadProject(db: D1Database, projectId: string): Promise<ProjectRow | null> {
   return db
-    .prepare(`SELECT id, name, customer_name, customer_id, solution_type, kickoff_date,
+    .prepare(`SELECT id, name, customer_name, customer_id, solution_type, vendor, kickoff_date,
                      target_go_live_date, kickoff_meeting_url, welcome_sent_at, pm_user_id
               FROM projects WHERE id = ? LIMIT 1`)
     .bind(projectId)
     .first<ProjectRow>();
+}
+
+// Partner AE label uses the project's vendor (Zoom / RingCentral / 8x8 / Dialpad / etc.)
+// Falls back to "Partner" when vendor is unset.
+function partnerLabel(vendor: string | null): string {
+  return vendor && vendor.trim() ? `${vendor.trim()} Partner AE` : "Partner AE";
+}
+
+function displayRoleFor(s: StaffRow, vendor: string | null): string {
+  if (s.staff_role === "partner_ae") return partnerLabel(vendor);
+  return staffRoleLabel(s);
 }
 
 type ContactRow = { id: string; name: string; email: string | null; job_title: string | null };
@@ -119,6 +131,7 @@ app.get("/:projectId/welcome/options", async (c) => {
       name: project.name,
       customerName: project.customer_name,
       solutionType: project.solution_type,
+      vendor: project.vendor,
       kickoffDate: project.kickoff_date,
       targetGoLiveDate: project.target_go_live_date,
       kickoffMeetingUrl: project.kickoff_meeting_url,
@@ -126,7 +139,13 @@ app.get("/:projectId/welcome/options", async (c) => {
     },
     recipients: {
       contacts: contacts.map((ct) => ({ id: ct.id, name: ct.name, email: ct.email, jobTitle: ct.job_title })),
-      staff: staff.map((s) => ({ id: s.id, name: s.name ?? s.email, email: s.email, role: staffRoleLabel(s) })),
+      staff: staff.map((s) => ({
+        id: s.id,
+        name: s.name ?? s.email,
+        email: s.email,
+        role: displayRoleFor(s, project.vendor),
+        isPartner: s.staff_role === "partner_ae",
+      })),
     },
     sharepoint: { folderUrl: sharepointUrl, files: sharepointFiles },
   });
@@ -139,6 +158,7 @@ const draftSchema = z.object({
   // Allow any string for the kickoff URL — PMs often paste shortened or
   // scheme-less Zoom links and we don't want strict URL validation to 400.
   kickoffMeetingUrl: z.string().nullable().optional(),
+  kickoffWhen: z.string().max(200).nullable().optional(),
   recipients: z.object({
     contactIds: z.array(z.string()).default([]),
     staffUserIds: z.array(z.string()).default([]),
@@ -174,23 +194,44 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     ...draft.recipients.extraEmails,
   ].filter((e) => !!e);
 
-  // Team directory for the email body — pulls photos from Zoom by email
+  // Team directory for the email body — pulls photos from Zoom by email.
+  // Partner AEs (and the Zoom rep free-text entry) get their own section so
+  // customers see PF team vs. partner/vendor team distinctly.
   const teamEmails = toStaff.map((s) => s.email);
   const photos = teamEmails.length > 0 ? await getStaffPhotos(c.env.KV, c.env, teamEmails) : {};
-  const teamMembers = toStaff.map((s) => ({
-    name: s.name ?? s.email,
-    role: staffRoleLabel(s),
-    photoUrl: photos[s.email] ?? null,
-    email: s.email,
-  }));
+
+  const pfMembers = toStaff
+    .filter((s) => s.staff_role !== "partner_ae")
+    .map((s) => ({
+      name: s.name ?? s.email,
+      role: displayRoleFor(s, project.vendor),
+      photoUrl: photos[s.email] ?? null,
+      email: s.email,
+    }));
+
+  const partnerMembers = toStaff
+    .filter((s) => s.staff_role === "partner_ae")
+    .map((s) => ({
+      name: s.name ?? s.email,
+      role: displayRoleFor(s, project.vendor),
+      photoUrl: photos[s.email] ?? null,
+      email: s.email,
+    }));
+
   if (draft.recipients.zoomRep) {
-    teamMembers.push({
+    partnerMembers.push({
       name: draft.recipients.zoomRep.name,
-      role: "Zoom Rep",
+      role: project.vendor?.trim() ? `${project.vendor.trim()} Rep` : "Zoom Rep",
       photoUrl: null,
       email: draft.recipients.zoomRep.email,
     });
   }
+
+  const partnerSectionLabel = project.vendor?.trim() ? `${project.vendor.trim()} Team` : "Partner Team";
+  const teamSections = [
+    { label: "Your Team", members: pfMembers },
+    { label: partnerSectionLabel, members: partnerMembers },
+  ];
 
   const pm = project.pm_user_id
     ? (await c.env.DB.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first()) as { name: string | null; email: string | null } | null
@@ -206,10 +247,11 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     pmCustomNote: draft.pmCustomNote,
     portalUrl,
     kickoffMeetingUrl: draft.kickoffMeetingUrl ?? project.kickoff_meeting_url,
+    kickoffWhen: draft.kickoffWhen ?? null,
     kickoffDate: project.kickoff_date,
     targetGoLiveDate: project.target_go_live_date,
     solution: project.solution_type,
-    teamMembers,
+    teamSections,
   });
 
   const subject = `Welcome to ${project.name}${project.customer_name ? ` · ${project.customer_name}` : ""}`;
