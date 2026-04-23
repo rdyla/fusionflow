@@ -816,8 +816,13 @@ export default function ProjectDetailPage() {
                   </span>
                 );
               })()}
-              {/* PF staff chips */}
-              {projectStaff.filter(s => s.staff_role !== "partner_ae" && !["ae", "sa", "csm"].includes(s.staff_role)).map((s) => {
+              {/* PF staff chips — skip the staff_role='pm' row for the project's primary PM
+                  since that user already renders via the dedicated PM chip above. */}
+              {projectStaff.filter(s =>
+                s.staff_role !== "partner_ae"
+                && !["ae", "sa", "csm"].includes(s.staff_role)
+                && !(s.staff_role === "pm" && s.user_id === project.pm_user_id)
+              ).map((s) => {
                 const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
                 const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
                 const photo = staffPhotoMap[s.email] ?? s.avatar_url;
