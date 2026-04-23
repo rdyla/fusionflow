@@ -473,6 +473,9 @@ function teamMemberRow(m: { name: string; role: string; photoUrl: string | null;
   </tr>`;
 }
 
+type WelcomeTeamMember = { name: string; role: string; photoUrl: string | null; email: string | null };
+type WelcomeTeamSection = { label: string; members: WelcomeTeamMember[] };
+
 export function welcomePackage(data: {
   projectName: string;
   customerName: string | null;
@@ -480,10 +483,11 @@ export function welcomePackage(data: {
   pmCustomNote: string;
   portalUrl: string;
   kickoffMeetingUrl: string | null;
+  kickoffWhen: string | null;
   kickoffDate: string | null;
   targetGoLiveDate: string | null;
   solution: string | null;
-  teamMembers: Array<{ name: string; role: string; photoUrl: string | null; email: string | null }>;
+  teamSections: WelcomeTeamSection[];
 }): string {
   const projectName = escapeHtml(data.projectName);
   const customerName = escapeHtml(data.customerName ?? "");
@@ -513,20 +517,28 @@ export function welcomePackage(data: {
     return linkified.replace(/\r?\n/g, "<br>");
   })();
 
-  const kickoffBlock = kickoffContent
+  const kickoffWhenLine = data.kickoffWhen && data.kickoffWhen.trim()
+    ? `<div style="color:#e8eef7;font-size:13px;font-weight:600;margin-bottom:8px;">${escapeHtml(data.kickoffWhen.trim())}</div>`
+    : "";
+
+  const kickoffBlock = (kickoffContent || kickoffWhenLine)
     ? `<div style="background:#14323c;border:1px solid #2a6d7e;border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
         <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:6px;">Kickoff Meeting</div>
-        <div style="color:#e8eef7;font-size:14px;line-height:1.55;word-break:break-word;">${kickoffContent}</div>
+        ${kickoffWhenLine}
+        ${kickoffContent ? `<div style="color:#e8eef7;font-size:14px;line-height:1.55;word-break:break-word;">${kickoffContent}</div>` : ""}
       </div>`
     : "";
 
-  const teamBlock = data.teamMembers.length
-    ? `<div style="margin:22px 0 6px;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Your Team</div>
-        <table style="border-collapse:collapse;width:100%;">
-          ${data.teamMembers.map(teamMemberRow).join("")}
-        </table>
-      </div>`
+  const teamSections = data.teamSections.filter((s) => s.members.length > 0);
+  const teamBlock = teamSections.length
+    ? teamSections.map((section) => `
+        <div style="margin:22px 0 6px;">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">${escapeHtml(section.label)}</div>
+          <table style="border-collapse:collapse;width:100%;">
+            ${section.members.map(teamMemberRow).join("")}
+          </table>
+        </div>
+      `).join("")
     : "";
 
   return base(`

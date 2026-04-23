@@ -22,6 +22,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
   const { showToast } = useToast();
   const [pmCustomNote, setPmCustomNote] = useState("");
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
+  const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [staffUserIds, setStaffUserIds] = useState<Set<string>>(new Set());
   const [includeZoomRep, setIncludeZoomRep] = useState(false);
@@ -59,6 +60,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
   const buildDraft = (): WelcomeDraft => ({
     pmCustomNote,
     kickoffMeetingUrl: kickoffMeetingUrl.trim() || null,
+    kickoffWhen: kickoffWhen.trim() || null,
     recipients: {
       contactIds: Array.from(contactIds),
       staffUserIds: Array.from(staffUserIds),
@@ -158,11 +160,27 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
               {options.recipients.contacts.map((ct) => checkbox(ct.name, ct.jobTitle ? `${ct.jobTitle} · ${ct.email}` : ct.email, contactIds.has(ct.id), () => toggle(contactIds, ct.id, setContactIds)))}
             </div>
 
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8 }}>PF Team</div>
-              {options.recipients.staff.length === 0 && <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No staff on this project.</div>}
-              {options.recipients.staff.map((s) => checkbox(s.name, `${s.role} · ${s.email}`, staffUserIds.has(s.id), () => toggle(staffUserIds, s.id, setStaffUserIds)))}
-            </div>
+            {(() => {
+              const pfStaff = options.recipients.staff.filter((s) => !s.isPartner);
+              const partnerStaff = options.recipients.staff.filter((s) => s.isPartner);
+              const vendor = options.project.vendor?.trim();
+              const partnerLabel = vendor ? `${vendor} Team` : "Partner Team";
+              return (
+                <>
+                  <div style={{ marginBottom: 18 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8 }}>PF Team</div>
+                    {pfStaff.length === 0 && <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No PF staff on this project.</div>}
+                    {pfStaff.map((s) => checkbox(s.name, `${s.role} · ${s.email}`, staffUserIds.has(s.id), () => toggle(staffUserIds, s.id, setStaffUserIds)))}
+                  </div>
+                  {partnerStaff.length > 0 && (
+                    <div style={{ marginBottom: 18 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8 }}>{partnerLabel}</div>
+                      {partnerStaff.map((s) => checkbox(s.name, `${s.role} · ${s.email}`, staffUserIds.has(s.id), () => toggle(staffUserIds, s.id, setStaffUserIds)))}
+                    </div>
+                  )}
+                </>
+              );
+            })()}
 
             <div style={{ marginBottom: 18 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8, cursor: "pointer" }}>
@@ -189,6 +207,13 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
             </div>
 
             {/* Kickoff meeting — free-form so Zoom / RingCentral / 8x8 / Dialpad / dial-ins all fit */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Kickoff Meeting When</div>
+              <input className="ms-input" value={kickoffWhen} onChange={(e) => setKickoffWhen(e.target.value)}
+                placeholder="e.g. January 31, 2026 at 2:00 PM PT" />
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Prefilled from the project kickoff date — add time + timezone.</div>
+            </div>
+
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Kickoff Meeting Details</div>
               <textarea className="ms-input" rows={3} value={kickoffMeetingUrl} onChange={(e) => setKickoffMeetingUrl(e.target.value)}
