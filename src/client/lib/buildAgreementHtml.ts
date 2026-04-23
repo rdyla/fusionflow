@@ -687,8 +687,8 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
     ${ucaasSection}
     ${ccaasSection}
     ${advAppSection}
-    ${customSection}
     ${msoSection}
+    ${customSection}
     ${inclusionsSection}
     <div class="section-header">
       <div class="section-num">${secNum()}</div>
@@ -1072,21 +1072,30 @@ export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: Op
           <td style="${tdStyle}">${calc.advAppSup > 0 ? "Advanced Applications Support" : `Included within ${showCCaaS ? "CCaaS" : "MSO"} CloudSupport`}</td>
           <td style="${tdStyle}text-align:right;">${calc.advAppSup > 0 ? `<span style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(calc.advAppSup)}</span>` : `<span style="display:inline-block;background:#e8f5f2;color:#007d6e;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:4px;border:1px solid #b2dfdb;">Included</span>`}</td>
         </tr>` : ""}
-        ${(d.customLines ?? []).map(l => {
-          const effect = customLineDollar(l, preCustomAnnualFrom(calc));
-          const isDiscount = (l.kind ?? "charge") !== "charge";
-          return `
-        <tr>
-          <td style="${tdStyle}"><div style="font-weight:700;color:${isDiscount ? "#065f46" : "#1e293b"};">${escHtml(lineDisplayLabel(l))}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(lineNoteText(l))}</div></td>
-          <td style="${tdStyle}">\u2014</td>
-          <td style="${tdStyle}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:${isDiscount ? "#065f46" : "#0d1b2e"};">${fmtSigned(effect)}</td>
+        ${(() => {
+          const hasLines = (d.customLines ?? []).length > 0;
+          const msoCell = hasLines ? tdStyle : `${tdStyle}border-bottom:none;`;
+          return `<tr>
+          <td style="${msoCell}"><div style="font-weight:700;color:#007d6e;">MSO Add-On \u2014 ${escHtml(tierLabel)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(tierEngineer)} \u00b7 Annual, auto-renewing</div></td>
+          <td style="${msoCell}">Named primary + backup engineer</td>
+          <td style="${msoCell}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#007d6e;">${fmtFull(calc.msoSup)}</td>
         </tr>`;
-        }).join("")}
+        })()}
+        ${(() => {
+          const lines = d.customLines ?? [];
+          return lines.map((l, idx) => {
+            const effect = customLineDollar(l, preCustomAnnualFrom(calc));
+            const isDiscount = (l.kind ?? "charge") !== "charge";
+            const isLast = idx === lines.length - 1;
+            const cell = isLast ? `${tdStyle}border-bottom:none;` : tdStyle;
+            return `
         <tr>
-          <td style="${tdStyle}border-bottom:none;"><div style="font-weight:700;color:#007d6e;">MSO Add-On \u2014 ${escHtml(tierLabel)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(tierEngineer)} \u00b7 Annual, auto-renewing</div></td>
-          <td style="${tdStyle}border-bottom:none;">Named primary + backup engineer</td>
-          <td style="${tdStyle}border-bottom:none;text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#007d6e;">${fmtFull(calc.msoSup)}</td>
-        </tr>
+          <td style="${cell}"><div style="font-weight:700;color:${isDiscount ? "#065f46" : "#1e293b"};">${escHtml(lineDisplayLabel(l))}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(lineNoteText(l))}</div></td>
+          <td style="${cell}">\u2014</td>
+          <td style="${cell}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:${isDiscount ? "#065f46" : "#0d1b2e"};">${fmtSigned(effect)}</td>
+        </tr>`;
+          }).join("");
+        })()}
       </tbody>
     </table>
 
@@ -1232,8 +1241,8 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
     <div class="sd-section-label">Service &amp; Pricing Schedule</div>
     ${ucaasLineItem}
     ${ccaasLineItem}
-    ${customLineItems}
     ${msoLineItem}
+    ${customLineItems}
     <div class="sd-totals">
       <div class="sd-total-row"><span class="sd-total-label">${calc.msoEnabled ? "Annual CloudSupport + MSO Investment" : "Annual CloudSupport Investment"}</span><span class="sd-total-val">${fmtFull(calc.annual)}</span></div>
       <div class="sd-total-row"><span class="sd-total-label">Term Length</span><span class="sd-total-val" style="font-family:'IBM Plex Sans',sans-serif;">${term} Year${term > 1 ? "s" : ""} &nbsp;(${startDate} \u2013 ${endDate})</span></div>
