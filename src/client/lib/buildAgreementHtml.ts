@@ -1,5 +1,29 @@
 import type { OppFormData, OppCalcResult } from "./calcSupport";
+import { customLineDollar, fmtSigned } from "./calcSupport";
 import { getMsoTier } from "./msoTiers";
+
+// Shared helpers for rendering custom line items (including discount kinds)
+// in the various agreement HTML documents.
+type CustomLine = OppFormData["customLines"][number];
+
+function lineDisplayLabel(l: CustomLine): string {
+  const base = l.label || (l.kind === "discount_percent" || l.kind === "discount_amount" ? "Discount" : "Line item");
+  if (l.kind === "discount_percent") return `${base} (${Number(l.price) || 0}% off)`;
+  return base;
+}
+
+function lineNoteText(l: CustomLine): string {
+  if (l.kind === "discount_percent") return "Percentage discount";
+  if (l.kind === "discount_amount")  return "Discount";
+  return "Custom line item";
+}
+
+/** preCustomAnnual is the annual total before any custom lines — needed so
+ *  discount_percent lines can compute their dollar effect. It equals
+ *  calc.annual - calc.customTotal. */
+function preCustomAnnualFrom(calc: OppCalcResult): number {
+  return calc.annual - calc.customTotal;
+}
 
 const MSO_PLATFORM_COVERAGE: Record<string, { area: string; scope: string }[]> = {
   zoom: [
@@ -569,6 +593,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       ${advAppScopeHtml}
   ` : "";
 
+  const proposalPreCustom = preCustomAnnualFrom(calc);
   const customSection = (d.customLines && d.customLines.length > 0) ? `
       <div class="section-header">
         <div class="section-num">${secNum()}</div>
@@ -579,7 +604,10 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
         <table class="pricing-table">
           <thead><tr><th>Description</th><th class="price-col">Annual</th></tr></thead>
           <tbody>
-            ${d.customLines.map(l => `<tr><td class="label-cell">${escHtml(l.label)}</td><td class="price-col">${fmtFull(l.price || 0)}</td></tr>`).join("")}
+            ${d.customLines.map(l => {
+              const effect = customLineDollar(l, proposalPreCustom);
+              return `<tr><td class="label-cell">${escHtml(lineDisplayLabel(l))}</td><td class="price-col">${fmtSigned(effect)}</td></tr>`;
+            }).join("")}
           </tbody>
         </table>
       </div>
@@ -1044,12 +1072,16 @@ export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: Op
           <td style="${tdStyle}">${calc.advAppSup > 0 ? "Advanced Applications Support" : `Included within ${showCCaaS ? "CCaaS" : "MSO"} CloudSupport`}</td>
           <td style="${tdStyle}text-align:right;">${calc.advAppSup > 0 ? `<span style="font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(calc.advAppSup)}</span>` : `<span style="display:inline-block;background:#e8f5f2;color:#007d6e;font-size:10px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;padding:2px 8px;border-radius:4px;border:1px solid #b2dfdb;">Included</span>`}</td>
         </tr>` : ""}
-        ${(d.customLines ?? []).map(l => `
+        ${(d.customLines ?? []).map(l => {
+          const effect = customLineDollar(l, preCustomAnnualFrom(calc));
+          const isDiscount = (l.kind ?? "charge") !== "charge";
+          return `
         <tr>
-          <td style="${tdStyle}"><div style="font-weight:700;color:#1e293b;">${escHtml(l.label)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">Custom line item</div></td>
+          <td style="${tdStyle}"><div style="font-weight:700;color:${isDiscount ? "#065f46" : "#1e293b"};">${escHtml(lineDisplayLabel(l))}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(lineNoteText(l))}</div></td>
           <td style="${tdStyle}">\u2014</td>
-          <td style="${tdStyle}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:#0d1b2e;">${fmtFull(l.price || 0)}</td>
-        </tr>`).join("")}
+          <td style="${tdStyle}text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:700;color:${isDiscount ? "#065f46" : "#0d1b2e"};">${fmtSigned(effect)}</td>
+        </tr>`;
+        }).join("")}
         <tr>
           <td style="${tdStyle}border-bottom:none;"><div style="font-weight:700;color:#007d6e;">MSO Add-On \u2014 ${escHtml(tierLabel)}</div><div style="font-size:11px;color:#94a3b8;margin-top:2px;">${escHtml(tierEngineer)} \u00b7 Annual, auto-renewing</div></td>
           <td style="${tdStyle}border-bottom:none;">Named primary + backup engineer</td>
@@ -1135,13 +1167,18 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
         <div class="sdli-price">${fmtFull(sigCcaasTotal)}/yr</div>
       </div>` : "";
 
+  const sigPreCustom = preCustomAnnualFrom(calc);
   const customLineItems = (d.customLines && d.customLines.length > 0)
-    ? d.customLines.map(l => `
-      <div class="sd-line-item">
-        <div class="sdli-desc"><div class="sdli-name">${escHtml(l.label)}</div><div class="sdli-note">Custom line item</div></div>
+    ? d.customLines.map(l => {
+      const effect = customLineDollar(l, sigPreCustom);
+      const isDiscount = (l.kind ?? "charge") !== "charge";
+      return `
+      <div class="sd-line-item"${isDiscount ? ` style="color:#065f46;"` : ""}>
+        <div class="sdli-desc"><div class="sdli-name">${escHtml(lineDisplayLabel(l))}</div><div class="sdli-note">${escHtml(lineNoteText(l))}</div></div>
         <div class="sdli-qty">\u2014</div>
-        <div class="sdli-price">${fmtFull(l.price || 0)}/yr</div>
-      </div>`).join("")
+        <div class="sdli-price">${fmtSigned(effect)}/yr</div>
+      </div>`;
+    }).join("")
     : "";
 
   const sigTierMeta = getMsoTier(d.msoTier || "");
