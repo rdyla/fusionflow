@@ -25,6 +25,7 @@ import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
+import WelcomeEmailCard from "../components/welcome/WelcomeEmailCard";
 import { useToast } from "../components/ui/ToastProvider";
 
 type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
@@ -906,6 +907,9 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {/* ── Welcome Email ─────────────────────────────────────────────── */}
+          <WelcomeEmailCard projectId={project.id} canSend={canEdit} />
 
           {/* ── Customer Contacts ─────────────────────────────────────────── */}
           <div className="ms-section-card">
