@@ -301,6 +301,25 @@ export async function uploadToSharePoint(
   return mapDriveItem(item);
 }
 
+export async function downloadSharePointFile(
+  env: GraphEnv,
+  fileWebUrl: string
+): Promise<{ name: string; mimeType: string; content: ArrayBuffer }> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, fileWebUrl);
+  const encodedPath = graphPath(segments);
+  const item = await graphGet<GraphDriveItem>(token, `/drives/${driveId}/root:/${encodedPath}`);
+  const downloadUrl = item["@microsoft.graph.downloadUrl"];
+  if (!downloadUrl) throw new Error(`No download URL for SharePoint file: ${fileWebUrl}`);
+  const res = await fetch(downloadUrl);
+  if (!res.ok) throw new Error(`SharePoint download failed (${res.status}) for ${fileWebUrl}`);
+  return {
+    name: item.name,
+    mimeType: item.file?.mimeType ?? "application/octet-stream",
+    content: await res.arrayBuffer(),
+  };
+}
+
 export async function deleteSharePointFile(
   env: GraphEnv,
   fileWebUrl: string

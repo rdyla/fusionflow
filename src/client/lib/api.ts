@@ -1711,4 +1711,57 @@ export const api = {
   toggleFeatureVote: (id: string) =>
     request<{ voted: boolean }>(`/features/${id}/vote`, { method: "POST" }),
 
+  // ── Project Welcome Email ────────────────────────────────────────────────
+  welcomeOptions: (projectId: string) =>
+    request<WelcomeOptions>(`/projects/${projectId}/welcome/options`),
+  welcomePreview: (projectId: string, draft: WelcomeDraft) =>
+    request<{ subject: string; html: string; recipientCount: number }>(
+      `/projects/${projectId}/welcome/preview`,
+      { method: "POST", body: JSON.stringify(draft) }
+    ),
+  welcomeTest: (projectId: string, draft: WelcomeDraft) =>
+    request<{ ok: boolean; sentTo: string }>(
+      `/projects/${projectId}/welcome/test`,
+      { method: "POST", body: JSON.stringify(draft) }
+    ),
+  welcomeSend: (projectId: string, draft: WelcomeDraft) =>
+    request<{ ok: boolean; sentTo: string[]; sentAt: string }>(
+      `/projects/${projectId}/welcome/send`,
+      { method: "POST", body: JSON.stringify(draft) }
+    ),
+};
+
+// ── Welcome Email types ────────────────────────────────────────────────────
+
+export type WelcomeOptions = {
+  project: {
+    id: string;
+    name: string;
+    customerName: string | null;
+    solutionType: string | null;
+    kickoffDate: string | null;
+    targetGoLiveDate: string | null;
+    kickoffMeetingUrl: string | null;
+    welcomeSentAt: string | null;
+  };
+  recipients: {
+    contacts: Array<{ id: string; name: string; email: string; jobTitle: string | null }>;
+    staff: Array<{ id: string; name: string; email: string; role: string }>;
+  };
+  sharepoint: {
+    folderUrl: string | null;
+    files: Array<{ name: string; webUrl: string; size: number | null; mimeType: string | null }>;
+  };
+};
+
+export type WelcomeDraft = {
+  pmCustomNote: string;
+  kickoffMeetingUrl?: string | null;
+  recipients: {
+    contactIds: string[];
+    staffUserIds: string[];
+    zoomRep?: { name: string; email: string } | null;
+    extraEmails: string[];
+  };
+  attachmentUrls: string[];
 };

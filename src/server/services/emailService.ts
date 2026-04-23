@@ -10,10 +10,17 @@ type Env = {
   KV?: KVNamespace;
 };
 
+type EmailAttachment = {
+  name: string;
+  contentType: string;
+  contentBytesBase64: string;
+};
+
 type EmailPayload = {
   to: string | string[];
   subject: string;
   html: string;
+  attachments?: EmailAttachment[];
 };
 
 const PF_DOMAIN = "@packetfusion.com";
@@ -60,6 +67,13 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
     return;
   }
 
+  const graphAttachments = (payload.attachments ?? []).map(a => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: a.name,
+    contentType: a.contentType,
+    contentBytes: a.contentBytesBase64,
+  }));
+
   const body = {
     message: {
       subject,
@@ -71,6 +85,7 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
         },
       },
       toRecipients: finalRecipients.map(r => ({ emailAddress: { address: r } })),
+      ...(graphAttachments.length > 0 ? { attachments: graphAttachments } : {}),
     },
     saveToSentItems: "true",
   };

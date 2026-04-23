@@ -443,3 +443,91 @@ export function highRiskAdded(data: {
 }): string {
   return pmRiskNotification({ ...data, severity: "high", status: "open", isNew: true });
 }
+
+// ── Project Welcome Package ────────────────────────────────────────────────────
+
+function initialsAvatar(name: string, size = 48): string {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#0891b2;color:#f0f6ff;font-size:${Math.floor(size * 0.4)}px;font-weight:700;line-height:${size}px;text-align:center;letter-spacing:0.02em;">${escapeHtml(initials || "?")}</div>`;
+}
+
+function teamMemberRow(m: { name: string; role: string; photoUrl: string | null; email: string | null }): string {
+  const photo = m.photoUrl
+    ? `<img src="${escapeHtml(m.photoUrl)}" alt="" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;">`
+    : initialsAvatar(m.name);
+  const email = m.email
+    ? `<div style="font-size:12px;color:rgba(240,246,255,0.45);margin-top:1px;"><a href="mailto:${escapeHtml(m.email)}" style="color:#00c8e0;text-decoration:none;">${escapeHtml(m.email)}</a></div>`
+    : "";
+  return `<tr>
+    <td style="padding:8px 14px 8px 0;vertical-align:middle;width:48px;">${photo}</td>
+    <td style="padding:8px 0;vertical-align:middle;">
+      <div style="font-size:13px;font-weight:600;color:#f0f6ff;">${escapeHtml(m.name)}</div>
+      <div style="font-size:12px;color:rgba(240,246,255,0.6);">${escapeHtml(m.role)}</div>
+      ${email}
+    </td>
+  </tr>`;
+}
+
+export function welcomePackage(data: {
+  projectName: string;
+  customerName: string | null;
+  pmName: string;
+  pmCustomNote: string;
+  portalUrl: string;
+  kickoffMeetingUrl: string | null;
+  kickoffDate: string | null;
+  targetGoLiveDate: string | null;
+  solution: string | null;
+  teamMembers: Array<{ name: string; role: string; photoUrl: string | null; email: string | null }>;
+}): string {
+  const projectName = escapeHtml(data.projectName);
+  const customerName = escapeHtml(data.customerName ?? "");
+  const pmName = escapeHtml(data.pmName);
+  const noteHtml = escapeHtml(data.pmCustomNote).replace(/\r?\n/g, "<br>");
+
+  const summaryRows = [
+    data.customerName ? detail("Customer", customerName) : "",
+    data.solution ? detail("Solution", escapeHtml(data.solution)) : "",
+    data.kickoffDate ? detail("Kickoff", escapeHtml(data.kickoffDate)) : "",
+    data.targetGoLiveDate ? detail("Target Go-Live", escapeHtml(data.targetGoLiveDate)) : "",
+    detail("Project Manager", pmName),
+  ].filter(Boolean).join("");
+
+  const kickoffBlock = data.kickoffMeetingUrl
+    ? `<div style="background:rgba(0,200,224,0.08);border:1px solid rgba(0,200,224,0.25);border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#00c8e0;margin-bottom:6px;">Kickoff Meeting</div>
+        <a href="${escapeHtml(data.kickoffMeetingUrl)}" style="color:#00c8e0;font-size:14px;text-decoration:none;word-break:break-all;">${escapeHtml(data.kickoffMeetingUrl)}</a>
+      </div>`
+    : "";
+
+  const teamBlock = data.teamMembers.length
+    ? `<div style="margin:22px 0 6px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Your Team</div>
+        <table style="border-collapse:collapse;width:100%;">
+          ${data.teamMembers.map(teamMemberRow).join("")}
+        </table>
+      </div>`
+    : "";
+
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f6ff;">Welcome to ${projectName}</h2>
+    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.6);line-height:1.6;">
+      A note from <strong style="color:rgba(240,246,255,0.9);">${pmName}</strong>, your Project Manager.
+    </p>
+    ${data.pmCustomNote.trim()
+      ? `<div style="background:rgba(255,255,255,0.04);border-left:3px solid #00c8e0;padding:14px 18px;margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.85);line-height:1.65;">${noteHtml}</div>`
+      : ""}
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Project Summary</div>
+      <table style="border-collapse:collapse;">${summaryRows}</table>
+    </div>
+    ${kickoffBlock}
+    ${teamBlock}
+    ${ctaButton("Open Project Portal", data.portalUrl)}
+  `, data.portalUrl);
+}
