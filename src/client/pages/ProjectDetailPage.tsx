@@ -808,9 +808,13 @@ export default function ProjectDetailPage() {
                 const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
                 if (!pmName && !pmEmail) return null;
                 const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
+                const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
                 return (
                   <span key="pm" title={`PM · ${pmEmail ?? ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
+                    {photo
+                      ? <img src={photo} alt={pmName ?? pmEmail ?? ""} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
+                    }
                     <span style={{ color: "#334155", fontWeight: 500 }}>{pmName ?? pmEmail}</span>
                     <span style={{ color: "#94a3b8", fontSize: 10 }}>PM</span>
                   </span>
