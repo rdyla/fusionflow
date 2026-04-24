@@ -9,6 +9,7 @@ import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
+import { solutionTypeLabel } from "../../shared/solutionTypes";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
 import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
@@ -38,13 +39,6 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
 };
 
 const STATUS_FLOW: SolutionStatus[] = ["draft", "assessment", "scope", "handoff"];
-
-const TYPE_LABELS: Record<SolutionType, string> = {
-  ucaas: "UCaaS",
-  ccaas: "CCaaS",
-  ci: "Conversation Intelligence",
-  va: "AI Virtual Agent",
-};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -338,7 +332,7 @@ export default function SolutionDetailPage() {
           )}
           <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
             <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-              {TYPE_LABELS[solution.solution_type]}
+              {solutionTypeLabel(solution.solution_type)}
             </span>
             <span className="ms-badge" style={{ background: `${STATUS_COLOR[solution.status]}18`, color: STATUS_COLOR[solution.status], border: `1px solid ${STATUS_COLOR[solution.status]}40` }}>
               {STATUS_LABELS[solution.status]}
@@ -521,7 +515,7 @@ export default function SolutionDetailPage() {
                     </optgroup>
                   </select>
                 ) : (
-                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type] ?? solution.solution_type}</div>
+                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solutionTypeLabel(solution.solution_type)}</div>
                 )}
               </label>
             </div>
@@ -928,7 +922,7 @@ export default function SolutionDetailPage() {
               solution.solution_type === "va" ? virtualAgentSurveyJson :
               solution.solution_type === "ucaas" ? ucaasSurveyJson :
               ciSurveyJson;
-            const solutionTypeLabel = TYPE_LABELS[solution.solution_type as keyof typeof TYPE_LABELS] ?? solution.solution_type;
+            const solutionTypeDisplayLabel = solutionTypeLabel(solution.solution_type);
             return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
                 key={needsAssessment?.id ?? "new"}
@@ -944,7 +938,7 @@ export default function SolutionDetailPage() {
               <NeedsAssessmentSOR
                 assessment={needsAssessment}
                 customerName={solution.customer_name}
-                solutionType={solutionTypeLabel}
+                solutionType={solutionTypeDisplayLabel}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
                 onBack={canEditNA ? () => setNaView("wizard") : () => {}}

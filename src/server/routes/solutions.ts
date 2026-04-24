@@ -8,7 +8,7 @@ import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
-import { parseSolutionTypes, serializeSolutionTypes } from "../../shared/solutionTypes";
+import { parseSolutionTypes, serializeSolutionTypes, solutionTypeLabel } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -26,13 +26,6 @@ const SOLUTION_SELECT = `
   LEFT JOIN users cu2 ON cu2.id = cust.pf_sa_user_id
   LEFT JOIN users cu3 ON cu3.id = cust.pf_csm_user_id
 `;
-
-const SOLUTION_TYPE_LABELS: Record<string, string> = {
-  ucaas: "UCaaS",
-  ccaas: "CCaaS",
-  ci: "Conversation Intelligence",
-  va: "AI Virtual Agent",
-};
 
 const JOURNEY_LABELS: Record<string, string> = {
   zoom_ucaas: "UCaaS", zoom_ccaas: "CCaaS", zoom_rooms: "Zoom Rooms",
@@ -142,7 +135,7 @@ app.post("/", async (c) => {
 
   const name = journeys.length > 0
     ? nameFromJourneys(customer_name, journeys, vendor)
-    : `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
+    : `${customer_name} — ${solutionTypeLabel(solution_type)}`;
   const id = crypto.randomUUID();
 
   // Find or create customer record when a CRM account is selected

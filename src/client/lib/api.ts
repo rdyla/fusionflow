@@ -48,7 +48,10 @@ export type User = {
   cs_permission?: "none" | "user" | "power_user";
 };
 
-export type SolutionType = "ucaas" | "ccaas" | "ci" | "va" | (string & {});
+// Re-exported from the shared canonical source so Solution.solution_type
+// and every other call site lines up with the same enum used across the app.
+import type { SolutionType } from "../../shared/solutionTypes";
+export type { SolutionType };
 
 export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
 export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
