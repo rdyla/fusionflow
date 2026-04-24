@@ -1,3 +1,6 @@
+import { WELCOME_SECTION_META, type WelcomeSectionId } from "../../shared/welcomeSections";
+import type { SolutionType } from "../../shared/solutionTypes";
+
 const APP_NAME = "CloudConnect by Packet Fusion";
 
 function escapeHtml(s: string | null | undefined): string {
@@ -476,11 +479,47 @@ function teamMemberRow(m: { name: string; role: string; photoUrl: string | null;
 type WelcomeTeamMember = { name: string; role: string; photoUrl: string | null; email: string | null };
 type WelcomeTeamSection = { label: string; members: WelcomeTeamMember[] };
 
-type WelcomeSections = {
-  adminAccess: boolean;
-  porting: boolean;
-  timeline: boolean;
-};
+type WelcomeSectionMap = Partial<Record<WelcomeSectionId, boolean>>;
+
+/**
+ * Render the HTML body for a single welcome-email section. Adding a new section
+ * ID to `WELCOME_SECTION_META` requires a matching case here.
+ *
+ * Returning an empty string suppresses the section (e.g., adminAccess needs a
+ * distributionListEmail to be meaningful).
+ */
+function renderWelcomeSection(
+  id: WelcomeSectionId,
+  ctx: { distributionListEmail: string | null },
+  psCard: (heading: string, innerHtml: string) => string
+): string {
+  const meta = WELCOME_SECTION_META.find((m) => m.id === id);
+  if (!meta) return "";
+  switch (id) {
+    case "adminAccess":
+      if (!ctx.distributionListEmail) return "";
+      return psCard(
+        meta.label,
+        `To configure and support your platform, please grant administrator access in your cloud portal to
+         <a href="mailto:${escapeHtml(ctx.distributionListEmail)}" style="color:#7de3f3;text-decoration:underline;">${escapeHtml(ctx.distributionListEmail)}</a>.
+         This covers the implementation and ongoing support after your transition. We'll walk through the steps with your Implementation Engineer during the first technical meeting.`
+      );
+    case "porting":
+      return psCard(
+        meta.label,
+        `<ul style="margin:0;padding-left:18px;">
+          <li style="margin:0 0 8px;">Request a <strong>Customer Service Record (CSR)</strong> from your voice carrier(s). Carriers typically return it within a couple of business days — it lists every number and service on the account.</li>
+          <li style="margin:0 0 8px;">Send us a copy of your most recent phone bill(s) and identify the <strong>authorized contact</strong> on the account.</li>
+          <li style="margin:0;">Send us the list of numbers to port (analog, fax, back-office — anything that rings). Excel, CSV, or plain text works.</li>
+        </ul>`
+      );
+    case "timeline":
+      return psCard(
+        meta.label,
+        `Please be prepared to discuss target go-live date(s) and production timing at kickoff so we can plan resourcing accordingly.`
+      );
+  }
+}
 
 export function welcomePackage(data: {
   projectName: string;
@@ -493,9 +532,10 @@ export function welcomePackage(data: {
   kickoffDate: string | null;
   targetGoLiveDate: string | null;
   solution: string | null;
+  solutionTypes: readonly SolutionType[];
   teamSections: WelcomeTeamSection[];
   distributionListEmail: string | null;
-  sections: WelcomeSections;
+  sections: WelcomeSectionMap;
 }): string {
   const projectName = escapeHtml(data.projectName);
   const customerName = escapeHtml(data.customerName ?? "");
@@ -558,32 +598,30 @@ export function welcomePackage(data: {
       <div style="font-size:13.5px;color:#e8eef7;line-height:1.6;">${innerHtml}</div>
     </div>`;
 
-  const adminAccessBlock = data.sections.adminAccess && data.distributionListEmail
-    ? psCard(
-        "Admin Access for Packet Fusion",
-        `To configure and support your platform, please grant administrator access in your cloud portal to
-         <a href="mailto:${escapeHtml(data.distributionListEmail)}" style="color:#7de3f3;text-decoration:underline;">${escapeHtml(data.distributionListEmail)}</a>.
-         This covers the implementation and ongoing support after your transition. We'll walk through the steps with your Implementation Engineer during the first technical meeting.`
-      )
-    : "";
+  // Walk the catalog, render enabled sections applicable to this project's solution types.
+  // Kickoff block sits inline between Admin Access and Porting (historical layout);
+  // keep that placement by inserting it after the adminAccess block if present.
+  const sectionsHtml = WELCOME_SECTION_META
+    .filter((meta) =>
+      (meta.appliesTo === "all" || meta.appliesTo.some((t) => data.solutionTypes.includes(t))) &&
+      data.sections[meta.id] === true
+    )
+    .map((meta) => {
+      const rendered = renderWelcomeSection(meta.id, { distributionListEmail: data.distributionListEmail }, psCard);
+      // Kickoff block has always rendered immediately after adminAccess in the prior layout —
+      // preserve that by splicing it in after adminAccess only.
+      if (meta.id === "adminAccess" && rendered) {
+        return `${rendered}${kickoffBlock}`;
+      }
+      return rendered;
+    })
+    .filter(Boolean)
+    .join("");
 
-  const portingBlock = data.sections.porting
-    ? psCard(
-        "Porting Information",
-        `<ul style="margin:0;padding-left:18px;">
-          <li style="margin:0 0 8px;">Request a <strong>Customer Service Record (CSR)</strong> from your voice carrier(s). Carriers typically return it within a couple of business days — it lists every number and service on the account.</li>
-          <li style="margin:0 0 8px;">Send us a copy of your most recent phone bill(s) and identify the <strong>authorized contact</strong> on the account.</li>
-          <li style="margin:0;">Send us the list of numbers to port (analog, fax, back-office — anything that rings). Excel, CSV, or plain text works.</li>
-        </ul>`
-      )
-    : "";
-
-  const timelineBlock = data.sections.timeline
-    ? psCard(
-        "Timeline",
-        `Please be prepared to discuss target go-live date(s) and production timing at kickoff so we can plan resourcing accordingly.`
-      )
-    : "";
+  // If adminAccess is filtered out (not enabled, suppressed, or not applicable), the kickoff
+  // block still needs a placement — render it between the summary and the first section.
+  const adminAccessRendered = data.sections.adminAccess === true && data.distributionListEmail;
+  const kickoffBlockFallback = !adminAccessRendered ? kickoffBlock : "";
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f6ff;">Welcome to ${projectName}</h2>
@@ -597,10 +635,8 @@ export function welcomePackage(data: {
       <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Project Summary</div>
       <table style="border-collapse:collapse;">${summaryRows}</table>
     </div>
-    ${adminAccessBlock}
-    ${kickoffBlock}
-    ${portingBlock}
-    ${timelineBlock}
+    ${kickoffBlockFallback}
+    ${sectionsHtml}
     ${teamBlock}
     ${ctaButton("Open Project Portal", data.portalUrl)}
   `, data.portalUrl);

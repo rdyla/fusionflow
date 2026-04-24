@@ -1764,11 +1764,11 @@ export type WelcomeDraft = {
   kickoffMeetingUrl?: string | null;
   kickoffWhen?: string | null;
   distributionListEmail?: string | null;
-  sections: {
-    adminAccess: boolean;
-    porting: boolean;
-    timeline: boolean;
-  };
+  /**
+   * Map of section-id → enabled. Server walks the shared welcomeSections
+   * catalog and fills in defaults for any applicable keys this payload omits.
+   */
+  sections: Record<string, boolean>;
   recipients: {
     contactIds: string[];
     staffUserIds: string[];

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type WelcomeDraft, type WelcomeOptions } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+import { sectionsForTypes, type WelcomeSectionId } from "../../../shared/welcomeSections";
+import { parseSolutionTypes } from "../../../shared/solutionTypes";
 
 type Props = {
   projectId: string;
@@ -24,9 +26,21 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
   const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
   const [distributionListEmail, setDistributionListEmail] = useState(options.project.suggestedDistributionListEmail ?? "");
-  const [sectionAdminAccess, setSectionAdminAccess] = useState(true);
-  const [sectionPorting, setSectionPorting] = useState(true);
-  const [sectionTimeline, setSectionTimeline] = useState(true);
+
+  // Sections applicable to this project's solution types — catalog-driven.
+  // Initial state: each applicable section toggled to its `defaultEnabled`.
+  const projectSolutionTypes = useMemo(
+    () => parseSolutionTypes(options.project.solutionTypes ?? []),
+    [options.project.solutionTypes]
+  );
+  const applicableSections = useMemo(() => sectionsForTypes(projectSolutionTypes), [projectSolutionTypes]);
+  const [sectionEnabled, setSectionEnabled] = useState<Record<string, boolean>>(() => {
+    const out: Record<string, boolean> = {};
+    for (const meta of applicableSections) out[meta.id] = meta.defaultEnabled;
+    return out;
+  });
+  const isSectionOn = (id: WelcomeSectionId) => sectionEnabled[id] === true;
+  const toggleSection = (id: WelcomeSectionId) => setSectionEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [staffUserIds, setStaffUserIds] = useState<Set<string>>(new Set());
   const [includeZoomRep, setIncludeZoomRep] = useState(false);
@@ -66,11 +80,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
     kickoffMeetingUrl: kickoffMeetingUrl.trim() || null,
     kickoffWhen: kickoffWhen.trim() || null,
     distributionListEmail: distributionListEmail.trim() || null,
-    sections: {
-      adminAccess: sectionAdminAccess,
-      porting: sectionPorting,
-      timeline: sectionTimeline,
-    },
+    sections: sectionEnabled,
     recipients: {
       contactIds: Array.from(contactIds),
       staffUserIds: Array.from(staffUserIds),
@@ -216,20 +226,19 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
               <textarea className="ms-input" rows={5} value={pmCustomNote} onChange={(e) => setPmCustomNote(e.target.value)} placeholder="Add a personal note to kick things off. Line breaks preserved." style={{ resize: "vertical", fontFamily: "inherit" }} />
             </div>
 
-            {/* PS boilerplate sections — togglable; admin access exposes the DL address */}
+            {/* PS boilerplate sections — catalog-driven; filtered to the project's solution types. */}
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8 }}>Standard Sections</div>
-              {[
-                { label: "Admin Access for Packet Fusion", checked: sectionAdminAccess, onChange: () => setSectionAdminAccess((v) => !v) },
-                { label: "Porting Information", checked: sectionPorting, onChange: () => setSectionPorting((v) => !v) },
-                { label: "Timeline", checked: sectionTimeline, onChange: () => setSectionTimeline((v) => !v) },
-              ].map((s) => (
-                <label key={s.label} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", cursor: "pointer", borderRadius: 4, fontSize: 13, color: "#1e293b" }}>
-                  <input type="checkbox" checked={s.checked} onChange={s.onChange} />
-                  {s.label}
+              {applicableSections.length === 0 && (
+                <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No standard sections defined for this project's solution types.</div>
+              )}
+              {applicableSections.map((meta) => (
+                <label key={meta.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 8px", cursor: "pointer", borderRadius: 4, fontSize: 13, color: "#1e293b" }}>
+                  <input type="checkbox" checked={isSectionOn(meta.id)} onChange={() => toggleSection(meta.id)} />
+                  {meta.label}
                 </label>
               ))}
-              {sectionAdminAccess && (
+              {isSectionOn("adminAccess") && (
                 <div style={{ marginTop: 10, paddingLeft: 24 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>Distribution list address</div>
                   <input className="ms-input" value={distributionListEmail} onChange={(e) => setDistributionListEmail(e.target.value)}
