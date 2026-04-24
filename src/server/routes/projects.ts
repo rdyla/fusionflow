@@ -188,6 +188,7 @@ const updateProjectSchema = z.object({
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
+  solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   asana_project_id: z.string().nullable().optional(),
   managed_in_asana: z.number().int().min(0).max(1).optional(),
   crm_case_id: z.string().nullable().optional(),
@@ -238,10 +239,14 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
   }
 
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
+    if (value === undefined) continue;
+    if (key === "solution_types" && Array.isArray(value)) {
       fields.push(`${key} = ?`);
-      values.push(value);
+      values.push(serializeSolutionTypes(value as typeof SOLUTION_TYPES[number][]));
+      continue;
     }
+    fields.push(`${key} = ?`);
+    values.push(value);
   }
 
   // When health is explicitly set by a PM, record it as a manual override
