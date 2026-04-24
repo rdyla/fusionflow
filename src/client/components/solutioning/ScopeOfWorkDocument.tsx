@@ -221,33 +221,29 @@ function buildSowHtml(
   }
 
   // ── Section 3: Work Breakdown ─────────────────────────────────────────────
+  // Customer-facing SOW: show the computed hour counts only. No ranges, no
+  // complexity multipliers, no confidence bands, no risk flags — those are
+  // internal planning aids and stay on the Labor Estimate tab.
   const wbsRows = WORKSTREAM_ORDER
     .filter((ws) => laborEstimate ? (laborEstimate.final_hours[ws] ?? 0) > 0 : true)
     .map((ws, i) => {
       const hours = laborEstimate ? (laborEstimate.final_hours[ws] ?? 0) : null;
-      const low   = laborEstimate ? Math.round((laborEstimate.final_hours[ws] ?? 0) * 0.85) : null;
-      const high  = laborEstimate ? Math.round((laborEstimate.final_hours[ws] ?? 0) * 1.15) : null;
       const deliverable = WORKSTREAM_DELIVERABLES[ws] ?? "";
       const rowClass = i % 2 === 0 ? "even" : "odd";
       return `<tr class="${rowClass}">
         <td class="ws-name">${esc(WORKSTREAM_LABELS[ws] ?? ws)}</td>
         <td class="ws-deliverable">${esc(deliverable)}</td>
-        <td class="ws-hours">${hours !== null ? `${low}–${high}h` : "TBD"}</td>
+        <td class="ws-hours">${hours !== null ? `${hours}h` : "TBD"}</td>
       </tr>`;
     }).join("");
 
-  const totalLow      = laborEstimate?.total_low ?? null;
   const totalExpected = laborEstimate?.total_expected ?? null;
-  const totalHigh     = laborEstimate?.total_high ?? null;
-  const complexity    = laborEstimate?.complexity;
-  const confidence    = laborEstimate?.confidence_band ?? null;
-  const riskFlags     = laborEstimate?.risk_flags ?? [];
 
   const wbsFooter = totalExpected
     ? `<tr class="total-row">
         <td><strong>Total Estimated Effort</strong></td>
         <td></td>
-        <td class="ws-hours"><strong>${totalLow}–${totalHigh}h</strong><br/><span style="font-size:8pt;color:#64748b">Expected: ${totalExpected}h</span></td>
+        <td class="ws-hours"><strong>${totalExpected}h</strong></td>
       </tr>`
     : "";
 
@@ -256,26 +252,19 @@ function buildSowHtml(
         <thead><tr>
           <th class="ws-name">Workstream</th>
           <th class="ws-deliverable">Key Deliverables</th>
-          <th class="ws-hours">Effort Range</th>
+          <th class="ws-hours">Hours</th>
         </tr></thead>
         <tbody>${wbsRows}${wbsFooter}</tbody>
       </table>`
     : `<p class="na-note">A labor estimate has not yet been generated for this solution.</p>`;
 
   // ── Section 4: Investment ─────────────────────────────────────────────────
-  const investmentRows = [
-    totalLow && totalHigh ? dataRow("Estimated Effort Range", `${totalLow} – ${totalHigh} hours`) : "",
-    totalExpected ? dataRow("Expected Effort", `${totalExpected} hours`) : "",
-    complexity ? dataRow("Complexity", `${complexity.band.charAt(0).toUpperCase() + complexity.band.slice(1)} (${complexity.score}/100 · ${complexity.multiplier}× multiplier)`) : "",
-    confidence ? dataRow("Estimate Confidence", confidence.charAt(0).toUpperCase() + confidence.slice(1)) : "",
-  ].filter(Boolean).join("");
-
-  const flagsHtml = riskFlags.length > 0
-    ? `<div class="risk-flags"><strong>Estimate Risk Flags:</strong><ul>${riskFlags.map((f) => `<li>${esc(f)}</li>`).join("")}</ul></div>`
+  const investmentRows = totalExpected
+    ? dataRow("Expected Effort", `${totalExpected} hours`)
     : "";
 
   const investmentHtml = investmentRows
-    ? `<table><tbody>${investmentRows}</tbody></table>${flagsHtml}`
+    ? `<table><tbody>${investmentRows}</tbody></table>`
     : `<p class="na-note">Investment details will be available once a labor estimate is generated.</p>`;
 
   // ── Section 5: Assumptions & Customer Responsibilities ───────────────────
@@ -577,26 +566,23 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ textAlign: "left", padding: "8px 12px", color: "#64748b", fontWeight: 600, borderBottom: "2px solid #e2e8f0" }}>Workstream</th>
-                  <th style={{ textAlign: "right", padding: "8px 12px", color: "#64748b", fontWeight: 600, borderBottom: "2px solid #e2e8f0" }}>Hours (Low–High)</th>
+                  <th style={{ textAlign: "right", padding: "8px 12px", color: "#64748b", fontWeight: 600, borderBottom: "2px solid #e2e8f0" }}>Hours</th>
                 </tr>
               </thead>
               <tbody>
                 {WORKSTREAM_ORDER.filter((ws) => (laborEstimate.final_hours[ws] ?? 0) > 0).map((ws) => {
                   const h = laborEstimate.final_hours[ws] ?? 0;
-                  const low = Math.round(h * 0.85);
-                  const high = Math.round(h * 1.15);
                   return (
                     <tr key={ws} style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={{ padding: "8px 12px", color: "#334155" }}>{WORKSTREAM_LABELS[ws]}</td>
-                      <td style={{ padding: "8px 12px", color: "#0b9aad", fontWeight: 600, textAlign: "right" }}>{low}–{high}h</td>
+                      <td style={{ padding: "8px 12px", color: "#0b9aad", fontWeight: 600, textAlign: "right" }}>{h}h</td>
                     </tr>
                   );
                 })}
                 <tr style={{ borderTop: "2px solid #0b9aad", background: "#f0f9ff" }}>
                   <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f" }}>Total Estimated Effort</td>
                   <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", textAlign: "right" }}>
-                    {laborEstimate.total_low}–{laborEstimate.total_high}h
-                    <span style={{ fontWeight: 400, color: "#64748b", fontSize: 12, marginLeft: 6 }}>(Expected: {laborEstimate.total_expected}h)</span>
+                    {laborEstimate.total_expected}h
                   </td>
                 </tr>
               </tbody>
