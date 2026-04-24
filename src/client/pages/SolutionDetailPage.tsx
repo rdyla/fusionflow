@@ -99,8 +99,10 @@ export default function SolutionDetailPage() {
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
-  // Needs Assessment
-  const [needsAssessment, setNeedsAssessment] = useState<NeedsAssessment | null>(null);
+  // Needs Assessments — one per (solution_id, solution_type). "other" is reserved
+  // for the Other Discovery flow when a solution has non-canonical journeys only.
+  const [needsAssessments, setNeedsAssessments] = useState<Record<string, NeedsAssessment>>({});
+  const [activeAssessmentType, setActiveAssessmentType] = useState<string>("");
   const [naView, setNaView] = useState<"sor" | "wizard">("sor");
   const [odView, setOdView] = useState<"sor" | "wizard">("sor");
 
@@ -149,8 +151,12 @@ export default function SolutionDetailPage() {
     setHandoffNotes(s.handoff_notes ?? "");
     try { setSowData(s.sow_data ? JSON.parse(s.sow_data) as SowData : null); } catch { setSowData(null); }
 
-    // Load needs assessment for all solution types
-    api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
+    // Load all needs assessments for this solution (one per type, including "other")
+    api.needsAssessments(id).then((list) => {
+      const map: Record<string, NeedsAssessment> = {};
+      for (const na of list) map[na.solution_type] = na;
+      setNeedsAssessments(map);
+    }).catch(() => {});
 
     // Load labor estimate (all solution types)
     api.laborEstimate(id).then(setLaborEstimate).catch(() => {});
@@ -242,6 +248,15 @@ export default function SolutionDetailPage() {
   const hasUcCc = solutionJourneys.some(j => UC_CC_PREFIXES.some(p => j.startsWith(p)))
     || solution.solution_types.some((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
   const hasOther = nonUcJourneys.length > 0;
+
+  // Per-type NA plumbing: the Assessment tab sub-tab picks which type we're editing.
+  // Default to the first canonical solution type, or fall back to a previously-saved
+  // type if solution_types is empty but a NA exists (legacy / edge cases).
+  const canonicalNaTypes = solution.solution_types.filter((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
+  const effectiveActiveType = activeAssessmentType || canonicalNaTypes[0] || Object.keys(needsAssessments)[0] || "";
+  const needsAssessment = needsAssessments[effectiveActiveType] ?? null;
+  // "other" (non-canonical journeys) uses its own NA slot.
+  const otherNa = needsAssessments["other"] ?? null;
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview",    label: "Overview"         },
@@ -903,27 +918,31 @@ export default function SolutionDetailPage() {
       {tab === "assessment" && (
         <div>
           {(() => {
-            // Non-UC/CC only → show other journeys survey
+            // Non-UC/CC only → show other journeys survey (stored with solution_type = "other")
             if (hasOther && !hasUcCc) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const surveyJson = buildOtherSurvey(solutionJourneys) as any;
               const initialAnswers = {
-                ...(needsAssessment?.answers as Record<string, unknown> | undefined ?? {}),
+                ...(otherNa?.answers as Record<string, unknown> | undefined ?? {}),
                 doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
               };
-              return (odView === "wizard" || needsAssessment === null) && odView !== "sor" ? (
+              return (odView === "wizard" || otherNa === null) && odView !== "sor" ? (
                 <NeedsAssessmentWizard
-                  key={needsAssessment?.id ?? "new-other"}
+                  key={otherNa?.id ?? "new-other"}
                   solutionId={solution.id}
+                  solutionType="other"
                   customerName={solution.customer_name}
                   surveyJson={surveyJson}
                   initialAnswers={initialAnswers}
-                  onComplete={(na) => { setNeedsAssessment(na); setOdView("sor"); }}
+                  onComplete={(na) => {
+                    setNeedsAssessments((prev) => ({ ...prev, other: na }));
+                    setOdView("sor");
+                  }}
                   onCancel={() => setOdView("sor")}
                 />
-              ) : needsAssessment !== null && odView === "sor" ? (
+              ) : otherNa !== null && odView === "sor" ? (
                 <NeedsAssessmentSOR
-                  assessment={needsAssessment}
+                  assessment={otherNa}
                   customerName={solution.customer_name}
                   solutionType={solution.name}
                   surveyJson={surveyJson}
@@ -931,8 +950,12 @@ export default function SolutionDetailPage() {
                   canDelete={!isClient}
                   onDelete={async () => {
                     try {
-                      await api.deleteNeedsAssessment(solution.id);
-                      setNeedsAssessment(null);
+                      await api.deleteNeedsAssessment(solution.id, "other");
+                      setNeedsAssessments((prev) => {
+                        const next = { ...prev };
+                        delete next.other;
+                        return next;
+                      });
                       setOdView("sor");
                     } catch {
                       showToast("Failed to delete assessment", "error");
@@ -953,24 +976,59 @@ export default function SolutionDetailPage() {
               );
             }
 
-            // UC/CC (or legacy) → existing survey. PR #7 routes off the first applicable type;
-            // PR #8 will expand this to per-type NA wizards (one survey per solution_type).
-            const primaryType = solution.solution_types[0] ?? "";
+            // UC/CC → per-type NA. Each canonical type in solution.solution_types
+            // gets its own NA record. When a solution has more than one canonical
+            // type, sub-tabs at the top let the user pick which one they're
+            // working on.
+            const activeType = effectiveActiveType;
             const surveyJson =
-              primaryType === "ccaas" ? ccaasSurveyJson :
-              primaryType === "va" ? virtualAgentSurveyJson :
-              primaryType === "ucaas" ? ucaasSurveyJson :
+              activeType === "ccaas" ? ccaasSurveyJson :
+              activeType === "va" ? virtualAgentSurveyJson :
+              activeType === "ucaas" ? ucaasSurveyJson :
               ciSurveyJson;
-            const solutionTypeDisplayLabel = solutionTypeLabel(primaryType);
-            return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
+            const solutionTypeDisplayLabel = solutionTypeLabel(activeType);
+
+            const subTabs = canonicalNaTypes.length > 1 ? (
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+                {canonicalNaTypes.map((t) => {
+                  const selected = t === activeType;
+                  const hasNa = needsAssessments[t] !== undefined;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className="ms-badge"
+                      onClick={() => { setActiveAssessmentType(t); setNaView(hasNa ? "sor" : "wizard"); }}
+                      style={{
+                        cursor: "pointer",
+                        background: selected ? "rgba(99,193,234,0.18)" : "rgba(99,193,234,0.06)",
+                        color: selected ? "#0891b2" : "#64748b",
+                        border: `1px solid ${selected ? "rgba(99,193,234,0.4)" : "rgba(99,193,234,0.15)"}`,
+                        padding: "6px 12px",
+                        fontWeight: selected ? 600 : 500,
+                      }}
+                    >
+                      {solutionTypeLabel(t)}
+                      {hasNa && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null;
+
+            const body = (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
-                key={needsAssessment?.id ?? "new"}
+                key={`${activeType}-${needsAssessment?.id ?? "new"}`}
                 solutionId={solution.id}
+                solutionType={activeType}
                 customerName={solution.customer_name}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
                 initialAnswers={needsAssessment?.answers as Record<string, unknown> | undefined}
-                onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
+                onComplete={(na) => {
+                  setNeedsAssessments((prev) => ({ ...prev, [na.solution_type]: na }));
+                  setNaView("sor");
+                }}
                 onCancel={() => setNaView("sor")}
               />
             ) : needsAssessment !== null && naView === "sor" ? (
@@ -984,8 +1042,12 @@ export default function SolutionDetailPage() {
                 canDelete={!isClient}
                 onDelete={async () => {
                   try {
-                    await api.deleteNeedsAssessment(solution.id);
-                    setNeedsAssessment(null);
+                    await api.deleteNeedsAssessment(solution.id, activeType);
+                    setNeedsAssessments((prev) => {
+                      const next = { ...prev };
+                      delete next[activeType];
+                      return next;
+                    });
                     setNaView("sor");
                   } catch {
                     showToast("Failed to delete assessment", "error");
@@ -995,7 +1057,9 @@ export default function SolutionDetailPage() {
             ) : (
               <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
                 <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
-                  No needs assessment has been completed for this solution yet.
+                  {canonicalNaTypes.length > 1
+                    ? `No needs assessment has been completed for ${solutionTypeDisplayLabel} yet.`
+                    : "No needs assessment has been completed for this solution yet."}
                 </p>
                 {canEditNA && (
                   <button className="ms-btn-primary" onClick={() => setNaView("wizard")}>
@@ -1003,6 +1067,13 @@ export default function SolutionDetailPage() {
                   </button>
                 )}
               </div>
+            );
+
+            return (
+              <>
+                {subTabs}
+                {body}
+              </>
             );
           })()}
         </div>
@@ -1015,22 +1086,26 @@ export default function SolutionDetailPage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const surveyJson = buildOtherSurvey(solutionJourneys) as any;
             const initialAnswers = {
-              ...(needsAssessment?.answers as Record<string, unknown> | undefined ?? {}),
+              ...(otherNa?.answers as Record<string, unknown> | undefined ?? {}),
               doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
             };
-            return (odView === "wizard" || needsAssessment === null) && odView !== "sor" ? (
+            return (odView === "wizard" || otherNa === null) && odView !== "sor" ? (
               <NeedsAssessmentWizard
-                key={(needsAssessment?.id ?? "new-other") + "-od"}
+                key={(otherNa?.id ?? "new-other") + "-od"}
                 solutionId={solution.id}
+                solutionType="other"
                 customerName={solution.customer_name}
                 surveyJson={surveyJson}
                 initialAnswers={initialAnswers}
-                onComplete={(na) => { setNeedsAssessment(na); setOdView("sor"); }}
+                onComplete={(na) => {
+                  setNeedsAssessments((prev) => ({ ...prev, other: na }));
+                  setOdView("sor");
+                }}
                 onCancel={() => setOdView("sor")}
               />
-            ) : needsAssessment !== null && odView === "sor" ? (
+            ) : otherNa !== null && odView === "sor" ? (
               <NeedsAssessmentSOR
-                assessment={needsAssessment}
+                assessment={otherNa}
                 customerName={solution.customer_name}
                 solutionType={solution.name}
                 surveyJson={surveyJson}

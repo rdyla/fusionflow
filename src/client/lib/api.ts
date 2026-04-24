@@ -805,6 +805,7 @@ export type RoadmapItem = {
 export type NeedsAssessment = {
   id: string;
   solution_id: string;
+  solution_type: string;
   survey_id: string;
   answers: Record<string, unknown>;
   readiness_score: number | null;
@@ -1600,16 +1601,18 @@ export const api = {
   resetLaborConfig: (category: string) =>
     request<{ ok: boolean }>(`/admin/labor-config/${category}`, { method: "DELETE" }),
 
-  // ── Needs Assessments ────────────────────────────────────────────────────────
-  needsAssessment: (solutionId: string) =>
-    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`),
-  upsertNeedsAssessment: (solutionId: string, body: { answers: Record<string, unknown> }) =>
-    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`, {
+  // ── Needs Assessments (one per (solution, solution_type) pair) ─────────────
+  needsAssessments: (solutionId: string) =>
+    request<NeedsAssessment[]>(`/solutions/${solutionId}/needs-assessments`),
+  needsAssessment: (solutionId: string, solutionType: string) =>
+    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessments/${solutionType}`),
+  upsertNeedsAssessment: (solutionId: string, solutionType: string, body: { answers: Record<string, unknown> }) =>
+    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessments/${solutionType}`, {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  deleteNeedsAssessment: (solutionId: string) =>
-    request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessment`, { method: "DELETE" }),
+  deleteNeedsAssessment: (solutionId: string, solutionType: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessments/${solutionType}`, { method: "DELETE" }),
 
   // ── Templates ────────────────────────────────────────────────────────────────
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm

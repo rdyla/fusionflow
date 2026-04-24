@@ -59,6 +59,7 @@ function shouldShow(field: FieldDef, answers: Record<string, unknown>): boolean 
 
 type Props = {
   solutionId: string;
+  solutionType: string;
   customerName: string;
   surveyJson: { sections: SectionDef[]; [key: string]: unknown };
   initialAnswers?: Record<string, unknown>;
@@ -358,7 +359,7 @@ function FieldInput({ field, answers, onChange, allSections }: FieldProps) {
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
-export default function NeedsAssessmentWizard({ solutionId, customerName, surveyJson, initialAnswers, onComplete, onCancel }: Props) {
+export default function NeedsAssessmentWizard({ solutionId, solutionType, customerName, surveyJson, initialAnswers, onComplete, onCancel }: Props) {
   const AUTO_FILLED_FIELDS = new Set(["customer_name", "assessment_date"]);
 
   const SECTIONS = useMemo(
@@ -419,7 +420,7 @@ export default function NeedsAssessmentWizard({ solutionId, customerName, survey
         customer_name: customerName,
         assessment_date: new Date().toISOString().slice(0, 10),
       };
-      const result = await api.upsertNeedsAssessment(solutionId, { answers: merged });
+      const result = await api.upsertNeedsAssessment(solutionId, solutionType, { answers: merged });
       onComplete(result);
     } catch {
       setErrors(["Failed to save assessment. Please try again."]);

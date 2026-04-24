@@ -447,14 +447,15 @@ app.put("/:id/labor-estimate", async (c) => {
 
   const { overrides } = parsed.data;
 
-  // Load needs assessment answers (empty object if none)
+  // Labor currently drives off the first applicable solution_type. Its NA answers are
+  // looked up by matching (solution_id, solution_type). PR #9 will rebuild this as
+  // per-type estimates summed into a solution total.
+  const primarySolutionType = parseSolutionTypes(solution.solution_types)[0] ?? "";
   const naRow = await c.env.DB.prepare(
-    "SELECT answers FROM needs_assessments WHERE solution_id = ? LIMIT 1"
-  ).bind(solutionId).first() as { answers: string } | null;
+    "SELECT answers FROM needs_assessments WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, primarySolutionType).first() as { answers: string } | null;
   const answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
 
-  // PR #7: labor routes off the first type; PR #9 will rebuild this as per-type estimates summed into a solution total.
-  const primarySolutionType = parseSolutionTypes(solution.solution_types)[0] ?? "";
   const category = solutionTypeToCategory(primarySolutionType);
 
   // Load base hours config override from DB if present
