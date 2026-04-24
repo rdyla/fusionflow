@@ -154,7 +154,7 @@ export type Project = {
   name: string;
   customer_name: string | null;
   vendor: string | null;
-  solution_type: string | null;
+  solution_types: string[];
   status: string | null;
   health: string | null;
   health_override: string | null;
@@ -989,7 +989,7 @@ export const api = {
     customer_name?: string;
     customer_id?: string | null;
     vendor?: string;
-    solution_type?: string;
+    solution_types?: string[];
     kickoff_date?: string;
     target_go_live_date?: string;
     pm_user_id?: string | null;
@@ -1434,7 +1434,7 @@ export const api = {
   optimizeDirectEnroll: (payload: {
     customer_name: string;
     vendor?: string | null;
-    solution_type?: string | null;
+    solution_types?: string[];
     actual_go_live_date?: string | null;
     ae_user_id?: string | null;
     sa_user_id?: string | null;
@@ -1675,9 +1675,9 @@ export const api = {
   customerSolutions: (id: string) =>
     request<Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">[]>(`/customers/${id}/solutions`),
   customerProjects: (id: string) =>
-    request<Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
+    request<Pick<Project, "id" | "name" | "vendor" | "solution_types" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
   customerOptimizations: (id: string) =>
-    request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_type: string | null; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
+    request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_types: string[]; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
 
   // ── Prospecting ──────────────────────────────────────────────────────────
   prospectingLists: () =>
@@ -1738,7 +1738,7 @@ export type WelcomeOptions = {
     id: string;
     name: string;
     customerName: string | null;
-    solutionType: string | null;
+    solutionTypes: string[];
     vendor: string | null;
     kickoffDate: string | null;
     targetGoLiveDate: string | null;

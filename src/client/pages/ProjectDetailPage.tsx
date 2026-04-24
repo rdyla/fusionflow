@@ -25,6 +25,7 @@ import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import WelcomeEmailCard from "../components/welcome/WelcomeEmailCard";
 import { useToast } from "../components/ui/ToastProvider";
 
@@ -703,11 +704,7 @@ export default function ProjectDetailPage() {
               {project.vendor}
             </span>
           )}
-          {project.solution_type && (
-            <span className="ms-badge" style={{ background: "rgba(135,100,184,0.15)", color: "#b39ddb", border: "1px solid rgba(135,100,184,0.35)", fontSize: 12, padding: "4px 12px" }}>
-              {project.solution_type}
-            </span>
-          )}
+          <SolutionTypePills types={project.solution_types} emptyFallback={null} />
         </div>
 
         {/* Summary info tiles */}

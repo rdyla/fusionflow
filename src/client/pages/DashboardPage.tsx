@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type DashboardSummaryResponse, type Task } from "../lib/api";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
@@ -408,8 +409,7 @@ export default function DashboardPage() {
                 ? { background: "rgba(209,52,56,0.04)", borderLeft: "3px solid #d13438" }
                 : {};
               const vendorLabel = VENDOR_LABELS[p.vendor ?? ""] ?? p.vendor ?? null;
-              const typeLabel = TYPE_LABELS[p.solution_type ?? ""] ?? p.solution_type ?? null;
-              const providerTech = [vendorLabel, typeLabel].filter(Boolean);
+              const hasTypes = (p.solution_types?.length ?? 0) > 0;
               return (
                 <tr
                   key={p.id}
@@ -426,18 +426,14 @@ export default function DashboardPage() {
                   </td>
                   <td style={{ color: isCompleted ? "#94a3b8" : "#475569", fontSize: 13 }}>{p.customer_name ?? "—"}</td>
                   <td>
-                    {providerTech.length > 0 ? (
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                    {vendorLabel || hasTypes ? (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
                         {vendorLabel && vendorLabel !== "TBD" && (
                           <span className="ms-badge" style={{ background: `${VENDOR_COLORS[vendorLabel] ?? "#94a3b8"}1a`, color: VENDOR_COLORS[vendorLabel] ?? "#94a3b8", border: `1px solid ${VENDOR_COLORS[vendorLabel] ?? "#94a3b8"}40`, fontSize: 11 }}>
                             {vendorLabel}
                           </span>
                         )}
-                        {typeLabel && (
-                          <span className="ms-badge" style={{ background: "rgba(135,100,184,0.1)", color: "#8764b8", border: "1px solid rgba(135,100,184,0.25)", fontSize: 11 }}>
-                            {typeLabel}
-                          </span>
-                        )}
+                        <SolutionTypePills types={p.solution_types} emptyFallback={null} />
                       </div>
                     ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
                   </td>

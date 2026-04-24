@@ -58,3 +58,12 @@ export function solutionTypeLabel(type: string | null | undefined): string {
   if (!type) return "";
   return isSolutionType(type) ? SOLUTION_TYPE_LABELS[type] : type;
 }
+
+/**
+ * Server helper — turns a DB row's `solution_types` JSON string into the typed array
+ * before returning to the client. Used at every SELECT-path return site so the API
+ * contract is `solution_types: SolutionType[]`, not `solution_types: string` (JSON).
+ */
+export function normalizeSolutionTypesField<T extends { solution_types?: unknown }>(row: T): T & { solution_types: SolutionType[] } {
+  return { ...row, solution_types: parseSolutionTypes(row.solution_types) };
+}

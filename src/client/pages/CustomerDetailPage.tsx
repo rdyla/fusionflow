@@ -11,12 +11,15 @@ import {
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
+import type { SolutionType } from "../../shared/solutionTypes";
 
 type Tab = "overview" | "solutions" | "implementations" | "optimizations" | "documents";
 
 type CustomerSolution = Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id">;
-type CustomerProject = Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "created_at" | "updated_at"> & { has_optimization: number | null };
-type CustomerOptimization = { id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_type: string | null; actual_go_live_date: string | null };
+type CustomerProject = Pick<Project, "id" | "name" | "vendor" | "solution_types" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "created_at" | "updated_at"> & { has_optimization: number | null };
+type CustomerOptimization = { id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_types: string[]; actual_go_live_date: string | null };
 
 const SOLUTION_TYPE_LABELS: Record<string, string> = {
   ucaas: "UCaaS", ccaas: "CCaaS", ci: "Conversation Intelligence", va: "AI Virtual Agent",
@@ -120,7 +123,7 @@ export default function CustomerDetailPage() {
 
   // New Implementation modal
   const [showNewProject, setShowNewProject] = useState(false);
-  const [newProjectForm, setNewProjectForm] = useState({ name: "", solution_type: "", vendor: "tbd", target_go_live_date: "" });
+  const [newProjectForm, setNewProjectForm] = useState<{ name: string; solution_types: SolutionType[]; vendor: string; target_go_live_date: string }>({ name: "", solution_types: [], vendor: "tbd", target_go_live_date: "" });
   const [creatingProject, setCreatingProject] = useState(false);
 
   useEffect(() => {
@@ -294,7 +297,7 @@ export default function CustomerDetailPage() {
         name: newProjectForm.name || `${customer.name} Implementation`,
         customer_name: customer.name,
         customer_id: customer.id,
-        solution_type: newProjectForm.solution_type || undefined,
+        solution_types: newProjectForm.solution_types,
         vendor: newProjectForm.vendor || undefined,
         target_go_live_date: newProjectForm.target_go_live_date || undefined,
       });
@@ -573,7 +576,7 @@ export default function CustomerDetailPage() {
                 <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/projects/${p.id}`)}>
                   <td style={{ fontWeight: 600, color: "#1e293b" }}>{p.name}</td>
                   <td style={{ color: "#64748b", fontSize: 13 }}>
-                    {p.solution_type ? (SOLUTION_TYPE_LABELS[p.solution_type] ?? p.solution_type) : "—"}
+                    <SolutionTypePills types={p.solution_types} />
                   </td>
                   <td>
                     <span className="ms-badge" style={{ background: `${STATUS_COLOR[p.status ?? ""] ?? "#94a3b8"}1a`, color: STATUS_COLOR[p.status ?? ""] ?? "#94a3b8", border: `1px solid ${STATUS_COLOR[p.status ?? ""] ?? "#94a3b8"}40` }}>
@@ -621,7 +624,7 @@ export default function CustomerDetailPage() {
                 <tr key={o.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/optimize/${o.project_id}`)}>
                   <td style={{ fontWeight: 600, color: "#1e293b" }}>{o.project_name}</td>
                   <td style={{ color: "#64748b", fontSize: 13 }}>
-                    {o.solution_type ? (SOLUTION_TYPE_LABELS[o.solution_type] ?? o.solution_type) : "—"}
+                    <SolutionTypePills types={o.solution_types} />
                   </td>
                   <td>
                     <span className="ms-badge" style={{
@@ -868,18 +871,8 @@ export default function CustomerDetailPage() {
                 />
               </label>
               <label className="ms-label">
-                <span>Technology</span>
-                <select
-                  className="ms-input"
-                  value={newProjectForm.solution_type}
-                  onChange={(e) => setNewProjectForm((f) => ({ ...f, solution_type: e.target.value }))}
-                >
-                  <option value="">— Select —</option>
-                  <option value="ucaas">UCaaS</option>
-                  <option value="ccaas">CCaaS</option>
-                  <option value="ci">Conversation Intelligence</option>
-                  <option value="va">AI Virtual Agent</option>
-                </select>
+                <span>Solution Types</span>
+                <SolutionTypePicker value={newProjectForm.solution_types} onChange={(next) => setNewProjectForm((f) => ({ ...f, solution_types: next }))} />
               </label>
               <label className="ms-label">
                 <span>Provider</span>
