@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ImpactAssessment } from "../../lib/api";
 import surveyDef from "../../assets/client_impact_assessment_unified_v1.json";
+import { solutionTypeLabel } from "../../../shared/solutionTypes";
 
 interface Props {
   assessment: ImpactAssessment;
@@ -29,13 +30,6 @@ const SECTION_LABELS: Record<string, string> = {
   experienceImpact: "Experience & Outcome Impact",
   aiAutomation: "AI & Automation",
   satisfaction: "Satisfaction & Next Steps",
-};
-
-const SOLUTION_TYPE_LABELS: Record<string, string> = {
-  ucaas: "UCaaS",
-  ccaas: "CCaaS / Contact Center",
-  ci: "Conversational Intelligence",
-  virtual_agent: "Virtual Agent",
 };
 
 const VALUE_DRIVER_LABELS: Record<string, string> = {
@@ -218,7 +212,7 @@ export default function ImpactAssessmentDetail({ assessment, previousAssessment,
                   className="ms-badge"
                   style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.25)" }}
                 >
-                  {SOLUTION_TYPE_LABELS[t] ?? t}
+                  {solutionTypeLabel(t)}
                 </span>
               ))}
             </div>
@@ -297,7 +291,7 @@ export default function ImpactAssessmentDetail({ assessment, previousAssessment,
             return (
               <div key={sol} className="ms-card" style={{ padding: "16px 18px", borderTop: `3px solid ${color}` }}>
                 <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>
-                  {SOLUTION_TYPE_LABELS[sol] ?? sol}
+                  {solutionTypeLabel(sol)}
                 </div>
                 <div style={{ fontSize: 32, fontWeight: 800, color, lineHeight: 1 }}>{score}</div>
                 <div style={{ fontSize: 11, marginTop: 4, color, fontWeight: 600 }}>{bandLabel}</div>
