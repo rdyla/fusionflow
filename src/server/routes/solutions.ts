@@ -12,7 +12,7 @@ import {
   parseSolutionTypes,
   serializeSolutionTypes,
   serializeOtherTechnologies,
-  solutionTypeLabel,
+  joinSolutionTypeLabels,
   normalizeSolutionRow,
   isOtherTechnology,
   SOLUTION_TYPES,
@@ -174,7 +174,7 @@ app.post("/", async (c) => {
 
   const name = journeys.length > 0
     ? nameFromJourneys(customer_name, journeys, vendor)
-    : `${customer_name} — ${solutionTypeLabel(solution_types[0] ?? "")}`;
+    : `${customer_name} — ${joinSolutionTypeLabels(solution_types)}`;
   const id = crypto.randomUUID();
 
   // Find or create customer record when a CRM account is selected

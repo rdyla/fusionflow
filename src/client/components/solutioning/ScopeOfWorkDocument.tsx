@@ -87,8 +87,9 @@ function buildSowHtml(
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const logoAbsolute = logo.startsWith("http") ? logo : `${window.location.origin}${logo}`;
   const customerName = solution.customer_name || "Customer";
-  const primaryType = solution.solution_types[0] ?? "";
-  const solutionTypeLabel = TYPE_LABELS[primaryType] ?? primaryType;
+  // Multi-type solutions get a joined label (e.g. "UCaaS / CCaaS") so the SOW document
+  // title + header reflect every type the customer is scoped to.
+  const solutionTypeLabel = solution.solution_types.map((t) => TYPE_LABELS[t] ?? t).filter(Boolean).join(" / ");
   const vendorLabel = VENDOR_LABELS[solution.vendor] ?? solution.vendor ?? "";
   const platformLabel = [vendorLabel !== "TBD" ? vendorLabel : null, solutionTypeLabel].filter(Boolean).join(" – ");
 
@@ -516,8 +517,9 @@ type Props = {
 
 export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimate, scopeText, sowData }: Props) {
   const customerName = solution.customer_name || "Customer";
-  const primaryType = solution.solution_types[0] ?? "";
-  const solutionTypeLabel = TYPE_LABELS[primaryType] ?? primaryType;
+  // Multi-type solutions get a joined label (e.g. "UCaaS / CCaaS") so the SOW document
+  // title + header reflect every type the customer is scoped to.
+  const solutionTypeLabel = solution.solution_types.map((t) => TYPE_LABELS[t] ?? t).filter(Boolean).join(" / ");
   const vendorLabel = VENDOR_LABELS[solution.vendor] ?? solution.vendor ?? "";
   const platformLabel = [vendorLabel !== "TBD" ? vendorLabel : null, solutionTypeLabel].filter(Boolean).join(" – ");
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });

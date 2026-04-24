@@ -7,7 +7,7 @@ import { welcomePackage } from "../lib/emailTemplates";
 import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
-import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
+import { parseSolutionTypes, joinSolutionTypeLabels, type SolutionType } from "../../shared/solutionTypes";
 import { applyWelcomeSectionDefaults } from "../../shared/welcomeSections";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -286,7 +286,8 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     kickoffWhen: draft.kickoffWhen ?? null,
     kickoffDate: project.kickoff_date,
     targetGoLiveDate: project.target_go_live_date,
-    solution: project.solution_types[0] ?? null,
+    // Joined label for multi-type projects; empty string when no types set.
+    solution: joinSolutionTypeLabels(project.solution_types) || null,
     solutionTypes: project.solution_types,
     teamSections,
     distributionListEmail,

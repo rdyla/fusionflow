@@ -250,12 +250,18 @@ const GRID2: React.CSSProperties = { display: "grid", gridTemplateColumns: "1fr 
 
 interface Props {
   solution: Solution;
-  needsAssessment: NeedsAssessment | null;
+  /**
+   * Per-type needs assessments keyed by solution_type. Each applicable type seeds
+   * its own section of the SOW data (UCaaS answers fill the UCaaS section, CCaaS
+   * answers fill the CCaaS section, etc.). Single-type solutions behave identically
+   * to pre-refactor — just one NA, one section seeded.
+   */
+  needsAssessments: Record<string, NeedsAssessment>;
   canEdit: boolean;
   onSaved?: (sow: SowData) => void;
 }
 
-export default function SowSizingForm({ solution, needsAssessment, canEdit, onSaved }: Props) {
+export default function SowSizingForm({ solution, needsAssessments, canEdit, onSaved }: Props) {
   const [sow, setSow] = useState<SowData>(DEFAULT_SOW);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -267,12 +273,18 @@ export default function SowSizingForm({ solution, needsAssessment, canEdit, onSa
     } catch {
       base = JSON.parse(JSON.stringify(DEFAULT_SOW)) as SowData;
     }
-    if (needsAssessment?.answers) {
-      base = seedSowFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_types[0] ?? "");
+    // Seed each applicable type's section from its own NA. Order matters — later
+    // calls can override earlier ones for shared fields, so iterate in the solution's
+    // declared type order to give the user's first pick precedence on ties.
+    for (const t of solution.solution_types) {
+      const na = needsAssessments[t];
+      if (na?.answers) {
+        base = seedSowFromAssessment(base, na.answers as Record<string, unknown>, t);
+      }
     }
     setSow(base);
     setDirty(false);
-  }, [solution.sow_data, needsAssessment, solution.solution_types]);
+  }, [solution.sow_data, needsAssessments, solution.solution_types]);
 
   const upd = useCallback(<K extends keyof SowData>(key: K, val: SowData[K]) => {
     setSow(prev => ({ ...prev, [key]: val }));
