@@ -26,6 +26,8 @@ import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
 import WelcomeEmailCard from "../components/welcome/WelcomeEmailCard";
 import { useToast } from "../components/ui/ToastProvider";
 
@@ -107,6 +109,9 @@ export default function ProjectDetailPage() {
   const [editStatus, setEditStatus] = useState("");
   const [editHealth, setEditHealth] = useState("");
   const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
+  const [editingSolutionTypes, setEditingSolutionTypes] = useState(false);
+  const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
+  const [savingSolutionTypes, setSavingSolutionTypes] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -305,6 +310,27 @@ export default function ProjectDetailPage() {
       showToast(message, "error");
     } finally {
       setSavingProject(false);
+    }
+  }
+
+  function startEditSolutionTypes() {
+    if (!project) return;
+    setEditSolutionTypes(parseSolutionTypes(project.solution_types));
+    setEditingSolutionTypes(true);
+  }
+
+  async function saveEditSolutionTypes() {
+    if (!project) return;
+    setSavingSolutionTypes(true);
+    try {
+      const updated = await api.updateProject(project.id, { solution_types: editSolutionTypes });
+      setProject(updated);
+      setEditingSolutionTypes(false);
+      showToast("Solution types updated.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update solution types", "error");
+    } finally {
+      setSavingSolutionTypes(false);
     }
   }
 
@@ -697,14 +723,35 @@ export default function ProjectDetailPage() {
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
         <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{project.name}</h1>
 
-        {/* Vendor + solution type badges */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        {/* Vendor + solution type badges (editable for admin/pm) */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
           {project.vendor && (
             <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
               {project.vendor}
             </span>
           )}
-          <SolutionTypePills types={project.solution_types} emptyFallback={null} />
+          {editingSolutionTypes ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0, maxWidth: 520 }}>
+              <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingSolutionTypes} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ms-btn-primary" onClick={saveEditSolutionTypes} disabled={savingSolutionTypes}>
+                  {savingSolutionTypes ? "Saving…" : "Save"}
+                </button>
+                <button className="ms-btn-ghost" onClick={() => setEditingSolutionTypes(false)} disabled={savingSolutionTypes}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
+              {canEdit && (
+                <button className="ms-btn-ghost" onClick={startEditSolutionTypes} style={{ fontSize: 12, padding: "2px 10px" }}>
+                  Edit
+                </button>
+              )}
+            </>
+          )}
         </div>
 
         {/* Summary info tiles */}

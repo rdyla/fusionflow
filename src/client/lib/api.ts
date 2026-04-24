@@ -1012,6 +1012,7 @@ export const api = {
       target_go_live_date?: string;
       actual_go_live_date?: string;
       pm_user_id?: string | null;
+      solution_types?: SolutionType[];
       crm_case_id?: string | null;
       crm_opportunity_id?: string | null;
     }
