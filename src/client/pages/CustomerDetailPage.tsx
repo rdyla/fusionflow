@@ -17,7 +17,7 @@ import { solutionTypeLabel, type SolutionType } from "../../shared/solutionTypes
 
 type Tab = "overview" | "solutions" | "implementations" | "optimizations" | "documents";
 
-type CustomerSolution = Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id">;
+type CustomerSolution = Pick<Solution, "id" | "name" | "vendor" | "solution_types" | "other_technologies" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">;
 type CustomerProject = Pick<Project, "id" | "name" | "vendor" | "solution_types" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "created_at" | "updated_at"> & { has_optimization: number | null };
 type CustomerOptimization = { id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_types: string[]; actual_go_live_date: string | null };
 
@@ -49,14 +49,15 @@ const STANDALONE_JOURNEYS = [
   "sdwan", "tem", "other",
 ];
 
-function journeyBadgeText(journeysJson: string | null, solutionType: string): string {
-  if (!journeysJson) return solutionTypeLabel(solutionType);
+function journeyBadgeText(journeysJson: string | null, solutionTypes: readonly string[]): string {
+  const fallbackFromTypes = () => solutionTypes.map((t) => solutionTypeLabel(t)).filter(Boolean).join(" · ");
+  if (!journeysJson) return fallbackFromTypes();
   try {
     const journeys: string[] = JSON.parse(journeysJson);
-    if (!journeys.length) return solutionTypeLabel(solutionType);
+    if (!journeys.length) return fallbackFromTypes();
     const labels = journeys.slice(0, 3).map(j => JOURNEY_LABELS[j] ?? j);
     return labels.join(" · ") + (journeys.length > 3 ? ` +${journeys.length - 3}` : "");
-  } catch { return solutionTypeLabel(solutionType); }
+  } catch { return fallbackFromTypes(); }
 }
 
 const HEALTH_COLOR: Record<string, string> = {
@@ -530,7 +531,7 @@ export default function CustomerDetailPage() {
                   <td style={{ fontWeight: 600, color: "#1e293b" }}>{s.name}</td>
                   <td>
                     <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-                      {journeyBadgeText((s as Solution & { journeys?: string | null }).journeys ?? null, s.solution_type)}
+                      {journeyBadgeText((s as CustomerSolution & { journeys?: string | null }).journeys ?? null, s.solution_types)}
                     </span>
                   </td>
                   <td>

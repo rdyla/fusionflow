@@ -87,7 +87,8 @@ function buildSowHtml(
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const logoAbsolute = logo.startsWith("http") ? logo : `${window.location.origin}${logo}`;
   const customerName = solution.customer_name || "Customer";
-  const solutionTypeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
+  const primaryType = solution.solution_types[0] ?? "";
+  const solutionTypeLabel = TYPE_LABELS[primaryType] ?? primaryType;
   const vendorLabel = VENDOR_LABELS[solution.vendor] ?? solution.vendor ?? "";
   const platformLabel = [vendorLabel !== "TBD" ? vendorLabel : null, solutionTypeLabel].filter(Boolean).join(" – ");
 
@@ -515,7 +516,8 @@ type Props = {
 
 export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimate, scopeText, sowData }: Props) {
   const customerName = solution.customer_name || "Customer";
-  const solutionTypeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
+  const primaryType = solution.solution_types[0] ?? "";
+  const solutionTypeLabel = TYPE_LABELS[primaryType] ?? primaryType;
   const vendorLabel = VENDOR_LABELS[solution.vendor] ?? solution.vendor ?? "";
   const platformLabel = [vendorLabel !== "TBD" ? vendorLabel : null, solutionTypeLabel].filter(Boolean).join(" – ");
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });

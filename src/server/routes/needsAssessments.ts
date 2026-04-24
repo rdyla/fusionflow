@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+import { parseSolutionTypes } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -413,12 +414,13 @@ app.put("/:id/needs-assessment", async (c) => {
 
   const solutionId = c.req.param("id");
 
-  // Verify solution exists and get solution_type
+  // Verify solution exists and read solution_types (PR #7: NA routes off the first applicable
+  // type; PR #8 will change this to per-type NA records).
   const solution = await c.env.DB.prepare(
-    "SELECT id, solution_type, dynamics_account_id FROM solutions WHERE id = ? LIMIT 1"
+    "SELECT id, solution_types, dynamics_account_id FROM solutions WHERE id = ? LIMIT 1"
   )
     .bind(solutionId)
-    .first() as { id: string; solution_type: string; dynamics_account_id: string | null } | null;
+    .first() as { id: string; solution_types: string; dynamics_account_id: string | null } | null;
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
 
   // Clients can only update assessments for their own account's solutions
@@ -430,9 +432,10 @@ app.put("/:id/needs-assessment", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { answers } = parsed.data;
-  const isUCaaS = solution.solution_type === "ucaas";
-  const isVA = solution.solution_type === "zoom_va" || solution.solution_type === "rc_air";
-  const isCCaaS = solution.solution_type === "ccaas";
+  const primaryType = parseSolutionTypes(solution.solution_types)[0] ?? "";
+  const isUCaaS = primaryType === "ucaas";
+  const isVA = primaryType === "va";
+  const isCCaaS = primaryType === "ccaas";
   const { score, status } = isUCaaS
     ? computeUCaaSReadiness(answers)
     : isVA

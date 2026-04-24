@@ -83,16 +83,17 @@ function journeyFilterMatch(s: Solution, category: string): boolean {
   if (journeys.length > 0) {
     return journeys.some(j => (JOURNEY_FILTER_CATEGORY[j] ?? j) === category);
   }
-  // Fallback for legacy solutions without journeys
+  // Fallback for solutions without journeys — test every selected solution type against the category.
   const legacyMap: Record<string, string> = { ucaas: "ucaas_ccaas", ccaas: "ucaas_ccaas", ci: "ci", va: "va" };
-  return (legacyMap[s.solution_type] ?? s.solution_type) === category;
+  return s.solution_types.some((t) => (legacyMap[t] ?? t) === category);
 }
 
 function journeyBadgeText(s: Solution): string {
   const journeys = parseJourneys(s);
   if (!journeys.length) {
-    const fallback: Record<string, string> = { ucaas: "UCaaS", ccaas: "CCaaS", ci: "Conversation Intelligence", va: "AI Virtual Agent" };
-    return fallback[s.solution_type] ?? s.solution_type;
+    const fallback: Record<string, string> = { ucaas: "UCaaS", ccaas: "CCaaS", ci: "Conversation Intelligence", va: "AI Virtual Agent", wfm: "Workforce Management", qm: "Quality Management" };
+    const labels = s.solution_types.map((t) => fallback[t] ?? t);
+    return labels.length ? labels.join(" · ") : "";
   }
   const labels = journeys.slice(0, 3).map(j => JOURNEY_LABELS[j] ?? j);
   return labels.join(" · ") + (journeys.length > 3 ? ` +${journeys.length - 3}` : "");

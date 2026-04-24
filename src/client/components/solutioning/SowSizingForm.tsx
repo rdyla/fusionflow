@@ -268,11 +268,11 @@ export default function SowSizingForm({ solution, needsAssessment, canEdit, onSa
       base = JSON.parse(JSON.stringify(DEFAULT_SOW)) as SowData;
     }
     if (needsAssessment?.answers) {
-      base = seedSowFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_type);
+      base = seedSowFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_types[0] ?? "");
     }
     setSow(base);
     setDirty(false);
-  }, [solution.sow_data, needsAssessment, solution.solution_type]);
+  }, [solution.sow_data, needsAssessment, solution.solution_types]);
 
   const upd = useCallback(<K extends keyof SowData>(key: K, val: SowData[K]) => {
     setSow(prev => ({ ...prev, [key]: val }));
@@ -290,12 +290,12 @@ export default function SowSizingForm({ solution, needsAssessment, canEdit, onSa
     }
   };
 
-  const st = solution.solution_type;
+  const types = solution.solution_types;
   const journeys: string[] = (() => { try { return solution.journeys ? JSON.parse(solution.journeys) : []; } catch { return []; } })();
-  const showUcaas = st === "ucaas" || journeys.some(j => j.includes("ucaas"));
-  const showCcaas = st === "ccaas" || journeys.some(j => j.includes("ccaas"));
-  const showCi    = st === "ci"    || journeys.some(j => ["zoom_zra", "rc_ace", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist"].includes(j));
-  const showVa    = st === "va"    || journeys.some(j => ["zoom_zva", "rc_air"].includes(j));
+  const showUcaas = types.includes("ucaas") || journeys.some(j => j.includes("ucaas"));
+  const showCcaas = types.includes("ccaas") || journeys.some(j => j.includes("ccaas"));
+  const showCi    = types.includes("ci")    || journeys.some(j => ["zoom_zra", "rc_ace", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist"].includes(j));
+  const showVa    = types.includes("va")    || journeys.some(j => ["zoom_zva", "rc_air"].includes(j));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>

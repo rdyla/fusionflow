@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
-import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -450,15 +450,15 @@ app.get("/:id/solutions", async (c) => {
 
   const rows = await c.env.DB
     .prepare(`
-      SELECT s.id, s.name, s.vendor, s.solution_type, s.status, s.created_at, s.updated_at,
-             s.linked_project_id, s.dynamics_account_id
+      SELECT s.id, s.name, s.vendor, s.solution_types, s.other_technologies, s.status,
+             s.created_at, s.updated_at, s.linked_project_id, s.dynamics_account_id, s.journeys
       FROM solutions s
       WHERE s.customer_id = ?
       ORDER BY s.updated_at DESC
     `)
     .bind(c.req.param("id"))
     .all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionRow));
 });
 
 app.get("/:id/projects", async (c) => {

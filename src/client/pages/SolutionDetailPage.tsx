@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
@@ -9,7 +9,9 @@ import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
-import { solutionTypeLabel } from "../../shared/solutionTypes";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
+import { solutionTypeLabel, otherTechnologyLabel, OTHER_TECHNOLOGIES, OTHER_TECHNOLOGY_LABELS } from "../../shared/solutionTypes";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
 import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
@@ -85,7 +87,15 @@ export default function SolutionDetailPage() {
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
 
   // Tab-local state
-  const [overview, setOverview] = useState({ name: "", customer_name: "", vendor: "tbd" as SolutionVendor, solution_type: "ucaas" as SolutionType, partner_ae_user_id: "", status: "" as SolutionStatus });
+  const [overview, setOverview] = useState<{
+    name: string;
+    customer_name: string;
+    vendor: SolutionVendor;
+    solution_types: SolutionType[];
+    other_technologies: OtherTechnology[];
+    partner_ae_user_id: string;
+    status: SolutionStatus;
+  }>({ name: "", customer_name: "", vendor: "tbd", solution_types: ["ucaas"], other_technologies: [], partner_ae_user_id: "", status: "" as SolutionStatus });
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
@@ -130,7 +140,8 @@ export default function SolutionDetailPage() {
       name: s.name,
       customer_name: s.customer_name,
       vendor: s.vendor as SolutionVendor,
-      solution_type: s.solution_type as SolutionType,
+      solution_types: s.solution_types,
+      other_technologies: s.other_technologies,
       partner_ae_user_id: s.partner_ae_user_id ?? "",
       status: s.status,
     });
@@ -229,7 +240,7 @@ export default function SolutionDetailPage() {
   const solutionJourneys = parseSolutionJourneys(solution);
   const nonUcJourneys = solutionJourneys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
   const hasUcCc = solutionJourneys.some(j => UC_CC_PREFIXES.some(p => j.startsWith(p)))
-    || ["ucaas", "ccaas", "ci", "va"].includes(solution.solution_type);
+    || solution.solution_types.some((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
   const hasOther = nonUcJourneys.length > 0;
 
   const TABS: { key: Tab; label: string }[] = [
@@ -330,10 +341,17 @@ export default function SolutionDetailPage() {
               )}
             </div>
           )}
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-            <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-              {solutionTypeLabel(solution.solution_type)}
-            </span>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <SolutionTypePills types={solution.solution_types} emptyFallback={null} />
+            {solution.other_technologies.length > 0 && (
+              <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6 }}>
+                {solution.other_technologies.map((t) => (
+                  <span key={t} className="ms-badge" style={{ background: "rgba(100,116,139,0.1)", color: "#475569", border: "1px solid rgba(100,116,139,0.25)" }}>
+                    {otherTechnologyLabel(t)}
+                  </span>
+                ))}
+              </span>
+            )}
             <span className="ms-badge" style={{ background: `${STATUS_COLOR[solution.status]}18`, color: STATUS_COLOR[solution.status], border: `1px solid ${STATUS_COLOR[solution.status]}40` }}>
               {STATUS_LABELS[solution.status]}
             </span>
@@ -488,40 +506,59 @@ export default function SolutionDetailPage() {
                   </div>
                 )}
               </label>
-              <label className="ms-label">
-                <span>Technology</span>
+              <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
+                <span>Solution Types</span>
                 {canEdit ? (
-                  <select className="ms-input" value={overview.solution_type ?? solution.solution_type} onChange={(e) => setOverview((o) => ({ ...o, solution_type: e.target.value as typeof overview.solution_type }))}>
-                    <optgroup label="UCaaS / CCaaS">
-                      <option value="ucaas">UCaaS</option>
-                      <option value="ccaas">CCaaS</option>
-                      <option value="ci">Conversation Intelligence</option>
-                      <option value="va">AI Virtual Agent</option>
-                    </optgroup>
-                    <optgroup label="Other Technology">
-                      <option value="bdr">Backup &amp; Disaster Recovery</option>
-                      <option value="connectivity">Connectivity</option>
-                      <option value="colocation">Colocation</option>
-                      <option value="cyber_security">Cyber Security</option>
-                      <option value="daas">Desktop as a Service</option>
-                      <option value="help_desk">Help Desk</option>
-                      <option value="iaas">Infrastructure as a Service</option>
-                      <option value="mobility">Mobility (Corporate Cellular)</option>
-                      <option value="managed_services">Managed Services</option>
-                      <option value="managed_cloud">Managed Public Cloud</option>
-                      <option value="sdwan">SD-WAN / SASE / Aggregation</option>
-                      <option value="tem">Technology Expense Management</option>
-                      <option value="other">Other Technology Discovery</option>
-                    </optgroup>
-                  </select>
+                  <SolutionTypePicker value={overview.solution_types} onChange={(next) => setOverview((o) => ({ ...o, solution_types: next }))} />
                 ) : (
-                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{solutionTypeLabel(solution.solution_type)}</div>
+                  <div style={{ padding: "8px 0" }}>
+                    <SolutionTypePills types={solution.solution_types} />
+                  </div>
+                )}
+              </label>
+              <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
+                <span>Other Technologies</span>
+                {canEdit ? (
+                  <div role="group" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+                    {OTHER_TECHNOLOGIES.map((t) => {
+                      const checked = overview.other_technologies.includes(t);
+                      return (
+                        <label key={t} style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "6px 10px",
+                          border: `1px solid ${checked ? "#64748b80" : "#c8d5e8"}`,
+                          borderRadius: 6,
+                          background: checked ? "#64748b0f" : "#ffffff",
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setOverview((o) => ({
+                              ...o,
+                              other_technologies: checked
+                                ? o.other_technologies.filter((x) => x !== t)
+                                : OTHER_TECHNOLOGIES.filter((x) => o.other_technologies.includes(x) || x === t),
+                            }))}
+                          />
+                          {OTHER_TECHNOLOGY_LABELS[t]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: "8px 0" }}>
+                    {solution.other_technologies.length
+                      ? solution.other_technologies.map((t) => otherTechnologyLabel(t)).join(" · ")
+                      : <span style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic" }}>None</span>}
+                  </div>
                 )}
               </label>
             </div>
             {canEdit && (
               <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
-                onClick={() => save({ name: overview.name, vendor: overview.vendor, solution_type: overview.solution_type })}>
+                onClick={() => save({ name: overview.name, vendor: overview.vendor, solution_types: overview.solution_types, other_technologies: overview.other_technologies })}>
                 {saving ? "Saving…" : "Save Changes"}
               </button>
             )}
@@ -916,13 +953,15 @@ export default function SolutionDetailPage() {
               );
             }
 
-            // UC/CC (or legacy) → existing survey
+            // UC/CC (or legacy) → existing survey. PR #7 routes off the first applicable type;
+            // PR #8 will expand this to per-type NA wizards (one survey per solution_type).
+            const primaryType = solution.solution_types[0] ?? "";
             const surveyJson =
-              solution.solution_type === "ccaas" ? ccaasSurveyJson :
-              solution.solution_type === "va" ? virtualAgentSurveyJson :
-              solution.solution_type === "ucaas" ? ucaasSurveyJson :
+              primaryType === "ccaas" ? ccaasSurveyJson :
+              primaryType === "va" ? virtualAgentSurveyJson :
+              primaryType === "ucaas" ? ucaasSurveyJson :
               ciSurveyJson;
-            const solutionTypeDisplayLabel = solutionTypeLabel(solution.solution_type);
+            const solutionTypeDisplayLabel = solutionTypeLabel(primaryType);
             return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
                 key={needsAssessment?.id ?? "new"}

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type Solution } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft", assessment: "Needs Assessment", requirements: "Requirements",
@@ -100,7 +101,7 @@ function SolutionTable({
                   <div style={{ fontWeight: 500, color: "#1e293b" }}>{s.customer_name}</div>
                   <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{s.name}</div>
                 </td>
-                <td style={{ color: "#64748b", fontSize: 13 }}>{s.solution_type.toUpperCase()}</td>
+                <td style={{ color: "#64748b", fontSize: 13 }}><SolutionTypePills types={s.solution_types} /></td>
                 <td>
                   <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status]}1a`, color: STATUS_COLOR[s.status], border: `1px solid ${STATUS_COLOR[s.status]}40` }}>
                     {STATUS_LABELS[s.status] ?? s.status}

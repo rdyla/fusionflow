@@ -409,7 +409,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
       base = JSON.parse(JSON.stringify(DEFAULT_PHD)) as PhdData;
     }
     if (needsAssessment?.answers) {
-      base = seedFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_type);
+      base = seedFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_types[0] ?? "");
     }
     if (solution.sow_data) {
       try {
@@ -419,7 +419,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
     }
     setPhd(base);
     setDirty(false);
-  }, [solution.phd_data, solution.sow_data, needsAssessment, solution.solution_type]);
+  }, [solution.phd_data, solution.sow_data, needsAssessment, solution.solution_types]);
 
   const update = useCallback(<K extends keyof PhdData>(key: K, value: PhdData[K]) => {
     setPhd(prev => ({ ...prev, [key]: value }));
