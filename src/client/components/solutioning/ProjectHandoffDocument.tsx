@@ -388,19 +388,22 @@ function YesNoCell({ value, onChange, canEdit }: { value: YesNo; onChange: (v: Y
 
 interface Props {
   solution: Solution;
-  needsAssessment: NeedsAssessment | null;
-  laborEstimate: LaborEstimate | null;
+  /** Per-type needs assessments keyed by solution_type — each type's answers seed its own PHD section. */
+  needsAssessments: Record<string, NeedsAssessment>;
+  /** Per-type labor estimates keyed by solution_type. The component currently uses the aggregate for display. */
+  laborEstimates: Record<string, LaborEstimate>;
   solutionContacts: SolutionContact[];
   canEdit: boolean;
   onSaved?: () => void;
 }
 
-export default function ProjectHandoffDocument({ solution, needsAssessment, laborEstimate, solutionContacts, canEdit, onSaved }: Props) {
+export default function ProjectHandoffDocument({ solution, needsAssessments, laborEstimates, solutionContacts, canEdit, onSaved }: Props) {
   const [phd, setPhd] = useState<PhdData>(DEFAULT_PHD);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
 
-  // Initialize from stored phd_data, then seed from assessment + confirmed sizing for any un-set fields
+  // Initialize from stored phd_data, then seed from assessment + confirmed sizing for any un-set fields.
+  // Seeds per applicable type so each type's PHD section pulls from its own NA.
   useEffect(() => {
     let base: PhdData;
     try {
@@ -408,8 +411,11 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
     } catch {
       base = JSON.parse(JSON.stringify(DEFAULT_PHD)) as PhdData;
     }
-    if (needsAssessment?.answers) {
-      base = seedFromAssessment(base, needsAssessment.answers as Record<string, unknown>, solution.solution_types[0] ?? "");
+    for (const t of solution.solution_types) {
+      const na = needsAssessments[t];
+      if (na?.answers) {
+        base = seedFromAssessment(base, na.answers as Record<string, unknown>, t);
+      }
     }
     if (solution.sow_data) {
       try {
@@ -419,7 +425,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
     }
     setPhd(base);
     setDirty(false);
-  }, [solution.phd_data, solution.sow_data, needsAssessment, solution.solution_types]);
+  }, [solution.phd_data, solution.sow_data, needsAssessments, solution.solution_types]);
 
   const update = useCallback(<K extends keyof PhdData>(key: K, value: PhdData[K]) => {
     setPhd(prev => ({ ...prev, [key]: value }));
@@ -443,9 +449,14 @@ export default function ProjectHandoffDocument({ solution, needsAssessment, labo
 
   const vendorLabel = solution.vendor === "zoom" ? "Zoom" : solution.vendor === "ringcentral" ? "RingCentral" : solution.vendor ?? "";
 
-  // Labor estimate total for SOW hint
-  const laborHint = laborEstimate
-    ? `Est. ${laborEstimate.total_low}–${laborEstimate.total_high} hrs`
+  // Labor estimate total for SOW hint — sums across all per-type estimates so a
+  // multi-type solution shows its combined total.
+  const laborTotals = Object.values(laborEstimates).reduce(
+    (acc, le) => ({ low: acc.low + (le.total_low ?? 0), high: acc.high + (le.total_high ?? 0), count: acc.count + 1 }),
+    { low: 0, high: 0, count: 0 }
+  );
+  const laborHint = laborTotals.count > 0
+    ? `Est. ${laborTotals.low}–${laborTotals.high} hrs`
     : "";
 
   // ── Render ───────────────────────────────────────────────────────────────────

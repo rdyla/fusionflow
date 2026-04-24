@@ -81,6 +81,12 @@ export function solutionTypeLabel(type: string | null | undefined): string {
   return canonical ? SOLUTION_TYPE_LABELS[canonical] : type;
 }
 
+/** Join labels for an array of solution types — used wherever a compact "Type A / Type B" read is needed. */
+export function joinSolutionTypeLabels(types: readonly string[] | null | undefined, separator = " / "): string {
+  if (!types || types.length === 0) return "";
+  return types.map((t) => solutionTypeLabel(t)).filter(Boolean).join(separator);
+}
+
 /**
  * Server helper — turns a DB row's `solution_types` JSON string into the typed array
  * before returning to the client. Used at every SELECT-path return site so the API

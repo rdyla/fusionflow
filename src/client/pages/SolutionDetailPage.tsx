@@ -1152,7 +1152,7 @@ export default function SolutionDetailPage() {
           {/* Sizing confirmation form */}
           <SowSizingForm
             solution={solution}
-            needsAssessment={needsAssessment}
+            needsAssessments={needsAssessments}
             canEdit={canEdit}
             onSaved={(saved) => {
               setSowData(saved);
@@ -1201,8 +1201,8 @@ export default function SolutionDetailPage() {
           {/* Project Handoff Document */}
           <ProjectHandoffDocument
             solution={solution}
-            needsAssessment={needsAssessment}
-            laborEstimate={laborEstimate}
+            needsAssessments={needsAssessments}
+            laborEstimates={laborEstimates}
             solutionContacts={solutionContacts}
             canEdit={canEdit}
             onSaved={load}
