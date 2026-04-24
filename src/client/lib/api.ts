@@ -817,6 +817,7 @@ export type NeedsAssessment = {
 export type LaborEstimate = {
   id: string;
   solution_id: string;
+  solution_type: string;
   model_version: string;
   solution_type_category: string;
   base_hours: Record<string, number>;
@@ -1583,15 +1584,17 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/recordings/${recordingId}`, { method: "DELETE" }),
 
   // ── Labor Estimates ──────────────────────────────────────────────────────────
-  laborEstimate: (solutionId: string) =>
-    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimate`),
-  upsertLaborEstimate: (solutionId: string, body: { overrides?: Record<string, number> }) =>
-    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimate`, {
+  laborEstimates: (solutionId: string) =>
+    request<LaborEstimate[]>(`/solutions/${solutionId}/labor-estimates`),
+  laborEstimate: (solutionId: string, solutionType: string) =>
+    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`),
+  upsertLaborEstimate: (solutionId: string, solutionType: string, body: { overrides?: Record<string, number> }) =>
+    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`, {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  deleteLaborEstimate: (solutionId: string) =>
-    request<{ success: boolean }>(`/solutions/${solutionId}/labor-estimate`, { method: "DELETE" }),
+  deleteLaborEstimate: (solutionId: string, solutionType: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/labor-estimates/${solutionType}`, { method: "DELETE" }),
 
   // ── Labor Config (admin) ──────────────────────────────────────────────────────
   laborConfig: () =>

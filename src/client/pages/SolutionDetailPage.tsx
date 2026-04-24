@@ -106,8 +106,9 @@ export default function SolutionDetailPage() {
   const [naView, setNaView] = useState<"sor" | "wizard">("sor");
   const [odView, setOdView] = useState<"sor" | "wizard">("sor");
 
-  // Labor Estimate
-  const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
+  // Labor Estimates — one per solution_type. Same shape as needsAssessments.
+  const [laborEstimates, setLaborEstimates] = useState<Record<string, LaborEstimate>>({});
+  const [activeLaborType, setActiveLaborType] = useState<string>("");
 
   // SOW Sizing
   const [sowData, setSowData] = useState<SowData | null>(null);
@@ -158,8 +159,12 @@ export default function SolutionDetailPage() {
       setNeedsAssessments(map);
     }).catch(() => {});
 
-    // Load labor estimate (all solution types)
-    api.laborEstimate(id).then(setLaborEstimate).catch(() => {});
+    // Load all labor estimates for this solution (one per canonical type)
+    api.laborEstimates(id).then((list) => {
+      const map: Record<string, LaborEstimate> = {};
+      for (const le of list) map[le.solution_type] = le;
+      setLaborEstimates(map);
+    }).catch(() => {});
 
     // Load CRM contacts and solution contacts in parallel
     if (s.dynamics_account_id) {
@@ -249,14 +254,27 @@ export default function SolutionDetailPage() {
     || solution.solution_types.some((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
   const hasOther = nonUcJourneys.length > 0;
 
-  // Per-type NA plumbing: the Assessment tab sub-tab picks which type we're editing.
-  // Default to the first canonical solution type, or fall back to a previously-saved
-  // type if solution_types is empty but a NA exists (legacy / edge cases).
+  // Per-type NA + labor plumbing. Same sub-tab pattern for both: an active type
+  // state picks which type's record we're viewing/editing.
   const canonicalNaTypes = solution.solution_types.filter((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
   const effectiveActiveType = activeAssessmentType || canonicalNaTypes[0] || Object.keys(needsAssessments)[0] || "";
   const needsAssessment = needsAssessments[effectiveActiveType] ?? null;
   // "other" (non-canonical journeys) uses its own NA slot.
   const otherNa = needsAssessments["other"] ?? null;
+
+  // Labor estimates are only built for the canonical types (no "other" — non-canonical
+  // journeys don't participate in labor calc).
+  const effectiveActiveLaborType = activeLaborType || canonicalNaTypes[0] || Object.keys(laborEstimates)[0] || "";
+  const laborEstimate = laborEstimates[effectiveActiveLaborType] ?? null;
+  // Aggregated totals across all per-type labor estimates for the solution header.
+  const laborTotals = Object.values(laborEstimates).reduce(
+    (acc, le) => ({
+      low: acc.low + (le.total_low ?? 0),
+      expected: acc.expected + (le.total_expected ?? 0),
+      high: acc.high + (le.total_high ?? 0),
+    }),
+    { low: 0, expected: 0, high: 0 }
+  );
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview",    label: "Overview"         },
@@ -1236,13 +1254,64 @@ export default function SolutionDetailPage() {
 
       {/* ── Labor Estimate Tab ── */}
       {tab === "labor" && (
-        <LaborEstimateView
-          solutionId={solution.id}
-          estimate={laborEstimate}
-          hasAssessment={needsAssessment !== null}
-          canEdit={canEdit}
-          onEstimateChange={setLaborEstimate}
-        />
+        <div>
+          {/* Sub-tabs when multiple canonical types apply — same UX as Assessment tab. */}
+          {canonicalNaTypes.length > 1 && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+              {canonicalNaTypes.map((t) => {
+                const selected = t === effectiveActiveLaborType;
+                const hasLe = laborEstimates[t] !== undefined;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    className="ms-badge"
+                    onClick={() => setActiveLaborType(t)}
+                    style={{
+                      cursor: "pointer",
+                      background: selected ? "rgba(99,193,234,0.18)" : "rgba(99,193,234,0.06)",
+                      color: selected ? "#0891b2" : "#64748b",
+                      border: `1px solid ${selected ? "rgba(99,193,234,0.4)" : "rgba(99,193,234,0.15)"}`,
+                      padding: "6px 12px",
+                      fontWeight: selected ? 600 : 500,
+                    }}
+                  >
+                    {solutionTypeLabel(t)}
+                    {hasLe && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>✓</span>}
+                  </button>
+                );
+              })}
+              {/* Solution-wide total — sum of all per-type totals. */}
+              {Object.keys(laborEstimates).length > 0 && (
+                <div style={{ marginLeft: "auto", padding: "6px 14px", background: "#eef2f7", borderRadius: 8, fontSize: 12, color: "#475569" }}>
+                  <span style={{ color: "#94a3b8" }}>Solution total: </span>
+                  <strong style={{ color: "#1e293b" }}>{laborTotals.expected}h</strong>
+                  <span style={{ color: "#94a3b8", marginLeft: 4 }}>
+                    ({laborTotals.low}–{laborTotals.high})
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          <LaborEstimateView
+            key={effectiveActiveLaborType}
+            solutionId={solution.id}
+            solutionType={effectiveActiveLaborType}
+            estimate={laborEstimate}
+            hasAssessment={needsAssessments[effectiveActiveLaborType] !== undefined}
+            canEdit={canEdit}
+            onEstimateChange={(le) => {
+              setLaborEstimates((prev) => {
+                if (le === null) {
+                  const next = { ...prev };
+                  delete next[effectiveActiveLaborType];
+                  return next;
+                }
+                return { ...prev, [le.solution_type]: le };
+              });
+            }}
+          />
+        </div>
       )}
 
       {/* ── SharePoint Tab ── */}
