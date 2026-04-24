@@ -11,6 +11,7 @@ import {
 import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
+import { solutionTypeLabel } from "../../shared/solutionTypes";
 
 type Tab = "assessments" | "tech-stack" | "roadmap" | "utilization";
 
@@ -399,7 +400,7 @@ export default function OptimizeAccountPage() {
                             )}
                             {a.solution_types.map((t) => (
                               <span key={t} className="ms-badge" style={{ background: "rgba(99,193,234,0.08)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
-                                {t === "ucaas" ? "UCaaS" : t === "ccaas" ? "CCaaS" : t === "ci" ? "CI" : t === "virtual_agent" ? "Virtual Agent" : t}
+                                {solutionTypeLabel(t)}
                               </span>
                             ))}
                           </div>

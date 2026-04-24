@@ -31,32 +31,54 @@ export function isSolutionType(v: unknown): v is SolutionType {
   return typeof v === "string" && (SOLUTION_TYPES as readonly string[]).includes(v);
 }
 
-/** Tolerant reader: accepts a JSON array string, a legacy single-string value, or nullish. */
+/**
+ * Legacy aliases — maps historical, non-canonical keys still in DB/asset JSON/scoring
+ * internals to their canonical SolutionType. Retire each alias only after the underlying
+ * call sites have been migrated.
+ *
+ * - `virtual_agent` (long form used by the Optimize scoring engine, labor config, and
+ *   impact_assessments.solution_types rows pre-dating the shared enum) → `va`.
+ */
+const LEGACY_ALIASES: Record<string, SolutionType> = {
+  virtual_agent: "va",
+};
+
+/** Returns the canonical SolutionType for a raw string, resolving legacy aliases. Returns null for unrecognized values. */
+export function canonicalizeSolutionType(v: string): SolutionType | null {
+  if (isSolutionType(v)) return v;
+  return LEGACY_ALIASES[v] ?? null;
+}
+
+/** Tolerant reader: accepts a JSON array string, a legacy single-string value, or nullish. Legacy aliases are folded to canonical. */
 export function parseSolutionTypes(raw: unknown): SolutionType[] {
   if (raw == null) return [];
-  if (Array.isArray(raw)) return raw.filter(isSolutionType);
+  const pickCanonical = (v: unknown): v is SolutionType => typeof v === "string" && canonicalizeSolutionType(v) !== null;
+  const toCanonical = (v: string): SolutionType => canonicalizeSolutionType(v) ?? (v as SolutionType);
+  if (Array.isArray(raw)) return raw.filter(pickCanonical).map(toCanonical);
   if (typeof raw !== "string") return [];
   const s = raw.trim();
   if (!s) return [];
   if (s.startsWith("[")) {
     try {
       const parsed: unknown = JSON.parse(s);
-      if (Array.isArray(parsed)) return parsed.filter(isSolutionType);
+      if (Array.isArray(parsed)) return parsed.filter(pickCanonical).map(toCanonical);
     } catch {
       /* fall through to legacy single-value handling */
     }
   }
-  return isSolutionType(s) ? [s] : [];
+  const canonical = canonicalizeSolutionType(s);
+  return canonical ? [canonical] : [];
 }
 
 export function serializeSolutionTypes(types: readonly SolutionType[]): string {
   return JSON.stringify(types);
 }
 
-/** Human label, tolerant of unknown inputs (returns the raw string for unknowns). */
+/** Human label, tolerant of unknown inputs and legacy aliases (returns the raw string for unknowns). */
 export function solutionTypeLabel(type: string | null | undefined): string {
   if (!type) return "";
-  return isSolutionType(type) ? SOLUTION_TYPE_LABELS[type] : type;
+  const canonical = canonicalizeSolutionType(type);
+  return canonical ? SOLUTION_TYPE_LABELS[canonical] : type;
 }
 
 /**
