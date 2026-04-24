@@ -13,17 +13,13 @@ import { useToast } from "../components/ui/ToastProvider";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
-import type { SolutionType } from "../../shared/solutionTypes";
+import { solutionTypeLabel, type SolutionType } from "../../shared/solutionTypes";
 
 type Tab = "overview" | "solutions" | "implementations" | "optimizations" | "documents";
 
 type CustomerSolution = Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id">;
 type CustomerProject = Pick<Project, "id" | "name" | "vendor" | "solution_types" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "created_at" | "updated_at"> & { has_optimization: number | null };
 type CustomerOptimization = { id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_types: string[]; actual_go_live_date: string | null };
-
-const SOLUTION_TYPE_LABELS: Record<string, string> = {
-  ucaas: "UCaaS", ccaas: "CCaaS", ci: "Conversation Intelligence", va: "AI Virtual Agent",
-};
 
 const JOURNEY_LABELS: Record<string, string> = {
   zoom_ucaas: "UCaaS", zoom_ccaas: "CCaaS", zoom_rooms: "Zoom Rooms",
@@ -54,13 +50,13 @@ const STANDALONE_JOURNEYS = [
 ];
 
 function journeyBadgeText(journeysJson: string | null, solutionType: string): string {
-  if (!journeysJson) return SOLUTION_TYPE_LABELS[solutionType] ?? solutionType;
+  if (!journeysJson) return solutionTypeLabel(solutionType);
   try {
     const journeys: string[] = JSON.parse(journeysJson);
-    if (!journeys.length) return SOLUTION_TYPE_LABELS[solutionType] ?? solutionType;
+    if (!journeys.length) return solutionTypeLabel(solutionType);
     const labels = journeys.slice(0, 3).map(j => JOURNEY_LABELS[j] ?? j);
     return labels.join(" · ") + (journeys.length > 3 ? ` +${journeys.length - 3}` : "");
-  } catch { return SOLUTION_TYPE_LABELS[solutionType] ?? solutionType; }
+  } catch { return solutionTypeLabel(solutionType); }
 }
 
 const HEALTH_COLOR: Record<string, string> = {
