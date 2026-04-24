@@ -7,6 +7,7 @@ import { welcomePackage } from "../lib/emailTemplates";
 import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
+import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -29,7 +30,7 @@ type ProjectRow = {
   name: string;
   customer_name: string | null;
   customer_id: string | null;
-  solution_type: string | null;
+  solution_types: SolutionType[];
   vendor: string | null;
   kickoff_date: string | null;
   target_go_live_date: string | null;
@@ -39,12 +40,13 @@ type ProjectRow = {
 };
 
 async function loadProject(db: D1Database, projectId: string): Promise<ProjectRow | null> {
-  return db
-    .prepare(`SELECT id, name, customer_name, customer_id, solution_type, vendor, kickoff_date,
+  const row = await db
+    .prepare(`SELECT id, name, customer_name, customer_id, solution_types, vendor, kickoff_date,
                      target_go_live_date, kickoff_meeting_url, welcome_sent_at, pm_user_id
               FROM projects WHERE id = ? LIMIT 1`)
     .bind(projectId)
-    .first<ProjectRow>();
+    .first<Omit<ProjectRow, "solution_types"> & { solution_types: string }>();
+  return row ? { ...row, solution_types: parseSolutionTypes(row.solution_types) } : null;
 }
 
 // Partner AE label uses the project's vendor (Zoom / RingCentral / 8x8 / Dialpad / etc.)
@@ -152,7 +154,7 @@ app.get("/:projectId/welcome/options", async (c) => {
       id: project.id,
       name: project.name,
       customerName: project.customer_name,
-      solutionType: project.solution_type,
+      solutionTypes: project.solution_types,
       vendor: project.vendor,
       kickoffDate: project.kickoff_date,
       targetGoLiveDate: project.target_go_live_date,
@@ -282,7 +284,7 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     kickoffWhen: draft.kickoffWhen ?? null,
     kickoffDate: project.kickoff_date,
     targetGoLiveDate: project.target_go_live_date,
-    solution: project.solution_type,
+    solution: project.solution_types[0] ?? null,
     teamSections,
     distributionListEmail,
     sections: draft.sections,

@@ -8,6 +8,7 @@ import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
+import { parseSolutionTypes, serializeSolutionTypes } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -434,7 +435,7 @@ app.post("/:id/create-project", async (c) => {
   const projectId = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, dynamics_account_id)
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_types, status, dynamics_account_id)
        VALUES (?, ?, ?, ?, ?, ?, 'planning', ?)`
     )
     .bind(
@@ -443,7 +444,7 @@ app.post("/:id/create-project", async (c) => {
       solution.customer_name,
       solution.customer_id ?? null,
       VENDOR_LABELS[solution.vendor] ?? solution.vendor,
-      solution.solution_type,
+      serializeSolutionTypes(parseSolutionTypes(solution.solution_type)),
       solution.dynamics_account_id ?? null,
     )
     .run();

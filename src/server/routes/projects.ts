@@ -10,6 +10,7 @@ import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -18,7 +19,7 @@ app.get("/", async (c) => {
   const db = c.env.DB;
 
   let sql = `
-    SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
+    SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, managed_in_asana, asana_project_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
@@ -55,7 +56,7 @@ app.get("/", async (c) => {
 
   const rows = await db.prepare(sql).bind(...bindings).all();
 
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
 app.get("/:id", async (c) => {
@@ -71,7 +72,7 @@ app.get("/:id", async (c) => {
   const project = await db
     .prepare(
       `
-      SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_type, p.status, p.health,
+      SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.created_at, p.updated_at,
@@ -99,7 +100,7 @@ app.get("/:id", async (c) => {
     throw new HTTPException(404, { message: "Project not found" });
   }
 
-  return c.json(project);
+  return c.json(normalizeSolutionTypesField(project));
 });
 
 const createProjectSchema = z.object({
@@ -107,7 +108,7 @@ const createProjectSchema = z.object({
   customer_name: z.string().max(500).optional(),
   customer_id: z.string().nullable().optional(),
   vendor: z.string().max(500).optional(),
-  solution_type: z.string().max(500).optional(),
+  solution_types: z.array(z.enum(SOLUTION_TYPES)).default([]),
   kickoff_date: z.string().optional(),
   target_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
@@ -126,7 +127,7 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, customer_id: customerIdInput, vendor, solution_type, kickoff_date, target_go_live_date, pm_user_id: pmInput, dynamics_account_id, crm_case_id } = parsed.data;
+  const { name, customer_name, customer_id: customerIdInput, vendor, solution_types, kickoff_date, target_go_live_date, pm_user_id: pmInput, dynamics_account_id, crm_case_id } = parsed.data;
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
 
@@ -166,18 +167,18 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
 
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, health, kickoff_date, target_go_live_date, pm_user_id, dynamics_account_id, crm_case_id)
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_types, status, health, kickoff_date, target_go_live_date, pm_user_id, dynamics_account_id, crm_case_id)
        VALUES (?, ?, ?, ?, ?, ?, 'in_progress', 'on_track', ?, ?, ?, ?, ?)`
     )
-    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, solution_type ?? null, kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, dynamics_account_id ?? null, crm_case_id ?? null)
+    .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, serializeSolutionTypes(solution_types), kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, dynamics_account_id ?? null, crm_case_id ?? null)
     .run();
 
   const created = await db
-    .prepare("SELECT id, name, customer_name, vendor, solution_type, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT id, name, customer_name, vendor, solution_types, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
     .first();
 
-  return c.json(created, 201);
+  return c.json(created ? normalizeSolutionTypesField(created) : null, 201);
 });
 
 const updateProjectSchema = z.object({
@@ -233,7 +234,7 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
       .bind(autoHealth, projectId)
       .run();
     const updated = await db.prepare("SELECT * FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
-    return c.json(updated);
+    return c.json(updated ? normalizeSolutionTypesField(updated) : null);
   }
 
   for (const [key, value] of Object.entries(updates)) {
@@ -315,7 +316,7 @@ app.patch("/:id", requireRole("admin", "pm"), async (c) => {
     }
   }
 
-  return c.json(updated);
+  return c.json(updated ? normalizeSolutionTypesField(updated) : null);
 });
 
 // ── CRM Case + Hours Compliance ──────────────────────────────────────────────
@@ -574,7 +575,7 @@ app.post("/:id/crm-sync", async (c) => {
   return c.json({
     staff: staff.results ?? [],
     crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name },
-    project: updatedProject,
+    project: updatedProject ? normalizeSolutionTypesField(updatedProject) : null,
   });
 });
 

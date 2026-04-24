@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount, type CrmAccountTeam, type Project } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import type { SolutionType } from "../../shared/solutionTypes";
 
 const STATUS_COLOR: Record<string, string> = {
   active: "#22c55e",
@@ -15,11 +17,23 @@ const METHOD_COLOR: Record<string, { color: string; bg: string; border: string }
   direct: { color: "#059669", bg: "rgba(5,150,105,0.1)",   border: "rgba(5,150,105,0.3)"   },
 };
 
-const EMPTY_DIRECT = {
+const EMPTY_DIRECT: {
+  customer_name: string;
+  dynamics_account_id: string;
+  vendor: string;
+  solution_types: SolutionType[];
+  actual_go_live_date: string;
+  ae_user_id: string;
+  sa_user_id: string;
+  csm_user_id: string;
+  next_review_date: string;
+  notes: string;
+  project_id: string;
+} = {
   customer_name: "",
   dynamics_account_id: "",
   vendor: "",
-  solution_type: "",
+  solution_types: [],
   actual_go_live_date: "",
   ae_user_id: "",
   sa_user_id: "",
@@ -127,7 +141,7 @@ export default function OptimizePage() {
       const created = await api.optimizeDirectEnroll({
         customer_name: directForm.customer_name.trim(),
         vendor: directForm.vendor.trim() || null,
-        solution_type: directForm.solution_type.trim() || null,
+        solution_types: directForm.solution_types,
         actual_go_live_date: directForm.actual_go_live_date || null,
         ae_user_id: directForm.ae_user_id || null,
         sa_user_id: directForm.sa_user_id || null,
@@ -401,10 +415,8 @@ export default function OptimizePage() {
                   </select>
                 </label>
                 <label className="ms-label">
-                  <span>Solution Type</span>
-                  <input className="ms-input" value={directForm.solution_type}
-                    onChange={(e) => setDirectForm({ ...directForm, solution_type: e.target.value })}
-                    placeholder="e.g. UCaaS, CCaaS" />
+                  <span>Solution Types</span>
+                  <SolutionTypePicker value={directForm.solution_types} onChange={(next) => setDirectForm({ ...directForm, solution_types: next })} />
                 </label>
                 <label className="ms-label">
                   <span>Go-Live Date</span>

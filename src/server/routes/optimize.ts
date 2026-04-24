@@ -6,6 +6,7 @@ import { findOrCreatePfUser } from "../lib/crmUsers";
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
 import { scoreAssessment } from "../lib/scoringEngine";
+import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -29,7 +30,7 @@ app.get("/accounts", async (c) => {
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, COALESCE(oa.customer_id, p.customer_id) AS customer_id,
-      p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
+      p.name AS project_name, p.customer_name, p.vendor, p.solution_types,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
       cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name,
@@ -46,7 +47,7 @@ app.get("/accounts", async (c) => {
     LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
     ORDER BY oa.graduated_at DESC
   `).all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
 // ── Eligible projects (all phases complete, not yet graduated) ─────────────────
@@ -54,7 +55,7 @@ app.get("/accounts", async (c) => {
 app.get("/eligible", async (c) => {
   assertOptimizeAccess(c.get("auth").role);
   const rows = await c.env.DB.prepare(`
-    SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_type,
+    SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_types,
            p.actual_go_live_date, p.pm_user_id
     FROM projects p
     WHERE (p.archived = 0 OR p.archived IS NULL)
@@ -62,7 +63,7 @@ app.get("/eligible", async (c) => {
       AND p.actual_go_live_date IS NOT NULL
     ORDER BY p.actual_go_live_date DESC
   `).all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
 // ── Single account ─────────────────────────────────────────────────────────────
@@ -75,7 +76,7 @@ app.get("/accounts/:projectId", async (c) => {
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.notes,
       COALESCE(oa.customer_id, p.customer_id) AS customer_id, oa.updated_at,
-      p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
+      p.name AS project_name, p.customer_name, p.vendor, p.solution_types,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name  AS ae_name,  ae.email  AS ae_email,
       cust.pf_sa_user_id AS sa_user_id, sa.name  AS sa_name,  sa.email  AS sa_email,
@@ -90,7 +91,7 @@ app.get("/accounts/:projectId", async (c) => {
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });
-  return c.json(row);
+  return c.json(normalizeSolutionTypesField(row));
 });
 
 // ── CRM account search ─────────────────────────────────────────────────────────
@@ -151,7 +152,7 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, oa.notes, COALESCE(oa.customer_id, p.customer_id) AS customer_id, oa.updated_at,
-      p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
+      p.name AS project_name, p.customer_name, p.vendor, p.solution_types,
       p.actual_go_live_date, p.kickoff_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name, ae.email AS ae_email,
       cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name, sa.email AS sa_email,
@@ -165,7 +166,7 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
 
-  return c.json({ account: updated, crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name } });
+  return c.json({ account: updated ? normalizeSolutionTypesField(updated) : null, crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name } });
 });
 
 // ── Direct enrollment (no prior project/solution) ──────────────────────────────
@@ -173,7 +174,7 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
 const directEnrollSchema = z.object({
   customer_name: z.string().min(1).max(500),
   vendor: z.string().max(100).nullable().optional(),
-  solution_type: z.string().max(100).nullable().optional(),
+  solution_types: z.array(z.enum(SOLUTION_TYPES)).default([]),
   actual_go_live_date: z.string().nullable().optional(),
   next_review_date: z.string().nullable().optional(),
   notes: z.string().nullable().optional(),
@@ -241,12 +242,12 @@ app.post("/accounts/direct", async (c) => {
     // Create a minimal project shell
     projectId = crypto.randomUUID();
     await db.prepare(`
-      INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, actual_go_live_date,
+      INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_types, actual_go_live_date,
         status, health, dynamics_account_id, archived)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started', 'on_track', ?, 0)
     `).bind(
       projectId, d.customer_name, d.customer_name, customerId,
-      d.vendor ?? null, d.solution_type ?? null,
+      d.vendor ?? null, serializeSolutionTypes(d.solution_types),
       d.actual_go_live_date ?? null, d.dynamics_account_id ?? null
     ).run();
   }
@@ -263,7 +264,7 @@ app.post("/accounts/direct", async (c) => {
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
       oa.optimize_status, oa.next_review_date, COALESCE(oa.customer_id, p.customer_id) AS customer_id,
-      p.name AS project_name, p.customer_name, p.vendor, p.solution_type,
+      p.name AS project_name, p.customer_name, p.vendor, p.solution_types,
       p.actual_go_live_date, p.pm_user_id, p.dynamics_account_id,
       cust.pf_ae_user_id AS ae_user_id, ae.name AS ae_name,
       cust.pf_sa_user_id AS sa_user_id, sa.name AS sa_name,
@@ -277,7 +278,7 @@ app.post("/accounts/direct", async (c) => {
     LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
     WHERE oa.id = ? LIMIT 1
   `).bind(accountId).first();
-  return c.json(created, 201);
+  return c.json(created ? normalizeSolutionTypesField(created) : null, 201);
 });
 
 // ── Graduate a project ─────────────────────────────────────────────────────────
