@@ -8,6 +8,7 @@ import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
 import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
+import { applyWelcomeSectionDefaults } from "../../shared/welcomeSections";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -185,11 +186,10 @@ const draftSchema = z.object({
   kickoffMeetingUrl: z.string().nullable().optional(),
   kickoffWhen: z.string().max(200).nullable().optional(),
   distributionListEmail: z.string().max(200).nullable().optional(),
-  sections: z.object({
-    adminAccess: z.boolean().default(true),
-    porting: z.boolean().default(true),
-    timeline: z.boolean().default(true),
-  }).default({ adminAccess: true, porting: true, timeline: true }),
+  // Catalog-driven: client sends whichever section IDs it toggled; server fills
+  // in defaults for any applicable section IDs the client omitted. See
+  // src/shared/welcomeSections.ts for the canonical ID set and per-type applicability.
+  sections: z.record(z.string(), z.boolean()).default({}),
   recipients: z.object({
     contactIds: z.array(z.string()).default([]),
     staffUserIds: z.array(z.string()).default([]),
@@ -274,6 +274,8 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
   const distributionListEmail = draft.distributionListEmail?.trim()
     || computeDistributionListEmail(project.vendor, project.customer_name);
 
+  const resolvedSections = applyWelcomeSectionDefaults(draft.sections, project.solution_types);
+
   const html = welcomePackage({
     projectName: project.name,
     customerName: project.customer_name,
@@ -285,9 +287,10 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     kickoffDate: project.kickoff_date,
     targetGoLiveDate: project.target_go_live_date,
     solution: project.solution_types[0] ?? null,
+    solutionTypes: project.solution_types,
     teamSections,
     distributionListEmail,
-    sections: draft.sections,
+    sections: resolvedSections,
   });
 
   const subject = `Welcome to ${project.name}${project.customer_name ? ` · ${project.customer_name}` : ""}`;
