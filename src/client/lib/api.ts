@@ -48,10 +48,10 @@ export type User = {
   cs_permission?: "none" | "user" | "power_user";
 };
 
-// Re-exported from the shared canonical source so Solution.solution_type
-// and every other call site lines up with the same enum used across the app.
-import type { SolutionType } from "../../shared/solutionTypes";
-export type { SolutionType };
+// Re-exported from the shared canonical source so every call site lines up
+// with the same enum used across the app.
+import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
+export type { SolutionType, OtherTechnology };
 
 export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
 export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
@@ -86,7 +86,8 @@ export type Solution = {
   customer_name: string;
   dynamics_account_id: string | null;
   vendor: SolutionVendor;
-  solution_type: SolutionType;
+  solution_types: SolutionType[];
+  other_technologies: OtherTechnology[];
   status: SolutionStatus;
   partner_ae_user_id: string | null;
   partner_ae_name: string | null;
@@ -1331,7 +1332,8 @@ export const api = {
     customer_id?: string;
     dynamics_account_id?: string;
     vendor?: SolutionVendor;
-    solution_type?: SolutionType;
+    solution_types?: SolutionType[];
+    other_technologies?: OtherTechnology[];
     journeys?: string[];
     pf_ae_user_id?: string;
     pf_sa_user_id?: string;
@@ -1352,7 +1354,8 @@ export const api = {
       customer_name: string;
       dynamics_account_id: string | null;
       vendor: SolutionVendor;
-      solution_type: SolutionType;
+      solution_types: SolutionType[];
+      other_technologies: OtherTechnology[];
       status: SolutionStatus;
       pf_ae_user_id: string | null;
       partner_ae_user_id: string | null;
@@ -1454,7 +1457,7 @@ export const api = {
     }),
 
   optimizeLinkedSolution: (projectId: string) =>
-    request<Pick<Solution, "id" | "name" | "customer_name" | "status" | "solution_type" | "vendor"> | null>(
+    request<Pick<Solution, "id" | "name" | "customer_name" | "status" | "solution_types" | "vendor"> | null>(
       `/optimize/accounts/${projectId}/linked-solution`
     ),
   optimizeUpdateAccount: (projectId: string, payload: {
@@ -1677,7 +1680,7 @@ export const api = {
   deleteCustomerProviderAe: (id: string, aeId: string) =>
     request<{ success: boolean }>(`/customers/${id}/provider-aes/${aeId}`, { method: "DELETE" }),
   customerSolutions: (id: string) =>
-    request<Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">[]>(`/customers/${id}/solutions`),
+    request<Pick<Solution, "id" | "name" | "vendor" | "solution_types" | "other_technologies" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">[]>(`/customers/${id}/solutions`),
   customerProjects: (id: string) =>
     request<Pick<Project, "id" | "name" | "vendor" | "solution_types" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
   customerOptimizations: (id: string) =>

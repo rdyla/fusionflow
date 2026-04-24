@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+import { parseSolutionTypes } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -437,8 +438,8 @@ app.put("/:id/labor-estimate", async (c) => {
   const solutionId = c.req.param("id");
 
   const solution = await c.env.DB.prepare(
-    "SELECT id, solution_type FROM solutions WHERE id = ? LIMIT 1"
-  ).bind(solutionId).first() as { id: string; solution_type: string } | null;
+    "SELECT id, solution_types FROM solutions WHERE id = ? LIMIT 1"
+  ).bind(solutionId).first() as { id: string; solution_types: string } | null;
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
 
   const parsed = upsertSchema.safeParse(await c.req.json().catch(() => ({})));
@@ -452,7 +453,9 @@ app.put("/:id/labor-estimate", async (c) => {
   ).bind(solutionId).first() as { answers: string } | null;
   const answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
 
-  const category = solutionTypeToCategory(solution.solution_type);
+  // PR #7: labor routes off the first type; PR #9 will rebuild this as per-type estimates summed into a solution total.
+  const primarySolutionType = parseSolutionTypes(solution.solution_types)[0] ?? "";
+  const category = solutionTypeToCategory(primarySolutionType);
 
   // Load base hours config override from DB if present
   const configRow = await c.env.DB.prepare(

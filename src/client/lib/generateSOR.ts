@@ -217,9 +217,10 @@ export async function generateSOR(
   requirements: string,
   preparedBy: string,
 ) {
-  const typeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
+  const primaryType = solution.solution_types[0] ?? "";
+  const typeLabel = TYPE_LABELS[primaryType] ?? primaryType;
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  const schema = ASSESSMENT_SCHEMA[solution.solution_type] ?? [];
+  const schema = ASSESSMENT_SCHEMA[primaryType] ?? [];
 
   const children: (Paragraph | Table)[] = [];
 
