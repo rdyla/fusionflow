@@ -51,7 +51,9 @@ export type User = {
 // Re-exported from the shared canonical source so every call site lines up
 // with the same enum used across the app.
 import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
+import type { AddOn } from "../../shared/sowAddOns";
 export type { SolutionType, OtherTechnology };
+export type { AddOn };
 
 export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
 export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
@@ -104,6 +106,10 @@ export type Solution = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // SOW pricing
+  add_ons: AddOn[];
+  blended_rate: number;
+  sow_total_amount: number | null;
   // Joined fields
   partner_ae_display_name: string | null;
   customer_pf_ae_name: string | null;
@@ -1371,6 +1377,8 @@ export const api = {
       sow_data: string | null;
       gap_analysis: string | null;
       linked_project_id: string | null;
+      add_ons: AddOn[];
+      blended_rate: number;
     }>
   ) =>
     request<Solution>(`/solutions/${id}`, {

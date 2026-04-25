@@ -1,5 +1,6 @@
 import type { NeedsAssessment, LaborEstimate, Solution } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
+import { ADD_ON_KIND_LABELS, calcSowTotal, DEFAULT_BLENDED_RATE, type AddOn } from "../../../shared/sowAddOns";
 import logoUrl from "../../assets/packetfusion-fullcolor.png";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -83,10 +84,31 @@ function ans(answers: Record<string, unknown>, key: string): string {
 
 // ── HTML Builder ──────────────────────────────────────────────────────────────
 
+function fmtUsd(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function fmtUsdShort(n: number): string {
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+
+/** Combine final_hours from every per-type labor estimate into one workstream → hours map. */
+function unifyFinalHours(estimates: LaborEstimate[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const le of estimates) {
+    const fh = le.final_hours ?? {};
+    for (const ws of Object.keys(fh)) {
+      out[ws] = (out[ws] ?? 0) + (fh[ws] ?? 0);
+    }
+  }
+  return out;
+}
+
 function buildSowHtml(
   solution: Solution,
   needsAssessment: NeedsAssessment | null,
-  laborEstimate: LaborEstimate | null,
+  laborEstimates: LaborEstimate[],
   scopeText: string,
   logo: string,
   sowData?: SowData | null,
@@ -226,14 +248,20 @@ function buildSowHtml(
     }
   }
 
-  // ── Section 3: Work Breakdown ─────────────────────────────────────────────
+  // ── Section 2.1: Work Breakdown ───────────────────────────────────────────
   // Customer-facing SOW: show the computed hour counts only. No ranges, no
   // complexity multipliers, no confidence bands, no risk flags — those are
   // internal planning aids and stay on the Labor Estimate tab.
+  // Hours are unified across every per-type labor estimate so combo solutions
+  // render one workstreams table rather than N copies.
+  const unifiedHours = unifyFinalHours(laborEstimates);
+  const laborHoursTotal = laborEstimates.reduce((sum, le) => sum + (le.total_expected ?? 0), 0);
+  const hasLabor = laborEstimates.length > 0;
+
   const wbsRows = WORKSTREAM_ORDER
-    .filter((ws) => laborEstimate ? (laborEstimate.final_hours[ws] ?? 0) > 0 : true)
+    .filter((ws) => hasLabor ? (unifiedHours[ws] ?? 0) > 0 : true)
     .map((ws, i) => {
-      const hours = laborEstimate ? (laborEstimate.final_hours[ws] ?? 0) : null;
+      const hours = hasLabor ? (unifiedHours[ws] ?? 0) : null;
       const deliverable = WORKSTREAM_DELIVERABLES[ws] ?? "";
       const rowClass = i % 2 === 0 ? "even" : "odd";
       return `<tr class="${rowClass}">
@@ -243,13 +271,11 @@ function buildSowHtml(
       </tr>`;
     }).join("");
 
-  const totalExpected = laborEstimate?.total_expected ?? null;
-
-  const wbsFooter = totalExpected
+  const wbsFooter = hasLabor
     ? `<tr class="total-row">
         <td><strong>Total Estimated Effort</strong></td>
         <td></td>
-        <td class="ws-hours"><strong>${totalExpected}h</strong></td>
+        <td class="ws-hours"><strong>${laborHoursTotal}h</strong></td>
       </tr>`
     : "";
 
@@ -264,13 +290,68 @@ function buildSowHtml(
       </table>`
     : `<p class="na-note">A labor estimate has not yet been generated for this solution.</p>`;
 
-  // ── Section 4: Investment ─────────────────────────────────────────────────
-  const investmentRows = totalExpected
-    ? dataRow("Expected Effort", `${totalExpected} hours`)
+  // ── Section 2.2: Project Investment ──────────────────────────────────────
+  // Pricing pulls the saved blended rate, sums labor hours across types, and
+  // applies any add-on / discount items in solutions.add_ons. Mirrors the
+  // CloudSupport custom-line pattern so AE post-presentation discounting flows
+  // through the same shape.
+  const addOns: AddOn[] = solution.add_ons ?? [];
+  const blendedRate = solution.blended_rate || DEFAULT_BLENDED_RATE;
+  const breakdown = calcSowTotal(laborHoursTotal, addOns, blendedRate);
+
+  const pricingHeader = `
+    <thead>
+      <tr>
+        <th class="pi-desc">Description</th>
+        <th class="pi-qty">Quantity</th>
+        <th class="pi-rate">Rate</th>
+        <th class="pi-amt">Amount</th>
+      </tr>
+    </thead>`;
+
+  const laborRow = hasLabor
+    ? `<tr>
+        <td class="pi-desc">Professional Services — labor</td>
+        <td class="pi-qty">${laborHoursTotal} hrs</td>
+        <td class="pi-rate">${fmtUsdShort(blendedRate)}/hr</td>
+        <td class="pi-amt">${fmtUsd(breakdown.laborSubtotal)}</td>
+      </tr>`
     : "";
 
-  const investmentHtml = investmentRows
-    ? `<table><tbody>${investmentRows}</tbody></table>`
+  const addOnRows = addOns.map((a, i) => {
+    const dollar = breakdown.addOnEffects[i]?.dollar ?? 0;
+    const isDiscount = dollar < 0;
+    const qty = a.kind === "hours"
+      ? `${a.value} hrs`
+      : a.kind === "discount_percent"
+        ? `${a.value}%`
+        : "—";
+    const rate = a.kind === "hours" ? `${fmtUsdShort(blendedRate)}/hr` : ADD_ON_KIND_LABELS[a.kind];
+    const labelText = a.label || (isDiscount ? "Discount" : "Custom Item");
+    const noteHtml = a.note ? `<div class="pi-note">${esc(a.note)}</div>` : "";
+    return `<tr class="${isDiscount ? "discount" : ""}">
+      <td class="pi-desc">${esc(labelText)}${noteHtml}</td>
+      <td class="pi-qty">${esc(qty)}</td>
+      <td class="pi-rate">${esc(rate)}</td>
+      <td class="pi-amt">${fmtUsd(dollar)}</td>
+    </tr>`;
+  }).join("");
+
+  const totalRow = (hasLabor || addOns.length > 0)
+    ? `<tr class="pi-total">
+        <td class="pi-desc"><strong>SOW Total</strong></td>
+        <td class="pi-qty"></td>
+        <td class="pi-rate"></td>
+        <td class="pi-amt"><strong>${fmtUsd(breakdown.total)}</strong></td>
+      </tr>`
+    : "";
+
+  const investmentHtml = (hasLabor || addOns.length > 0)
+    ? `<table class="pricing-table">
+        ${pricingHeader}
+        <tbody>${laborRow}${addOnRows}${totalRow}</tbody>
+      </table>
+      <p class="prose" style="margin-top:14px;">Pricing covers Packet Fusion-delivered professional services only. Customer-facing platform licensing, recurring usage charges, taxes, and fees are separate and not included in this SOW. Payment terms: 50% invoiced upon SOW signature; 50% upon Customer acceptance. Net 30. All amounts USD.</p>`
     : `<p class="na-note">Investment details will be available once a labor estimate is generated.</p>`;
 
   // ── Section 3: Assumptions & Customer Responsibilities ───────────────────
@@ -429,6 +510,25 @@ function buildSowHtml(
     .total-row td { background: ${SOW_GREY} !important; font-weight: 700; border-top: 2px solid ${SOW_GREEN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .total-row td.ws-hours { color: ${SOW_GREEN}; }
 
+    /* ── Pricing table ─────────────────── */
+    .pricing-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+    .pricing-table thead tr { background: ${SOW_NAVY}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pricing-table thead th { padding: 9px 12px; color: #fff; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 7.5pt; }
+    .pricing-table thead th.pi-desc { text-align: left; width: 50%; }
+    .pricing-table thead th.pi-qty,
+    .pricing-table thead th.pi-rate { text-align: center; width: 16%; }
+    .pricing-table thead th.pi-amt { text-align: right; width: 18%; }
+    .pricing-table tbody td { padding: 9px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; color: #334155; line-height: 1.5; }
+    .pricing-table td.pi-desc { text-align: left; }
+    .pricing-table td.pi-qty,
+    .pricing-table td.pi-rate { text-align: center; white-space: nowrap; }
+    .pricing-table td.pi-amt { text-align: right; white-space: nowrap; font-weight: 700; color: ${SOW_NAVY}; }
+    .pricing-table tr.discount td { color: #047857; }
+    .pricing-table tr.discount td.pi-amt { color: #047857; }
+    .pricing-table .pi-note { font-size: 8.5pt; color: #64748b; font-style: italic; margin-top: 4px; }
+    .pricing-table tr.pi-total td { background: ${SOW_GREY} !important; font-weight: 800; border-top: 2px solid ${SOW_GREEN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .pricing-table tr.pi-total td.pi-amt { color: ${SOW_GREEN}; font-size: 11pt; }
+
     /* ── Notes/prose ───────────────────── */
     .na-note { font-size: 9.5pt; color: #94a3b8; font-style: italic; }
     .prose { font-size: 9.5pt; color: #475569; line-height: 1.6; margin-bottom: 8px; }
@@ -569,14 +669,15 @@ function buildSowHtml(
 type Props = {
   solution: Solution;
   needsAssessment: NeedsAssessment | null;
-  laborEstimate: LaborEstimate | null;
+  /** Every per-type labor estimate. Hours are unified across them in the rendered SOW. */
+  laborEstimates: LaborEstimate[];
   scopeText: string;
   sowData?: SowData | null;
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimate, scopeText, sowData }: Props) {
+export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimates, scopeText, sowData }: Props) {
   const customerName = solution.customer_name || "Customer";
   // Multi-type solutions get a joined label (e.g. "UCaaS / CCaaS") so the SOW document
   // title + header reflect every type the customer is scoped to.
@@ -586,10 +687,12 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
   const hasNa = needsAssessment !== null;
-  const hasEstimate = laborEstimate !== null;
+  const hasEstimate = laborEstimates.length > 0;
+  const previewUnifiedHours = unifyFinalHours(laborEstimates);
+  const previewLaborTotal = laborEstimates.reduce((sum, le) => sum + (le.total_expected ?? 0), 0);
 
   function openPrintWindow() {
-    const html = buildSowHtml(solution, needsAssessment, laborEstimate, scopeText, logoUrl, sowData);
+    const html = buildSowHtml(solution, needsAssessment, laborEstimates, scopeText, logoUrl, sowData);
     const win = window.open("", "_blank", "width=960,height=750");
     if (!win) return;
     win.document.write(html);
@@ -642,8 +745,8 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
                 </tr>
               </thead>
               <tbody>
-                {WORKSTREAM_ORDER.filter((ws) => (laborEstimate.final_hours[ws] ?? 0) > 0).map((ws) => {
-                  const h = laborEstimate.final_hours[ws] ?? 0;
+                {WORKSTREAM_ORDER.filter((ws) => (previewUnifiedHours[ws] ?? 0) > 0).map((ws) => {
+                  const h = previewUnifiedHours[ws] ?? 0;
                   return (
                     <tr key={ws} style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={{ padding: "8px 12px", color: "#334155" }}>{WORKSTREAM_LABELS[ws]}</td>
@@ -654,7 +757,7 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
                 <tr style={{ borderTop: "2px solid #0b9aad", background: "#f0f9ff" }}>
                   <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f" }}>Total Estimated Effort</td>
                   <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", textAlign: "right" }}>
-                    {laborEstimate.total_expected}h
+                    {previewLaborTotal}h
                   </td>
                 </tr>
               </tbody>
