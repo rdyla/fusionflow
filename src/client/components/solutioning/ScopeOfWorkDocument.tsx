@@ -439,8 +439,10 @@ function buildSowHtml(
     .cover { padding-bottom: 36px; margin-bottom: 32px; }
     .cover-banner {
       background: ${SOW_GREY};
-      padding: 22px 28px;
-      margin: -20px -28px 56px;
+      /* Bleed edge-to-edge by negating the .page padding (48px top, 56px sides).
+         Padding compensates so the logo stays where it was visually. */
+      margin: -48px -56px 56px;
+      padding: 50px 56px 22px;
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .cover-banner img { height: 60px; width: auto; display: block; }
