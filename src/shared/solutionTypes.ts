@@ -155,12 +155,15 @@ export function normalizeOtherTechnologiesField<T extends { other_technologies?:
   return { ...row, other_technologies: parseOtherTechnologies(row.other_technologies) };
 }
 
-/** Combined helper — both solution_types + other_technologies on a solutions SELECT row. */
-export function normalizeSolutionRow<T extends Record<string, unknown>>(row: T): T & { solution_types: SolutionType[]; other_technologies: OtherTechnology[] } {
+/** Combined helper — both solution_types + other_technologies + add_ons on a solutions SELECT row. */
+import { parseAddOns, type AddOn } from "./sowAddOns";
+
+export function normalizeSolutionRow<T extends Record<string, unknown>>(row: T): T & { solution_types: SolutionType[]; other_technologies: OtherTechnology[]; add_ons: AddOn[] } {
   return {
     ...row,
     solution_types: parseSolutionTypes(row.solution_types),
     other_technologies: parseOtherTechnologies(row.other_technologies),
+    add_ons: parseAddOns(row.add_ons),
   };
 }
 

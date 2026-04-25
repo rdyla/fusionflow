@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
+import { recomputeSowTotal } from "../lib/sowTotal";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -540,6 +541,9 @@ app.put("/:id/labor-estimates/:type", async (c) => {
     "SELECT * FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
   ).bind(solutionId, solutionType).first() as Record<string, unknown>;
 
+  // Hours just changed → keep solutions.sow_total_amount in sync.
+  await recomputeSowTotal(c.env.DB, solutionId);
+
   return c.json(shapeEstimateRow(row));
 });
 
@@ -556,6 +560,9 @@ app.delete("/:id/labor-estimates/:type", async (c) => {
   await c.env.DB.prepare("DELETE FROM labor_estimates WHERE solution_id = ? AND solution_type = ?")
     .bind(solutionId, solutionType)
     .run();
+
+  await recomputeSowTotal(c.env.DB, solutionId);
+
   return c.json({ success: true });
 });
 

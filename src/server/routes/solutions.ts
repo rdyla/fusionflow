@@ -20,6 +20,8 @@ import {
   type SolutionType,
   type OtherTechnology,
 } from "../../shared/solutionTypes";
+import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
+import { recomputeSowTotal } from "../lib/sowTotal";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -289,6 +291,14 @@ app.get("/:id", async (c) => {
 
 // ── Update ────────────────────────────────────────────────────────────────────
 
+const addOnSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  kind: z.enum(ADD_ON_KINDS),
+  value: z.number().finite(),
+  note: z.string().optional(),
+});
+
 const updateSolutionSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   customer_name: z.string().min(1).max(500).optional(),
@@ -309,6 +319,8 @@ const updateSolutionSchema = z.object({
   sow_data: z.string().nullable().optional(),
   gap_analysis: z.string().nullable().optional(),
   linked_project_id: z.string().nullable().optional(),
+  add_ons: z.array(addOnSchema).optional(),
+  blended_rate: z.number().positive().finite().optional(),
 });
 
 app.patch("/:id", async (c) => {
@@ -329,6 +341,7 @@ app.patch("/:id", async (c) => {
 
   const fields: string[] = [];
   const values: unknown[] = [];
+  let pricingTouched = false;
 
   for (const [key, value] of Object.entries(updates)) {
     if (value === undefined) continue;
@@ -341,6 +354,16 @@ app.patch("/:id", async (c) => {
     } else if (key === "other_technologies" && Array.isArray(value)) {
       fields.push("other_technologies = ?");
       values.push(serializeOtherTechnologies(value as OtherTechnology[]));
+    } else if (key === "add_ons" && Array.isArray(value)) {
+      fields.push("add_ons = ?");
+      // Schema-validated upstream by addOnSchema; cast to drop the union
+      // produced by Object.entries on the inferred Zod type.
+      values.push(serializeAddOns(value as Parameters<typeof serializeAddOns>[0]));
+      pricingTouched = true;
+    } else if (key === "blended_rate") {
+      fields.push("blended_rate = ?");
+      values.push(value);
+      pricingTouched = true;
     } else {
       fields.push(`${key} = ?`);
       values.push(value);
@@ -354,6 +377,10 @@ app.patch("/:id", async (c) => {
     .prepare(`UPDATE solutions SET ${fields.join(", ")} WHERE id = ?`)
     .bind(...values, solutionId)
     .run();
+
+  if (pricingTouched) {
+    await recomputeSowTotal(db, solutionId);
+  }
 
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
   const normalizedUpdated = updated ? normalizeSolutionRow(updated) : null;

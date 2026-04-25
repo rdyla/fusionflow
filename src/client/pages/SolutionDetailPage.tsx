@@ -6,6 +6,7 @@ import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWiza
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
+import SowAddOnsEditor from "../components/solutioning/SowAddOnsEditor";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
@@ -1160,11 +1161,21 @@ export default function SolutionDetailPage() {
             }}
           />
 
+          {/* Add-ons + blended rate → SOW total */}
+          <SowAddOnsEditor
+            solution={solution}
+            laborHoursTotal={laborTotals.expected}
+            canEdit={canEdit}
+            onSaved={(next) => {
+              setSolution(prev => prev ? { ...prev, ...next } : prev);
+            }}
+          />
+
           {/* SOW document generator */}
           <ScopeOfWorkDocument
             solution={solution}
             needsAssessment={needsAssessment}
-            laborEstimate={laborEstimate}
+            laborEstimates={Object.values(laborEstimates)}
             scopeText={scope}
             sowData={sowData}
           />
