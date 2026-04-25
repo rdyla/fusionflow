@@ -1,0 +1,12 @@
+{
+  "name": "packet-fusion-sow-generator",
+  "version": "0.1.0",
+  "description": "Statement of Work generator for Packet Fusion, Inc. — produces branded .docx output via docx-js.",
+  "private": true,
+  "scripts": {
+    "build": "node build.js"
+  },
+  "dependencies": {
+    "docx": "^9.6.1"
+  }
+}
