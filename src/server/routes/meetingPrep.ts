@@ -55,18 +55,54 @@ type ProjectRow = {
   kickoff_date: string | null;
   target_go_live_date: string | null;
   kickoff_meeting_url: string | null;
-  kickoff_sent_at: string | null;
   pm_user_id: string | null;
 };
 
 async function loadProject(db: D1Database, projectId: string): Promise<ProjectRow | null> {
   const row = await db
     .prepare(`SELECT id, name, customer_name, customer_id, solution_types, vendor, kickoff_date,
-                     target_go_live_date, kickoff_meeting_url, kickoff_sent_at, pm_user_id
+                     target_go_live_date, kickoff_meeting_url, pm_user_id
               FROM projects WHERE id = ? LIMIT 1`)
     .bind(projectId)
     .first<Omit<ProjectRow, "solution_types"> & { solution_types: string }>();
   return row ? { ...row, solution_types: parseSolutionTypes(row.solution_types) } : null;
+}
+
+type SendHistoryRow = {
+  id: string;
+  meeting_type: string;
+  label: string | null;
+  subject: string;
+  recipient_emails: string;
+  sent_by_user_id: string | null;
+  sent_at: string;
+};
+
+async function loadSendHistory(db: D1Database, projectId: string, meetingType: MeetingType) {
+  const rows = await db
+    .prepare(
+      `SELECT id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at
+       FROM meeting_prep_sends
+       WHERE project_id = ? AND meeting_type = ?
+       ORDER BY sent_at DESC`
+    )
+    .bind(projectId, meetingType)
+    .all<SendHistoryRow>();
+  return (rows.results ?? []).map((r) => ({
+    id: r.id,
+    label: r.label,
+    subject: r.subject,
+    sentBy: r.sent_by_user_id,
+    sentAt: r.sent_at,
+    recipientCount: (() => {
+      try {
+        const arr = JSON.parse(r.recipient_emails);
+        return Array.isArray(arr) ? arr.length : 0;
+      } catch {
+        return 0;
+      }
+    })(),
+  }));
 }
 
 function partnerLabel(vendor: string | null): string {
@@ -139,11 +175,6 @@ function parseMeetingTypeParam(c: { req: { param: (k: string) => string } }): Me
   return raw;
 }
 
-/** Per-project sent-at column for each meeting type. */
-const SENT_AT_COLUMN: Record<MeetingType, string> = {
-  kickoff: "kickoff_sent_at",
-};
-
 // ── GET /api/projects/:projectId/meeting-prep/:meetingType/options ───────────
 
 app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
@@ -158,6 +189,7 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
   const { contacts, staff } = await loadRecipientCandidates(c.env.DB, project);
+  const history = await loadSendHistory(c.env.DB, projectId, meetingType);
 
   // Customer SharePoint files — tolerate missing config / folder
   let sharepointFiles: Array<{ name: string; webUrl: string; size: number | null; mimeType: string | null }> = [];
@@ -192,7 +224,6 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
       kickoffDate: project.kickoff_date,
       targetGoLiveDate: project.target_go_live_date,
       kickoffMeetingUrl: project.kickoff_meeting_url,
-      sentAt: project.kickoff_sent_at,
       suggestedDistributionListEmail: computeDistributionListEmail(project.vendor, project.customer_name),
     },
     recipients: {
@@ -206,6 +237,7 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
       })),
     },
     sharepoint: { folderUrl: sharepointUrl, files: sharepointFiles },
+    history,
   });
 });
 
@@ -213,8 +245,12 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
 
 const draftSchema = z.object({
   pmCustomNote: z.string().max(5000).default(""),
+  // Free-form per-send label distinguishing multiple sends of the same type
+  // (e.g. "Network Architecture" / "Call Flows" for split discovery sessions).
+  label: z.string().max(200).nullable().optional(),
   // Allow any string for the kickoff URL — PMs often paste shortened or
   // scheme-less Zoom links and we don't want strict URL validation to 400.
+  // Kickoff-only fields; other meeting types ignore.
   kickoffMeetingUrl: z.string().nullable().optional(),
   kickoffWhen: z.string().max(200).nullable().optional(),
   distributionListEmail: z.string().max(200).nullable().optional(),
@@ -304,22 +340,35 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
   const resolvedSections = applyMeetingPrepSectionDefaults(catalog, draft.sections, project.solution_types);
 
   const renderer = getRendererFor(meetingType);
-  const { html, subject } = renderer({
+  const commonData = {
     projectName: project.name,
     customerName: project.customer_name,
     pmName,
     pmCustomNote: draft.pmCustomNote,
     portalUrl,
-    kickoffMeetingUrl: draft.kickoffMeetingUrl ?? project.kickoff_meeting_url,
-    kickoffWhen: draft.kickoffWhen ?? null,
-    kickoffDate: project.kickoff_date,
-    targetGoLiveDate: project.target_go_live_date,
     solution: joinSolutionTypeLabels(project.solution_types) || null,
     solutionTypes: project.solution_types,
     teamSections,
-    distributionListEmail,
     sections: resolvedSections,
-  });
+  };
+
+  // Kickoff has extra type-specific fields (kickoff URL/when, dates, DL email);
+  // every other type takes the standard envelope shape with `label`.
+  const rendererData = meetingType === "kickoff"
+    ? {
+        ...commonData,
+        kickoffMeetingUrl: draft.kickoffMeetingUrl ?? project.kickoff_meeting_url,
+        kickoffWhen: draft.kickoffWhen ?? null,
+        kickoffDate: project.kickoff_date,
+        targetGoLiveDate: project.target_go_live_date,
+        distributionListEmail,
+      }
+    : {
+        ...commonData,
+        label: draft.label?.trim() || null,
+      };
+
+  const { html, subject } = renderer(rendererData);
 
   return { html, subject, recipientEmails };
 }
@@ -451,23 +500,37 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
 
   await sendEmail(c.env, { to: recipientEmails, subject, html, attachments });
 
-  // Persist any kickoff URL the PM set inline (kickoff-only state), and mark
-  // this meeting type as sent in its own column.
+  // Insert a history row for this send. Kickoff also persists the meeting URL
+  // back onto the project (the URL is project-level state, not per-send).
   const now = new Date().toISOString();
-  const sentAtCol = SENT_AT_COLUMN[meetingType];
-  if (meetingType === "kickoff") {
+  const sendId = crypto.randomUUID();
+  const label = parsed.data.label?.trim() || null;
+
+  await c.env.DB
+    .prepare(
+      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(
+      sendId,
+      projectId,
+      meetingType,
+      label,
+      subject,
+      JSON.stringify(recipientEmails),
+      auth.user.id,
+      now
+    )
+    .run();
+
+  if (meetingType === "kickoff" && parsed.data.kickoffMeetingUrl) {
     await c.env.DB
-      .prepare(`UPDATE projects SET kickoff_meeting_url = COALESCE(?, kickoff_meeting_url), ${sentAtCol} = ?, updated_at = ? WHERE id = ?`)
-      .bind(parsed.data.kickoffMeetingUrl ?? null, now, now, projectId)
-      .run();
-  } else {
-    await c.env.DB
-      .prepare(`UPDATE projects SET ${sentAtCol} = ?, updated_at = ? WHERE id = ?`)
-      .bind(now, now, projectId)
+      .prepare("UPDATE projects SET kickoff_meeting_url = ?, updated_at = ? WHERE id = ?")
+      .bind(parsed.data.kickoffMeetingUrl, now, projectId)
       .run();
   }
 
-  return c.json({ ok: true, sentTo: recipientEmails, sentAt: now });
+  return c.json({ ok: true, sentTo: recipientEmails, sentAt: now, sendId });
 });
 
 export default app;

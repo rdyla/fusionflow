@@ -1757,6 +1757,15 @@ export const api = {
 import type { MeetingType, MeetingPrepSectionMeta } from "../../shared/meetingPrep";
 export type { MeetingType, MeetingPrepSectionMeta };
 
+export type MeetingPrepSendRecord = {
+  id: string;
+  label: string | null;
+  subject: string;
+  sentBy: string | null;
+  sentAt: string;
+  recipientCount: number;
+};
+
 export type MeetingPrepOptions = {
   meetingType: MeetingType;
   catalog: readonly MeetingPrepSectionMeta[];
@@ -1769,7 +1778,6 @@ export type MeetingPrepOptions = {
     kickoffDate: string | null;
     targetGoLiveDate: string | null;
     kickoffMeetingUrl: string | null;
-    sentAt: string | null;
     suggestedDistributionListEmail: string | null;
   };
   recipients: {
@@ -1780,10 +1788,15 @@ export type MeetingPrepOptions = {
     folderUrl: string | null;
     files: Array<{ name: string; webUrl: string; size: number | null; mimeType: string | null }>;
   };
+  /** Past sends of this meeting type for this project, newest first. */
+  history: MeetingPrepSendRecord[];
 };
 
 export type MeetingPrepDraft = {
   pmCustomNote: string;
+  /** Optional per-send label distinguishing multiple sends of the same type
+   *  (e.g. "Network Architecture" / "Call Flows" for split discoveries). */
+  label?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */
   kickoffMeetingUrl?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */
