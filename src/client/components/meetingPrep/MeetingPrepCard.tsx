@@ -1,9 +1,9 @@
 /**
  * Meeting-prep email card — generic over `:meetingType`.
  *
- * Migrated from `WelcomeEmailCard.tsx`. Shows the sent / not-sent indicator
- * and the "Send" / "Resend" button; opens the `MeetingPrepModal` when
- * clicked.
+ * Shows the send history for this meeting type and the "Send" / "Send another"
+ * button. Many-to-one — every send appears in the history list with its
+ * timestamp + optional label + recipient count.
  */
 
 import { useEffect, useState } from "react";
@@ -19,8 +19,28 @@ type Props = {
 const TYPE_LABELS: Record<MeetingType, { ctaLabel: string; resendLabel: string; sectionLabel: string }> = {
   kickoff: {
     ctaLabel:     "Send Welcome Email",
-    resendLabel:  "Resend",
+    resendLabel:  "Send Another",
     sectionLabel: "Welcome Email",
+  },
+  discovery: {
+    ctaLabel:     "Send Discovery Prep",
+    resendLabel:  "Send Another",
+    sectionLabel: "Discovery Prep",
+  },
+  design_review: {
+    ctaLabel:     "Send Design Review Prep",
+    resendLabel:  "Send Another",
+    sectionLabel: "Design Review Prep",
+  },
+  uat: {
+    ctaLabel:     "Send UAT Prep",
+    resendLabel:  "Send Another",
+    sectionLabel: "UAT Prep",
+  },
+  go_live: {
+    ctaLabel:     "Send Go-Live Prep",
+    resendLabel:  "Send Another",
+    sectionLabel: "Go-Live Prep",
   },
 };
 
@@ -48,7 +68,8 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend }: Pro
 
   useEffect(load, [projectId, meetingType]);
 
-  const sentAt = options?.project.sentAt ?? null;
+  const history = options?.history ?? [];
+  const hasSends = history.length > 0;
 
   return (
     <div className="ms-section-card" style={{ padding: "12px 16px" }}>
@@ -58,9 +79,9 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend }: Pro
           {loading && <span style={{ fontSize: 12, color: "#94a3b8" }}>Loading…</span>}
           {error && <span style={{ fontSize: 12, color: "#d13438" }}>{error}</span>}
           {!loading && !error && (
-            sentAt ? (
+            hasSends ? (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: "rgba(16,185,129,0.1)", border: "1px solid rgba(16,185,129,0.3)", borderRadius: 20, fontSize: 12, color: "#047857" }}>
-                ✓ Sent {formatWhen(sentAt)}
+                ✓ {history.length} send{history.length === 1 ? "" : "s"}
               </span>
             ) : (
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "3px 10px", background: "rgba(148,163,184,0.12)", border: "1px solid rgba(148,163,184,0.3)", borderRadius: 20, fontSize: 12, color: "#64748b" }}>
@@ -71,10 +92,32 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend }: Pro
         </div>
         {canSend && options && (
           <button className="ms-btn-primary" style={{ fontSize: 12, padding: "6px 12px" }} onClick={() => setShowModal(true)}>
-            {sentAt ? labels.resendLabel : labels.ctaLabel}
+            {hasSends ? labels.resendLabel : labels.ctaLabel}
           </button>
         )}
       </div>
+
+      {hasSends && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #e2e8f0" }}>
+          {history.map((h) => (
+            <div key={h.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "4px 0", fontSize: 12 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {h.label || labels.sectionLabel}
+                </div>
+                {h.label && (
+                  <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {h.subject}
+                  </div>
+                )}
+              </div>
+              <div style={{ color: "#64748b", whiteSpace: "nowrap" }}>
+                {formatWhen(h.sentAt)} · {h.recipientCount} recip.
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {showModal && options && (
         <MeetingPrepModal

@@ -18,11 +18,15 @@
 import type { SolutionType } from "../solutionTypes";
 
 /** Canonical lifecycle meeting types this engine supports. Add new ones here. */
-export const MEETING_TYPES = ["kickoff"] as const;
+export const MEETING_TYPES = ["kickoff", "discovery", "design_review", "uat", "go_live"] as const;
 export type MeetingType = typeof MEETING_TYPES[number];
 
 export const MEETING_TYPE_LABELS: Record<MeetingType, string> = {
-  kickoff: "Kickoff",
+  kickoff:       "Kickoff",
+  discovery:     "Discovery",
+  design_review: "Design Review",
+  uat:           "UAT",
+  go_live:       "Go-Live",
 };
 
 export function isMeetingType(v: unknown): v is MeetingType {

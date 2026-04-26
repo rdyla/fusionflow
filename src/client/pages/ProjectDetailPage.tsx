@@ -961,8 +961,12 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* ── Welcome Email ─────────────────────────────────────────────── */}
-          <MeetingPrepCard projectId={project.id} meetingType="kickoff" canSend={canEdit} />
+          {/* ── Meeting Prep Emails (lifecycle-staged) ────────────────────── */}
+          <MeetingPrepCard projectId={project.id} meetingType="kickoff"       canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="discovery"     canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="design_review" canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="uat"           canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="go_live"       canSend={canEdit} />
 
           {/* ── Customer Contacts ─────────────────────────────────────────── */}
           <div className="ms-section-card">
