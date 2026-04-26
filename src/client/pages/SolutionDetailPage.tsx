@@ -1,14 +1,18 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
+import { api, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
+import SowAddOnsEditor from "../components/solutioning/SowAddOnsEditor";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
+import { solutionTypeLabel, otherTechnologyLabel, OTHER_TECHNOLOGIES, OTHER_TECHNOLOGY_LABELS } from "../../shared/solutionTypes";
 import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
 import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
 import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
@@ -38,13 +42,6 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
 };
 
 const STATUS_FLOW: SolutionStatus[] = ["draft", "assessment", "scope", "handoff"];
-
-const TYPE_LABELS: Record<SolutionType, string> = {
-  ucaas: "UCaaS",
-  ccaas: "CCaaS",
-  ci: "Conversation Intelligence",
-  va: "AI Virtual Agent",
-};
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -91,17 +88,28 @@ export default function SolutionDetailPage() {
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
 
   // Tab-local state
-  const [overview, setOverview] = useState({ name: "", customer_name: "", vendor: "tbd" as SolutionVendor, solution_type: "ucaas" as SolutionType, partner_ae_user_id: "", status: "" as SolutionStatus });
+  const [overview, setOverview] = useState<{
+    name: string;
+    customer_name: string;
+    vendor: SolutionVendor;
+    solution_types: SolutionType[];
+    other_technologies: OtherTechnology[];
+    partner_ae_user_id: string;
+    status: SolutionStatus;
+  }>({ name: "", customer_name: "", vendor: "tbd", solution_types: ["ucaas"], other_technologies: [], partner_ae_user_id: "", status: "" as SolutionStatus });
   const [scope, setScope] = useState("");
   const [handoffNotes, setHandoffNotes] = useState("");
 
-  // Needs Assessment
-  const [needsAssessment, setNeedsAssessment] = useState<NeedsAssessment | null>(null);
+  // Needs Assessments — one per (solution_id, solution_type). "other" is reserved
+  // for the Other Discovery flow when a solution has non-canonical journeys only.
+  const [needsAssessments, setNeedsAssessments] = useState<Record<string, NeedsAssessment>>({});
+  const [activeAssessmentType, setActiveAssessmentType] = useState<string>("");
   const [naView, setNaView] = useState<"sor" | "wizard">("sor");
   const [odView, setOdView] = useState<"sor" | "wizard">("sor");
 
-  // Labor Estimate
-  const [laborEstimate, setLaborEstimate] = useState<LaborEstimate | null>(null);
+  // Labor Estimates — one per solution_type. Same shape as needsAssessments.
+  const [laborEstimates, setLaborEstimates] = useState<Record<string, LaborEstimate>>({});
+  const [activeLaborType, setActiveLaborType] = useState<string>("");
 
   // SOW Sizing
   const [sowData, setSowData] = useState<SowData | null>(null);
@@ -136,7 +144,8 @@ export default function SolutionDetailPage() {
       name: s.name,
       customer_name: s.customer_name,
       vendor: s.vendor as SolutionVendor,
-      solution_type: s.solution_type as SolutionType,
+      solution_types: s.solution_types,
+      other_technologies: s.other_technologies,
       partner_ae_user_id: s.partner_ae_user_id ?? "",
       status: s.status,
     });
@@ -144,11 +153,19 @@ export default function SolutionDetailPage() {
     setHandoffNotes(s.handoff_notes ?? "");
     try { setSowData(s.sow_data ? JSON.parse(s.sow_data) as SowData : null); } catch { setSowData(null); }
 
-    // Load needs assessment for all solution types
-    api.needsAssessment(id).then(setNeedsAssessment).catch(() => {});
+    // Load all needs assessments for this solution (one per type, including "other")
+    api.needsAssessments(id).then((list) => {
+      const map: Record<string, NeedsAssessment> = {};
+      for (const na of list) map[na.solution_type] = na;
+      setNeedsAssessments(map);
+    }).catch(() => {});
 
-    // Load labor estimate (all solution types)
-    api.laborEstimate(id).then(setLaborEstimate).catch(() => {});
+    // Load all labor estimates for this solution (one per canonical type)
+    api.laborEstimates(id).then((list) => {
+      const map: Record<string, LaborEstimate> = {};
+      for (const le of list) map[le.solution_type] = le;
+      setLaborEstimates(map);
+    }).catch(() => {});
 
     // Load CRM contacts and solution contacts in parallel
     if (s.dynamics_account_id) {
@@ -235,8 +252,30 @@ export default function SolutionDetailPage() {
   const solutionJourneys = parseSolutionJourneys(solution);
   const nonUcJourneys = solutionJourneys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
   const hasUcCc = solutionJourneys.some(j => UC_CC_PREFIXES.some(p => j.startsWith(p)))
-    || ["ucaas", "ccaas", "ci", "va"].includes(solution.solution_type);
+    || solution.solution_types.some((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
   const hasOther = nonUcJourneys.length > 0;
+
+  // Per-type NA + labor plumbing. Same sub-tab pattern for both: an active type
+  // state picks which type's record we're viewing/editing.
+  const canonicalNaTypes = solution.solution_types.filter((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
+  const effectiveActiveType = activeAssessmentType || canonicalNaTypes[0] || Object.keys(needsAssessments)[0] || "";
+  const needsAssessment = needsAssessments[effectiveActiveType] ?? null;
+  // "other" (non-canonical journeys) uses its own NA slot.
+  const otherNa = needsAssessments["other"] ?? null;
+
+  // Labor estimates are only built for the canonical types (no "other" — non-canonical
+  // journeys don't participate in labor calc).
+  const effectiveActiveLaborType = activeLaborType || canonicalNaTypes[0] || Object.keys(laborEstimates)[0] || "";
+  const laborEstimate = laborEstimates[effectiveActiveLaborType] ?? null;
+  // Aggregated totals across all per-type labor estimates for the solution header.
+  const laborTotals = Object.values(laborEstimates).reduce(
+    (acc, le) => ({
+      low: acc.low + (le.total_low ?? 0),
+      expected: acc.expected + (le.total_expected ?? 0),
+      high: acc.high + (le.total_high ?? 0),
+    }),
+    { low: 0, expected: 0, high: 0 }
+  );
 
   const TABS: { key: Tab; label: string }[] = [
     { key: "overview",    label: "Overview"         },
@@ -336,10 +375,17 @@ export default function SolutionDetailPage() {
               )}
             </div>
           )}
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-            <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
-              {TYPE_LABELS[solution.solution_type]}
-            </span>
+          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <SolutionTypePills types={solution.solution_types} emptyFallback={null} />
+            {solution.other_technologies.length > 0 && (
+              <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6 }}>
+                {solution.other_technologies.map((t) => (
+                  <span key={t} className="ms-badge" style={{ background: "rgba(100,116,139,0.1)", color: "#475569", border: "1px solid rgba(100,116,139,0.25)" }}>
+                    {otherTechnologyLabel(t)}
+                  </span>
+                ))}
+              </span>
+            )}
             <span className="ms-badge" style={{ background: `${STATUS_COLOR[solution.status]}18`, color: STATUS_COLOR[solution.status], border: `1px solid ${STATUS_COLOR[solution.status]}40` }}>
               {STATUS_LABELS[solution.status]}
             </span>
@@ -494,40 +540,59 @@ export default function SolutionDetailPage() {
                   </div>
                 )}
               </label>
-              <label className="ms-label">
-                <span>Technology</span>
+              <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
+                <span>Solution Types</span>
                 {canEdit ? (
-                  <select className="ms-input" value={overview.solution_type ?? solution.solution_type} onChange={(e) => setOverview((o) => ({ ...o, solution_type: e.target.value as typeof overview.solution_type }))}>
-                    <optgroup label="UCaaS / CCaaS">
-                      <option value="ucaas">UCaaS</option>
-                      <option value="ccaas">CCaaS</option>
-                      <option value="ci">Conversation Intelligence</option>
-                      <option value="va">AI Virtual Agent</option>
-                    </optgroup>
-                    <optgroup label="Other Technology">
-                      <option value="bdr">Backup &amp; Disaster Recovery</option>
-                      <option value="connectivity">Connectivity</option>
-                      <option value="colocation">Colocation</option>
-                      <option value="cyber_security">Cyber Security</option>
-                      <option value="daas">Desktop as a Service</option>
-                      <option value="help_desk">Help Desk</option>
-                      <option value="iaas">Infrastructure as a Service</option>
-                      <option value="mobility">Mobility (Corporate Cellular)</option>
-                      <option value="managed_services">Managed Services</option>
-                      <option value="managed_cloud">Managed Public Cloud</option>
-                      <option value="sdwan">SD-WAN / SASE / Aggregation</option>
-                      <option value="tem">Technology Expense Management</option>
-                      <option value="other">Other Technology Discovery</option>
-                    </optgroup>
-                  </select>
+                  <SolutionTypePicker value={overview.solution_types} onChange={(next) => setOverview((o) => ({ ...o, solution_types: next }))} />
                 ) : (
-                  <div style={{ fontSize: 14, color: "#334155", padding: "8px 0" }}>{TYPE_LABELS[solution.solution_type] ?? solution.solution_type}</div>
+                  <div style={{ padding: "8px 0" }}>
+                    <SolutionTypePills types={solution.solution_types} />
+                  </div>
+                )}
+              </label>
+              <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
+                <span>Other Technologies</span>
+                {canEdit ? (
+                  <div role="group" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 8 }}>
+                    {OTHER_TECHNOLOGIES.map((t) => {
+                      const checked = overview.other_technologies.includes(t);
+                      return (
+                        <label key={t} style={{
+                          display: "flex", alignItems: "center", gap: 8,
+                          padding: "6px 10px",
+                          border: `1px solid ${checked ? "#64748b80" : "#c8d5e8"}`,
+                          borderRadius: 6,
+                          background: checked ? "#64748b0f" : "#ffffff",
+                          cursor: "pointer",
+                          fontSize: 13,
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => setOverview((o) => ({
+                              ...o,
+                              other_technologies: checked
+                                ? o.other_technologies.filter((x) => x !== t)
+                                : OTHER_TECHNOLOGIES.filter((x) => o.other_technologies.includes(x) || x === t),
+                            }))}
+                          />
+                          {OTHER_TECHNOLOGY_LABELS[t]}
+                        </label>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ padding: "8px 0" }}>
+                    {solution.other_technologies.length
+                      ? solution.other_technologies.map((t) => otherTechnologyLabel(t)).join(" · ")
+                      : <span style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic" }}>None</span>}
+                  </div>
                 )}
               </label>
             </div>
             {canEdit && (
               <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
-                onClick={() => save({ name: overview.name, vendor: overview.vendor, solution_type: overview.solution_type })}>
+                onClick={() => save({ name: overview.name, vendor: overview.vendor, solution_types: overview.solution_types, other_technologies: overview.other_technologies })}>
                 {saving ? "Saving…" : "Save Changes"}
               </button>
             )}
@@ -872,27 +937,31 @@ export default function SolutionDetailPage() {
       {tab === "assessment" && (
         <div>
           {(() => {
-            // Non-UC/CC only → show other journeys survey
+            // Non-UC/CC only → show other journeys survey (stored with solution_type = "other")
             if (hasOther && !hasUcCc) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const surveyJson = buildOtherSurvey(solutionJourneys) as any;
               const initialAnswers = {
-                ...(needsAssessment?.answers as Record<string, unknown> | undefined ?? {}),
+                ...(otherNa?.answers as Record<string, unknown> | undefined ?? {}),
                 doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
               };
-              return (odView === "wizard" || needsAssessment === null) && odView !== "sor" ? (
+              return (odView === "wizard" || otherNa === null) && odView !== "sor" ? (
                 <NeedsAssessmentWizard
-                  key={needsAssessment?.id ?? "new-other"}
+                  key={otherNa?.id ?? "new-other"}
                   solutionId={solution.id}
+                  solutionType="other"
                   customerName={solution.customer_name}
                   surveyJson={surveyJson}
                   initialAnswers={initialAnswers}
-                  onComplete={(na) => { setNeedsAssessment(na); setOdView("sor"); }}
+                  onComplete={(na) => {
+                    setNeedsAssessments((prev) => ({ ...prev, other: na }));
+                    setOdView("sor");
+                  }}
                   onCancel={() => setOdView("sor")}
                 />
-              ) : needsAssessment !== null && odView === "sor" ? (
+              ) : otherNa !== null && odView === "sor" ? (
                 <NeedsAssessmentSOR
-                  assessment={needsAssessment}
+                  assessment={otherNa}
                   customerName={solution.customer_name}
                   solutionType={solution.name}
                   surveyJson={surveyJson}
@@ -900,8 +969,12 @@ export default function SolutionDetailPage() {
                   canDelete={!isClient}
                   onDelete={async () => {
                     try {
-                      await api.deleteNeedsAssessment(solution.id);
-                      setNeedsAssessment(null);
+                      await api.deleteNeedsAssessment(solution.id, "other");
+                      setNeedsAssessments((prev) => {
+                        const next = { ...prev };
+                        delete next.other;
+                        return next;
+                      });
                       setOdView("sor");
                     } catch {
                       showToast("Failed to delete assessment", "error");
@@ -922,37 +995,78 @@ export default function SolutionDetailPage() {
               );
             }
 
-            // UC/CC (or legacy) → existing survey
+            // UC/CC → per-type NA. Each canonical type in solution.solution_types
+            // gets its own NA record. When a solution has more than one canonical
+            // type, sub-tabs at the top let the user pick which one they're
+            // working on.
+            const activeType = effectiveActiveType;
             const surveyJson =
-              solution.solution_type === "ccaas" ? ccaasSurveyJson :
-              solution.solution_type === "va" ? virtualAgentSurveyJson :
-              solution.solution_type === "ucaas" ? ucaasSurveyJson :
+              activeType === "ccaas" ? ccaasSurveyJson :
+              activeType === "va" ? virtualAgentSurveyJson :
+              activeType === "ucaas" ? ucaasSurveyJson :
               ciSurveyJson;
-            const solutionTypeLabel = TYPE_LABELS[solution.solution_type as keyof typeof TYPE_LABELS] ?? solution.solution_type;
-            return (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
+            const solutionTypeDisplayLabel = solutionTypeLabel(activeType);
+
+            const subTabs = canonicalNaTypes.length > 1 ? (
+              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+                {canonicalNaTypes.map((t) => {
+                  const selected = t === activeType;
+                  const hasNa = needsAssessments[t] !== undefined;
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className="ms-badge"
+                      onClick={() => { setActiveAssessmentType(t); setNaView(hasNa ? "sor" : "wizard"); }}
+                      style={{
+                        cursor: "pointer",
+                        background: selected ? "rgba(99,193,234,0.18)" : "rgba(99,193,234,0.06)",
+                        color: selected ? "#0891b2" : "#64748b",
+                        border: `1px solid ${selected ? "rgba(99,193,234,0.4)" : "rgba(99,193,234,0.15)"}`,
+                        padding: "6px 12px",
+                        fontWeight: selected ? 600 : 500,
+                      }}
+                    >
+                      {solutionTypeLabel(t)}
+                      {hasNa && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>✓</span>}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null;
+
+            const body = (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
-                key={needsAssessment?.id ?? "new"}
+                key={`${activeType}-${needsAssessment?.id ?? "new"}`}
                 solutionId={solution.id}
+                solutionType={activeType}
                 customerName={solution.customer_name}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
                 initialAnswers={needsAssessment?.answers as Record<string, unknown> | undefined}
-                onComplete={(na) => { setNeedsAssessment(na); setNaView("sor"); }}
+                onComplete={(na) => {
+                  setNeedsAssessments((prev) => ({ ...prev, [na.solution_type]: na }));
+                  setNaView("sor");
+                }}
                 onCancel={() => setNaView("sor")}
               />
             ) : needsAssessment !== null && naView === "sor" ? (
               <NeedsAssessmentSOR
                 assessment={needsAssessment}
                 customerName={solution.customer_name}
-                solutionType={solutionTypeLabel}
+                solutionType={solutionTypeDisplayLabel}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 surveyJson={surveyJson as any}
                 onBack={canEditNA ? () => setNaView("wizard") : () => {}}
                 canDelete={!isClient}
                 onDelete={async () => {
                   try {
-                    await api.deleteNeedsAssessment(solution.id);
-                    setNeedsAssessment(null);
+                    await api.deleteNeedsAssessment(solution.id, activeType);
+                    setNeedsAssessments((prev) => {
+                      const next = { ...prev };
+                      delete next[activeType];
+                      return next;
+                    });
                     setNaView("sor");
                   } catch {
                     showToast("Failed to delete assessment", "error");
@@ -962,7 +1076,9 @@ export default function SolutionDetailPage() {
             ) : (
               <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
                 <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
-                  No needs assessment has been completed for this solution yet.
+                  {canonicalNaTypes.length > 1
+                    ? `No needs assessment has been completed for ${solutionTypeDisplayLabel} yet.`
+                    : "No needs assessment has been completed for this solution yet."}
                 </p>
                 {canEditNA && (
                   <button className="ms-btn-primary" onClick={() => setNaView("wizard")}>
@@ -970,6 +1086,13 @@ export default function SolutionDetailPage() {
                   </button>
                 )}
               </div>
+            );
+
+            return (
+              <>
+                {subTabs}
+                {body}
+              </>
             );
           })()}
         </div>
@@ -982,22 +1105,26 @@ export default function SolutionDetailPage() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const surveyJson = buildOtherSurvey(solutionJourneys) as any;
             const initialAnswers = {
-              ...(needsAssessment?.answers as Record<string, unknown> | undefined ?? {}),
+              ...(otherNa?.answers as Record<string, unknown> | undefined ?? {}),
               doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
             };
-            return (odView === "wizard" || needsAssessment === null) && odView !== "sor" ? (
+            return (odView === "wizard" || otherNa === null) && odView !== "sor" ? (
               <NeedsAssessmentWizard
-                key={(needsAssessment?.id ?? "new-other") + "-od"}
+                key={(otherNa?.id ?? "new-other") + "-od"}
                 solutionId={solution.id}
+                solutionType="other"
                 customerName={solution.customer_name}
                 surveyJson={surveyJson}
                 initialAnswers={initialAnswers}
-                onComplete={(na) => { setNeedsAssessment(na); setOdView("sor"); }}
+                onComplete={(na) => {
+                  setNeedsAssessments((prev) => ({ ...prev, other: na }));
+                  setOdView("sor");
+                }}
                 onCancel={() => setOdView("sor")}
               />
-            ) : needsAssessment !== null && odView === "sor" ? (
+            ) : otherNa !== null && odView === "sor" ? (
               <NeedsAssessmentSOR
-                assessment={needsAssessment}
+                assessment={otherNa}
                 customerName={solution.customer_name}
                 solutionType={solution.name}
                 surveyJson={surveyJson}
@@ -1026,7 +1153,7 @@ export default function SolutionDetailPage() {
           {/* Sizing confirmation form */}
           <SowSizingForm
             solution={solution}
-            needsAssessment={needsAssessment}
+            needsAssessments={needsAssessments}
             canEdit={canEdit}
             onSaved={(saved) => {
               setSowData(saved);
@@ -1034,11 +1161,21 @@ export default function SolutionDetailPage() {
             }}
           />
 
+          {/* Add-ons + blended rate → SOW total */}
+          <SowAddOnsEditor
+            solution={solution}
+            laborHoursTotal={laborTotals.expected}
+            canEdit={canEdit}
+            onSaved={(next) => {
+              setSolution(prev => prev ? { ...prev, ...next } : prev);
+            }}
+          />
+
           {/* SOW document generator */}
           <ScopeOfWorkDocument
             solution={solution}
             needsAssessment={needsAssessment}
-            laborEstimate={laborEstimate}
+            laborEstimates={Object.values(laborEstimates)}
             scopeText={scope}
             sowData={sowData}
           />
@@ -1075,8 +1212,8 @@ export default function SolutionDetailPage() {
           {/* Project Handoff Document */}
           <ProjectHandoffDocument
             solution={solution}
-            needsAssessment={needsAssessment}
-            laborEstimate={laborEstimate}
+            needsAssessments={needsAssessments}
+            laborEstimates={laborEstimates}
             solutionContacts={solutionContacts}
             canEdit={canEdit}
             onSaved={load}
@@ -1128,13 +1265,64 @@ export default function SolutionDetailPage() {
 
       {/* ── Labor Estimate Tab ── */}
       {tab === "labor" && (
-        <LaborEstimateView
-          solutionId={solution.id}
-          estimate={laborEstimate}
-          hasAssessment={needsAssessment !== null}
-          canEdit={canEdit}
-          onEstimateChange={setLaborEstimate}
-        />
+        <div>
+          {/* Sub-tabs when multiple canonical types apply — same UX as Assessment tab. */}
+          {canonicalNaTypes.length > 1 && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+              {canonicalNaTypes.map((t) => {
+                const selected = t === effectiveActiveLaborType;
+                const hasLe = laborEstimates[t] !== undefined;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    className="ms-badge"
+                    onClick={() => setActiveLaborType(t)}
+                    style={{
+                      cursor: "pointer",
+                      background: selected ? "rgba(99,193,234,0.18)" : "rgba(99,193,234,0.06)",
+                      color: selected ? "#0891b2" : "#64748b",
+                      border: `1px solid ${selected ? "rgba(99,193,234,0.4)" : "rgba(99,193,234,0.15)"}`,
+                      padding: "6px 12px",
+                      fontWeight: selected ? 600 : 500,
+                    }}
+                  >
+                    {solutionTypeLabel(t)}
+                    {hasLe && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>✓</span>}
+                  </button>
+                );
+              })}
+              {/* Solution-wide total — sum of all per-type totals. */}
+              {Object.keys(laborEstimates).length > 0 && (
+                <div style={{ marginLeft: "auto", padding: "6px 14px", background: "#eef2f7", borderRadius: 8, fontSize: 12, color: "#475569" }}>
+                  <span style={{ color: "#94a3b8" }}>Solution total: </span>
+                  <strong style={{ color: "#1e293b" }}>{laborTotals.expected}h</strong>
+                  <span style={{ color: "#94a3b8", marginLeft: 4 }}>
+                    ({laborTotals.low}–{laborTotals.high})
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+          <LaborEstimateView
+            key={effectiveActiveLaborType}
+            solutionId={solution.id}
+            solutionType={effectiveActiveLaborType}
+            estimate={laborEstimate}
+            hasAssessment={needsAssessments[effectiveActiveLaborType] !== undefined}
+            canEdit={canEdit}
+            onEstimateChange={(le) => {
+              setLaborEstimates((prev) => {
+                if (le === null) {
+                  const next = { ...prev };
+                  delete next[effectiveActiveLaborType];
+                  return next;
+                }
+                return { ...prev, [le.solution_type]: le };
+              });
+            }}
+          />
+        </div>
       )}
 
       {/* ── SharePoint Tab ── */}

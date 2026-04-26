@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -449,15 +450,15 @@ app.get("/:id/solutions", async (c) => {
 
   const rows = await c.env.DB
     .prepare(`
-      SELECT s.id, s.name, s.vendor, s.solution_type, s.status, s.created_at, s.updated_at,
-             s.linked_project_id, s.dynamics_account_id
+      SELECT s.id, s.name, s.vendor, s.solution_types, s.other_technologies, s.status,
+             s.created_at, s.updated_at, s.linked_project_id, s.dynamics_account_id, s.journeys
       FROM solutions s
       WHERE s.customer_id = ?
       ORDER BY s.updated_at DESC
     `)
     .bind(c.req.param("id"))
     .all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionRow));
 });
 
 app.get("/:id/projects", async (c) => {
@@ -466,7 +467,7 @@ app.get("/:id/projects", async (c) => {
 
   const rows = await c.env.DB
     .prepare(`
-      SELECT p.id, p.name, p.vendor, p.solution_type, p.status, p.health,
+      SELECT p.id, p.name, p.vendor, p.solution_types, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.created_at, p.updated_at,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
@@ -476,7 +477,7 @@ app.get("/:id/projects", async (c) => {
     `)
     .bind(c.req.param("id"))
     .all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
 app.get("/:id/optimizations", async (c) => {
@@ -486,7 +487,7 @@ app.get("/:id/optimizations", async (c) => {
   const rows = await c.env.DB
     .prepare(`
       SELECT oa.id, oa.project_id, oa.optimize_status, oa.graduated_at, oa.next_review_date,
-             p.name AS project_name, p.vendor, p.solution_type, p.actual_go_live_date
+             p.name AS project_name, p.vendor, p.solution_types, p.actual_go_live_date
       FROM optimize_accounts oa
       JOIN projects p ON p.id = oa.project_id
       WHERE oa.customer_id = ?
@@ -494,7 +495,7 @@ app.get("/:id/optimizations", async (c) => {
     `)
     .bind(c.req.param("id"))
     .all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
 export default app;

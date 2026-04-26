@@ -6,6 +6,7 @@ import { requireRole } from "../middleware/requireRole";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
+import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -172,13 +173,13 @@ app.delete("/users/:id", async (c) => {
 app.get("/projects", async (c) => {
   const rows = await c.env.DB
     .prepare(
-      `SELECT id, name, customer_name, vendor, solution_type, status, health,
+      `SELECT id, name, customer_name, vendor, solution_types, status, health,
               kickoff_date, target_go_live_date, archived, created_at, updated_at
        FROM projects
        ORDER BY updated_at DESC`
     )
     .all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
 app.patch("/projects/:id", async (c) => {

@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import type { SolutionType } from "../../shared/solutionTypes";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -67,11 +69,19 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-const EMPTY_FORM = {
+const EMPTY_FORM: {
+  name: string;
+  customer_name: string;
+  vendor: string;
+  solution_types: SolutionType[];
+  kickoff_date: string;
+  target_go_live_date: string;
+  dynamics_account_id: string;
+} = {
   name: "",
   customer_name: "",
   vendor: "",
-  solution_type: "",
+  solution_types: [],
   kickoff_date: "",
   target_go_live_date: "",
   dynamics_account_id: "",
@@ -187,7 +197,7 @@ export default function ProjectsPage() {
         name: form.name.trim(),
         customer_name: form.customer_name.trim() || undefined,
         vendor: form.vendor.trim() || undefined,
-        solution_type: form.solution_type.trim() || undefined,
+        solution_types: form.solution_types,
         kickoff_date: form.kickoff_date || undefined,
         target_go_live_date: form.target_go_live_date || undefined,
         dynamics_account_id: form.dynamics_account_id || null,
@@ -413,10 +423,6 @@ export default function ProjectsPage() {
                   <input className="ms-input" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. Cisco, Zoom" />
                 </label>
                 <label className="ms-label">
-                  <span>Solution Type</span>
-                  <input className="ms-input" value={form.solution_type} onChange={(e) => setForm({ ...form, solution_type: e.target.value })} placeholder="e.g. UCaaS, CCaaS" />
-                </label>
-                <label className="ms-label">
                   <span>Kickoff Date</span>
                   <input type="date" className="ms-input" value={form.kickoff_date} onChange={(e) => setForm({ ...form, kickoff_date: e.target.value })} />
                 </label>
@@ -425,6 +431,10 @@ export default function ProjectsPage() {
                   <input type="date" className="ms-input" value={form.target_go_live_date} onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })} />
                 </label>
               </div>
+              <label className="ms-label">
+                <span>Solution Types</span>
+                <SolutionTypePicker value={form.solution_types} onChange={(next) => setForm({ ...form, solution_types: next })} />
+              </label>
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button type="submit" className="ms-btn-primary" disabled={saving || !form.name.trim()}>

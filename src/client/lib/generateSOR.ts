@@ -217,9 +217,14 @@ export async function generateSOR(
   requirements: string,
   preparedBy: string,
 ) {
-  const typeLabel = TYPE_LABELS[solution.solution_type] ?? solution.solution_type;
+  // SOR title covers every solution type the customer is scoped to. The per-field
+  // schema (ASSESSMENT_SCHEMA) stays keyed by the first applicable type — each field
+  // list is still single-type, so a multi-type SOR shows the first type's fields
+  // here. Per-type SOR sections are future work.
+  const primaryType = solution.solution_types[0] ?? "";
+  const typeLabel = solution.solution_types.map((t) => TYPE_LABELS[t] ?? t).filter(Boolean).join(" / ") || primaryType;
   const today = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
-  const schema = ASSESSMENT_SCHEMA[solution.solution_type] ?? [];
+  const schema = ASSESSMENT_SCHEMA[primaryType] ?? [];
 
   const children: (Paragraph | Table)[] = [];
 

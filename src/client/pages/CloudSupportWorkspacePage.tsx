@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { csApi } from "../lib/cloudSupportApi";
-import { calcSupport, DEFAULT_FORM_DATA, fmt } from "../lib/calcSupport";
+import { calcSupport, customLineDollar, DEFAULT_FORM_DATA, fmt, fmtSigned } from "../lib/calcSupport";
 import type { CsProposalDetail, CsVersion, OppFormData, OppCalcResult } from "../lib/calcSupport";
 import { buildProposalHtml, buildSignatureHtml, buildMsoStandaloneHtml } from "../lib/buildAgreementHtml";
 import { getMsoTier } from "../lib/msoTiers";
@@ -257,9 +257,23 @@ export default function CloudSupportWorkspacePage() {
               {form.msoEnabled && calc.msoSup > 0 && (
                 <SummaryLine label={`MSO — ${getMsoTier(form.msoTier)?.label ?? "Custom"}`} value={calc.msoSup} overridden={calc.msoOverridden} />
               )}
-              {(form.customLines ?? []).filter(l => l.price > 0).map((line, i) => (
-                <SummaryLine key={i} label={line.label || `Custom Line ${i + 1}`} value={line.price} overridden={false} />
-              ))}
+              {(() => {
+                const preCustomAnnual = calc.annual - calc.customTotal;
+                return (form.customLines ?? []).filter(l => (Number(l.price) || 0) !== 0).map((line, i) => {
+                  const kind = line.kind ?? "charge";
+                  const effect = customLineDollar(line, preCustomAnnual);
+                  const isDiscount = kind !== "charge";
+                  const label = kind === "discount_percent"
+                    ? `${line.label || `Custom Line ${i + 1}`} (${Number(line.price) || 0}% off)`
+                    : (line.label || `Custom Line ${i + 1}`);
+                  return (
+                    <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13 }}>
+                      <span style={{ color: isDiscount ? "#065f46" : "#475569", paddingRight: 8 }}>{label}</span>
+                      <span style={{ fontWeight: 600, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>{fmtSigned(effect)}/yr</span>
+                    </div>
+                  );
+                });
+              })()}
               {calc.annual === 0 && (
                 <div style={{ color: "#94a3b8", fontSize: 13, padding: "10px 0" }}>Enter values to see pricing.</div>
               )}

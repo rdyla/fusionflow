@@ -1,3 +1,6 @@
+import { WELCOME_SECTION_META, type WelcomeSectionId } from "../../shared/welcomeSections";
+import type { SolutionType } from "../../shared/solutionTypes";
+
 const APP_NAME = "CloudConnect by Packet Fusion";
 
 function escapeHtml(s: string | null | undefined): string {
@@ -442,4 +445,199 @@ export function highRiskAdded(data: {
   projectId: string;
 }): string {
   return pmRiskNotification({ ...data, severity: "high", status: "open", isNew: true });
+}
+
+// ── Project Welcome Package ────────────────────────────────────────────────────
+
+function initialsAvatar(name: string, size = 48): string {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#0891b2;color:#f0f6ff;font-size:${Math.floor(size * 0.4)}px;font-weight:700;line-height:${size}px;text-align:center;letter-spacing:0.02em;">${escapeHtml(initials || "?")}</div>`;
+}
+
+function teamMemberRow(m: { name: string; role: string; photoUrl: string | null; email: string | null }): string {
+  const photo = m.photoUrl
+    ? `<img src="${escapeHtml(m.photoUrl)}" alt="" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;">`
+    : initialsAvatar(m.name);
+  const email = m.email
+    ? `<div style="font-size:12px;color:rgba(240,246,255,0.45);margin-top:1px;"><a href="mailto:${escapeHtml(m.email)}" style="color:#00c8e0;text-decoration:none;">${escapeHtml(m.email)}</a></div>`
+    : "";
+  return `<tr>
+    <td style="padding:8px 14px 8px 0;vertical-align:middle;width:48px;">${photo}</td>
+    <td style="padding:8px 0;vertical-align:middle;">
+      <div style="font-size:13px;font-weight:600;color:#f0f6ff;">${escapeHtml(m.name)}</div>
+      <div style="font-size:12px;color:rgba(240,246,255,0.6);">${escapeHtml(m.role)}</div>
+      ${email}
+    </td>
+  </tr>`;
+}
+
+type WelcomeTeamMember = { name: string; role: string; photoUrl: string | null; email: string | null };
+type WelcomeTeamSection = { label: string; members: WelcomeTeamMember[] };
+
+type WelcomeSectionMap = Partial<Record<WelcomeSectionId, boolean>>;
+
+/**
+ * Render the HTML body for a single welcome-email section. Adding a new section
+ * ID to `WELCOME_SECTION_META` requires a matching case here.
+ *
+ * Returning an empty string suppresses the section (e.g., adminAccess needs a
+ * distributionListEmail to be meaningful).
+ */
+function renderWelcomeSection(
+  id: WelcomeSectionId,
+  ctx: { distributionListEmail: string | null },
+  psCard: (heading: string, innerHtml: string) => string
+): string {
+  const meta = WELCOME_SECTION_META.find((m) => m.id === id);
+  if (!meta) return "";
+  switch (id) {
+    case "adminAccess":
+      if (!ctx.distributionListEmail) return "";
+      return psCard(
+        meta.label,
+        `To configure and support your platform, please grant administrator access in your cloud portal to
+         <a href="mailto:${escapeHtml(ctx.distributionListEmail)}" style="color:#7de3f3;text-decoration:underline;">${escapeHtml(ctx.distributionListEmail)}</a>.
+         This covers the implementation and ongoing support after your transition. We'll walk through the steps with your Implementation Engineer during the first technical meeting.`
+      );
+    case "porting":
+      return psCard(
+        meta.label,
+        `<ul style="margin:0;padding-left:18px;">
+          <li style="margin:0 0 8px;">Request a <strong>Customer Service Record (CSR)</strong> from your voice carrier(s). Carriers typically return it within a couple of business days — it lists every number and service on the account.</li>
+          <li style="margin:0 0 8px;">Send us a copy of your most recent phone bill(s) and identify the <strong>authorized contact</strong> on the account.</li>
+          <li style="margin:0;">Send us the list of numbers to port (analog, fax, back-office — anything that rings). Excel, CSV, or plain text works.</li>
+        </ul>`
+      );
+    case "timeline":
+      return psCard(
+        meta.label,
+        `Please be prepared to discuss target go-live date(s) and production timing at kickoff so we can plan resourcing accordingly.`
+      );
+  }
+}
+
+export function welcomePackage(data: {
+  projectName: string;
+  customerName: string | null;
+  pmName: string;
+  pmCustomNote: string;
+  portalUrl: string;
+  kickoffMeetingUrl: string | null;
+  kickoffWhen: string | null;
+  kickoffDate: string | null;
+  targetGoLiveDate: string | null;
+  solution: string | null;
+  solutionTypes: readonly SolutionType[];
+  teamSections: WelcomeTeamSection[];
+  distributionListEmail: string | null;
+  sections: WelcomeSectionMap;
+}): string {
+  const projectName = escapeHtml(data.projectName);
+  const customerName = escapeHtml(data.customerName ?? "");
+  const pmName = escapeHtml(data.pmName);
+  const noteHtml = escapeHtml(data.pmCustomNote).replace(/\r?\n/g, "<br>");
+
+  const summaryRows = [
+    data.customerName ? detail("Customer", customerName) : "",
+    data.solution ? detail("Solution", escapeHtml(data.solution)) : "",
+    data.kickoffDate ? detail("Kickoff", escapeHtml(data.kickoffDate)) : "",
+    data.targetGoLiveDate ? detail("Target Go-Live", escapeHtml(data.targetGoLiveDate)) : "",
+    detail("Project Manager", pmName),
+  ].filter(Boolean).join("");
+
+  const kickoffContent = (() => {
+    if (!data.kickoffMeetingUrl) return "";
+    const raw = data.kickoffMeetingUrl.trim();
+    if (!raw) return "";
+    // Auto-linkify standalone http(s) URLs; render everything else as-is with
+    // line breaks preserved so dial-ins, access codes, and mixed free-form
+    // text (RingCentral / 8x8 / Dialpad / Zoom / etc.) all render cleanly.
+    const urlRe = /https?:\/\/[^\s<>"]+/g;
+    const escaped = escapeHtml(raw);
+    const linkified = escaped.replace(urlRe, (m) =>
+      `<a href="${m}" style="color:#7de3f3;text-decoration:underline;word-break:break-all;">${m}</a>`
+    );
+    return linkified.replace(/\r?\n/g, "<br>");
+  })();
+
+  const kickoffWhenLine = data.kickoffWhen && data.kickoffWhen.trim()
+    ? `<div style="color:#e8eef7;font-size:13px;font-weight:600;margin-bottom:8px;">${escapeHtml(data.kickoffWhen.trim())}</div>`
+    : "";
+
+  const kickoffBlock = (kickoffContent || kickoffWhenLine)
+    ? `<div style="background:#14323c;border:1px solid #2a6d7e;border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:6px;">Kickoff Meeting</div>
+        ${kickoffWhenLine}
+        ${kickoffContent ? `<div style="color:#e8eef7;font-size:14px;line-height:1.55;word-break:break-word;">${kickoffContent}</div>` : ""}
+      </div>`
+    : "";
+
+  const teamSections = data.teamSections.filter((s) => s.members.length > 0);
+  const teamBlock = teamSections.length
+    ? teamSections.map((section) => `
+        <div style="margin:22px 0 6px;">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">${escapeHtml(section.label)}</div>
+          <table style="border-collapse:collapse;width:100%;">
+            ${section.members.map(teamMemberRow).join("")}
+          </table>
+        </div>
+      `).join("")
+    : "";
+
+  // ── Optional PS sections (admin access / porting / timeline) ────────────────
+  // Shared card styling for the three optional boilerplate blocks — solid dark
+  // backgrounds survive email-client dark-mode normalization (Zoom web app etc.)
+  const psCard = (heading: string, innerHtml: string) => `
+    <div style="background:#1a2a3e;border:1px solid #2a3a51;border-radius:6px;padding:16px 18px;margin:18px 0 6px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:10px;">${escapeHtml(heading)}</div>
+      <div style="font-size:13.5px;color:#e8eef7;line-height:1.6;">${innerHtml}</div>
+    </div>`;
+
+  // Walk the catalog, render enabled sections applicable to this project's solution types.
+  // Kickoff block sits inline between Admin Access and Porting (historical layout);
+  // keep that placement by inserting it after the adminAccess block if present.
+  const sectionsHtml = WELCOME_SECTION_META
+    .filter((meta) =>
+      (meta.appliesTo === "all" || meta.appliesTo.some((t) => data.solutionTypes.includes(t))) &&
+      data.sections[meta.id] === true
+    )
+    .map((meta) => {
+      const rendered = renderWelcomeSection(meta.id, { distributionListEmail: data.distributionListEmail }, psCard);
+      // Kickoff block has always rendered immediately after adminAccess in the prior layout —
+      // preserve that by splicing it in after adminAccess only.
+      if (meta.id === "adminAccess" && rendered) {
+        return `${rendered}${kickoffBlock}`;
+      }
+      return rendered;
+    })
+    .filter(Boolean)
+    .join("");
+
+  // If adminAccess is filtered out (not enabled, suppressed, or not applicable), the kickoff
+  // block still needs a placement — render it between the summary and the first section.
+  const adminAccessRendered = data.sections.adminAccess === true && data.distributionListEmail;
+  const kickoffBlockFallback = !adminAccessRendered ? kickoffBlock : "";
+
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f6ff;">Welcome to ${projectName}</h2>
+    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.6);line-height:1.6;">
+      A note from <strong style="color:rgba(240,246,255,0.9);">${pmName}</strong>, your Project Manager.
+    </p>
+    ${data.pmCustomNote.trim()
+      ? `<div style="background:rgba(255,255,255,0.04);border-left:3px solid #00c8e0;padding:14px 18px;margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.85);line-height:1.65;">${noteHtml}</div>`
+      : ""}
+    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Project Summary</div>
+      <table style="border-collapse:collapse;">${summaryRows}</table>
+    </div>
+    ${kickoffBlockFallback}
+    ${sectionsHtml}
+    ${teamBlock}
+    ${ctaButton("Open Project Portal", data.portalUrl)}
+  `, data.portalUrl);
 }

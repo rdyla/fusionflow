@@ -33,10 +33,13 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
   }
 
   function addCustomLine() {
-    onChange({ customLines: [...(form.customLines ?? []), { label: "", price: 0 }] });
+    onChange({ customLines: [...(form.customLines ?? []), { label: "", price: 0, kind: "charge" }] });
   }
 
-  function updateCustomLine(i: number, patch: Partial<{ label: string; price: number }>) {
+  function updateCustomLine(
+    i: number,
+    patch: Partial<{ label: string; price: number; kind: "charge" | "discount_amount" | "discount_percent" }>
+  ) {
     const lines = [...(form.customLines ?? [])];
     lines[i] = { ...lines[i], ...patch };
     onChange({ customLines: lines });
@@ -461,19 +464,31 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
         {(form.customLines ?? []).length === 0 && (
           <div style={{ fontSize: 13, color: "#94a3b8" }}>No additional line items.</div>
         )}
-        {(form.customLines ?? []).map((line, i) => (
-          <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-end" }}>
-            <label style={{ ...S.label, flex: 2 }}>
-              {i === 0 && <span>Description</span>}
-              <input className="ms-input" value={line.label} onChange={(e) => updateCustomLine(i, { label: e.target.value })} placeholder="Line item description" />
-            </label>
-            <label style={{ ...S.label, flex: 1 }}>
-              {i === 0 && <span>Annual Price ($)</span>}
-              <input className="ms-input" type="number" value={line.price || ""} onChange={(e) => updateCustomLine(i, { price: Number(e.target.value) })} placeholder="0" />
-            </label>
-            <button type="button" onClick={() => removeCustomLine(i)} style={{ height: 38, padding: "0 10px", background: "none", border: "1px solid #fecaca", borderRadius: 5, color: "#d13438", cursor: "pointer", fontSize: 16, marginBottom: 0 }}>×</button>
-          </div>
-        ))}
+        {(form.customLines ?? []).map((line, i) => {
+          const kind = line.kind ?? "charge";
+          const valuePlaceholder = kind === "discount_percent" ? "10" : "0";
+          return (
+            <div key={i} style={{ display: "flex", gap: 10, marginBottom: 10, alignItems: "flex-end" }}>
+              <label style={{ ...S.label, flex: 2 }}>
+                {i === 0 && <span>Description</span>}
+                <input className="ms-input" value={line.label} onChange={(e) => updateCustomLine(i, { label: e.target.value })} placeholder={kind === "charge" ? "Line item description" : "Discount description"} />
+              </label>
+              <label style={{ ...S.label, flex: 1 }}>
+                {i === 0 && <span>Type</span>}
+                <select className="ms-input" value={kind} onChange={(e) => updateCustomLine(i, { kind: e.target.value as "charge" | "discount_amount" | "discount_percent" })}>
+                  <option value="charge">Charge</option>
+                  <option value="discount_amount">Discount ($)</option>
+                  <option value="discount_percent">Discount (%)</option>
+                </select>
+              </label>
+              <label style={{ ...S.label, flex: 1 }}>
+                {i === 0 && <span>Amount</span>}
+                <input className="ms-input" type="number" value={line.price || ""} onChange={(e) => updateCustomLine(i, { price: Number(e.target.value) })} placeholder={valuePlaceholder} />
+              </label>
+              <button type="button" onClick={() => removeCustomLine(i)} style={{ height: 38, padding: "0 10px", background: "none", border: "1px solid #fecaca", borderRadius: 5, color: "#d13438", cursor: "pointer", fontSize: 16, marginBottom: 0 }}>×</button>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Custom Inclusions ────────────────────────────────────────────────── */}

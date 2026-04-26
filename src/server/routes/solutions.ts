@@ -8,6 +8,20 @@ import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
+import {
+  parseSolutionTypes,
+  serializeSolutionTypes,
+  serializeOtherTechnologies,
+  joinSolutionTypeLabels,
+  normalizeSolutionRow,
+  isOtherTechnology,
+  SOLUTION_TYPES,
+  OTHER_TECHNOLOGIES,
+  type SolutionType,
+  type OtherTechnology,
+} from "../../shared/solutionTypes";
+import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
+import { recomputeSowTotal } from "../lib/sowTotal";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -25,13 +39,6 @@ const SOLUTION_SELECT = `
   LEFT JOIN users cu2 ON cu2.id = cust.pf_sa_user_id
   LEFT JOIN users cu3 ON cu3.id = cust.pf_csm_user_id
 `;
-
-const SOLUTION_TYPE_LABELS: Record<string, string> = {
-  ucaas: "UCaaS",
-  ccaas: "CCaaS",
-  ci: "Conversation Intelligence",
-  va: "AI Virtual Agent",
-};
 
 const JOURNEY_LABELS: Record<string, string> = {
   zoom_ucaas: "UCaaS", zoom_ccaas: "CCaaS", zoom_rooms: "Zoom Rooms",
@@ -55,12 +62,31 @@ function deriveVendorFromJourneys(journeys: string[]): "zoom" | "ringcentral" | 
   return "tbd";
 }
 
-function deriveSolutionTypeFromJourneys(journeys: string[]): string {
-  if (journeys.some(j => ["zoom_ccaas", "rc_ccaas", "agnostic_ccaas"].includes(j))) return "ccaas";
-  if (journeys.some(j => ["zoom_ucaas", "rc_ucaas", "agnostic_ucaas"].includes(j))) return "ucaas";
-  if (journeys.some(j => ["zoom_zra", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist", "rc_ace", "rc_ava"].includes(j))) return "ci";
-  if (journeys.some(j => ["zoom_zva", "rc_air"].includes(j))) return "va";
-  return journeys[0] ?? "other";
+/**
+ * Returns every canonical SolutionType implied by the selected journeys,
+ * preserving the order from the SOLUTION_TYPES enum. A journey bundle like
+ * ["zoom_ucaas","zoom_zra"] yields ["ucaas","ci"]. Non-canonical journeys
+ * (bdr, sdwan, etc.) are handled separately by deriveOtherTechnologiesFromJourneys.
+ *
+ * zoom_wfm and zoom_qm intentionally still map to "ci" rather than "wfm"/"qm"
+ * to preserve existing NA routing — a user who wants WFM/QM as a standalone
+ * type can pick it explicitly from the multi-select.
+ */
+function deriveSolutionTypesFromJourneys(journeys: string[]): SolutionType[] {
+  const types = new Set<SolutionType>();
+  for (const j of journeys) {
+    if (["zoom_ccaas", "rc_ccaas", "agnostic_ccaas"].includes(j)) types.add("ccaas");
+    else if (["zoom_ucaas", "rc_ucaas", "agnostic_ucaas"].includes(j)) types.add("ucaas");
+    else if (["zoom_zra", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist", "rc_ace", "rc_ava"].includes(j)) types.add("ci");
+    else if (["zoom_zva", "rc_air"].includes(j)) types.add("va");
+  }
+  return SOLUTION_TYPES.filter((t) => types.has(t));
+}
+
+function deriveOtherTechnologiesFromJourneys(journeys: string[]): OtherTechnology[] {
+  const techs = new Set<OtherTechnology>();
+  for (const j of journeys) if (isOtherTechnology(j)) techs.add(j);
+  return OTHER_TECHNOLOGIES.filter((t) => techs.has(t));
 }
 
 function nameFromJourneys(customerName: string, journeys: string[], vendor: string): string {
@@ -101,7 +127,7 @@ app.get("/", async (c) => {
     .prepare(`${SOLUTION_SELECT} WHERE ${where} ORDER BY s.updated_at DESC`)
     .bind(...bindings)
     .all();
-  return c.json(rows.results ?? []);
+  return c.json((rows.results ?? []).map(normalizeSolutionRow));
 });
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -111,7 +137,8 @@ const createSolutionSchema = z.object({
   customer_id: z.string().optional(),
   dynamics_account_id: z.string().optional(),
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
-  solution_type: z.string().optional(),
+  solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
+  other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
   journeys: z.array(z.string()).optional(),
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
@@ -135,13 +162,21 @@ app.post("/", async (c) => {
   const vendor = journeys.length > 0
     ? deriveVendorFromJourneys(journeys)
     : (parsed.data.vendor ?? "tbd");
-  const solution_type = journeys.length > 0
-    ? deriveSolutionTypeFromJourneys(journeys)
-    : (parsed.data.solution_type ?? "ucaas");
+
+  // Explicit types on the payload win; otherwise derive from journeys. Default
+  // to ["ucaas"] only if nothing was supplied, preserving the legacy fallback.
+  const explicitTypes = parsed.data.solution_types ?? [];
+  const explicitOtherTechs = parsed.data.other_technologies ?? [];
+  const solution_types: SolutionType[] = explicitTypes.length > 0
+    ? explicitTypes
+    : (journeys.length > 0 ? deriveSolutionTypesFromJourneys(journeys) : ["ucaas"]);
+  const other_technologies: OtherTechnology[] = explicitOtherTechs.length > 0
+    ? explicitOtherTechs
+    : deriveOtherTechnologiesFromJourneys(journeys);
 
   const name = journeys.length > 0
     ? nameFromJourneys(customer_name, journeys, vendor)
-    : `${customer_name} — ${SOLUTION_TYPE_LABELS[solution_type] ?? solution_type}`;
+    : `${customer_name} — ${joinSolutionTypeLabels(solution_types)}`;
   const id = crypto.randomUUID();
 
   // Find or create customer record when a CRM account is selected
@@ -212,12 +247,13 @@ app.post("/", async (c) => {
   await db
     .prepare(
       `INSERT INTO solutions
-         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_type, journeys,
+         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_types, other_technologies, journeys,
           partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor, solution_type, journeysJson,
+      id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor,
+      serializeSolutionTypes(solution_types), serializeOtherTechnologies(other_technologies), journeysJson,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
     .run();
@@ -233,7 +269,7 @@ app.post("/", async (c) => {
     }));
   }
 
-  return c.json(created, 201);
+  return c.json(created ? normalizeSolutionRow(created) : null, 201);
 });
 
 // ── Detail ────────────────────────────────────────────────────────────────────
@@ -250,17 +286,26 @@ app.get("/:id", async (c) => {
     .bind(c.req.param("id"), ...bindings)
     .first();
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
-  return c.json(solution);
+  return c.json(normalizeSolutionRow(solution));
 });
 
 // ── Update ────────────────────────────────────────────────────────────────────
+
+const addOnSchema = z.object({
+  id: z.string().min(1),
+  label: z.string(),
+  kind: z.enum(ADD_ON_KINDS),
+  value: z.number().finite(),
+  note: z.string().optional(),
+});
 
 const updateSolutionSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   customer_name: z.string().min(1).max(500).optional(),
   dynamics_account_id: z.string().nullable().optional(),
   vendor: z.string().optional(),
-  solution_type: z.string().optional(),
+  solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
+  other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
   journeys: z.array(z.string()).nullable().optional(),
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   partner_ae_user_id: z.string().nullable().optional(),
@@ -274,6 +319,8 @@ const updateSolutionSchema = z.object({
   sow_data: z.string().nullable().optional(),
   gap_analysis: z.string().nullable().optional(),
   linked_project_id: z.string().nullable().optional(),
+  add_ons: z.array(addOnSchema).optional(),
+  blended_rate: z.number().positive().finite().optional(),
 });
 
 app.patch("/:id", async (c) => {
@@ -294,16 +341,32 @@ app.patch("/:id", async (c) => {
 
   const fields: string[] = [];
   const values: unknown[] = [];
+  let pricingTouched = false;
 
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
-      if (key === "journeys") {
-        fields.push("journeys = ?");
-        values.push(value === null ? null : JSON.stringify(value));
-      } else {
-        fields.push(`${key} = ?`);
-        values.push(value);
-      }
+    if (value === undefined) continue;
+    if (key === "journeys") {
+      fields.push("journeys = ?");
+      values.push(value === null ? null : JSON.stringify(value));
+    } else if (key === "solution_types" && Array.isArray(value)) {
+      fields.push("solution_types = ?");
+      values.push(serializeSolutionTypes(value as SolutionType[]));
+    } else if (key === "other_technologies" && Array.isArray(value)) {
+      fields.push("other_technologies = ?");
+      values.push(serializeOtherTechnologies(value as OtherTechnology[]));
+    } else if (key === "add_ons" && Array.isArray(value)) {
+      fields.push("add_ons = ?");
+      // Schema-validated upstream by addOnSchema; cast to drop the union
+      // produced by Object.entries on the inferred Zod type.
+      values.push(serializeAddOns(value as Parameters<typeof serializeAddOns>[0]));
+      pricingTouched = true;
+    } else if (key === "blended_rate") {
+      fields.push("blended_rate = ?");
+      values.push(value);
+      pricingTouched = true;
+    } else {
+      fields.push(`${key} = ?`);
+      values.push(value);
     }
   }
 
@@ -315,7 +378,12 @@ app.patch("/:id", async (c) => {
     .bind(...values, solutionId)
     .run();
 
+  if (pricingTouched) {
+    await recomputeSowTotal(db, solutionId);
+  }
+
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
+  const normalizedUpdated = updated ? normalizeSolutionRow(updated) : null;
 
   if (c.env.ZOOM_CHAT_WEBHOOK_URL && updates.status) {
     c.executionCtx.waitUntil(notifyZoomChat(c.env.ZOOM_CHAT_WEBHOOK_URL, c.env.APP_URL ?? "", {
@@ -327,7 +395,7 @@ app.patch("/:id", async (c) => {
     }));
   }
 
-  return c.json(updated);
+  return c.json(normalizedUpdated);
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -422,7 +490,8 @@ app.post("/:id/create-project", async (c) => {
     .prepare("SELECT * FROM solutions WHERE id = ? LIMIT 1")
     .bind(solutionId)
     .first<{
-      id: string; name: string; customer_name: string; vendor: string; solution_type: string;
+      id: string; name: string; customer_name: string; vendor: string;
+      solution_types: string; other_technologies: string;
       customer_id: string | null; partner_ae_user_id: string | null;
       dynamics_account_id: string | null;
     }>();
@@ -434,7 +503,7 @@ app.post("/:id/create-project", async (c) => {
   const projectId = crypto.randomUUID();
   await db
     .prepare(
-      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_type, status, dynamics_account_id)
+      `INSERT INTO projects (id, name, customer_name, customer_id, vendor, solution_types, status, dynamics_account_id)
        VALUES (?, ?, ?, ?, ?, ?, 'planning', ?)`
     )
     .bind(
@@ -443,7 +512,9 @@ app.post("/:id/create-project", async (c) => {
       solution.customer_name,
       solution.customer_id ?? null,
       VENDOR_LABELS[solution.vendor] ?? solution.vendor,
-      solution.solution_type,
+      // Solution's solution_types JSON string is already shaped as the project column wants.
+      // Round-trip through parse/serialize to filter out any drift and enforce canonical shape.
+      serializeSolutionTypes(parseSolutionTypes(solution.solution_types)),
       solution.dynamics_account_id ?? null,
     )
     .run();

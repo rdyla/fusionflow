@@ -30,13 +30,14 @@ const CONFIDENCE_COLOR: Record<string, string> = {
 
 type Props = {
   solutionId: string;
+  solutionType: string;
   estimate: LaborEstimate | null;
   hasAssessment: boolean;
   canEdit: boolean;
   onEstimateChange: (estimate: LaborEstimate | null) => void;
 };
 
-export default function LaborEstimateView({ solutionId, estimate, hasAssessment, canEdit, onEstimateChange }: Props) {
+export default function LaborEstimateView({ solutionId, solutionType, estimate, hasAssessment, canEdit, onEstimateChange }: Props) {
   const [overrides, setOverrides] = useState<Record<string, string>>(
     estimate ? Object.fromEntries(Object.entries(estimate.overrides).map(([k, v]) => [k, String(v)])) : {}
   );
@@ -55,7 +56,7 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
           if (!isNaN(n) && n >= 0) parsed[ws] = n;
         }
       }
-      const result = await api.upsertLaborEstimate(solutionId, { overrides: parsed });
+      const result = await api.upsertLaborEstimate(solutionId, solutionType, { overrides: parsed });
       onEstimateChange(result);
       setOverrides(Object.fromEntries(Object.entries(result.overrides).map(([k, v]) => [k, String(v)])));
     } catch {
@@ -73,7 +74,7 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
         const n = parseInt(val);
         if (!isNaN(n) && n >= 0) parsed[ws] = n;
       }
-      const result = await api.upsertLaborEstimate(solutionId, { overrides: parsed });
+      const result = await api.upsertLaborEstimate(solutionId, solutionType, { overrides: parsed });
       onEstimateChange(result);
       setOverrides(Object.fromEntries(Object.entries(result.overrides).map(([k, v]) => [k, String(v)])));
     } catch {
@@ -87,7 +88,7 @@ export default function LaborEstimateView({ solutionId, estimate, hasAssessment,
     if (!confirm("Delete this labor estimate?")) return;
     setDeleting(true);
     try {
-      await api.deleteLaborEstimate(solutionId);
+      await api.deleteLaborEstimate(solutionId, solutionType);
       onEstimateChange(null);
       setOverrides({});
     } catch {

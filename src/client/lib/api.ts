@@ -48,7 +48,12 @@ export type User = {
   cs_permission?: "none" | "user" | "power_user";
 };
 
-export type SolutionType = "ucaas" | "ccaas" | "ci" | "va" | (string & {});
+// Re-exported from the shared canonical source so every call site lines up
+// with the same enum used across the app.
+import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
+import type { AddOn } from "../../shared/sowAddOns";
+export type { SolutionType, OtherTechnology };
+export type { AddOn };
 
 export type GapCategory = "Feature" | "Integration" | "Infrastructure" | "Process" | "Compliance";
 export type RiskCategory = "Technical" | "Commercial" | "Operational" | "Timeline" | "Compliance";
@@ -83,7 +88,8 @@ export type Solution = {
   customer_name: string;
   dynamics_account_id: string | null;
   vendor: SolutionVendor;
-  solution_type: SolutionType;
+  solution_types: SolutionType[];
+  other_technologies: OtherTechnology[];
   status: SolutionStatus;
   partner_ae_user_id: string | null;
   partner_ae_name: string | null;
@@ -100,6 +106,10 @@ export type Solution = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  // SOW pricing
+  add_ons: AddOn[];
+  blended_rate: number;
+  sow_total_amount: number | null;
   // Joined fields
   partner_ae_display_name: string | null;
   customer_pf_ae_name: string | null;
@@ -154,7 +164,7 @@ export type Project = {
   name: string;
   customer_name: string | null;
   vendor: string | null;
-  solution_type: string | null;
+  solution_types: string[];
   status: string | null;
   health: string | null;
   health_override: string | null;
@@ -801,6 +811,7 @@ export type RoadmapItem = {
 export type NeedsAssessment = {
   id: string;
   solution_id: string;
+  solution_type: string;
   survey_id: string;
   answers: Record<string, unknown>;
   readiness_score: number | null;
@@ -812,6 +823,7 @@ export type NeedsAssessment = {
 export type LaborEstimate = {
   id: string;
   solution_id: string;
+  solution_type: string;
   model_version: string;
   solution_type_category: string;
   base_hours: Record<string, number>;
@@ -989,7 +1001,7 @@ export const api = {
     customer_name?: string;
     customer_id?: string | null;
     vendor?: string;
-    solution_type?: string;
+    solution_types?: string[];
     kickoff_date?: string;
     target_go_live_date?: string;
     pm_user_id?: string | null;
@@ -1009,6 +1021,7 @@ export const api = {
       target_go_live_date?: string;
       actual_go_live_date?: string;
       pm_user_id?: string | null;
+      solution_types?: SolutionType[];
       crm_case_id?: string | null;
       crm_opportunity_id?: string | null;
     }
@@ -1327,7 +1340,8 @@ export const api = {
     customer_id?: string;
     dynamics_account_id?: string;
     vendor?: SolutionVendor;
-    solution_type?: SolutionType;
+    solution_types?: SolutionType[];
+    other_technologies?: OtherTechnology[];
     journeys?: string[];
     pf_ae_user_id?: string;
     pf_sa_user_id?: string;
@@ -1348,7 +1362,8 @@ export const api = {
       customer_name: string;
       dynamics_account_id: string | null;
       vendor: SolutionVendor;
-      solution_type: SolutionType;
+      solution_types: SolutionType[];
+      other_technologies: OtherTechnology[];
       status: SolutionStatus;
       pf_ae_user_id: string | null;
       partner_ae_user_id: string | null;
@@ -1362,6 +1377,8 @@ export const api = {
       sow_data: string | null;
       gap_analysis: string | null;
       linked_project_id: string | null;
+      add_ons: AddOn[];
+      blended_rate: number;
     }>
   ) =>
     request<Solution>(`/solutions/${id}`, {
@@ -1434,7 +1451,7 @@ export const api = {
   optimizeDirectEnroll: (payload: {
     customer_name: string;
     vendor?: string | null;
-    solution_type?: string | null;
+    solution_types?: string[];
     actual_go_live_date?: string | null;
     ae_user_id?: string | null;
     sa_user_id?: string | null;
@@ -1450,7 +1467,7 @@ export const api = {
     }),
 
   optimizeLinkedSolution: (projectId: string) =>
-    request<Pick<Solution, "id" | "name" | "customer_name" | "status" | "solution_type" | "vendor"> | null>(
+    request<Pick<Solution, "id" | "name" | "customer_name" | "status" | "solution_types" | "vendor"> | null>(
       `/optimize/accounts/${projectId}/linked-solution`
     ),
   optimizeUpdateAccount: (projectId: string, payload: {
@@ -1575,15 +1592,17 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/recordings/${recordingId}`, { method: "DELETE" }),
 
   // ── Labor Estimates ──────────────────────────────────────────────────────────
-  laborEstimate: (solutionId: string) =>
-    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimate`),
-  upsertLaborEstimate: (solutionId: string, body: { overrides?: Record<string, number> }) =>
-    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimate`, {
+  laborEstimates: (solutionId: string) =>
+    request<LaborEstimate[]>(`/solutions/${solutionId}/labor-estimates`),
+  laborEstimate: (solutionId: string, solutionType: string) =>
+    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`),
+  upsertLaborEstimate: (solutionId: string, solutionType: string, body: { overrides?: Record<string, number> }) =>
+    request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`, {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  deleteLaborEstimate: (solutionId: string) =>
-    request<{ success: boolean }>(`/solutions/${solutionId}/labor-estimate`, { method: "DELETE" }),
+  deleteLaborEstimate: (solutionId: string, solutionType: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/labor-estimates/${solutionType}`, { method: "DELETE" }),
 
   // ── Labor Config (admin) ──────────────────────────────────────────────────────
   laborConfig: () =>
@@ -1593,16 +1612,18 @@ export const api = {
   resetLaborConfig: (category: string) =>
     request<{ ok: boolean }>(`/admin/labor-config/${category}`, { method: "DELETE" }),
 
-  // ── Needs Assessments ────────────────────────────────────────────────────────
-  needsAssessment: (solutionId: string) =>
-    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`),
-  upsertNeedsAssessment: (solutionId: string, body: { answers: Record<string, unknown> }) =>
-    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessment`, {
+  // ── Needs Assessments (one per (solution, solution_type) pair) ─────────────
+  needsAssessments: (solutionId: string) =>
+    request<NeedsAssessment[]>(`/solutions/${solutionId}/needs-assessments`),
+  needsAssessment: (solutionId: string, solutionType: string) =>
+    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessments/${solutionType}`),
+  upsertNeedsAssessment: (solutionId: string, solutionType: string, body: { answers: Record<string, unknown> }) =>
+    request<NeedsAssessment>(`/solutions/${solutionId}/needs-assessments/${solutionType}`, {
       method: "PUT",
       body: JSON.stringify(body),
     }),
-  deleteNeedsAssessment: (solutionId: string) =>
-    request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessment`, { method: "DELETE" }),
+  deleteNeedsAssessment: (solutionId: string, solutionType: string) =>
+    request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessments/${solutionType}`, { method: "DELETE" }),
 
   // ── Templates ────────────────────────────────────────────────────────────────
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
@@ -1673,11 +1694,11 @@ export const api = {
   deleteCustomerProviderAe: (id: string, aeId: string) =>
     request<{ success: boolean }>(`/customers/${id}/provider-aes/${aeId}`, { method: "DELETE" }),
   customerSolutions: (id: string) =>
-    request<Pick<Solution, "id" | "name" | "vendor" | "solution_type" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">[]>(`/customers/${id}/solutions`),
+    request<Pick<Solution, "id" | "name" | "vendor" | "solution_types" | "other_technologies" | "status" | "created_at" | "updated_at" | "linked_project_id" | "dynamics_account_id">[]>(`/customers/${id}/solutions`),
   customerProjects: (id: string) =>
-    request<Pick<Project, "id" | "name" | "vendor" | "solution_type" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
+    request<Pick<Project, "id" | "name" | "vendor" | "solution_types" | "status" | "health" | "kickoff_date" | "target_go_live_date" | "actual_go_live_date" | "pm_user_id" | "created_at" | "updated_at"> & { has_optimization: number | null }>(`/customers/${id}/projects`),
   customerOptimizations: (id: string) =>
-    request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_type: string | null; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
+    request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_types: string[]; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
 
   // ── Prospecting ──────────────────────────────────────────────────────────
   prospectingLists: () =>
@@ -1711,4 +1732,66 @@ export const api = {
   toggleFeatureVote: (id: string) =>
     request<{ voted: boolean }>(`/features/${id}/vote`, { method: "POST" }),
 
+  // ── Project Welcome Email ────────────────────────────────────────────────
+  welcomeOptions: (projectId: string) =>
+    request<WelcomeOptions>(`/projects/${projectId}/welcome/options`),
+  welcomePreview: (projectId: string, draft: WelcomeDraft) =>
+    request<{ subject: string; html: string; recipientCount: number }>(
+      `/projects/${projectId}/welcome/preview`,
+      { method: "POST", body: JSON.stringify(draft) }
+    ),
+  welcomeTest: (projectId: string, draft: WelcomeDraft) =>
+    request<{ ok: boolean; sentTo: string }>(
+      `/projects/${projectId}/welcome/test`,
+      { method: "POST", body: JSON.stringify(draft) }
+    ),
+  welcomeSend: (projectId: string, draft: WelcomeDraft) =>
+    request<{ ok: boolean; sentTo: string[]; sentAt: string }>(
+      `/projects/${projectId}/welcome/send`,
+      { method: "POST", body: JSON.stringify(draft) }
+    ),
+};
+
+// ── Welcome Email types ────────────────────────────────────────────────────
+
+export type WelcomeOptions = {
+  project: {
+    id: string;
+    name: string;
+    customerName: string | null;
+    solutionTypes: string[];
+    vendor: string | null;
+    kickoffDate: string | null;
+    targetGoLiveDate: string | null;
+    kickoffMeetingUrl: string | null;
+    welcomeSentAt: string | null;
+    suggestedDistributionListEmail: string | null;
+  };
+  recipients: {
+    contacts: Array<{ id: string; name: string; email: string; jobTitle: string | null }>;
+    staff: Array<{ id: string; name: string; email: string; role: string; isPartner: boolean }>;
+  };
+  sharepoint: {
+    folderUrl: string | null;
+    files: Array<{ name: string; webUrl: string; size: number | null; mimeType: string | null }>;
+  };
+};
+
+export type WelcomeDraft = {
+  pmCustomNote: string;
+  kickoffMeetingUrl?: string | null;
+  kickoffWhen?: string | null;
+  distributionListEmail?: string | null;
+  /**
+   * Map of section-id → enabled. Server walks the shared welcomeSections
+   * catalog and fills in defaults for any applicable keys this payload omits.
+   */
+  sections: Record<string, boolean>;
+  recipients: {
+    contactIds: string[];
+    staffUserIds: string[];
+    zoomRep?: { name: string; email: string } | null;
+    extraEmails: string[];
+  };
+  attachmentUrls: string[];
 };

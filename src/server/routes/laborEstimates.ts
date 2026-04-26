@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+import { parseSolutionTypes } from "../../shared/solutionTypes";
+import { recomputeSowTotal } from "../lib/sowTotal";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -398,19 +400,9 @@ function parseJson<T>(raw: unknown, fallback: T): T {
 
 const EDIT_ROLES = ["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae"] as const;
 
-// GET /api/solutions/:id/labor-estimate
-app.get("/:id/labor-estimate", async (c) => {
-  const auth = c.get("auth");
-  if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
-
-  const solutionId = c.req.param("id");
-  const row = await c.env.DB.prepare(
-    "SELECT * FROM labor_estimates WHERE solution_id = ? LIMIT 1"
-  ).bind(solutionId).first() as Record<string, unknown> | null;
-
-  if (!row) throw new HTTPException(404, { message: "Labor estimate not found" });
-
-  return c.json({
+// Helper: shape a labor_estimates row for the client (parse all JSON columns).
+function shapeEstimateRow(row: Record<string, unknown>) {
+  return {
     ...row,
     base_hours: parseJson(row.base_hours, {}),
     driver_adjustments: parseJson(row.driver_adjustments, []),
@@ -419,15 +411,44 @@ app.get("/:id/labor-estimate", async (c) => {
     final_hours: parseJson(row.final_hours, {}),
     overrides: parseJson(row.overrides, {}),
     risk_flags: parseJson(row.risk_flags, []),
-  });
+  };
+}
+
+// GET /api/solutions/:id/labor-estimates — list all labor estimates for a solution.
+app.get("/:id/labor-estimates", async (c) => {
+  const auth = c.get("auth");
+  if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
+
+  const solutionId = c.req.param("id");
+  const rows = await c.env.DB.prepare(
+    "SELECT * FROM labor_estimates WHERE solution_id = ? ORDER BY solution_type"
+  ).bind(solutionId).all() as { results?: Record<string, unknown>[] };
+
+  return c.json((rows.results ?? []).map(shapeEstimateRow));
 });
 
-// PUT /api/solutions/:id/labor-estimate
+// GET /api/solutions/:id/labor-estimates/:type — one labor estimate for a (solution, type).
+app.get("/:id/labor-estimates/:type", async (c) => {
+  const auth = c.get("auth");
+  if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
+
+  const solutionId = c.req.param("id");
+  const solutionType = c.req.param("type");
+  const row = await c.env.DB.prepare(
+    "SELECT * FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first() as Record<string, unknown> | null;
+
+  if (!row) throw new HTTPException(404, { message: "Labor estimate not found" });
+
+  return c.json(shapeEstimateRow(row));
+});
+
+// PUT /api/solutions/:id/labor-estimates/:type
 const upsertSchema = z.object({
   overrides: z.record(z.string(), z.number()).optional().default({}),
 });
 
-app.put("/:id/labor-estimate", async (c) => {
+app.put("/:id/labor-estimates/:type", async (c) => {
   const auth = c.get("auth");
   if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
   if (!EDIT_ROLES.includes(auth.role as typeof EDIT_ROLES[number])) {
@@ -435,24 +456,30 @@ app.put("/:id/labor-estimate", async (c) => {
   }
 
   const solutionId = c.req.param("id");
+  const solutionType = c.req.param("type");
 
   const solution = await c.env.DB.prepare(
-    "SELECT id, solution_type FROM solutions WHERE id = ? LIMIT 1"
-  ).bind(solutionId).first() as { id: string; solution_type: string } | null;
+    "SELECT id, solution_types FROM solutions WHERE id = ? LIMIT 1"
+  ).bind(solutionId).first() as { id: string; solution_types: string } | null;
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
+
+  const applicableTypes = parseSolutionTypes(solution.solution_types);
+  if (!applicableTypes.includes(solutionType as typeof applicableTypes[number])) {
+    throw new HTTPException(400, { message: `Solution is not scoped to solution_type '${solutionType}'` });
+  }
 
   const parsed = upsertSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { overrides } = parsed.data;
 
-  // Load needs assessment answers (empty object if none)
+  // Per-type NA answers drive per-type labor calc.
   const naRow = await c.env.DB.prepare(
-    "SELECT answers FROM needs_assessments WHERE solution_id = ? LIMIT 1"
-  ).bind(solutionId).first() as { answers: string } | null;
+    "SELECT answers FROM needs_assessments WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first() as { answers: string } | null;
   const answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
 
-  const category = solutionTypeToCategory(solution.solution_type);
+  const category = solutionTypeToCategory(solutionType);
 
   // Load base hours config override from DB if present
   const configRow = await c.env.DB.prepare(
@@ -463,8 +490,8 @@ app.put("/:id/labor-estimate", async (c) => {
   const estimate = computeEstimate(category, answers, overrides, baseHoursOverride);
 
   const existing = await c.env.DB.prepare(
-    "SELECT id FROM labor_estimates WHERE solution_id = ? LIMIT 1"
-  ).bind(solutionId).first();
+    "SELECT id FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first();
 
   if (existing) {
     await c.env.DB.prepare(`
@@ -474,7 +501,7 @@ app.put("/:id/labor-estimate", async (c) => {
           total_low = ?, total_expected = ?, total_high = ?,
           confidence_score = ?, confidence_band = ?, risk_flags = ?,
           updated_at = datetime('now')
-      WHERE solution_id = ?
+      WHERE solution_id = ? AND solution_type = ?
     `).bind(
       estimate.solutionTypeCategory,
       JSON.stringify(estimate.baseHours),
@@ -486,18 +513,18 @@ app.put("/:id/labor-estimate", async (c) => {
       estimate.totals.low, estimate.totals.expected, estimate.totals.high,
       estimate.confidence.score, estimate.confidence.band,
       JSON.stringify(estimate.riskFlags),
-      solutionId
+      solutionId, solutionType
     ).run();
   } else {
     const id = crypto.randomUUID();
     await c.env.DB.prepare(`
       INSERT INTO labor_estimates
-        (id, solution_id, solution_type_category, base_hours, driver_adjustments, complexity,
+        (id, solution_id, solution_type, solution_type_category, base_hours, driver_adjustments, complexity,
          pre_override_hours, final_hours, overrides, total_low, total_expected, total_high,
          confidence_score, confidence_band, risk_flags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      id, solutionId, estimate.solutionTypeCategory,
+      id, solutionId, solutionType, estimate.solutionTypeCategory,
       JSON.stringify(estimate.baseHours),
       JSON.stringify(estimate.driverAdjustments),
       JSON.stringify(estimate.complexity),
@@ -511,23 +538,17 @@ app.put("/:id/labor-estimate", async (c) => {
   }
 
   const row = await c.env.DB.prepare(
-    "SELECT * FROM labor_estimates WHERE solution_id = ? LIMIT 1"
-  ).bind(solutionId).first() as Record<string, unknown>;
+    "SELECT * FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first() as Record<string, unknown>;
 
-  return c.json({
-    ...row,
-    base_hours: parseJson(row.base_hours, {}),
-    driver_adjustments: parseJson(row.driver_adjustments, []),
-    complexity: parseJson(row.complexity, {}),
-    pre_override_hours: parseJson(row.pre_override_hours, {}),
-    final_hours: parseJson(row.final_hours, {}),
-    overrides: parseJson(row.overrides, {}),
-    risk_flags: parseJson(row.risk_flags, []),
-  });
+  // Hours just changed → keep solutions.sow_total_amount in sync.
+  await recomputeSowTotal(c.env.DB, solutionId);
+
+  return c.json(shapeEstimateRow(row));
 });
 
-// DELETE /api/solutions/:id/labor-estimate
-app.delete("/:id/labor-estimate", async (c) => {
+// DELETE /api/solutions/:id/labor-estimates/:type
+app.delete("/:id/labor-estimates/:type", async (c) => {
   const auth = c.get("auth");
   if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
   if (!EDIT_ROLES.includes(auth.role as typeof EDIT_ROLES[number])) {
@@ -535,7 +556,13 @@ app.delete("/:id/labor-estimate", async (c) => {
   }
 
   const solutionId = c.req.param("id");
-  await c.env.DB.prepare("DELETE FROM labor_estimates WHERE solution_id = ?").bind(solutionId).run();
+  const solutionType = c.req.param("type");
+  await c.env.DB.prepare("DELETE FROM labor_estimates WHERE solution_id = ? AND solution_type = ?")
+    .bind(solutionId, solutionType)
+    .run();
+
+  await recomputeSowTotal(c.env.DB, solutionId);
+
   return c.json({ success: true });
 });
 

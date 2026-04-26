@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -82,7 +83,7 @@ app.get("/summary", async (c) => {
   // Full project list
   const projects = await db
     .prepare(
-      `SELECT id, name, customer_name, customer_id, vendor, solution_type, status, health,
+      `SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health,
               kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id
        FROM projects ${projectFilter}
        ORDER BY
@@ -177,15 +178,24 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings)
     .all<{ label: string; count: number }>();
 
+  // Per-type counts: a project with multiple solution_types contributes to each bucket.
+  // Projects with empty/null solution_types fall into the 'Unknown' bucket.
   const typeDistribution = await db
     .prepare(
-      `SELECT COALESCE(solution_type, 'Unknown') AS label, COUNT(*) AS count
-       FROM projects
-       WHERE id IN (${projectSubquery})
-       GROUP BY solution_type
+      `SELECT label, COUNT(*) AS count FROM (
+         SELECT je.value AS label
+         FROM projects p, json_each(p.solution_types) je
+         WHERE p.id IN (${projectSubquery})
+         UNION ALL
+         SELECT 'Unknown' AS label
+         FROM projects p
+         WHERE p.id IN (${projectSubquery})
+           AND (p.solution_types IS NULL OR p.solution_types = '' OR p.solution_types = '[]')
+       )
+       GROUP BY label
        ORDER BY count DESC`
     )
-    .bind(...filterBindings)
+    .bind(...filterBindings, ...filterBindings)
     .all<{ label: string; count: number }>();
 
   return c.json({
@@ -196,7 +206,7 @@ app.get("/summary", async (c) => {
       openTasks: openTasksCount?.count ?? 0,
       openBlockers: openBlockersCount?.count ?? 0,
     },
-    projects: projects.results ?? [],
+    projects: (projects.results ?? []).map(normalizeSolutionTypesField),
     projectPhases: projectPhases.results ?? [],
     openTasks: openTasks.results ?? [],
     openBlockers: openBlockers.results ?? [],

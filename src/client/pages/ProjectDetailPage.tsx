@@ -25,6 +25,10 @@ import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
+import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
+import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
+import WelcomeEmailCard from "../components/welcome/WelcomeEmailCard";
 import { useToast } from "../components/ui/ToastProvider";
 
 type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
@@ -105,6 +109,9 @@ export default function ProjectDetailPage() {
   const [editStatus, setEditStatus] = useState("");
   const [editHealth, setEditHealth] = useState("");
   const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
+  const [editingSolutionTypes, setEditingSolutionTypes] = useState(false);
+  const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
+  const [savingSolutionTypes, setSavingSolutionTypes] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -303,6 +310,27 @@ export default function ProjectDetailPage() {
       showToast(message, "error");
     } finally {
       setSavingProject(false);
+    }
+  }
+
+  function startEditSolutionTypes() {
+    if (!project) return;
+    setEditSolutionTypes(parseSolutionTypes(project.solution_types));
+    setEditingSolutionTypes(true);
+  }
+
+  async function saveEditSolutionTypes() {
+    if (!project) return;
+    setSavingSolutionTypes(true);
+    try {
+      const updated = await api.updateProject(project.id, { solution_types: editSolutionTypes });
+      setProject(updated);
+      setEditingSolutionTypes(false);
+      showToast("Solution types updated.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update solution types", "error");
+    } finally {
+      setSavingSolutionTypes(false);
     }
   }
 
@@ -695,17 +723,34 @@ export default function ProjectDetailPage() {
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
         <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{project.name}</h1>
 
-        {/* Vendor + solution type badges */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+        {/* Vendor + solution type badges (editable for admin/pm) */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
           {project.vendor && (
             <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
               {project.vendor}
             </span>
           )}
-          {project.solution_type && (
-            <span className="ms-badge" style={{ background: "rgba(135,100,184,0.15)", color: "#b39ddb", border: "1px solid rgba(135,100,184,0.35)", fontSize: 12, padding: "4px 12px" }}>
-              {project.solution_type}
-            </span>
+          {editingSolutionTypes ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0, maxWidth: 520 }}>
+              <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingSolutionTypes} />
+              <div style={{ display: "flex", gap: 8 }}>
+                <button className="ms-btn-primary" onClick={saveEditSolutionTypes} disabled={savingSolutionTypes}>
+                  {savingSolutionTypes ? "Saving…" : "Save"}
+                </button>
+                <button className="ms-btn-ghost" onClick={() => setEditingSolutionTypes(false)} disabled={savingSolutionTypes}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
+              {canEdit && (
+                <button className="ms-btn-ghost" onClick={startEditSolutionTypes} style={{ fontSize: 12, padding: "2px 10px" }}>
+                  Edit
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -808,16 +853,25 @@ export default function ProjectDetailPage() {
                 const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
                 if (!pmName && !pmEmail) return null;
                 const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
+                const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
                 return (
                   <span key="pm" title={`PM · ${pmEmail ?? ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12 }}>
-                    <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
+                    {photo
+                      ? <img src={photo} alt={pmName ?? pmEmail ?? ""} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
+                    }
                     <span style={{ color: "#334155", fontWeight: 500 }}>{pmName ?? pmEmail}</span>
                     <span style={{ color: "#94a3b8", fontSize: 10 }}>PM</span>
                   </span>
                 );
               })()}
-              {/* PF staff chips */}
-              {projectStaff.filter(s => s.staff_role !== "partner_ae" && !["ae", "sa", "csm"].includes(s.staff_role)).map((s) => {
+              {/* PF staff chips — skip the staff_role='pm' row for the project's primary PM
+                  since that user already renders via the dedicated PM chip above. */}
+              {projectStaff.filter(s =>
+                s.staff_role !== "partner_ae"
+                && !["ae", "sa", "csm"].includes(s.staff_role)
+                && !(s.staff_role === "pm" && s.user_id === project.pm_user_id)
+              ).map((s) => {
                 const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
                 const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
                 const photo = staffPhotoMap[s.email] ?? s.avatar_url;
@@ -906,6 +960,9 @@ export default function ProjectDetailPage() {
               </div>
             )}
           </div>
+
+          {/* ── Welcome Email ─────────────────────────────────────────────── */}
+          <WelcomeEmailCard projectId={project.id} canSend={canEdit} />
 
           {/* ── Customer Contacts ─────────────────────────────────────────── */}
           <div className="ms-section-card">
