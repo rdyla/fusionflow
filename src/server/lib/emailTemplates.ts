@@ -518,6 +518,93 @@ function renderWelcomeSection(
         meta.label,
         `Please be prepared to discuss target go-live date(s) and production timing at kickoff so we can plan resourcing accordingly.`
       );
+    case "discoveryUcaas":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">UCaaS topics we'll work through during discovery. You don't need to bring answers to kickoff &mdash; these are the questions we'll explore in the coming weeks. It helps to start identifying who internally owns each topic so the right voices are at the table.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Current dial plan, extension scheme, and auto-attendant call flows</li>
+           <li style="margin:0 0 8px;">Network readiness &mdash; bandwidth, QoS, LAN configuration</li>
+           <li style="margin:0 0 8px;">E911 dispatchable location data</li>
+           <li style="margin:0 0 8px;">Hardware logistics &mdash; phones, gateways, headsets</li>
+           <li style="margin:0;">Auto-attendant + IVR redesign opportunities</li>
+         </ul>`
+      );
+    case "discoveryCcaas":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Contact-center topics we'll work through during discovery. You don't need answers at kickoff &mdash; these are the questions that will guide the design and configuration sessions ahead.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Agent roster, skill matrix, and license assignment</li>
+           <li style="margin:0 0 8px;">Queue list, skill-based routing rules, and after-hours behavior</li>
+           <li style="margin:0 0 8px;">Call recording &mdash; retention period, consent / disclaimer requirements, storage location</li>
+           <li style="margin:0 0 8px;">Reporting + BI integration (Power BI, Tableau, data warehouse exports)</li>
+           <li style="margin:0;">Survey and post-call workflow</li>
+         </ul>`
+      );
+    case "discoveryVa":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Virtual-agent topics we'll work through during discovery. You don't need answers at kickoff &mdash; start identifying who internally owns each topic.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Knowledge base content sources and content owners</li>
+           <li style="margin:0 0 8px;">Phase 1 intent prioritization (top 10&ndash;25 intents)</li>
+           <li style="margin:0 0 8px;">Escalation paths to live agents &mdash; handoff triggers and warm-transfer destinations</li>
+           <li style="margin:0 0 8px;">Customer-to-system mapping and APIs to query for caller identification</li>
+           <li style="margin:0;">Voice and chat channel selection</li>
+         </ul>`
+      );
+    case "discoveryCi":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Conversation-intelligence topics we'll explore during discovery. These shape how the platform integrates with your existing systems and how supervisors will use it day-to-day.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">CRM integration prerequisites &mdash; Salesforce / HubSpot / Dynamics admin contact and OAuth scope</li>
+           <li style="margin:0 0 8px;">Transcript storage compliance &mdash; retention period and PII redaction policy</li>
+           <li style="margin:0 0 8px;">Scorecard and trigger-phrase design</li>
+           <li style="margin:0;">Agent training and rollout plan</li>
+         </ul>`
+      );
+    case "discoveryWfm":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Workforce-management topics we'll explore during discovery. We'll need historical data and policy inputs to model forecasts and shift plans accurately.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Twelve-month historical interval data &mdash; volume, handle time, AHT</li>
+           <li style="margin:0 0 8px;">Forecasting inputs &mdash; channels, queues, skill groups, service-level targets</li>
+           <li style="margin:0;">Shift, time-off, and overtime policy inputs</li>
+         </ul>`
+      );
+    case "discoveryQm":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Quality-management topics we'll explore during discovery. These define how evaluations are scored and how feedback flows back to agents.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Scoring rubric &mdash; evaluation form and section weighting</li>
+           <li style="margin:0 0 8px;">Calibration cadence and supervisor sign-off process</li>
+           <li style="margin:0;">Coaching workflow &mdash; feedback loop and agent acknowledgement</li>
+         </ul>`
+      );
+    case "ssoIdentity":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Identity and access topics we'll cover during discovery. These determine how users sign in and how licenses are provisioned.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Identity provider (Azure AD / Okta / Google) and admin contact</li>
+           <li style="margin:0 0 8px;">SAML SSO setup and SCIM provisioning preferences</li>
+           <li style="margin:0;">User group and role mapping for license assignment</li>
+         </ul>`
+      );
+    case "changeManagement":
+      return psCard(
+        meta.label,
+        `<p style="margin:0 0 10px;">Change-management and rollout topics we'll cover during discovery. The earlier we agree on the rollout shape, the smoother go-live will be.</p>
+         <ul style="margin:0;padding-left:18px;">
+           <li style="margin:0 0 8px;">Internal communications plan &mdash; who's announcing the change, on what cadence</li>
+           <li style="margin:0 0 8px;">Training rollout &mdash; admin training first, then end-user; live or recorded</li>
+           <li style="margin:0;">Pilot group and phased cutover preferences</li>
+         </ul>`
+      );
   }
 }
 
