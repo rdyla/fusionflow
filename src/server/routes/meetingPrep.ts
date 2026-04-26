@@ -1,18 +1,37 @@
+/**
+ * Meeting-prep email engine — server route.
+ *
+ * Generic over `:meetingType` (kickoff today, discovery / design review later).
+ * Each meeting type has its own catalog (in `src/shared/meetingPrep/`) and
+ * its own renderer (in `src/server/lib/meetingPrep/`); this route handles
+ * the common envelope: load options, build context, preview, test, send.
+ *
+ * Migrated from `src/server/routes/projectWelcome.ts`. Same draft shape +
+ * URL semantics where possible — only meaningful changes are:
+ *   - URL prefix `/welcome/...` → `/meeting-prep/:meetingType/...`
+ *   - DB column `welcome_sent_at` → `kickoff_sent_at` (migration 0056)
+ */
+
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canEditProject } from "../services/accessService";
-import { welcomePackage } from "../lib/emailTemplates";
 import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
 import { parseSolutionTypes, joinSolutionTypeLabels, type SolutionType } from "../../shared/solutionTypes";
-import { applyWelcomeSectionDefaults } from "../../shared/welcomeSections";
+import {
+  applyMeetingPrepSectionDefaults,
+  getCatalogFor,
+  isMeetingType,
+  type MeetingType,
+} from "../../shared/meetingPrep";
+import { getRendererFor, type MeetingPrepTeamSection } from "../lib/meetingPrep";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Helpers (mostly verbatim from old projectWelcome.ts) ─────────────────────
 
 const STAFF_ROLE_LABEL: Record<string, string> = {
   pm: "Project Manager",
@@ -36,29 +55,26 @@ type ProjectRow = {
   kickoff_date: string | null;
   target_go_live_date: string | null;
   kickoff_meeting_url: string | null;
-  welcome_sent_at: string | null;
+  kickoff_sent_at: string | null;
   pm_user_id: string | null;
 };
 
 async function loadProject(db: D1Database, projectId: string): Promise<ProjectRow | null> {
   const row = await db
     .prepare(`SELECT id, name, customer_name, customer_id, solution_types, vendor, kickoff_date,
-                     target_go_live_date, kickoff_meeting_url, welcome_sent_at, pm_user_id
+                     target_go_live_date, kickoff_meeting_url, kickoff_sent_at, pm_user_id
               FROM projects WHERE id = ? LIMIT 1`)
     .bind(projectId)
     .first<Omit<ProjectRow, "solution_types"> & { solution_types: string }>();
   return row ? { ...row, solution_types: parseSolutionTypes(row.solution_types) } : null;
 }
 
-// Partner AE label uses the project's vendor (Zoom / RingCentral / 8x8 / Dialpad / etc.)
-// Falls back to "Partner" when vendor is unset.
 function partnerLabel(vendor: string | null): string {
   return vendor && vendor.trim() ? `${vendor.trim()} Partner AE` : "Partner AE";
 }
 
 // Map project vendor → short prefix used in our per-project distribution list
 // naming convention: {prefix}-{customerSlug}@packetfusion.com
-// zoom=zm, ringcentral=rc, 8x8=8x8, dialpad=dp; fallback=ps (Professional Services)
 function vendorPrefix(vendor: string | null): string {
   const v = (vendor ?? "").toLowerCase().replace(/[\s_-]/g, "");
   if (v.includes("zoom")) return "zm";
@@ -78,13 +94,18 @@ function computeDistributionListEmail(vendor: string | null, customerName: strin
   return `${vendorPrefix(vendor)}-${slug}@packetfusion.com`;
 }
 
+type ContactRow = { id: string; name: string; email: string | null; job_title: string | null };
+type StaffRow = { id: string; name: string | null; email: string; role: string; staff_role: string | null };
+
+function staffRoleLabel(s: StaffRow): string {
+  const key = s.staff_role ?? s.role;
+  return STAFF_ROLE_LABEL[key] ?? (key || "Team Member");
+}
+
 function displayRoleFor(s: StaffRow, vendor: string | null): string {
   if (s.staff_role === "partner_ae") return partnerLabel(vendor);
   return staffRoleLabel(s);
 }
-
-type ContactRow = { id: string; name: string; email: string | null; job_title: string | null };
-type StaffRow = { id: string; name: string | null; email: string; role: string; staff_role: string | null };
 
 async function loadRecipientCandidates(db: D1Database, project: ProjectRow) {
   const [contactsRes, staffRes, pmRes] = await Promise.all([
@@ -110,16 +131,25 @@ async function loadRecipientCandidates(db: D1Database, project: ProjectRow) {
   return { contacts, staff };
 }
 
-function staffRoleLabel(s: StaffRow): string {
-  const key = s.staff_role ?? s.role;
-  return STAFF_ROLE_LABEL[key] ?? (key || "Team Member");
+function parseMeetingTypeParam(c: { req: { param: (k: string) => string } }): MeetingType {
+  const raw = c.req.param("meetingType");
+  if (!isMeetingType(raw)) {
+    throw new HTTPException(400, { message: `Unknown meeting type: ${raw}` });
+  }
+  return raw;
 }
 
-// ── GET /api/projects/:projectId/welcome/options ──────────────────────────────
+/** Per-project sent-at column for each meeting type. */
+const SENT_AT_COLUMN: Record<MeetingType, string> = {
+  kickoff: "kickoff_sent_at",
+};
 
-app.get("/:projectId/welcome/options", async (c) => {
+// ── GET /api/projects/:projectId/meeting-prep/:meetingType/options ───────────
+
+app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.param("projectId");
+  const meetingType = parseMeetingTypeParam(c);
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
@@ -145,12 +175,14 @@ app.get("/:projectId/welcome/options", async (c) => {
           .filter((f) => !f.isFolder)
           .map((f) => ({ name: f.name, webUrl: f.webUrl, size: f.size, mimeType: f.mimeType }));
       } catch (err) {
-        console.warn("[welcome] SharePoint list failed:", err instanceof Error ? err.message : err);
+        console.warn(`[meeting-prep/${meetingType}] SharePoint list failed:`, err instanceof Error ? err.message : err);
       }
     }
   }
 
   return c.json({
+    meetingType,
+    catalog: getCatalogFor(meetingType),
     project: {
       id: project.id,
       name: project.name,
@@ -160,7 +192,7 @@ app.get("/:projectId/welcome/options", async (c) => {
       kickoffDate: project.kickoff_date,
       targetGoLiveDate: project.target_go_live_date,
       kickoffMeetingUrl: project.kickoff_meeting_url,
-      welcomeSentAt: project.welcome_sent_at,
+      sentAt: project.kickoff_sent_at,
       suggestedDistributionListEmail: computeDistributionListEmail(project.vendor, project.customer_name),
     },
     recipients: {
@@ -177,7 +209,7 @@ app.get("/:projectId/welcome/options", async (c) => {
   });
 });
 
-// ── Draft payload schema ──────────────────────────────────────────────────────
+// ── Draft schema ─────────────────────────────────────────────────────────────
 
 const draftSchema = z.object({
   pmCustomNote: z.string().max(5000).default(""),
@@ -187,8 +219,7 @@ const draftSchema = z.object({
   kickoffWhen: z.string().max(200).nullable().optional(),
   distributionListEmail: z.string().max(200).nullable().optional(),
   // Catalog-driven: client sends whichever section IDs it toggled; server fills
-  // in defaults for any applicable section IDs the client omitted. See
-  // src/shared/welcomeSections.ts for the canonical ID set and per-type applicability.
+  // in defaults for any applicable section IDs the client omitted.
   sections: z.record(z.string(), z.boolean()).default({}),
   recipients: z.object({
     contactIds: z.array(z.string()).default([]),
@@ -201,12 +232,9 @@ const draftSchema = z.object({
 
 type Draft = z.infer<typeof draftSchema>;
 
-// Resolve everything the template needs: recipient emails, team directory with photos,
-// PM info, project summary, kickoff link. Used by preview, test, and send.
-async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
+async function buildTemplateContext(c: any, project: ProjectRow, meetingType: MeetingType, draft: Draft) {
   const auth = c.get("auth");
 
-  // Load candidate recipients so we can turn IDs back into emails + names
   const { contacts, staff } = await loadRecipientCandidates(c.env.DB, project);
   const contactsById = new Map(contacts.map((ct) => [ct.id, ct]));
   const staffById = new Map(staff.map((s) => [s.id, s]));
@@ -226,8 +254,6 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
   ].filter((e) => !!e);
 
   // Team directory for the email body — pulls photos from Zoom by email.
-  // Partner AEs (and the Zoom rep free-text entry) get their own section so
-  // customers see PF team vs. partner/vendor team distinctly.
   const teamEmails = toStaff.map((s) => s.email);
   const photos = teamEmails.length > 0 ? await getStaffPhotos(c.env.KV, c.env, teamEmails) : {};
 
@@ -259,7 +285,7 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
   }
 
   const partnerSectionLabel = project.vendor?.trim() ? `${project.vendor.trim()} Team` : "Partner Team";
-  const teamSections = [
+  const teamSections: MeetingPrepTeamSection[] = [
     { label: "Your Team", members: pfMembers },
     { label: partnerSectionLabel, members: partnerMembers },
   ];
@@ -274,9 +300,11 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
   const distributionListEmail = draft.distributionListEmail?.trim()
     || computeDistributionListEmail(project.vendor, project.customer_name);
 
-  const resolvedSections = applyWelcomeSectionDefaults(draft.sections, project.solution_types);
+  const catalog = getCatalogFor(meetingType);
+  const resolvedSections = applyMeetingPrepSectionDefaults(catalog, draft.sections, project.solution_types);
 
-  const html = welcomePackage({
+  const renderer = getRendererFor(meetingType);
+  const { html, subject } = renderer({
     projectName: project.name,
     customerName: project.customer_name,
     pmName,
@@ -286,7 +314,6 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     kickoffWhen: draft.kickoffWhen ?? null,
     kickoffDate: project.kickoff_date,
     targetGoLiveDate: project.target_go_live_date,
-    // Joined label for multi-type projects; empty string when no types set.
     solution: joinSolutionTypeLabels(project.solution_types) || null,
     solutionTypes: project.solution_types,
     teamSections,
@@ -294,41 +321,39 @@ async function buildTemplateContext(c: any, project: ProjectRow, draft: Draft) {
     sections: resolvedSections,
   });
 
-  const subject = `Welcome to ${project.name}${project.customer_name ? ` · ${project.customer_name}` : ""}`;
-
   return { html, subject, recipientEmails };
 }
 
-// ── POST /api/projects/:projectId/welcome/preview ─────────────────────────────
+// ── Preview ──────────────────────────────────────────────────────────────────
 
-app.post("/:projectId/welcome/preview", async (c) => {
+app.post("/:projectId/meeting-prep/:meetingType/preview", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.param("projectId");
+  const meetingType = parseMeetingTypeParam(c);
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
   const project = await loadProject(c.env.DB, projectId);
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
-  const body = await c.req.json();
-  const parsed = draftSchema.safeParse(body);
+  const parsed = draftSchema.safeParse(await c.req.json());
   if (!parsed.success) {
-    console.error("[welcome/preview] validation failed:", JSON.stringify(parsed.error.issues));
+    console.error(`[meeting-prep/${meetingType}/preview] validation failed:`, JSON.stringify(parsed.error.issues));
     return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
   }
 
   try {
-    const { html, subject, recipientEmails } = await buildTemplateContext(c, project, parsed.data);
+    const { html, subject, recipientEmails } = await buildTemplateContext(c, project, meetingType, parsed.data);
     return c.json({ subject, html, recipientCount: recipientEmails.length });
   } catch (err) {
-    console.error("[welcome/preview] buildTemplateContext failed:", err);
+    console.error(`[meeting-prep/${meetingType}/preview] buildTemplateContext failed:`, err);
     return c.json({ error: err instanceof Error ? err.message : "Preview failed" }, 500);
   }
 });
 
-// ── Attachment download ───────────────────────────────────────────────────────
+// ── Attachments ──────────────────────────────────────────────────────────────
 
-const MAX_ATTACHMENT_TOTAL_BYTES = 3 * 1024 * 1024; // ~3 MB Graph simple-attachment ceiling
+const MAX_ATTACHMENT_TOTAL_BYTES = 3 * 1024 * 1024;
 
 function toBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
@@ -354,11 +379,12 @@ async function fetchAttachments(env: Bindings, urls: string[]) {
   }));
 }
 
-// ── POST /api/projects/:projectId/welcome/test ────────────────────────────────
+// ── Test send ────────────────────────────────────────────────────────────────
 
-app.post("/:projectId/welcome/test", async (c) => {
+app.post("/:projectId/meeting-prep/:meetingType/test", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.param("projectId");
+  const meetingType = parseMeetingTypeParam(c);
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
@@ -367,12 +393,12 @@ app.post("/:projectId/welcome/test", async (c) => {
 
   const parsed = draftSchema.safeParse(await c.req.json());
   if (!parsed.success) {
-    console.error("[welcome/test] validation failed:", JSON.stringify(parsed.error.issues));
+    console.error(`[meeting-prep/${meetingType}/test] validation failed:`, JSON.stringify(parsed.error.issues));
     return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
   }
 
   try {
-    const { html, subject } = await buildTemplateContext(c, project, parsed.data);
+    const { html, subject } = await buildTemplateContext(c, project, meetingType, parsed.data);
     const attachments = await fetchAttachments(c.env, parsed.data.attachmentUrls);
 
     await sendEmail(c.env, {
@@ -385,16 +411,17 @@ app.post("/:projectId/welcome/test", async (c) => {
     return c.json({ ok: true, sentTo: auth.user.email });
   } catch (err) {
     if (err instanceof HTTPException) throw err;
-    console.error("[welcome/test] send failed:", err);
+    console.error(`[meeting-prep/${meetingType}/test] send failed:`, err);
     return c.json({ error: err instanceof Error ? err.message : "Test send failed" }, 500);
   }
 });
 
-// ── POST /api/projects/:projectId/welcome/send ────────────────────────────────
+// ── Send ─────────────────────────────────────────────────────────────────────
 
-app.post("/:projectId/welcome/send", async (c) => {
+app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.param("projectId");
+  const meetingType = parseMeetingTypeParam(c);
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
@@ -403,7 +430,7 @@ app.post("/:projectId/welcome/send", async (c) => {
 
   const parsed = draftSchema.safeParse(await c.req.json());
   if (!parsed.success) {
-    console.error("[welcome/send] validation failed:", JSON.stringify(parsed.error.issues));
+    console.error(`[meeting-prep/${meetingType}/send] validation failed:`, JSON.stringify(parsed.error.issues));
     return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
   }
 
@@ -411,9 +438,9 @@ app.post("/:projectId/welcome/send", async (c) => {
   let subject: string;
   let recipientEmails: string[];
   try {
-    ({ html, subject, recipientEmails } = await buildTemplateContext(c, project, parsed.data));
+    ({ html, subject, recipientEmails } = await buildTemplateContext(c, project, meetingType, parsed.data));
   } catch (err) {
-    console.error("[welcome/send] buildTemplateContext failed:", err);
+    console.error(`[meeting-prep/${meetingType}/send] buildTemplateContext failed:`, err);
     return c.json({ error: err instanceof Error ? err.message : "Send failed" }, 500);
   }
   if (recipientEmails.length === 0) {
@@ -424,12 +451,21 @@ app.post("/:projectId/welcome/send", async (c) => {
 
   await sendEmail(c.env, { to: recipientEmails, subject, html, attachments });
 
-  // Persist any kickoff URL the PM set inline, and mark welcome as sent
+  // Persist any kickoff URL the PM set inline (kickoff-only state), and mark
+  // this meeting type as sent in its own column.
   const now = new Date().toISOString();
-  await c.env.DB
-    .prepare("UPDATE projects SET kickoff_meeting_url = COALESCE(?, kickoff_meeting_url), welcome_sent_at = ?, updated_at = ? WHERE id = ?")
-    .bind(parsed.data.kickoffMeetingUrl ?? null, now, now, projectId)
-    .run();
+  const sentAtCol = SENT_AT_COLUMN[meetingType];
+  if (meetingType === "kickoff") {
+    await c.env.DB
+      .prepare(`UPDATE projects SET kickoff_meeting_url = COALESCE(?, kickoff_meeting_url), ${sentAtCol} = ?, updated_at = ? WHERE id = ?`)
+      .bind(parsed.data.kickoffMeetingUrl ?? null, now, now, projectId)
+      .run();
+  } else {
+    await c.env.DB
+      .prepare(`UPDATE projects SET ${sentAtCol} = ?, updated_at = ? WHERE id = ?`)
+      .bind(now, now, projectId)
+      .run();
+  }
 
   return c.json({ ok: true, sentTo: recipientEmails, sentAt: now });
 });
