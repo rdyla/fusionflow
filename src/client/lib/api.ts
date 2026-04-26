@@ -1732,29 +1732,34 @@ export const api = {
   toggleFeatureVote: (id: string) =>
     request<{ voted: boolean }>(`/features/${id}/vote`, { method: "POST" }),
 
-  // ── Project Welcome Email ────────────────────────────────────────────────
-  welcomeOptions: (projectId: string) =>
-    request<WelcomeOptions>(`/projects/${projectId}/welcome/options`),
-  welcomePreview: (projectId: string, draft: WelcomeDraft) =>
+  // ── Meeting prep emails (generic over meeting type) ──────────────────────
+  meetingPrepOptions: (projectId: string, meetingType: MeetingType) =>
+    request<MeetingPrepOptions>(`/projects/${projectId}/meeting-prep/${meetingType}/options`),
+  meetingPrepPreview: (projectId: string, meetingType: MeetingType, draft: MeetingPrepDraft) =>
     request<{ subject: string; html: string; recipientCount: number }>(
-      `/projects/${projectId}/welcome/preview`,
+      `/projects/${projectId}/meeting-prep/${meetingType}/preview`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
-  welcomeTest: (projectId: string, draft: WelcomeDraft) =>
+  meetingPrepTest: (projectId: string, meetingType: MeetingType, draft: MeetingPrepDraft) =>
     request<{ ok: boolean; sentTo: string }>(
-      `/projects/${projectId}/welcome/test`,
+      `/projects/${projectId}/meeting-prep/${meetingType}/test`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
-  welcomeSend: (projectId: string, draft: WelcomeDraft) =>
+  meetingPrepSend: (projectId: string, meetingType: MeetingType, draft: MeetingPrepDraft) =>
     request<{ ok: boolean; sentTo: string[]; sentAt: string }>(
-      `/projects/${projectId}/welcome/send`,
+      `/projects/${projectId}/meeting-prep/${meetingType}/send`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
 };
 
-// ── Welcome Email types ────────────────────────────────────────────────────
+// ── Meeting prep types ─────────────────────────────────────────────────────
 
-export type WelcomeOptions = {
+import type { MeetingType, MeetingPrepSectionMeta } from "../../shared/meetingPrep";
+export type { MeetingType, MeetingPrepSectionMeta };
+
+export type MeetingPrepOptions = {
+  meetingType: MeetingType;
+  catalog: readonly MeetingPrepSectionMeta[];
   project: {
     id: string;
     name: string;
@@ -1764,7 +1769,7 @@ export type WelcomeOptions = {
     kickoffDate: string | null;
     targetGoLiveDate: string | null;
     kickoffMeetingUrl: string | null;
-    welcomeSentAt: string | null;
+    sentAt: string | null;
     suggestedDistributionListEmail: string | null;
   };
   recipients: {
@@ -1777,14 +1782,16 @@ export type WelcomeOptions = {
   };
 };
 
-export type WelcomeDraft = {
+export type MeetingPrepDraft = {
   pmCustomNote: string;
+  /** Kickoff-specific. Other meeting types ignore. */
   kickoffMeetingUrl?: string | null;
+  /** Kickoff-specific. Other meeting types ignore. */
   kickoffWhen?: string | null;
   distributionListEmail?: string | null;
   /**
-   * Map of section-id → enabled. Server walks the shared welcomeSections
-   * catalog and fills in defaults for any applicable keys this payload omits.
+   * Map of section-id → enabled. Server walks the meeting-type catalog and
+   * fills in defaults for any applicable keys this payload omits.
    */
   sections: Record<string, boolean>;
   recipients: {
