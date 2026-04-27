@@ -19,7 +19,9 @@ interface Props {
    *  keep using freeform text while we still persist the CRM linkage.
    *  hasCrmLink reflects whether cs_proposals.customer_id is currently set. */
   customer: { customerName: string | null; hasCrmLink: boolean };
-  onCustomerChange: (next: { dynamicsAccountId: string | null; customerName: string | null }) => void;
+  /** Fires only on commit events from the picker (pick from dropdown, blur
+   *  with text, or clear) — not on every keystroke. Network calls go here. */
+  onCustomerCommit: (next: { dynamicsAccountId: string | null; customerName: string | null }) => void;
 }
 
 const OPP_TYPES = ["UCaaS Only", "CCaaS Only", "UCaaS + CCaaS", "Advanced Applications"] as const;
@@ -32,7 +34,7 @@ function calcEndDate(start: string, term: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export default function CalculatorForm({ form, calc, canOverride, onChange, customer, onCustomerChange }: Props) {
+export default function CalculatorForm({ form, calc, canOverride, onChange, customer, onCustomerCommit }: Props) {
   const msoTier = getMsoTier(form.msoTier);
 
   function setField<K extends keyof OppFormData>(key: K, value: OppFormData[K]) {
@@ -115,10 +117,11 @@ export default function CalculatorForm({ form, calc, canOverride, onChange, cust
               value={customer}
               onChange={(next) => {
                 // Mirror the picked / typed name into the form so the
-                // agreement template uses it. Caller persists FK separately.
+                // agreement template uses it. No network calls here —
+                // proposal-level FK persistence happens on commit.
                 onChange({ customerName: next.customerName ?? "" });
-                onCustomerChange(next);
               }}
+              onCommit={onCustomerCommit}
               placeholder="Search CRM customers or type a name…"
             />
           </label>

@@ -236,16 +236,16 @@ export default function CloudSupportWorkspacePage() {
             canOverride={canOverride}
             onChange={handleFormChange}
             customer={{ customerName: proposal.customerName ?? null, hasCrmLink: !!proposal.customerId }}
-            onCustomerChange={async (next) => {
-              // Optimistic local update so the picker reflects the choice immediately.
-              // CRM-linked state mirrors whether the user picked from the D365 dropdown.
+            onCustomerCommit={async (next) => {
+              // Fires only on commit events (pick / blur / clear) — not every
+              // keystroke — so per-stroke setCustomer + get races no longer
+              // overwrite the input mid-type.
               setProposal((prev) => prev ? { ...prev, customerName: next.customerName, customerId: next.dynamicsAccountId ? prev.customerId : null } : prev);
               try {
                 const ref = next.dynamicsAccountId
                   ? { dynamicsAccountId: next.dynamicsAccountId, customerName: next.customerName }
                   : { customerId: null, customerName: next.customerName };
                 await csApi.setCustomer(proposal.id, ref);
-                // Server resolved the FK — refresh proposal so customerId is current.
                 const fresh = await csApi.get(proposal.id);
                 setProposal((prev) => prev ? { ...prev, customerId: fresh.customerId, customerName: fresh.customerName } : prev);
               } catch (e) {

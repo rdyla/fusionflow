@@ -14,23 +14,47 @@ import { api, type DynamicsAccount } from "../../lib/api";
 // freeform name with no FK. Used for early-stage pricing where the customer
 // record may not exist in CRM yet.
 
+type CustomerRef = { dynamicsAccountId: string | null; customerName: string | null };
+
 type Props = {
   value: { customerName: string | null; hasCrmLink: boolean };
-  onChange: (next: { dynamicsAccountId: string | null; customerName: string | null }) => void;
+  /** Fires on every keystroke + pick — for live display state (e.g. mirroring
+   *  the typed name into a form field for an agreement preview). Cheap. */
+  onChange: (next: CustomerRef) => void;
+  /** Fires on commit events: picking from the dropdown, blurring the field
+   *  with text in it, or clearing. This is where expensive work goes
+   *  (network calls, FK persistence). Optional — if omitted, picks still
+   *  fire onChange and behave fine for in-memory state. */
+  onCommit?: (next: CustomerRef) => void;
   placeholder?: string;
   autoFocus?: boolean;
 };
 
-export default function CustomerCombobox({ value, onChange, placeholder, autoFocus }: Props) {
+export default function CustomerCombobox({ value, onChange, onCommit, placeholder, autoFocus }: Props) {
   const [text, setText] = useState(value.customerName ?? "");
   const [results, setResults] = useState<DynamicsAccount[]>([]);
   const [searching, setSearching] = useState(false);
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks the last name we sent up via onChange. We use this to filter out
+  // echo updates (the parent re-rendering with a value we just produced)
+  // so the input doesn't fight the user mid-type.
+  const lastSentRef = useRef<string | null>(value.customerName ?? "");
+  // Tracks the latest text the user typed without committing — the blur
+  // handler reads this rather than `text` to avoid stale closure.
+  const textRef = useRef(text);
+  textRef.current = text;
+  // Tracks whether the last edit was a free-text type (vs a pick) so blur
+  // can decide whether to fire onCommit.
+  const dirtyRef = useRef(false);
 
-  // Sync displayed text when an external value change happens.
+  // Sync displayed text when an external value change happens — but ignore
+  // echoes from our own onChange (where the parent is just relaying back what
+  // we sent). Without this guard, fast typing combined with parent-side async
+  // work (network round-trips) reverts the input mid-stroke.
   useEffect(() => {
+    if (value.customerName === lastSentRef.current) return;
     setText(value.customerName ?? "");
   }, [value.customerName, value.hasCrmLink]);
 
@@ -67,22 +91,42 @@ export default function CustomerCombobox({ value, onChange, placeholder, autoFoc
     setText(next);
     setOpen(true);
     runSearch(next);
+    dirtyRef.current = true;
     // Typing freely drops any prior CRM link and stores the typed text.
-    onChange({ dynamicsAccountId: null, customerName: next.trim() ? next.trim() : null });
+    // Display-only update via onChange — committal (network calls etc.)
+    // happens on blur or pick to avoid per-keystroke races.
+    const trimmed = next.trim() ? next.trim() : null;
+    lastSentRef.current = trimmed;
+    onChange({ dynamicsAccountId: null, customerName: trimmed });
+  };
+
+  const onBlur = () => {
+    if (!dirtyRef.current) return;
+    dirtyRef.current = false;
+    const trimmed = textRef.current.trim() ? textRef.current.trim() : null;
+    onCommit?.({ dynamicsAccountId: null, customerName: trimmed });
   };
 
   const pick = (a: DynamicsAccount) => {
     setText(a.name);
     setOpen(false);
     setResults([]);
-    onChange({ dynamicsAccountId: a.accountid, customerName: a.name });
+    dirtyRef.current = false;
+    lastSentRef.current = a.name;
+    const ref = { dynamicsAccountId: a.accountid, customerName: a.name };
+    onChange(ref);
+    onCommit?.(ref);
   };
 
   const clear = () => {
     setText("");
     setOpen(false);
     setResults([]);
-    onChange({ dynamicsAccountId: null, customerName: null });
+    dirtyRef.current = false;
+    lastSentRef.current = null;
+    const ref = { dynamicsAccountId: null, customerName: null };
+    onChange(ref);
+    onCommit?.(ref);
   };
 
   return (
@@ -93,6 +137,7 @@ export default function CustomerCombobox({ value, onChange, placeholder, autoFoc
           value={text}
           onChange={(e) => onTextChange(e.target.value)}
           onFocus={() => setOpen(true)}
+          onBlur={onBlur}
           placeholder={placeholder ?? "Search CRM customers (or type a name)…"}
           autoFocus={autoFocus}
           style={{ flex: 1 }}
