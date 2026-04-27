@@ -16,9 +16,10 @@ interface Props {
   onChange: (patch: Partial<OppFormData>) => void;
   /** Proposal-level customer ref (FK to local customers table + cached name).
    *  Tracked separately from form.customerName so the agreement template can
-   *  keep using freeform text while we still persist the CRM linkage. */
-  customer: { customerId: string | null; customerName: string | null };
-  onCustomerChange: (next: { customerId: string | null; customerName: string | null }) => void;
+   *  keep using freeform text while we still persist the CRM linkage.
+   *  hasCrmLink reflects whether cs_proposals.customer_id is currently set. */
+  customer: { customerName: string | null; hasCrmLink: boolean };
+  onCustomerChange: (next: { dynamicsAccountId: string | null; customerName: string | null }) => void;
 }
 
 const OPP_TYPES = ["UCaaS Only", "CCaaS Only", "UCaaS + CCaaS", "Advanced Applications"] as const;
