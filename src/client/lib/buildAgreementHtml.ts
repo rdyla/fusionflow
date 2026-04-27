@@ -512,7 +512,6 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
           <tfoot><tr><td colspan="4">Auto-renews and co-terms with Customer\u2019s Master Services Agreement or Subscription Term</td></tr></tfoot>
         </table>
       </div>
-      ${calc.minApplied ? '<div class="pricing-note">Annual minimum of $2,500.00 applied \u2014 seat count pricing falls below the baseline commitment.</div>' : ""}
   ` : "";
 
   const ccaasTotal = calc.ccaasSup + calc.implSup;
