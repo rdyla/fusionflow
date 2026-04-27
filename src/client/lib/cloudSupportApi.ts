@@ -10,8 +10,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// Customer reference shape sent to the server.
+//   - dynamicsAccountId set → server find-or-creates a local customers row
+//     keyed on crm_account_id and returns customerId in the response.
+//   - dynamicsAccountId null + customerName set → free-text fallback (no FK).
+//   - customerId is rarely sent from the client; server preserves it when
+//     present for callers that already know the local row.
 export type CsCustomerRef = {
   customerId?: string | null;
+  dynamicsAccountId?: string | null;
   customerName?: string | null;
 };
 

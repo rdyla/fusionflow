@@ -72,33 +72,64 @@ app.get("/", async (c) => {
 
 // ── Create a proposal ─────────────────────────────────────────────────────────
 
-const CreateSchema = z.object({
-  name: z.string().min(1).max(200),
-  // Optional CRM-linked customer. If only customerId is given we look up the
-  // name; if only customerName is given (free-text fallback) we store it
-  // as-is with no FK. Both null/missing = pricing exercise without a
-  // customer attached.
+const CustomerRefSchema = z.object({
+  // Local customers.id (rare — set when caller already knows the FK).
   customerId: z.string().nullable().optional(),
+  // D365 account GUID — used for find-or-create against the local customers
+  // table when the picker just handed us a CRM hit.
+  dynamicsAccountId: z.string().nullable().optional(),
+  // Free-text fallback name (or canonical name from a CRM pick — both are fine).
   customerName: z.string().max(500).nullable().optional(),
 });
 
-// Resolves a customer ref → { id, name } pair. Returns nulls when neither
-// arg gives us anything useful. Looks up the customer name when only id is
-// supplied so the cached column stays accurate.
+const CreateSchema = z.object({
+  name: z.string().min(1).max(200),
+}).extend(CustomerRefSchema.shape);
+
+type CustomerRef = z.infer<typeof CustomerRefSchema>;
+
+// Resolves a customer ref → { id, name } pair. Returns nulls when nothing
+// useful was provided. Resolution order:
+//   1. customerId → look up local row by id (validates it exists, gets name).
+//   2. dynamicsAccountId → find-or-create local row keyed on crm_account_id.
+//   3. customerName only → free-text fallback, no FK.
 async function resolveCustomerRef(
   db: D1Database,
-  customerId: string | null | undefined,
-  customerName: string | null | undefined,
+  ref: CustomerRef,
 ): Promise<{ id: string | null; name: string | null }> {
-  const trimmedName = customerName?.trim() || null;
-  if (customerId) {
+  const trimmedName = ref.customerName?.trim() || null;
+
+  if (ref.customerId) {
     const row = await db
       .prepare("SELECT name FROM customers WHERE id = ? LIMIT 1")
-      .bind(customerId)
+      .bind(ref.customerId)
       .first<{ name: string }>();
-    if (!row) return { id: null, name: trimmedName };
-    return { id: customerId, name: row.name };
+    if (row) return { id: ref.customerId, name: row.name };
+    // FK miss → fall through to other resolution paths
   }
+
+  if (ref.dynamicsAccountId) {
+    // Find existing local customer for this D365 account.
+    const existing = await db
+      .prepare("SELECT id, name FROM customers WHERE crm_account_id = ? LIMIT 1")
+      .bind(ref.dynamicsAccountId)
+      .first<{ id: string; name: string }>();
+    if (existing) return { id: existing.id, name: existing.name };
+
+    // Auto-create a local customer for this CRM account so the proposal can
+    // hold a real FK (matching the existing CustomersPage pattern). Requires
+    // a name — refuse to create a nameless local customer.
+    if (trimmedName) {
+      const newId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await db
+        .prepare("INSERT INTO customers (id, name, crm_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(newId, trimmedName, ref.dynamicsAccountId, now, now)
+        .run();
+      return { id: newId, name: trimmedName };
+    }
+  }
+
   return { id: null, name: trimmedName };
 }
 
@@ -112,7 +143,7 @@ app.post("/", async (c) => {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
-  const cust = await resolveCustomerRef(c.env.DB, parsed.data.customerId, parsed.data.customerName);
+  const cust = await resolveCustomerRef(c.env.DB, parsed.data);
 
   await c.env.DB
     .prepare("INSERT INTO cs_proposals (id, name, creator_id, customer_id, customer_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
@@ -194,9 +225,7 @@ app.get("/:id", async (c) => {
 
 const UpdateSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  customerId: z.string().nullable().optional(),
-  customerName: z.string().max(500).nullable().optional(),
-});
+}).extend(CustomerRefSchema.shape);
 
 app.patch("/:id", async (c) => {
   const auth = c.get("auth");
@@ -222,8 +251,8 @@ app.patch("/:id", async (c) => {
     sets.push("name = ?");
     binds.push(parsed.data.name.trim());
   }
-  if ("customerId" in parsed.data || "customerName" in parsed.data) {
-    const cust = await resolveCustomerRef(c.env.DB, parsed.data.customerId, parsed.data.customerName);
+  if ("customerId" in parsed.data || "dynamicsAccountId" in parsed.data || "customerName" in parsed.data) {
+    const cust = await resolveCustomerRef(c.env.DB, parsed.data);
     sets.push("customer_id = ?", "customer_name = ?");
     binds.push(cust.id, cust.name);
   }

@@ -11,7 +11,7 @@ export default function CloudSupportPage() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newCustomer, setNewCustomer] = useState<{ customerId: string | null; customerName: string | null }>({ customerId: null, customerName: null });
+  const [newCustomer, setNewCustomer] = useState<{ dynamicsAccountId: string | null; customerName: string | null }>({ dynamicsAccountId: null, customerName: null });
   const [creating, setCreating] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -31,7 +31,7 @@ export default function CloudSupportPage() {
       const created = await csApi.create(newName.trim(), newCustomer);
       setShowCreate(false);
       setNewName("");
-      setNewCustomer({ customerId: null, customerName: null });
+      setNewCustomer({ dynamicsAccountId: null, customerName: null });
       navigate(`/solutions/cloudsupport/${created.id}`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create proposal", "error");
@@ -115,13 +115,17 @@ export default function CloudSupportPage() {
       )}
 
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setNewName(""); setNewCustomer({ customerId: null, customerName: null }); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setNewName(""); setNewCustomer({ dynamicsAccountId: null, customerName: null }); } }}>
           <div className="ms-modal" style={{ maxWidth: 460 }}>
             <h2>New Cloud Support Proposal</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
               <label className="ms-label">
                 <span>Customer</span>
-                <CustomerCombobox value={newCustomer} onChange={setNewCustomer} autoFocus />
+                <CustomerCombobox
+                  value={{ customerName: newCustomer.customerName, hasCrmLink: !!newCustomer.dynamicsAccountId }}
+                  onChange={setNewCustomer}
+                  autoFocus
+                />
               </label>
               <label className="ms-label">
                 <span>Proposal Name *</span>
@@ -133,7 +137,7 @@ export default function CloudSupportPage() {
                 />
               </label>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
-                <button type="button" className="ms-btn-ghost" onClick={() => { setShowCreate(false); setNewName(""); setNewCustomer({ customerId: null, customerName: null }); }}>Cancel</button>
+                <button type="button" className="ms-btn-ghost" onClick={() => { setShowCreate(false); setNewName(""); setNewCustomer({ dynamicsAccountId: null, customerName: null }); }}>Cancel</button>
                 <button type="submit" className="ms-btn-primary" disabled={creating || !newName.trim()}>
                   {creating ? "Creating…" : "Create & Open"}
                 </button>
