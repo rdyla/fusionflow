@@ -1,6 +1,19 @@
 import type { OppFormData, OppCalcResult } from "./calcSupport";
 import { customLineDollar, fmtSigned } from "./calcSupport";
 import { getMsoTier } from "./msoTiers";
+import packetFusionLogo from "../assets/packetfusion-fullcolor.png";
+
+// SOW-derived banner palette — applied to the agreement letterhead so the CS
+// docs look cohesive with the SOW package coming out of the same shop.
+const BANNER_GREY = "#D9E1E2";
+
+// Vite resolves the import to a hashed path like "/assets/packetfusion-...png".
+// Iframe srcDoc has no base URL, so we resolve to absolute against the host.
+function logoSrc(): string {
+  if (packetFusionLogo.startsWith("http")) return packetFusionLogo;
+  if (typeof window === "undefined") return packetFusionLogo;
+  return `${window.location.origin}${packetFusionLogo}`;
+}
 
 // Shared helpers for rendering custom line items (including discount kinds)
 // in the various agreement HTML documents.
@@ -87,9 +100,8 @@ function sharedStyles(): string {
       body { background: #f0f4f8; padding: 20px; }
 
       .agreement-doc { background: #fff; color: #1c2333; border-radius: 12px; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; font-size: 13.5px; line-height: 1.75; box-shadow: 0 4px 32px rgba(0,0,0,0.18); }
-      .agreement-doc .doc-letterhead { background: #ffffff; border-bottom: 3px solid #0d1b2e; padding: 28px 52px 24px; display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
-      .agreement-doc .lh-wordmark { font-family: 'DM Serif Display', serif; font-size: 22px; color: #0d1b2e; letter-spacing: 0.01em; margin-bottom: 2px; }
-      .agreement-doc .lh-tagline { font-size: 11px; color: #94a3b8; letter-spacing: 0.12em; text-transform: uppercase; }
+      .agreement-doc .doc-letterhead { background: ${BANNER_GREY}; border-bottom: 3px solid #0d1b2e; padding: 28px 52px 24px; display: flex; align-items: center; justify-content: space-between; gap: 24px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .agreement-doc .lh-logo { height: 60px; width: auto; display: block; }
       .agreement-doc .lh-doc-type { font-size: 10px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: #007d6e; margin-bottom: 4px; text-align: right; }
       .agreement-doc .lh-doc-date { font-size: 12px; color: #64748b; text-align: right; }
       .agreement-doc .doc-title-band { background: #f8fafc; border-bottom: 1px solid #e4eaf2; padding: 28px 52px 24px; }
@@ -158,9 +170,8 @@ function sharedStyles(): string {
 
       .sig-doc { background: #fff; color: #1a202c; border-radius: 10px; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; line-height: 1.7; box-shadow: 0 4px 32px rgba(0,0,0,0.18); }
       .sig-doc .sd-top-rule { height: 4px; background: #0d1b2e; }
-      .sig-doc .sd-header { padding: 24px 44px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 20px; background: #fff; }
-      .sig-doc .sd-wordmark { font-family: 'DM Serif Display', serif; font-size: 20px; color: #0d1b2e; margin-bottom: 2px; }
-      .sig-doc .sd-tagline { font-size: 10px; color: #94a3b8; letter-spacing: 0.1em; text-transform: uppercase; }
+      .sig-doc .sd-header { padding: 24px 44px 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 20px; background: ${BANNER_GREY}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .sig-doc .sd-logo { height: 56px; width: auto; display: block; }
       .sig-doc .sd-doc-info { text-align: right; }
       .sig-doc .sd-doc-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #0d1b2e; margin-bottom: 3px; }
       .sig-doc .sd-doc-ref { font-size: 11px; color: #64748b; font-family: 'IBM Plex Mono', monospace; }
@@ -663,10 +674,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
 <body>
 <div class="agreement-doc">
   <div class="doc-letterhead">
-    <div>
-      <div class="lh-wordmark">Packet Fusion</div>
-      <div class="lh-tagline">Cloud Communications</div>
-    </div>
+    <img class="lh-logo" src="${logoSrc()}" alt="Packet Fusion" onerror="this.style.display='none'"/>
     <div>
       <div class="lh-doc-type">${calc.msoEnabled ? "CloudSupport + MSO Agreement" : "CloudSupport Agreement"}</div>
       <div class="lh-doc-date">${verStr} &nbsp;\u00b7&nbsp; ${today}</div>
@@ -861,7 +869,8 @@ export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: Op
   ${sharedStyles()}
   <style>
     .mso-sa { background:#fff;color:#1c2333;font-family:'IBM Plex Sans',sans-serif;font-size:13px;line-height:1.75;max-width:900px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 32px rgba(0,0,0,0.18); }
-    .mso-sa-letterhead { padding:18px 48px;border-bottom:3px solid #0d1b2e;display:flex;align-items:center;justify-content:space-between;gap:20px;background:#fff; }
+    .mso-sa-letterhead { padding:24px 48px;border-bottom:3px solid #0d1b2e;display:flex;align-items:center;justify-content:space-between;gap:20px;background:${BANNER_GREY};-webkit-print-color-adjust:exact;print-color-adjust:exact; }
+    .mso-sa-letterhead-logo { height:60px;width:auto;display:block; }
     .mso-sa-hero { background:#0d1b2e;padding:32px 48px;display:flex;align-items:flex-start;justify-content:space-between;gap:24px; }
     .mso-sa-body { padding:32px 48px 56px; }
     @media print {
@@ -876,10 +885,7 @@ export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: Op
 
   <!-- Letterhead -->
   <div class="mso-sa-letterhead">
-    <div>
-      <div style="font-family:'DM Serif Display',serif;font-size:22px;color:#0d1b2e;letter-spacing:0.01em;">Packet Fusion</div>
-      <div style="font-size:10px;color:#94a3b8;letter-spacing:0.1em;text-transform:uppercase;margin-top:2px;">Cloud Communications</div>
-    </div>
+    <img class="mso-sa-letterhead-logo" src="${logoSrc()}" alt="Packet Fusion" onerror="this.style.display='none'"/>
     <div style="text-align:right;">
       <div style="font-size:11px;font-weight:700;color:#00b8a0;letter-spacing:0.06em;">${escHtml(verStr)} \u00b7 ${escHtml(today)}</div>
       <div style="font-size:11px;color:#64748b;margin-top:2px;">MSO Standalone Agreement</div>
@@ -1213,10 +1219,7 @@ export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCal
 <div class="sig-doc">
   <div class="sd-top-rule"></div>
   <div class="sd-header">
-    <div>
-      <div class="sd-wordmark">Packet Fusion</div>
-      <div class="sd-tagline">Cloud Communications</div>
-    </div>
+    <img class="sd-logo" src="${logoSrc()}" alt="Packet Fusion" onerror="this.style.display='none'"/>
     <div class="sd-doc-info">
       <div class="sd-doc-label">${calc.msoEnabled ? "CloudSupport + MSO Agreement" : "CloudSupport Agreement"}</div>
       <div class="sd-doc-ref">${refNum} &nbsp;\u00b7&nbsp; ${today}</div>
