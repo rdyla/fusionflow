@@ -229,7 +229,11 @@ function sharedStyles(): string {
         .agreement-doc .mac-item, .agreement-doc .pricing-note, .agreement-doc .doc-intro,
         .sig-doc .sd-parties, .sig-doc .sd-totals, .sig-doc .sd-recital, .sig-doc .sd-term-box, .sig-doc .sd-scope
         { break-inside: avoid; page-break-inside: avoid; }
-        .agreement-doc .sig-band { break-inside: avoid; page-break-inside: avoid; break-before: avoid-page; page-break-before: avoid; }
+        /* Force the totals + sig block onto a dedicated page so the four
+           sig fields never split across pages. Tradeoff: the page before
+           may have whitespace, but a clean sig page is the priority. */
+        .agreement-doc .price-summary { break-before: page; page-break-before: always; }
+        .agreement-doc .sig-band { break-inside: avoid; page-break-inside: avoid; }
         .sig-doc .sd-sig-section { break-inside: avoid; page-break-inside: avoid; }
         .mso-section, .mso-card, .mso-panels, .mso-sla-table, .mso-note { break-inside: avoid; page-break-inside: avoid; }
         .agreement-doc .pricing-table tr, .sig-doc .sd-line-item, .sig-doc .sd-total-row { break-inside: avoid; page-break-inside: avoid; }
