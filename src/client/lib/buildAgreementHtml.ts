@@ -116,13 +116,13 @@ function sharedStyles(): string {
       .agreement-doc .pricing-table .sub-cell { font-size: 12px; color: #64748b; margin-top: 2px; }
       .agreement-doc .pricing-table tfoot td { background: #f8fafc; border-top: 1px solid #e4eaf2; font-size: 11px; color: #94a3b8; font-style: italic; padding: 10px 16px; }
       .agreement-doc .pricing-note { font-size: 12px; color: #059669; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 8px 14px; margin-bottom: 20px; }
-      .agreement-doc .price-summary { display: grid; grid-template-columns: 1fr 1px 1fr; margin: 28px 0; border: 1px solid #e4eaf2; border-radius: 10px; overflow: hidden; }
-      .agreement-doc .price-summary-cell { padding: 20px 24px; background: #f8fafc; }
+      .agreement-doc .price-summary { display: grid; grid-template-columns: 1fr 1px 1fr; margin: 18px 0; border: 1px solid #e4eaf2; border-radius: 10px; overflow: hidden; }
+      .agreement-doc .price-summary-cell { padding: 14px 22px; background: #f8fafc; }
       .agreement-doc .price-summary-cell.accent { background: #0d1b2e; }
       .agreement-doc .price-summary-divider { background: #e4eaf2; }
       .agreement-doc .ps-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #94a3b8; margin-bottom: 6px; }
       .agreement-doc .price-summary-cell.accent .ps-label { color: rgba(255,255,255,0.45); }
-      .agreement-doc .ps-value { font-family: 'DM Serif Display', serif; font-size: 30px; color: #0d1b2e; line-height: 1.1; }
+      .agreement-doc .ps-value { font-family: 'DM Serif Display', serif; font-size: 26px; color: #0d1b2e; line-height: 1.1; }
       .agreement-doc .price-summary-cell.accent .ps-value { color: #4dd0c4; }
       .agreement-doc .ps-sub { font-size: 11px; color: #94a3b8; margin-top: 3px; }
       .agreement-doc .price-summary-cell.accent .ps-sub { color: rgba(255,255,255,0.35); }
@@ -133,27 +133,27 @@ function sharedStyles(): string {
       .agreement-doc .mac-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 4px; }
       .agreement-doc .mac-item { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: #374151; padding: 8px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e8edf4; }
       .agreement-doc .mac-dot { width: 5px; height: 5px; border-radius: 50%; background: #00796b; margin-top: 6px; flex-shrink: 0; }
-      .agreement-doc .scope-block { background: #fafafa; border: 1px solid #e8edf4; border-radius: 10px; padding: 18px 22px; margin-bottom: 4px; }
-      .agreement-doc .scope-intro { font-size: 12.5px; color: #64748b; margin-bottom: 14px; line-height: 1.6; }
-      .agreement-doc .scope-item { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #f0f4f8; }
+      .agreement-doc .scope-block { background: #fafafa; border: 1px solid #e8edf4; border-radius: 10px; padding: 14px 20px; margin-bottom: 4px; }
+      .agreement-doc .scope-intro { font-size: 12px; color: #64748b; margin-bottom: 10px; line-height: 1.55; }
+      .agreement-doc .scope-item { display: flex; align-items: flex-start; gap: 12px; padding: 7px 0; border-bottom: 1px solid #f0f4f8; }
       .agreement-doc .scope-item:last-child { border-bottom: none; padding-bottom: 0; }
       .agreement-doc .scope-label { font-size: 13px; font-weight: 600; color: #374151; }
       .agreement-doc .scope-desc { font-size: 12px; color: #94a3b8; margin-top: 2px; line-height: 1.5; }
       .agreement-doc .scope-tag { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: #b0bec5; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 4px; padding: 3px 8px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
-      .agreement-doc .term-panel { background: #f8fafc; border: 1px solid #e4eaf2; border-radius: 10px; padding: 22px 24px; margin-bottom: 4px; }
-      .agreement-doc .term-dates { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: #e4eaf2; border-radius: 8px; overflow: hidden; margin-bottom: 18px; }
-      .agreement-doc .term-date-cell { background: #fff; padding: 12px 16px; }
-      .agreement-doc .term-date-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; }
+      .agreement-doc .term-panel { background: #f8fafc; border: 1px solid #e4eaf2; border-radius: 10px; padding: 16px 22px; margin-bottom: 4px; }
+      .agreement-doc .term-dates { display: grid; grid-template-columns: repeat(3,1fr); gap: 1px; background: #e4eaf2; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+      .agreement-doc .term-date-cell { background: #fff; padding: 10px 14px; }
+      .agreement-doc .term-date-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; margin-bottom: 3px; }
       .agreement-doc .term-date-val { font-size: 13px; font-weight: 600; color: #0d1b2e; }
-      .agreement-doc .term-prose { font-size: 12.5px; color: #4a5568; line-height: 1.8; }
-      .agreement-doc .term-prose p { margin-bottom: 8px; }
+      .agreement-doc .term-prose { font-size: 12px; color: #4a5568; line-height: 1.65; }
+      .agreement-doc .term-prose p { margin-bottom: 6px; }
       .agreement-doc .term-prose p:last-child { margin-bottom: 0; }
-      .agreement-doc .sig-band { background: #f8fafc; border-top: 1px solid #e4eaf2; padding: 36px 52px; margin-top: 32px; }
-      .agreement-doc .sig-band-title { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; margin-bottom: 24px; text-align: center; }
-      .agreement-doc .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
-      .agreement-doc .sig-party-name { font-size: 15px; font-weight: 700; color: #0d1b2e; margin-bottom: 20px; padding-bottom: 8px; border-bottom: 2px solid #0d1b2e; }
-      .agreement-doc .sig-row { margin-bottom: 20px; }
-      .agreement-doc .sig-line { height: 32px; border-bottom: 1px solid #cbd5e1; margin-bottom: 4px; }
+      .agreement-doc .sig-band { background: #f8fafc; border-top: 1px solid #e4eaf2; padding: 22px 52px 28px; margin-top: 18px; }
+      .agreement-doc .sig-band-title { font-size: 10px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; margin-bottom: 16px; text-align: center; }
+      .agreement-doc .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+      .agreement-doc .sig-party-name { font-size: 15px; font-weight: 700; color: #0d1b2e; margin-bottom: 14px; padding-bottom: 6px; border-bottom: 2px solid #0d1b2e; }
+      .agreement-doc .sig-row { margin-bottom: 12px; }
+      .agreement-doc .sig-line { height: 26px; border-bottom: 1px solid #cbd5e1; margin-bottom: 3px; }
       .agreement-doc .sig-field-label { font-size: 10px; color: #94a3b8; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
 
       .sig-doc { background: #fff; color: #1a202c; border-radius: 10px; overflow: hidden; font-family: 'IBM Plex Sans', sans-serif; font-size: 13px; line-height: 1.7; box-shadow: 0 4px 32px rgba(0,0,0,0.18); }
@@ -704,7 +704,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       <div class="coverage-card"><div class="coverage-card-title">Quarterly Optimization &amp; User Coaching</div><div class="coverage-card-desc">Proactive system reviews, call flow audits, quarterly end-user training sessions, and strategic advisory for growth and scalability.</div></div>
       <div class="coverage-card" style="grid-column:1/-1;"><div class="coverage-card-title">Manufacturer Direct Support Option</div><div class="coverage-card-desc">Retain full flexibility to engage directly with the manufacturer\u2019s support team at any time, giving your organization an additional layer of troubleshooting resources.</div></div>
     </div>
-    <div class="section-header" style="margin-top:28px;">
+    <div class="section-header" style="margin-top:22px;">
       <div class="section-num">${secNum()}</div>
       <div class="section-title">Included Adds, Moves &amp; Changes</div>
       <div class="section-divider"></div>
@@ -718,7 +718,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       <div class="mac-item"><div class="mac-dot"></div>Activating new licenses or reassigning existing ones</div>
     </div>
     ${!calc.msoEnabled ? `
-    <div class="section-header" style="margin-top:28px;">
+    <div class="section-header" style="margin-top:22px;">
       <div class="section-num">${secNum()}</div>
       <div class="section-title">Outside Scope of Support</div>
       <div class="section-divider"></div>
@@ -728,7 +728,7 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
       <div class="scope-item"><div style="flex:1;"><div class="scope-label">Major Call Flow Overhauls</div><div class="scope-desc">Designing or implementing significant structural changes to existing call flow configurations.</div></div><div class="scope-tag">Separate SOW</div></div>
       <div class="scope-item"><div style="flex:1;"><div class="scope-label">New Integration Deployments</div><div class="scope-desc">Full deployment or integration of new solutions, such as transitioning to a provider contact center platform.</div></div><div class="scope-tag">Separate SOW</div></div>
     </div>` : ""}
-    <div class="section-header" style="margin-top:28px;">
+    <div class="section-header" style="margin-top:22px;">
       <div class="section-num">${secNum()}</div>
       <div class="section-title">Term &amp; Renewal</div>
       <div class="section-divider"></div>
