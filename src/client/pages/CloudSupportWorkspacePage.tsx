@@ -235,6 +235,16 @@ export default function CloudSupportWorkspacePage() {
             calc={calc}
             canOverride={canOverride}
             onChange={handleFormChange}
+            customer={{ customerId: proposal.customerId ?? null, customerName: proposal.customerName ?? null }}
+            onCustomerChange={async (next) => {
+              // Optimistic local update so the picker reflects the choice immediately.
+              setProposal((prev) => prev ? { ...prev, customerId: next.customerId, customerName: next.customerName } : prev);
+              try {
+                await csApi.setCustomer(proposal.id, next);
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : "Failed to link customer", "error");
+              }
+            }}
           />
 
           {/* Sticky summary panel */}

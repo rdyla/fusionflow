@@ -10,14 +10,19 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type CsCustomerRef = {
+  customerId?: string | null;
+  customerName?: string | null;
+};
+
 export const csApi = {
   list: () => request<CsProposal[]>("/api/cloudsupport"),
 
-  create: (name: string) =>
+  create: (name: string, customer?: CsCustomerRef) =>
     request<CsProposal>("/api/cloudsupport", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, ...(customer ?? {}) }),
     }),
 
   get: (id: string) => request<CsProposalDetail>(`/api/cloudsupport/${id}`),
@@ -27,6 +32,13 @@ export const csApi = {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
+    }),
+
+  setCustomer: (id: string, customer: CsCustomerRef) =>
+    request<{ ok: boolean }>(`/api/cloudsupport/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(customer),
     }),
 
   delete: (id: string) =>
