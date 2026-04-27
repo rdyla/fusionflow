@@ -4,12 +4,14 @@ import { csApi } from "../lib/cloudSupportApi";
 import { fmt } from "../lib/calcSupport";
 import type { CsProposal } from "../lib/calcSupport";
 import { useToast } from "../components/ui/ToastProvider";
+import CustomerCombobox from "../components/cloudSupport/CustomerCombobox";
 
 export default function CloudSupportPage() {
   const [proposals, setProposals] = useState<CsProposal[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
+  const [newCustomer, setNewCustomer] = useState<{ customerId: string | null; customerName: string | null }>({ customerId: null, customerName: null });
   const [creating, setCreating] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
@@ -26,9 +28,10 @@ export default function CloudSupportPage() {
     if (!newName.trim()) return;
     setCreating(true);
     try {
-      const created = await csApi.create(newName.trim());
+      const created = await csApi.create(newName.trim(), newCustomer);
       setShowCreate(false);
       setNewName("");
+      setNewCustomer({ customerId: null, customerName: null });
       navigate(`/solutions/cloudsupport/${created.id}`);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create proposal", "error");
@@ -73,6 +76,7 @@ export default function CloudSupportPage() {
             <thead>
               <tr>
                 <th>Proposal Name</th>
+                <th>Customer</th>
                 <th>Versions</th>
                 <th>Annual Value</th>
                 <th>TCV</th>
@@ -85,6 +89,14 @@ export default function CloudSupportPage() {
                 <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/solutions/cloudsupport/${p.id}`)}>
                   <td>
                     <div style={{ fontWeight: 600, color: "#1e293b" }}>{p.name}</div>
+                  </td>
+                  <td style={{ fontSize: 13 }}>
+                    {p.customerName
+                      ? <span style={{ color: "#475569" }}>
+                          {p.customerName}
+                          {p.customerId && <span title="CRM-linked" style={{ marginLeft: 6, fontSize: 10, color: "#0891b2" }}>●</span>}
+                        </span>
+                      : <span style={{ color: "#94a3b8" }}>—</span>}
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{p.versionCount}</td>
                   <td style={{ color: "#475569", fontSize: 13 }}>
@@ -103,10 +115,14 @@ export default function CloudSupportPage() {
       )}
 
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setNewName(""); } }}>
-          <div className="ms-modal" style={{ maxWidth: 420 }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setNewName(""); setNewCustomer({ customerId: null, customerName: null }); } }}>
+          <div className="ms-modal" style={{ maxWidth: 460 }}>
             <h2>New Cloud Support Proposal</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
+              <label className="ms-label">
+                <span>Customer</span>
+                <CustomerCombobox value={newCustomer} onChange={setNewCustomer} autoFocus />
+              </label>
               <label className="ms-label">
                 <span>Proposal Name *</span>
                 <input
@@ -114,11 +130,10 @@ export default function CloudSupportPage() {
                   placeholder="e.g. Acme Corp MSO Proposal"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  autoFocus
                 />
               </label>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
-                <button type="button" className="ms-btn-ghost" onClick={() => { setShowCreate(false); setNewName(""); }}>Cancel</button>
+                <button type="button" className="ms-btn-ghost" onClick={() => { setShowCreate(false); setNewName(""); setNewCustomer({ customerId: null, customerName: null }); }}>Cancel</button>
                 <button type="submit" className="ms-btn-primary" disabled={creating || !newName.trim()}>
                   {creating ? "Creating…" : "Create & Open"}
                 </button>
