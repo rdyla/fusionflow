@@ -235,12 +235,19 @@ export default function CloudSupportWorkspacePage() {
             calc={calc}
             canOverride={canOverride}
             onChange={handleFormChange}
-            customer={{ customerId: proposal.customerId ?? null, customerName: proposal.customerName ?? null }}
+            customer={{ customerName: proposal.customerName ?? null, hasCrmLink: !!proposal.customerId }}
             onCustomerChange={async (next) => {
               // Optimistic local update so the picker reflects the choice immediately.
-              setProposal((prev) => prev ? { ...prev, customerId: next.customerId, customerName: next.customerName } : prev);
+              // CRM-linked state mirrors whether the user picked from the D365 dropdown.
+              setProposal((prev) => prev ? { ...prev, customerName: next.customerName, customerId: next.dynamicsAccountId ? prev.customerId : null } : prev);
               try {
-                await csApi.setCustomer(proposal.id, next);
+                const ref = next.dynamicsAccountId
+                  ? { dynamicsAccountId: next.dynamicsAccountId, customerName: next.customerName }
+                  : { customerId: null, customerName: next.customerName };
+                await csApi.setCustomer(proposal.id, ref);
+                // Server resolved the FK — refresh proposal so customerId is current.
+                const fresh = await csApi.get(proposal.id);
+                setProposal((prev) => prev ? { ...prev, customerId: fresh.customerId, customerName: fresh.customerName } : prev);
               } catch (e) {
                 showToast(e instanceof Error ? e.message : "Failed to link customer", "error");
               }
