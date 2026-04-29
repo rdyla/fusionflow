@@ -2,6 +2,9 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
 import { d365FetchSupport, getLastUcaasVendor } from "../services/dynamicsService";
+import { sendEmail } from "../services/emailService";
+import { supportDigestEmail, type DigestEmailData } from "../lib/emailTemplates";
+import { isSupportSupervisor } from "../lib/permissions";
 import { notifyZoomNewCase } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -52,6 +55,7 @@ app.get("/me", (c) => {
     email: auth.user.email,
     name: auth.user.name,
     isInternal: internal,
+    isSupportSupervisor: isSupportSupervisor(auth),
     contactId: internal ? null : auth.user.id,
     accountId: internal ? null : (auth.user.dynamics_account_id ?? null),
   });
@@ -265,6 +269,179 @@ app.get("/dashboard", async (c) => {
       resolved: days.map((d) => resolvedByDay.get(d) ?? 0),
     },
   });
+});
+
+// ── Customer support digests (supervisor only) ───────────────────────────────
+
+const DIGEST_WINDOW_DAYS = 30;
+const DIGEST_STALE_DAYS  = 7;
+const DIGEST_LIST_LIMIT  = 10;
+
+// Pulls open + recently-resolved Support-board cases for an account and shapes
+// them into the digest email payload. Shared by /preview and /send so the
+// preview the supervisor sees is byte-for-byte the email that ships.
+async function buildDigestData(env: Bindings, accountId: string, accountName: string, recipientName: string | null, appUrl: string): Promise<DigestEmailData> {
+  const now = Date.now();
+  const since = new Date(now - DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const sinceIso = since.toISOString();
+  const staleCutoff = now - DIGEST_STALE_DAYS * 24 * 60 * 60 * 1000;
+
+  const SUPPORT_BOARD = 173590005;
+  const formattedHeader = { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' };
+  const accountFilter = `_customerid_value eq ${accountId} and amc_serviceboard eq ${SUPPORT_BOARD}`;
+
+  const [openRes, resolvedRes] = await Promise.all([
+    d365FetchSupport(
+      env,
+      `/incidents?$filter=statecode eq 0 and ${accountFilter}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$orderby=createdon asc&$top=200`,
+      { headers: formattedHeader },
+    ),
+    d365FetchSupport(
+      env,
+      `/incidents?$filter=statecode eq 1 and modifiedon ge ${sinceIso} and ${accountFilter}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$orderby=modifiedon desc&$top=200`,
+      { headers: formattedHeader },
+    ),
+  ]);
+
+  if (!openRes.ok)     throw new HTTPException(502, { message: `D365 open-cases query failed: ${await openRes.text()}` });
+  if (!resolvedRes.ok) throw new HTTPException(502, { message: `D365 resolved-cases query failed: ${await resolvedRes.text()}` });
+
+  const openData     = await openRes.json()     as { value: any[] };
+  const resolvedData = await resolvedRes.json() as { value: any[] };
+
+  const openCases = openData.value.map((r) => {
+    const ageDays = Math.floor((now - new Date(r.createdon).getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      ticketNumber: r.ticketnumber ?? "",
+      title:    r.title ?? "",
+      severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? null,
+      status:   r["statuscode@OData.Community.Display.V1.FormattedValue"]   ?? "Active",
+      createdOn:  r.createdon,
+      modifiedOn: r.modifiedon,
+      ageDays,
+    };
+  });
+
+  const resolvedCases = resolvedData.value.map((r) => {
+    const days = Math.max(0, Math.round((new Date(r.modifiedon).getTime() - new Date(r.createdon).getTime()) / (1000 * 60 * 60 * 24)));
+    return {
+      ticketNumber: r.ticketnumber ?? "",
+      title:    r.title ?? "",
+      severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? null,
+      status:   "Resolved",
+      daysToResolve: days,
+    };
+  });
+
+  const stale = openCases.filter((c) => c.ageDays >= DIGEST_STALE_DAYS).length;
+  const stuckOnCustomer = openCases.filter((c) =>
+    c.status === "Waiting on Customer" &&
+    c.modifiedOn && new Date(c.modifiedOn).getTime() <= staleCutoff
+  ).length;
+
+  return {
+    accountName,
+    recipientName,
+    windowDays: DIGEST_WINDOW_DAYS,
+    kpis: {
+      open:     openCases.length,
+      resolved: resolvedCases.length,
+      stale,
+      stuckOnCustomer,
+    },
+    openCases:     openCases.slice(0, DIGEST_LIST_LIMIT).map(({ createdOn: _c, modifiedOn: _m, ...rest }) => rest),
+    resolvedCases: resolvedCases.slice(0, DIGEST_LIST_LIMIT),
+    appUrl,
+  };
+}
+
+// GET /api/support/digests/preview?accountId=...&accountName=...
+app.get("/digests/preview", async (c) => {
+  const auth = c.get("auth");
+  if (!isSupportSupervisor(auth)) throw new HTTPException(403, { message: "Supervisor only" });
+
+  const accountId = c.req.query("accountId")?.trim() ?? "";
+  const accountName = c.req.query("accountName")?.trim() ?? "";
+  if (!accountId || !accountName) return c.json({ error: "accountId and accountName are required" }, 400);
+
+  const appUrl = c.env.APP_URL ?? "";
+  const data = await buildDigestData(c.env, accountId, accountName, null, appUrl);
+  const rendered = supportDigestEmail(data);
+  return c.json({ data, subject: rendered.subject, html: rendered.html });
+});
+
+// POST /api/support/digests/send
+// body: { accountId, accountName, recipients: [{ name?, email }] }
+app.post("/digests/send", async (c) => {
+  const auth = c.get("auth");
+  if (!isSupportSupervisor(auth)) throw new HTTPException(403, { message: "Supervisor only" });
+
+  const body = await c.req.json() as {
+    accountId: string;
+    accountName: string;
+    recipients: Array<{ name?: string | null; email: string }>;
+  };
+
+  if (!body.accountId || !body.accountName) return c.json({ error: "accountId and accountName are required" }, 400);
+  const recipients = (body.recipients ?? []).filter((r) => r.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+  if (recipients.length === 0) return c.json({ error: "At least one valid recipient email is required" }, 400);
+
+  const appUrl = c.env.APP_URL ?? "";
+  // Personalize the salutation only when sending to a single named recipient.
+  const recipientName = recipients.length === 1 ? (recipients[0].name ?? null) : null;
+  const data = await buildDigestData(c.env, body.accountId, body.accountName, recipientName, appUrl);
+  const rendered = supportDigestEmail(data);
+
+  await sendEmail(c.env, {
+    to: recipients.map((r) => r.email),
+    subject: rendered.subject,
+    html: rendered.html,
+  });
+
+  // Record to history so supervisors can see what's been sent to whom
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(`
+    INSERT INTO support_digests
+      (id, account_id, account_name, recipients, sent_by_user_id, sent_by_name, sent_by_email,
+       open_cases_count, resolved_cases_count, stale_cases_count, stuck_cases_count)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+  `).bind(
+    id, body.accountId, body.accountName, JSON.stringify(recipients),
+    auth.user.id, auth.user.name ?? null, auth.user.email,
+    data.kpis.open, data.kpis.resolved, data.kpis.stale, data.kpis.stuckOnCustomer,
+  ).run();
+
+  return c.json({ id, ok: true });
+});
+
+// GET /api/support/digests/history?limit=50
+app.get("/digests/history", async (c) => {
+  const auth = c.get("auth");
+  if (!isSupportSupervisor(auth)) throw new HTTPException(403, { message: "Supervisor only" });
+
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
+  const rows = await c.env.DB
+    .prepare(`SELECT id, account_id, account_name, recipients, sent_by_name, sent_by_email,
+                     open_cases_count, resolved_cases_count, stale_cases_count, stuck_cases_count, sent_at
+              FROM support_digests
+              ORDER BY sent_at DESC
+              LIMIT ?`)
+    .bind(limit)
+    .all();
+
+  return c.json((rows.results ?? []).map((r: any) => ({
+    id: r.id,
+    accountId: r.account_id,
+    accountName: r.account_name,
+    recipients: JSON.parse(r.recipients ?? "[]"),
+    sentByName: r.sent_by_name,
+    sentByEmail: r.sent_by_email,
+    kpis: {
+      open: r.open_cases_count, resolved: r.resolved_cases_count,
+      stale: r.stale_cases_count, stuckOnCustomer: r.stuck_cases_count,
+    },
+    sentAt: r.sent_at,
+  })));
 });
 
 // ── Cases ─────────────────────────────────────────────────────────────────────

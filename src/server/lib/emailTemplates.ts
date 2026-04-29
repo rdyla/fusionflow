@@ -443,3 +443,106 @@ export function highRiskAdded(data: {
 }): string {
   return pmRiskNotification({ ...data, severity: "high", status: "open", isNew: true });
 }
+
+// ── Support Activity Digest (sent by supervisors to customers) ─────────────────
+
+const DIGEST_SEVERITY_COLOR: Record<string, string> = {
+  P1: "#d13438", P2: "#ff8c00", P3: "#0891b2",
+  E1: "#d13438", E2: "#ff8c00",
+};
+
+function digestKpiCell(label: string, value: number, accent: string | null): string {
+  const valueColor = accent ?? "#f0f6ff";
+  return `
+    <td style="padding:12px;text-align:center;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;width:25%;">
+      <div style="font-size:24px;font-weight:800;color:${valueColor};line-height:1.1;">${value}</div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin-top:4px;">${label}</div>
+    </td>`;
+}
+
+function digestCaseRow(c: { ticketNumber: string; title: string; severity: string | null; status: string; ageDays?: number; daysToResolve?: number }): string {
+  const sev = c.severity ?? "—";
+  const sevColor = DIGEST_SEVERITY_COLOR[sev] ?? "#94a3b8";
+  const meta = c.ageDays !== undefined
+    ? `${escapeHtml(c.status)} · ${c.ageDays}d open`
+    : c.daysToResolve !== undefined
+      ? `Resolved in ${c.daysToResolve}d`
+      : escapeHtml(c.status);
+  return `
+    <tr>
+      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;font-family:monospace;color:rgba(240,246,255,0.7);white-space:nowrap;vertical-align:top;">${escapeHtml(c.ticketNumber)}</td>
+      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);vertical-align:top;">
+        <div style="font-size:13px;color:#f0f6ff;line-height:1.4;">${escapeHtml(c.title)}</div>
+        <div style="font-size:11px;color:rgba(240,246,255,0.45);margin-top:2px;">${meta}</div>
+      </td>
+      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);text-align:right;vertical-align:top;white-space:nowrap;">${pill(sev, sevColor)}</td>
+    </tr>`;
+}
+
+export type DigestEmailData = {
+  accountName: string;
+  recipientName?: string | null;
+  windowDays: number;
+  kpis: {
+    open: number;
+    resolved: number;
+    stale: number;
+    stuckOnCustomer: number;
+  };
+  openCases: Array<{ ticketNumber: string; title: string; severity: string | null; status: string; ageDays: number }>;
+  resolvedCases: Array<{ ticketNumber: string; title: string; severity: string | null; status: string; daysToResolve: number }>;
+  appUrl: string;
+};
+
+export function supportDigestEmail(data: DigestEmailData): { subject: string; html: string } {
+  const accountName = escapeHtml(data.accountName);
+  const greeting = data.recipientName
+    ? `Hi ${escapeHtml(data.recipientName)},`
+    : `Hello,`;
+  const w = data.windowDays;
+
+  const openRows = data.openCases.length
+    ? data.openCases.map(digestCaseRow).join("")
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:rgba(240,246,255,0.45);text-align:center;font-style:italic;">No open cases — nice and quiet.</td></tr>`;
+
+  const resolvedRows = data.resolvedCases.length
+    ? data.resolvedCases.map(digestCaseRow).join("")
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:rgba(240,246,255,0.45);text-align:center;font-style:italic;">No cases resolved in the last ${w} days.</td></tr>`;
+
+  const html = base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Support Activity Summary</h2>
+    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.7);line-height:1.6;">
+      ${greeting}<br><br>
+      Here's a snapshot of <strong style="color:#00c8e0;">${accountName}</strong>'s support activity from the last ${w} days.
+    </p>
+
+    <table cellpadding="0" cellspacing="6" style="border-collapse:separate;width:100%;margin-bottom:18px;">
+      <tr>
+        ${digestKpiCell("Open", data.kpis.open, null)}
+        ${digestKpiCell(`Resolved (${w}d)`, data.kpis.resolved, "#22c55e")}
+        ${digestKpiCell(`Stale 7d+`, data.kpis.stale, data.kpis.stale > 0 ? "#d13438" : null)}
+        ${digestKpiCell("Awaiting You", data.kpis.stuckOnCustomer, data.kpis.stuckOnCustomer > 0 ? "#ff8c00" : null)}
+      </tr>
+    </table>
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin:20px 0 6px;">Open Cases</div>
+    <table style="border-collapse:collapse;width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:6px;">
+      ${openRows}
+    </table>
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin:20px 0 6px;">Recently Resolved</div>
+    <table style="border-collapse:collapse;width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:6px;">
+      ${resolvedRows}
+    </table>
+
+    <p style="margin:24px 0 0;font-size:13px;color:rgba(240,246,255,0.55);line-height:1.6;">
+      Need to open a new case or follow up on an existing one? Use the support portal — it's the fastest way to reach the team.
+    </p>
+    ${ctaButton("Open Support Portal", `${data.appUrl}/support/cases`)}
+  `, data.appUrl);
+
+  return {
+    subject: `Support Activity Summary — ${data.accountName}`,
+    html,
+  };
+}

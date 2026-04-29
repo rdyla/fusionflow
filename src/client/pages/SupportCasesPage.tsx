@@ -118,6 +118,12 @@ export default function SupportCasesPage() {
             style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid #0891b2", fontSize: 13, fontWeight: 600, color: "#0891b2", cursor: "default" }}>
             Cases
           </button>
+          {user?.isSupportSupervisor && (
+            <button onClick={() => navigate("/support/digests")}
+              style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid transparent", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
+              Digests
+            </button>
+          )}
         </div>
       )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: deepLinkLabel ? 12 : 24 }}>

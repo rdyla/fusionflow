@@ -174,6 +174,12 @@ export default function SupportDashboardPage() {
           style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid transparent", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
           Cases
         </button>
+        {user?.isSupportSupervisor && (
+          <button onClick={() => navigate("/support/digests")}
+            style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid transparent", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
+            Digests
+          </button>
+        )}
       </div>
       <div style={{ marginBottom: 24 }}>
         <h1 className="ms-page-title">Support Dashboard</h1>
