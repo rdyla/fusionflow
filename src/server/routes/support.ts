@@ -81,6 +81,147 @@ app.get("/me/contacts", async (c) => {
   })));
 });
 
+// ── Dashboard (internal only) ─────────────────────────────────────────────────
+
+// GET /api/support/dashboard
+app.get("/dashboard", async (c) => {
+  const auth = c.get("auth");
+  if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const now = Date.now();
+  const WINDOW_DAYS = 30;
+  const since = new Date(now - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const sinceIso = since.toISOString();
+
+  const formattedHeader = { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' };
+
+  const [openRes, recentRes] = await Promise.all([
+    d365FetchSupport(
+      c.env,
+      `/incidents?$filter=statecode eq 0&$select=incidentid,severitycode,statuscode,createdon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
+      { headers: formattedHeader },
+    ),
+    d365FetchSupport(
+      c.env,
+      `/incidents?$filter=createdon ge ${sinceIso} or (statecode eq 1 and modifiedon ge ${sinceIso})&$select=createdon,statecode,modifiedon&$top=5000`,
+    ),
+  ]);
+
+  if (!openRes.ok) return c.json({ error: await openRes.text() }, openRes.status as any);
+  if (!recentRes.ok) return c.json({ error: await recentRes.text() }, recentRes.status as any);
+
+  const openData = await openRes.json() as { value: any[] };
+  const recentData = await recentRes.json() as { value: any[] };
+
+  // Cases owned by the support-portal app user (created by customers via the
+  // portal but not yet picked up by an engineer) — treat these as unassigned.
+  const PORTAL_OWNER_NAME = "pfsupport portal";
+  function isUnassigned(owner: string | null): boolean {
+    return owner === null || owner.trim().toLowerCase() === PORTAL_OWNER_NAME;
+  }
+
+  type OpenRow = {
+    severity: string;
+    status: string;
+    owner: string | null;
+    createdOn: string;
+  };
+
+  const openCases: OpenRow[] = openData.value.map((r) => ({
+    severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? "Unknown",
+    status:   r["statuscode@OData.Community.Display.V1.FormattedValue"]   ?? "Active",
+    owner:    r.owninguser?.fullname ?? null,
+    createdOn: r.createdon,
+  }));
+
+  // ── KPIs ────────────────────────────────────────────────────────────────────
+  const totalOpen   = openCases.length;
+  const p1Open      = openCases.filter((c) => c.severity === "P1" || c.severity === "E1").length;
+  const unassigned  = openCases.filter((c) => isUnassigned(c.owner)).length;
+
+  const resolved = recentData.value.filter((r) => r.statecode === 1 && r.modifiedon && new Date(r.modifiedon).getTime() >= since.getTime());
+  const resolvedLast30d = resolved.length;
+  const resolveDurations = resolved
+    .map((r) => (new Date(r.modifiedon).getTime() - new Date(r.createdon).getTime()) / (1000 * 60 * 60 * 24))
+    .filter((d) => d >= 0 && Number.isFinite(d));
+  const avgResolveDays = resolveDurations.length
+    ? resolveDurations.reduce((s, d) => s + d, 0) / resolveDurations.length
+    : null;
+
+  // ── Distributions ─────────────────────────────────────────────────────────
+  function groupCount<T>(rows: T[], key: (r: T) => string): { label: string; count: number }[] {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const k = key(r);
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const severityDistribution = groupCount(openCases, (c) => c.severity);
+  const statusDistribution   = groupCount(openCases, (c) => c.status);
+  const ownerDistribution    = groupCount(openCases, (c) => isUnassigned(c.owner) ? "Unassigned" : c.owner!).slice(0, 8);
+
+  // ── Aging buckets (open cases) ────────────────────────────────────────────
+  const agingBuckets = [
+    { label: "<1d",   count: 0 },
+    { label: "1–3d",  count: 0 },
+    { label: "3–7d",  count: 0 },
+    { label: "7d+",   count: 0 },
+  ];
+  for (const c of openCases) {
+    const ageDays = (now - new Date(c.createdOn).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays < 1)      agingBuckets[0].count++;
+    else if (ageDays < 3) agingBuckets[1].count++;
+    else if (ageDays < 7) agingBuckets[2].count++;
+    else                  agingBuckets[3].count++;
+  }
+
+  // ── Trend (last 30d, daily) ──────────────────────────────────────────────
+  const days: string[] = [];
+  const openedByDay = new Map<string, number>();
+  const resolvedByDay = new Map<string, number>();
+  for (let i = WINDOW_DAYS - 1; i >= 0; i--) {
+    const d = new Date(now - i * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    days.push(key);
+    openedByDay.set(key, 0);
+    resolvedByDay.set(key, 0);
+  }
+  for (const r of recentData.value) {
+    if (r.createdon) {
+      const k = r.createdon.slice(0, 10);
+      if (openedByDay.has(k)) openedByDay.set(k, (openedByDay.get(k) ?? 0) + 1);
+    }
+    if (r.statecode === 1 && r.modifiedon) {
+      const k = r.modifiedon.slice(0, 10);
+      if (resolvedByDay.has(k)) resolvedByDay.set(k, (resolvedByDay.get(k) ?? 0) + 1);
+    }
+  }
+
+  return c.json({
+    windowDays: WINDOW_DAYS,
+    kpis: {
+      totalOpen,
+      p1Open,
+      unassigned,
+      resolvedLast30d,
+      avgResolveDays,
+    },
+    severityDistribution,
+    statusDistribution,
+    ownerDistribution,
+    agingBuckets,
+    trend: {
+      days,
+      opened:   days.map((d) => openedByDay.get(d) ?? 0),
+      resolved: days.map((d) => resolvedByDay.get(d) ?? 0),
+    },
+  });
+});
+
 // ── Cases ─────────────────────────────────────────────────────────────────────
 
 // GET /api/support/cases

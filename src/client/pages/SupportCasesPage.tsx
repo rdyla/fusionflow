@@ -67,6 +67,18 @@ export default function SupportCasesPage() {
 
   return (
     <>
+      {isStaff && (
+        <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #e2e8f0" }}>
+          <button onClick={() => navigate("/support/dashboard")}
+            style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid transparent", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
+            Dashboard
+          </button>
+          <button
+            style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid #0891b2", fontSize: 13, fontWeight: 600, color: "#0891b2", cursor: "default" }}>
+            Cases
+          </button>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1e293b" }}>Support Cases</h1>
         <button

@@ -132,7 +132,9 @@ export default function ModuleSelectPage() {
     ? MODULES.filter((m) => m.route === "/dashboard" || m.route === "/solutions" || m.route === "/support/cases").map((m) =>
         m.route === "/dashboard" ? { ...m, route: "/projects" } : m
       )
-    : MODULES.filter((m) => !m.visibleTo || m.visibleTo.includes(userRole));
+    : MODULES
+        .filter((m) => !m.visibleTo || m.visibleTo.includes(userRole))
+        .map((m) => m.route === "/support/cases" ? { ...m, route: "/support/dashboard" } : m);
 
   function handleCardClick(mod: Module) {
     if (mod.route) {

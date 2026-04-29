@@ -113,8 +113,30 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface SupportDashboardResponse {
+  windowDays: number;
+  kpis: {
+    totalOpen: number;
+    p1Open: number;
+    unassigned: number;
+    resolvedLast30d: number;
+    avgResolveDays: number | null;
+  };
+  severityDistribution: { label: string; count: number }[];
+  statusDistribution:   { label: string; count: number }[];
+  ownerDistribution:    { label: string; count: number }[];
+  agingBuckets:         { label: string; count: number }[];
+  trend: {
+    days: string[];
+    opened: number[];
+    resolved: number[];
+  };
+}
+
 export const supportApi = {
   me: () => request<SupportUser>("/api/support/me"),
+
+  getDashboard: () => request<SupportDashboardResponse>("/api/support/dashboard"),
 
   getCases: (search?: string, mine?: boolean) => {
     const params = new URLSearchParams();
