@@ -162,6 +162,7 @@ export default function AdminUsersPage() {
       manager_id: user.manager_id ?? null,
       zoom_user_id: user.zoom_user_id ?? null,
       cs_permission: (user.cs_permission ?? "none") as CsPerm,
+      is_support_supervisor: user.is_support_supervisor ?? 0,
     });
   }
 
@@ -544,6 +545,29 @@ export default function AdminUsersPage() {
                   onChange={(e) => setEditForm({ ...editForm, zoom_user_id: e.target.value || null })}
                 />
               </label>
+
+              {/* Support Supervisor flag — internal only */}
+              {editForm.role !== "client" && (
+                <label
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer",
+                    border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", background: "#f8fafc",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={(editForm.is_support_supervisor ?? 0) === 1}
+                    onChange={(e) => setEditForm({ ...editForm, is_support_supervisor: e.target.checked ? 1 : 0 })}
+                    style={{ marginTop: 3, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Support Supervisor</div>
+                    <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+                      Grants access to generate and send customer support digest emails. Additive to the user's role.
+                    </div>
+                  </div>
+                </label>
+              )}
 
               {/* Cloud Support Calculator permission */}
               {editForm.role !== "partner_ae" && (
