@@ -95,15 +95,19 @@ app.get("/dashboard", async (c) => {
 
   const formattedHeader = { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' };
 
+  // amc_serviceboard option-set value 173590005 = "Support" (vs Install, Onboard,
+  // PreSales, etc.) — without this the dashboard mixes project-board cases in.
+  const SUPPORT_BOARD = 173590005;
+
   const [openRes, recentRes] = await Promise.all([
     d365FetchSupport(
       c.env,
-      `/incidents?$filter=statecode eq 0&$select=incidentid,severitycode,statuscode,createdon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
+      `/incidents?$filter=statecode eq 0 and amc_serviceboard eq ${SUPPORT_BOARD}&$select=incidentid,severitycode,statuscode,createdon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
       { headers: formattedHeader },
     ),
     d365FetchSupport(
       c.env,
-      `/incidents?$filter=createdon ge ${sinceIso} or (statecode eq 1 and modifiedon ge ${sinceIso})&$select=createdon,statecode,modifiedon&$top=5000`,
+      `/incidents?$filter=amc_serviceboard eq ${SUPPORT_BOARD} and (createdon ge ${sinceIso} or (statecode eq 1 and modifiedon ge ${sinceIso}))&$select=createdon,statecode,modifiedon&$top=5000`,
     ),
   ]);
 
