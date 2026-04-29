@@ -111,6 +111,43 @@ export async function d365Fetch(env: Env, path: string, options: RequestInit = {
   });
 }
 
+// am_techtype option-set values that count as "the UCaaS platform we sold them":
+//   930680017 = UCaaS, 930680034 = UCaaS & CCaaS (e.g. Zoom Phone + Contact Center)
+const UCAAS_TECHTYPES = [930680017, 930680034] as const;
+
+export type LastUcaasVendor = {
+  vendor: string | null;
+  vendorId: string | null;
+  techType: string | null;
+  soldOn: string | null;
+};
+
+/** Look up the most recent UCaaS-board sold-tech row for a D365 account.
+ *  Returns null on any error so callers can render fail-soft. */
+export async function getLastUcaasVendor(env: Env, accountId: string): Promise<LastUcaasVendor | null> {
+  if (!accountId) return null;
+  const techFilter = UCAAS_TECHTYPES.map((t) => `am_techtype eq ${t}`).join(" or ");
+  const filter = `_am_account_value eq ${accountId} and (${techFilter})`;
+  const path = `/am_soldtechnologies?$filter=${encodeURIComponent(filter)}&$select=_am_vendor_value,am_techtype,createdon&$orderby=createdon desc&$top=1`;
+  try {
+    const res = await d365Fetch(env, path, {
+      headers: { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { value: any[] };
+    const row = data.value?.[0];
+    if (!row) return null;
+    return {
+      vendor:    row["_am_vendor_value@OData.Community.Display.V1.FormattedValue"] ?? null,
+      vendorId:  row._am_vendor_value ?? null,
+      techType:  row["am_techtype@OData.Community.Display.V1.FormattedValue"] ?? null,
+      soldOn:    row.createdon ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Same as d365Fetch, but authenticates as the support-portal app user so
  *  cases, notes, and attachments are owned by "pfsupport portal" in D365. */
 export async function d365FetchSupport(env: Env, path: string, options: RequestInit = {}): Promise<Response> {

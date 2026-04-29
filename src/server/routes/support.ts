@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { d365FetchSupport } from "../services/dynamicsService";
+import { d365FetchSupport, getLastUcaasVendor } from "../services/dynamicsService";
 import { notifyZoomNewCase } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -718,6 +718,16 @@ app.get("/accounts", async (c) => {
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
   return c.json(data.value.map((a: any) => ({ id: a.accountid, name: a.name })));
+});
+
+// GET /api/support/accounts/:id/last-vendor — most recent UCaaS sold-tech row
+// for an account. Lets engineers see the customer's platform at a glance from
+// the case detail page.
+app.get("/accounts/:id/last-vendor", async (c) => {
+  const auth = c.get("auth");
+  if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+  const result = await getLastUcaasVendor(c.env, c.req.param("id"));
+  return c.json(result ?? { vendor: null });
 });
 
 // GET /api/support/accounts/:id/contacts
