@@ -179,6 +179,7 @@ export default function AdminUsersPage() {
         manager_id: editForm.manager_id ?? null,
         zoom_user_id: typeof editForm.zoom_user_id === "string" ? editForm.zoom_user_id.trim() || null : null,
         cs_permission: editForm.role === "admin" ? undefined : (editForm.cs_permission as CsPerm | undefined),
+        is_support_supervisor: editForm.role === "client" ? 0 : (editForm.is_support_supervisor ?? 0),
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setEditingUser(null);

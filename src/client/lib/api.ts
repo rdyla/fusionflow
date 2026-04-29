@@ -1305,6 +1305,7 @@ export const api = {
       organization_name?: string;
       role?: "admin" | "executive" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
       is_active?: number;
+      is_support_supervisor?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
       zoom_user_id?: string | null;
