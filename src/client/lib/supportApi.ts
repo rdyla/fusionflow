@@ -2,6 +2,7 @@ export interface SupportUser {
   email: string;
   name: string | null;
   isInternal: boolean;
+  isSupportSupervisor: boolean;
   contactId: string | null;
   accountId: string | null;
 }
@@ -208,6 +209,55 @@ export const supportApi = {
     request<{ vendor: string | null; vendorId?: string | null; techType?: string | null; soldOn?: string | null }>(
       `/api/support/accounts/${accountId}/last-vendor`
     ),
+};
+
+// ── Customer support digests (supervisor-only) ──────────────────────────────
+
+export interface DigestCaseRow {
+  ticketNumber: string;
+  title: string;
+  severity: string | null;
+  status: string;
+  ageDays?: number;
+  daysToResolve?: number;
+}
+
+export interface DigestPreview {
+  data: {
+    accountName: string;
+    windowDays: number;
+    kpis: { open: number; resolved: number; stale: number; stuckOnCustomer: number };
+    openCases: DigestCaseRow[];
+    resolvedCases: DigestCaseRow[];
+  };
+  subject: string;
+  html: string;
+}
+
+export interface DigestHistoryRow {
+  id: string;
+  accountId: string;
+  accountName: string;
+  recipients: Array<{ name?: string | null; email: string }>;
+  sentByName: string | null;
+  sentByEmail: string | null;
+  kpis: { open: number; resolved: number; stale: number; stuckOnCustomer: number };
+  sentAt: string;
+}
+
+export const supportDigests = {
+  preview: (accountId: string, accountName: string) =>
+    request<DigestPreview>(`/api/support/digests/preview?accountId=${encodeURIComponent(accountId)}&accountName=${encodeURIComponent(accountName)}`),
+
+  send: (data: { accountId: string; accountName: string; recipients: Array<{ name?: string | null; email: string }> }) =>
+    request<{ id: string; ok: boolean }>("/api/support/digests/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    }),
+
+  history: (limit = 50) =>
+    request<DigestHistoryRow[]>(`/api/support/digests/history?limit=${limit}`),
 };
 
 export const supportAccounts = {
