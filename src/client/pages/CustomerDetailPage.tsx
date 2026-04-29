@@ -81,6 +81,23 @@ function capitalize(s: string) {
   return s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+// Maps a vendor name from D365 (e.g. "Zoom Communications", "RingCentral, Inc.")
+// to a short label and brand color. Substring match — D365 vendor account names
+// vary in formatting, so loose matching is more robust than an exact lookup.
+function resolveVendorBadge(rawName: string | null | undefined): { label: string; color: string } | null {
+  if (!rawName) return null;
+  const n = rawName.toLowerCase();
+  if (n.includes("zoom"))         return { label: "Zoom",        color: "#0078d4" };
+  if (n.includes("ringcentral"))  return { label: "RingCentral", color: "#ff8c00" };
+  if (n.includes("8x8"))          return { label: "8x8",         color: "#8764b8" };
+  if (n.includes("shoretel"))     return { label: "ShoreTel",    color: "#64748b" };
+  if (n.includes("mitel"))        return { label: "Mitel",       color: "#64748b" };
+  if (n.includes("microsoft") || n.includes("teams")) return { label: "MS Teams", color: "#5059c9" };
+  if (n.includes("vonage"))       return { label: "Vonage",      color: "#dc2626" };
+  // Unknown UCaaS vendor — render the raw name in a neutral pill.
+  return { label: rawName, color: "#475569" };
+}
+
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -92,6 +109,7 @@ export default function CustomerDetailPage() {
   const [solutions, setSolutions] = useState<CustomerSolution[]>([]);
   const [projects, setProjects] = useState<CustomerProject[]>([]);
   const [optimizations, setOptimizations] = useState<CustomerOptimization[]>([]);
+  const [lastVendor, setLastVendor] = useState<{ vendor: string | null; techType?: string | null; soldOn?: string | null } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [pfTeamPhotoMap, setPfTeamPhotoMap] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -126,6 +144,9 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     if (!id) return;
     api.users().then(setUsers).catch(() => {}); // admin-only; non-admins get empty list gracefully
+    // Best-effort fetch of most-recent UCaaS vendor (D365 — don't block page)
+    api.customerLastVendor(id).then(setLastVendor).catch(() => {});
+
     Promise.all([
       api.customer(id),
       api.customerContacts(id),
@@ -332,7 +353,36 @@ export default function CustomerDetailPage() {
         </button>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", margin: 0 }}>{customer.name}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", margin: 0 }}>{customer.name}</h1>
+              {(() => {
+                const badge = resolveVendorBadge(lastVendor?.vendor);
+                if (!badge) return null;
+                const tooltip = lastVendor?.soldOn
+                  ? `${lastVendor.techType ?? "UCaaS"} · sold ${fmt(lastVendor.soldOn)}`
+                  : (lastVendor?.techType ?? "UCaaS");
+                return (
+                  <span
+                    title={tooltip}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "4px 10px",
+                      borderRadius: 14,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      background: `${badge.color}1a`,
+                      color: badge.color,
+                      border: `1px solid ${badge.color}40`,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+                );
+              })()}
+            </div>
             {(customer.address_city || customer.address_state) && (
               <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
                 {[customer.address_city, customer.address_state].filter(Boolean).join(", ")}

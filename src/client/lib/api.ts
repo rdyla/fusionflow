@@ -1700,6 +1700,9 @@ export const api = {
   customerOptimizations: (id: string) =>
     request<{ id: string; project_id: string; optimize_status: string; graduated_at: string | null; next_review_date: string | null; project_name: string; vendor: string | null; solution_types: string[]; actual_go_live_date: string | null }[]>(`/customers/${id}/optimizations`),
 
+  customerLastVendor: (id: string) =>
+    request<{ vendor: string | null; vendorId?: string | null; techType?: string | null; soldOn?: string | null }>(`/customers/${id}/last-vendor`),
+
   // ── Prospecting ──────────────────────────────────────────────────────────
   prospectingLists: () =>
     request<ProspectList[]>("/prospecting/lists"),
