@@ -40,6 +40,7 @@ export type User = {
   organization_name: string | null;
   role: string;
   is_active: number;
+  is_support_supervisor?: number;
   avatar_url?: string | null;
   dynamics_account_id?: string | null;
   manager_id?: string | null;

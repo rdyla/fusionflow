@@ -104,6 +104,7 @@ const updateUserSchema = z.object({
   organization_name: z.string().max(500).optional(),
   role: z.enum(["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"]).optional(),
   is_active: z.number().int().min(0).max(1).optional(),
+  is_support_supervisor: z.number().int().min(0).max(1).optional(),
   dynamics_account_id: z.string().nullable().optional(),
   manager_id: z.string().nullable().optional(),
   zoom_user_id: z.string().nullable().optional(),
