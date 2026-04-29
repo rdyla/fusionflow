@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { getAccountTeam } from "../services/dynamicsService";
+import { d365Fetch, getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
 
@@ -496,6 +496,47 @@ app.get("/:id/optimizations", async (c) => {
     .bind(c.req.param("id"))
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
+});
+
+// ── Most-recent UCaaS vendor (from D365 am_soldtechnology) ────────────────────
+// am_techtype option-set values: 930680017 = UCaaS, 930680034 = UCaaS & CCaaS.
+// Most recent by createdon (when added to the account) — represents the latest
+// platform decision, not the active contract.
+
+app.get("/:id/last-vendor", async (c) => {
+  const auth = c.get("auth");
+  if (!canViewCustomers(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const customer = await c.env.DB
+    .prepare("SELECT crm_account_id FROM customers WHERE id = ? LIMIT 1")
+    .bind(c.req.param("id"))
+    .first<{ crm_account_id: string | null }>();
+  if (!customer) throw new HTTPException(404, { message: "Customer not found" });
+  if (!customer.crm_account_id) return c.json({ vendor: null });
+
+  const filter = `_am_account_value eq ${customer.crm_account_id} and (am_techtype eq 930680017 or am_techtype eq 930680034)`;
+  const path = `/am_soldtechnologies?$filter=${encodeURIComponent(filter)}&$select=_am_vendor_value,am_techtype,createdon&$orderby=createdon desc&$top=1`;
+
+  let res: Response;
+  try {
+    res = await d365Fetch(c.env, path, {
+      headers: { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' },
+    });
+  } catch {
+    return c.json({ vendor: null });
+  }
+  if (!res.ok) return c.json({ vendor: null });
+
+  const data = await res.json() as { value: any[] };
+  const row = data.value?.[0];
+  if (!row) return c.json({ vendor: null });
+
+  return c.json({
+    vendor:    row["_am_vendor_value@OData.Community.Display.V1.FormattedValue"] ?? null,
+    vendorId:  row._am_vendor_value ?? null,
+    techType:  row["am_techtype@OData.Community.Display.V1.FormattedValue"] ?? null,
+    soldOn:    row.createdon ?? null,
+  });
 });
 
 export default app;
