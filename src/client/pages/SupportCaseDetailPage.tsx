@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { supportApi, supportAccounts, formatSupportDate, fileToBase64, severityColor, type SupportCaseDetail, type ContactResult, type SupportUser, type UserResult } from "../lib/supportApi";
+import { resolveVendorBadge, type LastVendor } from "../lib/vendorBadge";
 import UserSearch from "../components/support/UserSearch";
 
 function Badge({ label, color }: { label: string; color: string }) {
@@ -21,6 +22,7 @@ export default function SupportCaseDetailPage() {
   const navigate = useNavigate();
 
   const [caseData, setCaseData] = useState<SupportCaseDetail | null>(null);
+  const [lastVendor, setLastVendor] = useState<LastVendor | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -57,6 +59,13 @@ export default function SupportCaseDetailPage() {
   };
 
   useEffect(load, [id]);
+
+  // Best-effort vendor lookup off the case's account — D365 hiccups shouldn't
+  // break the case page, just silently skip the badge.
+  useEffect(() => {
+    if (!caseData?.accountId || !user?.isInternal) { setLastVendor(null); return; }
+    supportApi.getAccountLastVendor(caseData.accountId).then(setLastVendor).catch(() => setLastVendor(null));
+  }, [caseData?.accountId, user?.isInternal]);
 
   const submitNote = async () => {
     if (!id || (!noteText.trim() && !selectedFile)) return;
@@ -286,8 +295,35 @@ export default function SupportCaseDetailPage() {
           {/* Metadata card */}
           <div style={{ background: "#fff", borderRadius: 10, border: "1px solid #e2e8f0", padding: "16px 20px" }}>
             {caseData.accountName && (
-              <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid #f1f5f9" }}>
+              <div style={{ paddingBottom: 12, marginBottom: 12, borderBottom: "1px solid #f1f5f9", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 <span style={{ fontWeight: 700, fontSize: 15, color: "#1e293b" }}>{caseData.accountName}</span>
+                {(() => {
+                  const badge = resolveVendorBadge(lastVendor?.vendor);
+                  if (!badge) return null;
+                  const tooltip = lastVendor?.soldOn
+                    ? `${lastVendor.techType ?? "UCaaS"} · sold ${formatSupportDate(lastVendor.soldOn)}`
+                    : (lastVendor?.techType ?? "UCaaS");
+                  return (
+                    <span
+                      title={tooltip}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        padding: "2px 8px",
+                        borderRadius: 10,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.02em",
+                        background: `${badge.color}1a`,
+                        color: badge.color,
+                        border: `1px solid ${badge.color}40`,
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {badge.label}
+                    </span>
+                  );
+                })()}
               </div>
             )}
             {[
