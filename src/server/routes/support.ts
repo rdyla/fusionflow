@@ -119,9 +119,10 @@ app.get("/dashboard", async (c) => {
 
   // Cases owned by the support-portal app user (created by customers via the
   // portal but not yet picked up by an engineer) — treat these as unassigned.
-  const PORTAL_OWNER_NAME = "pfsupport portal";
+  // D365 returns the fullname as "# pfsupport portal" (the leading "# " is a
+  // Packet Fusion convention for non-human app users), so substring-match it.
   function isUnassigned(owner: string | null): boolean {
-    return owner === null || owner.trim().toLowerCase() === PORTAL_OWNER_NAME;
+    return owner === null || owner.toLowerCase().includes("pfsupport portal");
   }
 
   type OpenRow = {
