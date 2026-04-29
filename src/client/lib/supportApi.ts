@@ -50,6 +50,7 @@ export interface SupportCase {
   status: string;
   state: string;
   createdOn: string;
+  modifiedOn: string;
   owner: string | null;
   accountName: string | null;
 }
@@ -113,12 +114,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export interface SupportDashboardStaleCase {
+  id: string;
+  ticketNumber: string;
+  title: string;
+  severity: string;
+  status: string;
+  owner: string | null;
+  ageDays: number;
+  createdOn: string;
+}
+
 export interface SupportDashboardResponse {
   windowDays: number;
+  staleThresholdDays: number;
   kpis: {
     totalOpen: number;
     p1Open: number;
     unassigned: number;
+    stale7d: number;
+    stuckOnCustomer: number;
     resolvedLast30d: number;
     avgResolveDays: number | null;
   };
@@ -126,6 +141,7 @@ export interface SupportDashboardResponse {
   statusDistribution:   { label: string; count: number }[];
   ownerDistribution:    { label: string; count: number }[];
   agingBuckets:         { label: string; count: number }[];
+  staleOpen:            SupportDashboardStaleCase[];
   trend: {
     days: string[];
     opened: number[];

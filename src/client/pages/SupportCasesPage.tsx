@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useNavigate, useOutletContext, useSearchParams } from "react-router-dom";
 import { supportApi, formatSupportDate, severityColor, type SupportCase, type SupportUser } from "../lib/supportApi";
 
 const STATUS_OPTIONS = ["Active", "All Statuses", "Resolved", "Cancelled"];
@@ -18,9 +18,23 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
+// Parses ?stale=Nd into a number of days; returns null if absent or malformed.
+function parseStaleParam(raw: string | null): number | null {
+  if (!raw) return null;
+  const m = raw.match(/^(\d+)d?$/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 export default function SupportCasesPage() {
   const user = useOutletContext<SupportUser | null>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const staleDays = parseStaleParam(searchParams.get("stale"));
+  const stuckOnCustomer = searchParams.get("stuck") === "customer";
+  const hasDeepLinkFilter = staleDays !== null || stuckOnCustomer;
+
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
@@ -28,7 +42,8 @@ export default function SupportCasesPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Active");
   const [severityFilter, setSeverityFilter] = useState("All Severities");
-  const [mineOnly, setMineOnly] = useState(true);
+  // Deep-link filters span the team — default off when arriving via dashboard.
+  const [mineOnly, setMineOnly] = useState(!hasDeepLinkFilter);
   const [page, setPage] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -56,11 +71,37 @@ export default function SupportCasesPage() {
     debounceRef.current = setTimeout(() => fetchCases(value.trim() || undefined, mineOnly), 400);
   };
 
+  const now = Date.now();
   const filtered = cases.filter((c) => {
     const matchStatus = statusFilter === "All Statuses" || c.state === statusFilter;
     const matchSeverity = severityFilter === "All Severities" || c.severity === severityFilter;
-    return matchStatus && matchSeverity;
+
+    let matchDeepLink = true;
+    if (staleDays !== null) {
+      const ageDays = (now - new Date(c.createdOn).getTime()) / (1000 * 60 * 60 * 24);
+      matchDeepLink = c.state === "Active" && ageDays >= staleDays;
+    } else if (stuckOnCustomer) {
+      const inactiveDays = c.modifiedOn
+        ? (now - new Date(c.modifiedOn).getTime()) / (1000 * 60 * 60 * 24)
+        : 0;
+      matchDeepLink = c.state === "Active" && c.status === "Waiting on Customer" && inactiveDays >= 7;
+    }
+
+    return matchStatus && matchSeverity && matchDeepLink;
   });
+
+  function clearDeepLinkFilter() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("stale");
+    next.delete("stuck");
+    setSearchParams(next, { replace: true });
+  }
+
+  const deepLinkLabel = staleDays !== null
+    ? `Stale ${staleDays}d+`
+    : stuckOnCustomer
+      ? "Stuck on Customer (7d+)"
+      : null;
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
@@ -79,7 +120,7 @@ export default function SupportCasesPage() {
           </button>
         </div>
       )}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: deepLinkLabel ? 12 : 24 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1e293b" }}>Support Cases</h1>
         <button
           onClick={() => navigate("/support/cases/new")}
@@ -88,6 +129,23 @@ export default function SupportCasesPage() {
           + New Case
         </button>
       </div>
+      {deepLinkLabel && (
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+          <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Filter
+          </span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 10px", borderRadius: 14, background: "#fef2f2", border: "1px solid #fecaca", color: "#b91c1c", fontSize: 12, fontWeight: 600 }}>
+            {deepLinkLabel}
+            <button
+              onClick={clearDeepLinkFilter}
+              style={{ background: "transparent", border: "none", color: "#b91c1c", fontSize: 14, lineHeight: 1, cursor: "pointer", padding: 0, fontWeight: 700 }}
+              aria-label="Clear filter"
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
 
       {/* Filters */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: 16, alignItems: "center" }}>
