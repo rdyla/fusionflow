@@ -107,7 +107,7 @@ export default function SupportCasesPage() {
   const paginated = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
-    <>
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       {isStaff && (
         <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #e2e8f0" }}>
           <button onClick={() => navigate("/support/dashboard")}
@@ -257,6 +257,6 @@ export default function SupportCasesPage() {
           <div>Showing {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} of {filtered.length}{!search && cases.length >= 500 ? "+" : ""} cases</div>
         </div>
       )}
-    </>
+    </div>
   );
 }
