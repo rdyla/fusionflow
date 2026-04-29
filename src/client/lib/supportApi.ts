@@ -203,6 +203,11 @@ export const supportApi = {
     `/api/support/cases/${caseId}/attachments/${annotId}/download`,
 
   getMyContacts: () => request<ContactResult[]>("/api/support/me/contacts"),
+
+  getAccountLastVendor: (accountId: string) =>
+    request<{ vendor: string | null; vendorId?: string | null; techType?: string | null; soldOn?: string | null }>(
+      `/api/support/accounts/${accountId}/last-vendor`
+    ),
 };
 
 export const supportAccounts = {
