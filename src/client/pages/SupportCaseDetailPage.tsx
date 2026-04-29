@@ -147,7 +147,7 @@ export default function SupportCaseDetailPage() {
   const btnSm = { ...btnSecondary, padding: "0.35rem 0.75rem", fontSize: 12 };
 
   return (
-    <>
+    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <button onClick={() => navigate("/support/cases")}
         style={{ background: "none", border: "none", color: "#0891b2", fontSize: 14, fontWeight: 600, cursor: "pointer", padding: 0, marginBottom: 20, display: "flex", alignItems: "center", gap: 4 }}>
         ← Back to cases
@@ -372,6 +372,6 @@ export default function SupportCaseDetailPage() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }

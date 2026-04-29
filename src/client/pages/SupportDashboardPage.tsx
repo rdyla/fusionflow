@@ -11,9 +11,16 @@ const AGING_COLORS: Record<string, string> = {
   "7d+":  "#d13438",
 };
 
-function MetricCard({ title, value, accent }: { title: string; value: string | number; accent?: string }) {
+function MetricCard({ title, value, accent, onClick }: { title: string; value: string | number; accent?: string; onClick?: () => void }) {
+  const clickable = !!onClick;
   return (
-    <div className="ms-metric-card">
+    <div
+      className="ms-metric-card"
+      onClick={onClick}
+      style={clickable ? { cursor: "pointer", transition: "transform 0.1s, box-shadow 0.1s" } : undefined}
+      onMouseEnter={clickable ? (e) => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; (e.currentTarget as HTMLDivElement).style.boxShadow = "0 4px 12px rgba(0,0,0,0.08)"; } : undefined}
+      onMouseLeave={clickable ? (e) => { (e.currentTarget as HTMLDivElement).style.transform = ""; (e.currentTarget as HTMLDivElement).style.boxShadow = ""; } : undefined}
+    >
       <div className="ms-metric-label">{title}</div>
       <div className="ms-metric-value" style={accent ? { color: accent } : undefined}>{value}</div>
     </div>
@@ -149,7 +156,7 @@ export default function SupportDashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading…</div>;
   }
 
-  const { kpis, severityDistribution, statusDistribution, ownerDistribution, agingBuckets, trend, windowDays } = data;
+  const { kpis, severityDistribution, statusDistribution, ownerDistribution, agingBuckets, staleOpen, trend, windowDays, staleThresholdDays } = data;
   const avgResolve = kpis.avgResolveDays === null
     ? "—"
     : kpis.avgResolveDays < 1
@@ -178,6 +185,18 @@ export default function SupportDashboardPage() {
         <MetricCard title="Open Cases" value={kpis.totalOpen} />
         <MetricCard title="P1 / E1 Open" value={kpis.p1Open} accent={kpis.p1Open > 0 ? "#d13438" : undefined} />
         <MetricCard title="Unassigned" value={kpis.unassigned} accent={kpis.unassigned > 0 ? "#ff8c00" : undefined} />
+        <MetricCard
+          title={`Stale (${staleThresholdDays}d+)`}
+          value={kpis.stale7d}
+          accent={kpis.stale7d > 0 ? "#d13438" : undefined}
+          onClick={() => navigate(`/support/cases?stale=${staleThresholdDays}d`)}
+        />
+        <MetricCard
+          title="Stuck on Customer"
+          value={kpis.stuckOnCustomer}
+          accent={kpis.stuckOnCustomer > 0 ? "#ff8c00" : undefined}
+          onClick={() => navigate(`/support/cases?stuck=customer`)}
+        />
         <MetricCard title={`Resolved (${windowDays}d)`} value={kpis.resolvedLast30d} />
         <MetricCard title={`Avg Resolve (${windowDays}d)`} value={avgResolve} />
       </div>
@@ -239,6 +258,65 @@ export default function SupportDashboardPage() {
           <div className="ms-section-title">Opened vs Resolved ({windowDays}d)</div>
           <TrendChart days={trend.days} opened={trend.opened} resolved={trend.resolved} />
         </div>
+      </div>
+
+      {/* Stale Open Cases */}
+      <div className="ms-card" style={{ marginTop: 20, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Stale Open Cases ({staleThresholdDays}d+)
+          </span>
+          {staleOpen.length > 0 && (
+            <button
+              onClick={() => navigate(`/support/cases?stale=${staleThresholdDays}d`)}
+              style={{ background: "transparent", border: "none", fontSize: 13, color: "#63c1ea", textDecoration: "none", fontWeight: 600, cursor: "pointer" }}
+            >
+              View all →
+            </button>
+          )}
+        </div>
+        {staleOpen.length === 0 ? (
+          <div style={{ padding: "24px 20px", color: "#64748b", fontSize: 13 }}>No stale open cases — nice work.</div>
+        ) : (
+          <table className="ms-table">
+            <thead>
+              <tr>
+                {["Ticket", "Title", "Severity", "Status", "Owner", "Age"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {staleOpen.map((c) => (
+                <tr
+                  key={c.id}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => navigate(`/support/cases/${c.id}`)}
+                >
+                  <td style={{ fontWeight: 600, color: "#1e293b", fontSize: 13, whiteSpace: "nowrap" }}>{c.ticketNumber}</td>
+                  <td style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 380 }}>{c.title}</td>
+                  <td>
+                    <span className="ms-badge" style={{
+                      background: `${severityColor(c.severity)}1a`,
+                      color: severityColor(c.severity),
+                      border: `1px solid ${severityColor(c.severity)}40`,
+                      fontSize: 11,
+                    }}>
+                      {c.severity}
+                    </span>
+                  </td>
+                  <td style={{ fontSize: 12, color: "#475569" }}>{c.status}</td>
+                  <td style={{ fontSize: 12, color: c.owner ? "#475569" : "#94a3b8", fontStyle: c.owner ? "normal" : "italic" }}>
+                    {c.owner ?? "Unassigned"}
+                  </td>
+                  <td style={{ fontSize: 12, color: c.ageDays >= 14 ? "#d13438" : "#ff8c00", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {c.ageDays}d
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </div>
   );

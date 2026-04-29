@@ -102,7 +102,7 @@ app.get("/dashboard", async (c) => {
   const [openRes, recentRes] = await Promise.all([
     d365FetchSupport(
       c.env,
-      `/incidents?$filter=statecode eq 0 and amc_serviceboard eq ${SUPPORT_BOARD}&$select=incidentid,severitycode,statuscode,createdon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
+      `/incidents?$filter=statecode eq 0 and amc_serviceboard eq ${SUPPORT_BOARD}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
       { headers: formattedHeader },
     ),
     d365FetchSupport(
@@ -126,23 +126,43 @@ app.get("/dashboard", async (c) => {
   }
 
   type OpenRow = {
+    id: string;
+    ticketNumber: string;
+    title: string;
     severity: string;
     status: string;
     owner: string | null;
     createdOn: string;
+    modifiedOn: string;
   };
 
   const openCases: OpenRow[] = openData.value.map((r) => ({
+    id: r.incidentid,
+    ticketNumber: r.ticketnumber ?? "",
+    title:    r.title ?? "",
     severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? "Unknown",
     status:   r["statuscode@OData.Community.Display.V1.FormattedValue"]   ?? "Active",
     owner:    r.owninguser?.fullname ?? null,
     createdOn: r.createdon,
+    modifiedOn: r.modifiedon,
   }));
+
+  const STALE_THRESHOLD_DAYS = 7;
+  const staleCutoff = now - STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+  function ageDays(createdOn: string): number {
+    return (now - new Date(createdOn).getTime()) / (1000 * 60 * 60 * 24);
+  }
 
   // ── KPIs ────────────────────────────────────────────────────────────────────
   const totalOpen   = openCases.length;
   const p1Open      = openCases.filter((c) => c.severity === "P1" || c.severity === "E1").length;
   const unassigned  = openCases.filter((c) => isUnassigned(c.owner)).length;
+  const stale7d     = openCases.filter((c) => ageDays(c.createdOn) >= STALE_THRESHOLD_DAYS).length;
+  const stuckOnCustomer = openCases.filter((c) =>
+    c.status === "Waiting on Customer" &&
+    c.modifiedOn &&
+    new Date(c.modifiedOn).getTime() <= staleCutoff
+  ).length;
 
   const resolved = recentData.value.filter((r) => r.statecode === 1 && r.modifiedon && new Date(r.modifiedon).getTime() >= since.getTime());
   const resolvedLast30d = resolved.length;
@@ -206,12 +226,31 @@ app.get("/dashboard", async (c) => {
     }
   }
 
+  // ── Stale open cases (top 10 oldest, age >= STALE_THRESHOLD_DAYS) ────────
+  const staleOpen = openCases
+    .filter((c) => ageDays(c.createdOn) >= STALE_THRESHOLD_DAYS)
+    .sort((a, b) => new Date(a.createdOn).getTime() - new Date(b.createdOn).getTime())
+    .slice(0, 10)
+    .map((c) => ({
+      id: c.id,
+      ticketNumber: c.ticketNumber,
+      title: c.title,
+      severity: c.severity,
+      status: c.status,
+      owner: isUnassigned(c.owner) ? null : c.owner,
+      ageDays: Math.floor(ageDays(c.createdOn)),
+      createdOn: c.createdOn,
+    }));
+
   return c.json({
     windowDays: WINDOW_DAYS,
+    staleThresholdDays: STALE_THRESHOLD_DAYS,
     kpis: {
       totalOpen,
       p1Open,
       unassigned,
+      stale7d,
+      stuckOnCustomer,
       resolvedLast30d,
       avgResolveDays,
     },
@@ -219,6 +258,7 @@ app.get("/dashboard", async (c) => {
     statusDistribution,
     ownerDistribution,
     agingBuckets,
+    staleOpen,
     trend: {
       days,
       opened:   days.map((d) => openedByDay.get(d) ?? 0),
@@ -267,7 +307,7 @@ app.get("/cases", async (c) => {
   }
 
   const top = search ? 100 : 500;
-  const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,_customerid_value";
+  const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value";
   const expand = "owninguser($select=fullname)";
   const res = await d365FetchSupport(
     c.env,
@@ -289,6 +329,7 @@ app.get("/cases", async (c) => {
     status: r["statuscode@OData.Community.Display.V1.FormattedValue"] ?? (STATE_MAP[r.statecode] ?? "Active"),
     state: STATE_MAP[r.statecode] ?? "Active",
     createdOn: r.createdon,
+    modifiedOn: r.modifiedon,
     owner: r.owninguser?.fullname ?? null,
     accountName: r["_customerid_value@OData.Community.Display.V1.FormattedValue"] ?? null,
   })));
