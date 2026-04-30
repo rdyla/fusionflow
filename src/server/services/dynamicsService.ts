@@ -960,8 +960,14 @@ export async function getPayCodes(env: Env): Promise<DynamicsPayCode[]> {
   }
 }
 
+/** D365 GUID format. Exported for guarding any user-supplied ID before it
+ * gets interpolated into an OData filter or path segment. */
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function isUuid(s: string | null | undefined): boolean {
+  return typeof s === "string" && UUID_RE.test(s);
+}
+
 /** Get the job GUID and case GUID for a project's CRM case (by ticketnumber). */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function getCaseAndJob(
   env: Env,

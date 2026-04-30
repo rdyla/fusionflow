@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { d365FetchSupport, getLastUcaasVendor } from "../services/dynamicsService";
+import { d365FetchSupport, getLastUcaasVendor, isUuid } from "../services/dynamicsService";
 import { sendEmail } from "../services/emailService";
 import { supportDigestEmail, type DigestEmailData } from "../lib/emailTemplates";
 import { isSupportSupervisor } from "../lib/permissions";
@@ -363,6 +363,7 @@ app.get("/digests/preview", async (c) => {
   const accountId = c.req.query("accountId")?.trim() ?? "";
   const accountName = c.req.query("accountName")?.trim() ?? "";
   if (!accountId || !accountName) return c.json({ error: "accountId and accountName are required" }, 400);
+  if (!isUuid(accountId)) return c.json({ error: "Invalid accountId" }, 400);
 
   const appUrl = c.env.APP_URL ?? "";
   const data = await buildDigestData(c.env, accountId, accountName, null, appUrl);
@@ -383,6 +384,7 @@ app.post("/digests/send", async (c) => {
   };
 
   if (!body.accountId || !body.accountName) return c.json({ error: "accountId and accountName are required" }, 400);
+  if (!isUuid(body.accountId)) return c.json({ error: "Invalid accountId" }, 400);
   const recipients = (body.recipients ?? []).filter((r) => r.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
   if (recipients.length === 0) return c.json({ error: "At least one valid recipient email is required" }, 400);
 
@@ -515,6 +517,7 @@ app.get("/cases", async (c) => {
 // GET /api/support/cases/:id
 app.get("/cases/:id", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
 
   const select = "incidentid,ticketnumber,title,description,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value,_primarycontactid_value,_amc_notificationcontact1_value,_am_escalationengineer_value";
   const expand = "owninguser($select=fullname,systemuserid)";
@@ -597,6 +600,11 @@ app.post("/cases", async (c) => {
     return c.json({ error: "Title and description are required" }, 400);
   }
 
+  for (const field of ["accountId", "primaryContactId", "notificationContactId", "escalationEngineerId"] as const) {
+    const v = body[field];
+    if (v && !isUuid(v)) return c.json({ error: `Invalid ${field}` }, 400);
+  }
+
   const severitycode = body.severitycode ?? DEFAULT_SEVERITY;
   if (!internal && !CUSTOMER_SEVERITY_VALUES.has(severitycode)) {
     return c.json({ error: "Invalid severity" }, 400);
@@ -675,6 +683,7 @@ app.post("/cases", async (c) => {
 // POST /api/support/cases/:id/notes
 app.post("/cases/:id/notes", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as { text: string };
 
@@ -699,6 +708,7 @@ app.post("/cases/:id/notes", async (c) => {
 // POST /api/support/cases/:id/attachments
 app.post("/cases/:id/attachments", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as { filename: string; mimetype: string; documentbody: string; notetext?: string };
 
@@ -727,6 +737,7 @@ app.post("/cases/:id/attachments", async (c) => {
 // POST /api/support/cases/:id/status
 app.post("/cases/:id/status", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as { action: string; comment?: string };
   const internal = isInternal(auth.role);
@@ -794,6 +805,7 @@ app.post("/cases/:id/status", async (c) => {
 // PATCH /api/support/cases/:id/contacts
 app.patch("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as {
     primaryContactId?: string | null;
@@ -801,6 +813,12 @@ app.patch("/cases/:id/contacts", async (c) => {
     escalationEngineerId?: string | null;
     ownerId?: string | null;
   };
+
+  // Reject malformed UUIDs in any of the bind fields before they reach OData.
+  for (const field of ["primaryContactId", "notificationContactId", "escalationEngineerId", "ownerId"] as const) {
+    const v = body[field];
+    if (v && !isUuid(v)) return c.json({ error: `Invalid ${field}` }, 400);
+  }
 
   const payload: any = {};
   if ("primaryContactId" in body) {
@@ -830,6 +848,7 @@ app.patch("/cases/:id/contacts", async (c) => {
 // GET /api/support/cases/:id/contacts
 app.get("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts?$select=contactid,fullname,emailaddress1&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
@@ -839,8 +858,9 @@ app.get("/cases/:id/contacts", async (c) => {
 // POST /api/support/cases/:id/contacts
 app.post("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const body = await c.req.json() as { contactId: string };
-  if (!body.contactId) return c.json({ error: "contactId required" }, 400);
+  if (!body.contactId || !isUuid(body.contactId)) return c.json({ error: "contactId required" }, 400);
 
   const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts/$ref`, {
     method: "POST",
@@ -856,6 +876,7 @@ app.post("/cases/:id/contacts", async (c) => {
 // DELETE /api/support/cases/:id/contacts/:contactId
 app.delete("/cases/:id/contacts/:contactId", async (c) => {
   const { id, contactId } = c.req.param();
+  if (!isUuid(id) || !isUuid(contactId)) return c.json({ error: "Invalid id" }, 400);
   const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts(${contactId})/$ref`, { method: "DELETE" });
   if (!res.ok) {
     const error = await res.text();
@@ -867,6 +888,7 @@ app.delete("/cases/:id/contacts/:contactId", async (c) => {
 // GET /api/support/cases/:id/attachments/:annotId/download
 app.get("/cases/:id/attachments/:annotId/download", async (c) => {
   const { annotId } = c.req.param();
+  if (!isUuid(annotId)) return c.json({ error: "Invalid annotation id" }, 400);
   const res = await d365FetchSupport(c.env, `/annotations(${annotId})?$select=filename,mimetype,documentbody`);
   if (!res.ok) return c.json({ error: "Not found" }, 404);
 
@@ -903,7 +925,9 @@ app.get("/accounts", async (c) => {
 app.get("/accounts/:id/last-vendor", async (c) => {
   const auth = c.get("auth");
   if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
-  const result = await getLastUcaasVendor(c.env, c.req.param("id"));
+  const id = c.req.param("id");
+  if (!isUuid(id)) return c.json({ error: "Invalid account id" }, 400);
+  const result = await getLastUcaasVendor(c.env, id);
   return c.json(result ?? { vendor: null });
 });
 
@@ -913,6 +937,7 @@ app.get("/accounts/:id/contacts", async (c) => {
   if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
 
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid account id" }, 400);
   const res = await d365FetchSupport(c.env, `/contacts?$filter=_parentcustomerid_value eq '${id}'&$select=contactid,fullname,emailaddress1&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
