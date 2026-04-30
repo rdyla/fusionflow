@@ -266,23 +266,10 @@ export default function ModuleSelectPage() {
         </div>
       </section>
 
-      {/* Bottom strip — desktop only */}
-      {!isMobile && <div style={{ position: "relative", zIndex: 5, display: "flex", alignItems: "center", justifyContent: "center", gap: 40, padding: "28px 48px 40px", borderTop: "1px solid #e2e8f0", background: "#ffffff" }}>
-        {[
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, label: "SOC 2 Compliant" },
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>, label: "Multi-region Available" },
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>, label: "Role-based Access" },
-          { icon: <svg viewBox="0 0 24 24" fill="none" stroke="#63c1ea" strokeWidth="2" style={{ width: 16, height: 16 }}><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13.1 19.79 19.79 0 0 1 1.59 4.5 2 2 0 0 1 3.56 2.27h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L7.91 9.91a16 16 0 0 0 6.18 6.18l.9-.9a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 21.73 17z"/></svg>, label: "24/7 Support" },
-        ].map((item, i, arr) => (
-          <div key={item.label} style={{ display: "flex", alignItems: "center" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "#64748b" }}>
-              {item.icon}
-              {item.label}
-            </div>
-            {i < arr.length - 1 && <div style={{ width: 1, height: 24, background: "#e2e8f0", margin: "0 20px" }} />}
-          </div>
-        ))}
-      </div>}
+      {/* Footer */}
+      <div style={{ position: "relative", zIndex: 5, textAlign: "center", padding: "20px 24px 28px", borderTop: "1px solid #e2e8f0", background: "#ffffff", fontSize: 12, color: "#94a3b8" }}>
+        © 2026 Packet Fusion
+      </div>
 
       {/* Toast */}
       {toast && (
