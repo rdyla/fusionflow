@@ -47,7 +47,9 @@ export default function AppShell() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifItems, setNotifItems] = useState<Notification[]>([]);
   const [notifLoading, setNotifLoading] = useState(false);
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const adminMenuRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
@@ -63,6 +65,17 @@ export default function AppShell() {
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, [notifOpen]);
+
+  useEffect(() => {
+    if (!adminMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (adminMenuRef.current && !adminMenuRef.current.contains(e.target as Node)) {
+        setAdminMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [adminMenuOpen]);
 
   useEffect(() => {
     const imp = localStorage.getItem(IMPERSONATE_KEY);
@@ -167,17 +180,6 @@ export default function AppShell() {
             <SideLink to="/solutions" icon={NAV_ICONS.solutions} onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
             <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
           </>
-        )}
-        {isAdmin && (
-          <div style={{ marginTop: 16, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-            <SideLink to="/admin/projects" icon={NAV_ICONS.adminProjects} onClick={() => setDrawerOpen(false)}>Admin: Projects</SideLink>
-            <SideLink to="/admin/solutions" icon={NAV_ICONS.adminSolutions} onClick={() => setDrawerOpen(false)}>Admin: Solutions</SideLink>
-            <SideLink to="/admin/optimize" icon={NAV_ICONS.adminOptimize} onClick={() => setDrawerOpen(false)}>Admin: Optimize</SideLink>
-            <SideLink to="/admin/labor" icon={NAV_ICONS.adminLabor} onClick={() => setDrawerOpen(false)}>Admin: Labor</SideLink>
-            <SideLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setDrawerOpen(false)}>Admin: Templates</SideLink>
-            <SideLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setDrawerOpen(false)}>Admin: Users</SideLink>
-            <SideLink to="/admin/roadmap" icon={NAV_ICONS.adminRoadmap} onClick={() => setDrawerOpen(false)}>Admin: Roadmap</SideLink>
-          </div>
         )}
       </nav>
 
@@ -398,6 +400,44 @@ export default function AppShell() {
               </div>
             )}
 
+            {/* Admin cog wheel — only when admin */}
+            {isAdmin && (
+              <div ref={adminMenuRef} style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={() => setAdminMenuOpen((v) => !v)}
+                  title="Admin"
+                  style={{ background: "none", border: "none", cursor: "pointer", color: adminMenuOpen ? "#fff" : "rgba(255,255,255,0.75)", padding: 6, display: "flex", alignItems: "center", borderRadius: 8 }}
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ width: 20, height: 20 }}>
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                  </svg>
+                </button>
+                {adminMenuOpen && (
+                  <div style={{
+                    position: "absolute", top: "calc(100% + 10px)", right: 0,
+                    width: 240,
+                    background: "#fff", borderRadius: 12,
+                    boxShadow: "0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.1)",
+                    border: "1px solid #e2e8f0",
+                    overflow: "hidden", zIndex: 1000,
+                  }}>
+                    <div style={{ padding: "10px 14px", borderBottom: "1px solid #f1f5f9", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#64748b" }}>
+                      Admin
+                    </div>
+                    <AdminMenuLink to="/admin/projects" icon={NAV_ICONS.adminProjects} onClick={() => setAdminMenuOpen(false)}>Projects</AdminMenuLink>
+                    <AdminMenuLink to="/admin/solutions" icon={NAV_ICONS.adminSolutions} onClick={() => setAdminMenuOpen(false)}>Solutions</AdminMenuLink>
+                    <AdminMenuLink to="/admin/optimize" icon={NAV_ICONS.adminOptimize} onClick={() => setAdminMenuOpen(false)}>Optimize</AdminMenuLink>
+                    <AdminMenuLink to="/admin/labor" icon={NAV_ICONS.adminLabor} onClick={() => setAdminMenuOpen(false)}>Labor</AdminMenuLink>
+                    <AdminMenuLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setAdminMenuOpen(false)}>Templates</AdminMenuLink>
+                    <AdminMenuLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setAdminMenuOpen(false)}>Users</AdminMenuLink>
+                    <AdminMenuLink to="/admin/roadmap" icon={NAV_ICONS.adminRoadmap} onClick={() => setAdminMenuOpen(false)}>Roadmap</AdminMenuLink>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* User avatar — compact, pops down */}
             {currentUser && (
               <UserChip user={currentUser} compact popout="down" />
@@ -447,6 +487,27 @@ function SideLink({ to, children, end, onClick, icon }: { to: string; children: 
       className={({ isActive }) => `ms-nav-link${isActive ? " active" : ""}`}
     >
       {icon}
+      {children}
+    </NavLink>
+  );
+}
+
+function AdminMenuLink({ to, children, onClick, icon }: { to: string; children: React.ReactNode; onClick?: () => void; icon?: React.ReactNode }) {
+  return (
+    <NavLink
+      to={to}
+      onClick={onClick}
+      style={({ isActive }) => ({
+        display: "flex", alignItems: "center", gap: 10,
+        padding: "9px 14px",
+        fontSize: 13, fontWeight: isActive ? 600 : 500,
+        color: isActive ? "#0b9aad" : "#1e293b",
+        background: isActive ? "#f0f9ff" : "transparent",
+        textDecoration: "none",
+        borderBottom: "1px solid #f1f5f9",
+      })}
+    >
+      <span style={{ color: "#64748b", display: "flex", alignItems: "center" }}>{icon}</span>
       {children}
     </NavLink>
   );
