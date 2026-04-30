@@ -257,21 +257,18 @@ function buildSowHtml(
   const wbsRows = WORKSTREAM_ORDER
     .filter((ws) => hasLabor ? (unifiedHours[ws] ?? 0) > 0 : true)
     .map((ws, i) => {
-      const hours = hasLabor ? (unifiedHours[ws] ?? 0) : null;
       const deliverable = WORKSTREAM_DELIVERABLES[ws] ?? "";
       const rowClass = i % 2 === 0 ? "even" : "odd";
       return `<tr class="${rowClass}">
         <td class="ws-name">${esc(WORKSTREAM_LABELS[ws] ?? ws)}</td>
         <td class="ws-deliverable">${esc(deliverable)}</td>
-        <td class="ws-hours">${hours !== null ? `${hours}h` : "TBD"}</td>
       </tr>`;
     }).join("");
 
   const wbsFooter = hasLabor
     ? `<tr class="total-row">
         <td><strong>Total Estimated Effort</strong></td>
-        <td></td>
-        <td class="ws-hours"><strong>${laborHoursTotal}h</strong></td>
+        <td class="ws-total"><strong>${laborHoursTotal}h</strong></td>
       </tr>`
     : "";
 
@@ -280,7 +277,6 @@ function buildSowHtml(
         <thead><tr>
           <th class="ws-name">Workstream</th>
           <th class="ws-deliverable">Key Deliverables</th>
-          <th class="ws-hours">Hours</th>
         </tr></thead>
         <tbody>${wbsRows}${wbsFooter}</tbody>
       </table>`
@@ -483,15 +479,13 @@ function buildSowHtml(
     .wbs-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
     .wbs-table thead tr { background: ${SOW_NAVY}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .wbs-table thead th { padding: 9px 12px; color: #fff; font-weight: 700; text-align: left; text-transform: uppercase; letter-spacing: 0.06em; font-size: 7.5pt; }
-    .ws-name { width: 25%; }
-    .ws-deliverable { width: 55%; }
-    .ws-hours { width: 20%; text-align: right; white-space: nowrap; }
+    .ws-name { width: 30%; }
+    .ws-deliverable { width: 70%; }
     .wbs-table tbody tr.even { background: #f8fafc; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .wbs-table tbody tr.odd { background: #fff; }
     .wbs-table tbody td { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; vertical-align: top; color: #334155; line-height: 1.5; }
-    .wbs-table tbody td.ws-hours { color: ${SOW_NAVY}; font-weight: 700; text-align: right; }
     .total-row td { background: ${SOW_GREY} !important; font-weight: 700; border-top: 2px solid ${SOW_GREEN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .total-row td.ws-hours { color: ${SOW_GREEN}; }
+    .total-row td.ws-total { color: ${SOW_GREEN}; text-align: right; white-space: nowrap; }
 
     /* ── Investment block ──────────────── */
     .investment-items-heading { font-size: 8pt; font-weight: 700; color: ${SOW_GREEN}; text-transform: uppercase; letter-spacing: 0.16em; margin-bottom: 8px; }
@@ -719,23 +713,18 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
               <thead>
                 <tr style={{ background: "#f8fafc" }}>
                   <th style={{ textAlign: "left", padding: "8px 12px", color: "#64748b", fontWeight: 600, borderBottom: "2px solid #e2e8f0" }}>Workstream</th>
-                  <th style={{ textAlign: "right", padding: "8px 12px", color: "#64748b", fontWeight: 600, borderBottom: "2px solid #e2e8f0" }}>Hours</th>
                 </tr>
               </thead>
               <tbody>
-                {WORKSTREAM_ORDER.filter((ws) => (previewUnifiedHours[ws] ?? 0) > 0).map((ws) => {
-                  const h = previewUnifiedHours[ws] ?? 0;
-                  return (
-                    <tr key={ws} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "8px 12px", color: "#334155" }}>{WORKSTREAM_LABELS[ws]}</td>
-                      <td style={{ padding: "8px 12px", color: "#0b9aad", fontWeight: 600, textAlign: "right" }}>{h}h</td>
-                    </tr>
-                  );
-                })}
+                {WORKSTREAM_ORDER.filter((ws) => (previewUnifiedHours[ws] ?? 0) > 0).map((ws) => (
+                  <tr key={ws} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <td style={{ padding: "8px 12px", color: "#334155" }}>{WORKSTREAM_LABELS[ws]}</td>
+                  </tr>
+                ))}
                 <tr style={{ borderTop: "2px solid #0b9aad", background: "#f0f9ff" }}>
-                  <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f" }}>Total Estimated Effort</td>
-                  <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", textAlign: "right" }}>
-                    {previewLaborTotal}h
+                  <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
+                    <span>Total Estimated Effort</span>
+                    <span>{previewLaborTotal}h</span>
                   </td>
                 </tr>
               </tbody>
