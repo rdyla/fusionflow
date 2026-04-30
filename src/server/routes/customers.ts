@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { getAccountTeam } from "../services/dynamicsService";
+import { getAccountTeam, getLastUcaasVendor } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
 
@@ -496,6 +496,23 @@ app.get("/:id/optimizations", async (c) => {
     .bind(c.req.param("id"))
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
+});
+
+// ── Most-recent UCaaS vendor (from D365 am_soldtechnology) ────────────────────
+
+app.get("/:id/last-vendor", async (c) => {
+  const auth = c.get("auth");
+  if (!canViewCustomers(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const customer = await c.env.DB
+    .prepare("SELECT crm_account_id FROM customers WHERE id = ? LIMIT 1")
+    .bind(c.req.param("id"))
+    .first<{ crm_account_id: string | null }>();
+  if (!customer) throw new HTTPException(404, { message: "Customer not found" });
+  if (!customer.crm_account_id) return c.json({ vendor: null });
+
+  const result = await getLastUcaasVendor(c.env, customer.crm_account_id);
+  return c.json(result ?? { vendor: null });
 });
 
 export default app;

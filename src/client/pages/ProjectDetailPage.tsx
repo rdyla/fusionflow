@@ -28,7 +28,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
-import WelcomeEmailCard from "../components/welcome/WelcomeEmailCard";
+import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 
 type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
@@ -961,8 +961,12 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* ── Welcome Email ─────────────────────────────────────────────── */}
-          <WelcomeEmailCard projectId={project.id} canSend={canEdit} />
+          {/* ── Meeting Prep Emails (lifecycle-staged) ────────────────────── */}
+          <MeetingPrepCard projectId={project.id} meetingType="kickoff"       canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="discovery"     canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="design_review" canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="uat"           canSend={canEdit} />
+          <MeetingPrepCard projectId={project.id} meetingType="go_live"       canSend={canEdit} />
 
           {/* ── Customer Contacts ─────────────────────────────────────────── */}
           <div className="ms-section-card">

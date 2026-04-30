@@ -1,17 +1,55 @@
+/**
+ * Meeting-prep email modal — generic over `:meetingType`.
+ *
+ * Migrated from `WelcomeEmailModal.tsx`. Shared envelope (recipients, PM
+ * note, sections checklist, attachments, preview, test send, send) is
+ * meeting-type-agnostic. Type-specific form fields are rendered via a
+ * conditional based on `meetingType`.
+ */
+
 import { useEffect, useMemo, useState } from "react";
-import { api, type WelcomeDraft, type WelcomeOptions } from "../../lib/api";
+import { api, type MeetingType, type MeetingPrepDraft, type MeetingPrepOptions } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
-import { sectionsForTypes, type WelcomeSectionId } from "../../../shared/welcomeSections";
+import {
+  sectionsApplicableToTypes,
+  type MeetingPrepSectionMeta,
+} from "../../../shared/meetingPrep";
 import { parseSolutionTypes } from "../../../shared/solutionTypes";
+import KickoffPrepFields from "./KickoffPrepFields";
 
 type Props = {
   projectId: string;
-  options: WelcomeOptions;
+  meetingType: MeetingType;
+  options: MeetingPrepOptions;
   onClose: () => void;
   onSent: (sentAt: string) => void;
 };
 
 const MAX_BYTES = 3 * 1024 * 1024;
+
+const MEETING_TYPE_TITLES: Record<MeetingType, string> = {
+  kickoff:       "Send Welcome Email",
+  discovery:     "Send Discovery Prep",
+  design_review: "Send Design Review Prep",
+  uat:           "Send UAT Prep",
+  go_live:       "Send Go-Live Prep",
+};
+
+const MEETING_TYPE_VERBS: Record<MeetingType, string> = {
+  kickoff:       "welcome email",
+  discovery:     "discovery prep",
+  design_review: "design review prep",
+  uat:           "UAT prep",
+  go_live:       "go-live prep",
+};
+
+const MEETING_TYPE_LABEL_PLACEHOLDERS: Record<MeetingType, string> = {
+  kickoff:       "(optional) e.g. Re-kickoff after scope change",
+  discovery:     "(optional) e.g. Network Architecture",
+  design_review: "(optional) e.g. Call Flow Design",
+  uat:           "(optional) e.g. Phase 2 UAT",
+  go_live:       "(optional) e.g. Site B Cutover",
+};
 
 function fmtKb(n: number | null): string {
   if (!n) return "";
@@ -20,27 +58,31 @@ function fmtKb(n: number | null): string {
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
 
-export default function WelcomeEmailModal({ projectId, options, onClose, onSent }: Props) {
+export default function MeetingPrepModal({ projectId, meetingType, options, onClose, onSent }: Props) {
   const { showToast } = useToast();
   const [pmCustomNote, setPmCustomNote] = useState("");
+  const [label, setLabel] = useState("");
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
   const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
   const [distributionListEmail, setDistributionListEmail] = useState(options.project.suggestedDistributionListEmail ?? "");
 
   // Sections applicable to this project's solution types — catalog-driven.
-  // Initial state: each applicable section toggled to its `defaultEnabled`.
   const projectSolutionTypes = useMemo(
     () => parseSolutionTypes(options.project.solutionTypes ?? []),
     [options.project.solutionTypes]
   );
-  const applicableSections = useMemo(() => sectionsForTypes(projectSolutionTypes), [projectSolutionTypes]);
+  const applicableSections: readonly MeetingPrepSectionMeta[] = useMemo(
+    () => sectionsApplicableToTypes(options.catalog, projectSolutionTypes),
+    [options.catalog, projectSolutionTypes]
+  );
   const [sectionEnabled, setSectionEnabled] = useState<Record<string, boolean>>(() => {
     const out: Record<string, boolean> = {};
     for (const meta of applicableSections) out[meta.id] = meta.defaultEnabled;
     return out;
   });
-  const isSectionOn = (id: WelcomeSectionId) => sectionEnabled[id] === true;
-  const toggleSection = (id: WelcomeSectionId) => setSectionEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
+  const isSectionOn = (id: string) => sectionEnabled[id] === true;
+  const toggleSection = (id: string) => setSectionEnabled((prev) => ({ ...prev, [id]: !prev[id] }));
+
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [staffUserIds, setStaffUserIds] = useState<Set<string>>(new Set());
   const [includeZoomRep, setIncludeZoomRep] = useState(false);
@@ -75,8 +117,9 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
   }, [attachmentUrls, options.sharepoint.files]);
   const attachmentsOverLimit = attachmentsTotalBytes > MAX_BYTES;
 
-  const buildDraft = (): WelcomeDraft => ({
+  const buildDraft = (): MeetingPrepDraft => ({
     pmCustomNote,
+    label: label.trim() || null,
     kickoffMeetingUrl: kickoffMeetingUrl.trim() || null,
     kickoffWhen: kickoffWhen.trim() || null,
     distributionListEmail: distributionListEmail.trim() || null,
@@ -95,7 +138,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
   const refreshPreview = async () => {
     setLoadingPreview(true);
     try {
-      const res = await api.welcomePreview(projectId, buildDraft());
+      const res = await api.meetingPrepPreview(projectId, meetingType, buildDraft());
       setPreviewHtml(res.html);
       setPreviewRecipientCount(res.recipientCount);
     } catch (e) {
@@ -105,7 +148,6 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
     }
   };
 
-  // Auto-load preview on first mount
   useEffect(() => { refreshPreview(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
   const onTest = async () => {
@@ -115,7 +157,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
     }
     setTesting(true);
     try {
-      const res = await api.welcomeTest(projectId, buildDraft());
+      const res = await api.meetingPrepTest(projectId, meetingType, buildDraft());
       showToast(`Test sent to ${res.sentTo}`, "success");
     } catch (e) {
       showToast((e as Error).message, "error");
@@ -133,11 +175,12 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
       showToast("Attachments exceed 3 MB limit", "error");
       return;
     }
-    if (!window.confirm(`Send welcome email to ${previewRecipientCount} recipient${previewRecipientCount === 1 ? "" : "s"}?`)) return;
+    const verb = MEETING_TYPE_VERBS[meetingType];
+    if (!window.confirm(`Send ${verb} to ${previewRecipientCount} recipient${previewRecipientCount === 1 ? "" : "s"}?`)) return;
     setSending(true);
     try {
-      const res = await api.welcomeSend(projectId, buildDraft());
-      showToast(`Welcome email sent to ${res.sentTo.length} recipient${res.sentTo.length === 1 ? "" : "s"}`, "success");
+      const res = await api.meetingPrepSend(projectId, meetingType, buildDraft());
+      showToast(`${verb.charAt(0).toUpperCase()}${verb.slice(1)} sent to ${res.sentTo.length} recipient${res.sentTo.length === 1 ? "" : "s"}`, "success");
       onSent(res.sentAt);
     } catch (e) {
       showToast((e as Error).message, "error");
@@ -163,7 +206,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
       <div style={{ background: "#fff", borderRadius: 10, width: "100%", maxWidth: 1080, maxHeight: "92vh", display: "flex", flexDirection: "column", overflow: "hidden", border: "1px solid #e2e8f0" }}>
         <div style={{ padding: "14px 20px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>Send Welcome Email</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>{MEETING_TYPE_TITLES[meetingType]}</div>
             <div style={{ fontSize: 12, color: "#64748b" }}>{options.project.name}</div>
           </div>
           <button className="ms-btn-ghost" onClick={onClose}>✕</button>
@@ -220,13 +263,25 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
               <input className="ms-input" placeholder="comma or space separated" value={extraEmailsText} onChange={(e) => setExtraEmailsText(e.target.value)} />
             </div>
 
+            {/* Optional per-send label — distinguishes multiple sends of the same type. */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Label</div>
+              <input
+                className="ms-input"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder={MEETING_TYPE_LABEL_PLACEHOLDERS[meetingType]}
+              />
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Shown in the email and the send history. Useful when there are multiple sends of the same type.</div>
+            </div>
+
             {/* PM intro note */}
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Your Note (PM Intro)</div>
               <textarea className="ms-input" rows={5} value={pmCustomNote} onChange={(e) => setPmCustomNote(e.target.value)} placeholder="Add a personal note to kick things off. Line breaks preserved." style={{ resize: "vertical", fontFamily: "inherit" }} />
             </div>
 
-            {/* PS boilerplate sections — catalog-driven; filtered to the project's solution types. */}
+            {/* Catalog-driven sections, filtered to this project's solution types. */}
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8 }}>Standard Sections</div>
               {applicableSections.length === 0 && (
@@ -238,7 +293,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
                   {meta.label}
                 </label>
               ))}
-              {isSectionOn("adminAccess") && (
+              {meetingType === "kickoff" && isSectionOn("adminAccess") && (
                 <div style={{ marginTop: 10, paddingLeft: 24 }}>
                   <div style={{ fontSize: 11, fontWeight: 600, color: "#64748b", marginBottom: 4 }}>Distribution list address</div>
                   <input className="ms-input" value={distributionListEmail} onChange={(e) => setDistributionListEmail(e.target.value)}
@@ -250,21 +305,15 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
               )}
             </div>
 
-            {/* Kickoff meeting — free-form so Zoom / RingCentral / 8x8 / Dialpad / dial-ins all fit */}
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Kickoff Meeting When</div>
-              <input className="ms-input" value={kickoffWhen} onChange={(e) => setKickoffWhen(e.target.value)}
-                placeholder="e.g. January 31, 2026 at 2:00 PM PT" />
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Prefilled from the project kickoff date — add time + timezone.</div>
-            </div>
-
-            <div style={{ marginBottom: 18 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Kickoff Meeting Details</div>
-              <textarea className="ms-input" rows={3} value={kickoffMeetingUrl} onChange={(e) => setKickoffMeetingUrl(e.target.value)}
-                placeholder="Meeting link, dial-in, access code, or mix — any http/https URLs are auto-linked."
-                style={{ resize: "vertical", fontFamily: "inherit" }} />
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>Saved to the project on send.</div>
-            </div>
+            {/* Type-specific form fields */}
+            {meetingType === "kickoff" && (
+              <KickoffPrepFields
+                kickoffWhen={kickoffWhen}
+                setKickoffWhen={setKickoffWhen}
+                kickoffMeetingUrl={kickoffMeetingUrl}
+                setKickoffMeetingUrl={setKickoffMeetingUrl}
+              />
+            )}
 
             {/* Attachments */}
             <div style={{ marginBottom: 18 }}>
@@ -289,7 +338,7 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
               <button className="ms-btn-ghost" onClick={refreshPreview} disabled={loadingPreview}>{loadingPreview ? "Refreshing…" : "Refresh"}</button>
             </div>
             <iframe
-              title="Welcome email preview"
+              title="Meeting prep email preview"
               srcDoc={previewHtml}
               sandbox=""
               style={{ flex: 1, minHeight: 500, background: "#fff", border: "1px solid #e2e8f0", borderRadius: 6 }}
@@ -297,14 +346,11 @@ export default function WelcomeEmailModal({ projectId, options, onClose, onSent 
           </div>
         </div>
 
-        <div style={{ padding: "12px 20px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ fontSize: 12, color: "#64748b" }}>
-            {options.project.welcomeSentAt && <>Last sent {new Date(options.project.welcomeSentAt).toLocaleString()}</>}
-          </div>
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 10 }}>
             <button className="ms-btn-ghost" onClick={onClose}>Cancel</button>
             <button className="ms-btn-ghost" onClick={onTest} disabled={testing || attachmentsOverLimit}>{testing ? "Sending…" : "Test send to me"}</button>
-            <button className="ms-btn-primary" onClick={onSend} disabled={sending || previewRecipientCount === 0 || attachmentsOverLimit}>{sending ? "Sending…" : "Send Welcome Email"}</button>
+            <button className="ms-btn-primary" onClick={onSend} disabled={sending || previewRecipientCount === 0 || attachmentsOverLimit}>{sending ? "Sending…" : MEETING_TYPE_TITLES[meetingType]}</button>
           </div>
         </div>
       </div>

@@ -60,6 +60,8 @@ export interface CsProposal {
   name: string;
   creatorId: string;
   creatorName: string;
+  customerId: string | null;
+  customerName: string | null;
   createdAt: string;
   updatedAt: string;
   versionCount: number;

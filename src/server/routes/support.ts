@@ -1,7 +1,10 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { d365FetchSupport } from "../services/dynamicsService";
+import { d365FetchSupport, getLastUcaasVendor, isUuid } from "../services/dynamicsService";
+import { sendEmail } from "../services/emailService";
+import { supportDigestEmail, type DigestEmailData } from "../lib/emailTemplates";
+import { isSupportSupervisor } from "../lib/permissions";
 import { notifyZoomNewCase } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -52,6 +55,7 @@ app.get("/me", (c) => {
     email: auth.user.email,
     name: auth.user.name,
     isInternal: internal,
+    isSupportSupervisor: isSupportSupervisor(auth),
     contactId: internal ? null : auth.user.id,
     accountId: internal ? null : (auth.user.dynamics_account_id ?? null),
   });
@@ -78,6 +82,367 @@ app.get("/me/contacts", async (c) => {
     id: ct.contactid,
     name: ct.fullname,
     email: ct.emailaddress1,
+  })));
+});
+
+// ── Dashboard (internal only) ─────────────────────────────────────────────────
+
+// GET /api/support/dashboard
+app.get("/dashboard", async (c) => {
+  const auth = c.get("auth");
+  if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+
+  const now = Date.now();
+  const WINDOW_DAYS = 30;
+  const since = new Date(now - WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const sinceIso = since.toISOString();
+
+  const formattedHeader = { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' };
+
+  // amc_serviceboard option-set value 173590005 = "Support" (vs Install, Onboard,
+  // PreSales, etc.) — without this the dashboard mixes project-board cases in.
+  const SUPPORT_BOARD = 173590005;
+
+  const [openRes, recentRes] = await Promise.all([
+    d365FetchSupport(
+      c.env,
+      `/incidents?$filter=statecode eq 0 and amc_serviceboard eq ${SUPPORT_BOARD}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
+      { headers: formattedHeader },
+    ),
+    d365FetchSupport(
+      c.env,
+      `/incidents?$filter=amc_serviceboard eq ${SUPPORT_BOARD} and (createdon ge ${sinceIso} or (statecode eq 1 and modifiedon ge ${sinceIso}))&$select=createdon,statecode,modifiedon&$top=5000`,
+    ),
+  ]);
+
+  if (!openRes.ok) return c.json({ error: await openRes.text() }, openRes.status as any);
+  if (!recentRes.ok) return c.json({ error: await recentRes.text() }, recentRes.status as any);
+
+  const openData = await openRes.json() as { value: any[] };
+  const recentData = await recentRes.json() as { value: any[] };
+
+  // Cases owned by the support-portal app user (created by customers via the
+  // portal but not yet picked up by an engineer) — treat these as unassigned.
+  // D365 returns the fullname as "# pfsupport portal" (the leading "# " is a
+  // Packet Fusion convention for non-human app users), so substring-match it.
+  function isUnassigned(owner: string | null): boolean {
+    return owner === null || owner.toLowerCase().includes("pfsupport portal");
+  }
+
+  type OpenRow = {
+    id: string;
+    ticketNumber: string;
+    title: string;
+    severity: string;
+    status: string;
+    owner: string | null;
+    createdOn: string;
+    modifiedOn: string;
+  };
+
+  const openCases: OpenRow[] = openData.value.map((r) => ({
+    id: r.incidentid,
+    ticketNumber: r.ticketnumber ?? "",
+    title:    r.title ?? "",
+    severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? "Unknown",
+    status:   r["statuscode@OData.Community.Display.V1.FormattedValue"]   ?? "Active",
+    owner:    r.owninguser?.fullname ?? null,
+    createdOn: r.createdon,
+    modifiedOn: r.modifiedon,
+  }));
+
+  const STALE_THRESHOLD_DAYS = 7;
+  const staleCutoff = now - STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+  function ageDays(createdOn: string): number {
+    return (now - new Date(createdOn).getTime()) / (1000 * 60 * 60 * 24);
+  }
+
+  // ── KPIs ────────────────────────────────────────────────────────────────────
+  const totalOpen   = openCases.length;
+  const p1Open      = openCases.filter((c) => c.severity === "P1" || c.severity === "E1").length;
+  const unassigned  = openCases.filter((c) => isUnassigned(c.owner)).length;
+  const stale7d     = openCases.filter((c) => ageDays(c.createdOn) >= STALE_THRESHOLD_DAYS).length;
+  const stuckOnCustomer = openCases.filter((c) =>
+    c.status === "Waiting on Customer" &&
+    c.modifiedOn &&
+    new Date(c.modifiedOn).getTime() <= staleCutoff
+  ).length;
+
+  const resolved = recentData.value.filter((r) => r.statecode === 1 && r.modifiedon && new Date(r.modifiedon).getTime() >= since.getTime());
+  const resolvedLast30d = resolved.length;
+  const resolveDurations = resolved
+    .map((r) => (new Date(r.modifiedon).getTime() - new Date(r.createdon).getTime()) / (1000 * 60 * 60 * 24))
+    .filter((d) => d >= 0 && Number.isFinite(d));
+  const avgResolveDays = resolveDurations.length
+    ? resolveDurations.reduce((s, d) => s + d, 0) / resolveDurations.length
+    : null;
+
+  // ── Distributions ─────────────────────────────────────────────────────────
+  function groupCount<T>(rows: T[], key: (r: T) => string): { label: string; count: number }[] {
+    const map = new Map<string, number>();
+    for (const r of rows) {
+      const k = key(r);
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([label, count]) => ({ label, count }))
+      .sort((a, b) => b.count - a.count);
+  }
+
+  const severityDistribution = groupCount(openCases, (c) => c.severity);
+  const statusDistribution   = groupCount(openCases, (c) => c.status);
+  const ownerDistribution    = groupCount(openCases, (c) => isUnassigned(c.owner) ? "Unassigned" : c.owner!).slice(0, 8);
+
+  // ── Aging buckets (open cases) ────────────────────────────────────────────
+  const agingBuckets = [
+    { label: "<1d",   count: 0 },
+    { label: "1–3d",  count: 0 },
+    { label: "3–7d",  count: 0 },
+    { label: "7d+",   count: 0 },
+  ];
+  for (const c of openCases) {
+    const ageDays = (now - new Date(c.createdOn).getTime()) / (1000 * 60 * 60 * 24);
+    if (ageDays < 1)      agingBuckets[0].count++;
+    else if (ageDays < 3) agingBuckets[1].count++;
+    else if (ageDays < 7) agingBuckets[2].count++;
+    else                  agingBuckets[3].count++;
+  }
+
+  // ── Trend (last 30d, daily) ──────────────────────────────────────────────
+  const days: string[] = [];
+  const openedByDay = new Map<string, number>();
+  const resolvedByDay = new Map<string, number>();
+  for (let i = WINDOW_DAYS - 1; i >= 0; i--) {
+    const d = new Date(now - i * 24 * 60 * 60 * 1000);
+    const key = d.toISOString().slice(0, 10);
+    days.push(key);
+    openedByDay.set(key, 0);
+    resolvedByDay.set(key, 0);
+  }
+  for (const r of recentData.value) {
+    if (r.createdon) {
+      const k = r.createdon.slice(0, 10);
+      if (openedByDay.has(k)) openedByDay.set(k, (openedByDay.get(k) ?? 0) + 1);
+    }
+    if (r.statecode === 1 && r.modifiedon) {
+      const k = r.modifiedon.slice(0, 10);
+      if (resolvedByDay.has(k)) resolvedByDay.set(k, (resolvedByDay.get(k) ?? 0) + 1);
+    }
+  }
+
+  // ── Stale open cases (top 10 oldest, age >= STALE_THRESHOLD_DAYS) ────────
+  const staleOpen = openCases
+    .filter((c) => ageDays(c.createdOn) >= STALE_THRESHOLD_DAYS)
+    .sort((a, b) => new Date(a.createdOn).getTime() - new Date(b.createdOn).getTime())
+    .slice(0, 10)
+    .map((c) => ({
+      id: c.id,
+      ticketNumber: c.ticketNumber,
+      title: c.title,
+      severity: c.severity,
+      status: c.status,
+      owner: isUnassigned(c.owner) ? null : c.owner,
+      ageDays: Math.floor(ageDays(c.createdOn)),
+      createdOn: c.createdOn,
+    }));
+
+  return c.json({
+    windowDays: WINDOW_DAYS,
+    staleThresholdDays: STALE_THRESHOLD_DAYS,
+    kpis: {
+      totalOpen,
+      p1Open,
+      unassigned,
+      stale7d,
+      stuckOnCustomer,
+      resolvedLast30d,
+      avgResolveDays,
+    },
+    severityDistribution,
+    statusDistribution,
+    ownerDistribution,
+    agingBuckets,
+    staleOpen,
+    trend: {
+      days,
+      opened:   days.map((d) => openedByDay.get(d) ?? 0),
+      resolved: days.map((d) => resolvedByDay.get(d) ?? 0),
+    },
+  });
+});
+
+// ── Customer support digests (supervisor only) ───────────────────────────────
+
+const DIGEST_WINDOW_DAYS = 30;
+const DIGEST_STALE_DAYS  = 7;
+const DIGEST_LIST_LIMIT  = 10;
+
+// Pulls open + recently-resolved Support-board cases for an account and shapes
+// them into the digest email payload. Shared by /preview and /send so the
+// preview the supervisor sees is byte-for-byte the email that ships.
+async function buildDigestData(env: Bindings, accountId: string, accountName: string, recipientName: string | null, appUrl: string): Promise<DigestEmailData> {
+  const now = Date.now();
+  const since = new Date(now - DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  const sinceIso = since.toISOString();
+  const staleCutoff = now - DIGEST_STALE_DAYS * 24 * 60 * 60 * 1000;
+
+  const SUPPORT_BOARD = 173590005;
+  const formattedHeader = { Prefer: 'odata.include-annotations="OData.Community.Display.V1.FormattedValue"' };
+  const accountFilter = `_customerid_value eq ${accountId} and amc_serviceboard eq ${SUPPORT_BOARD}`;
+
+  const [openRes, resolvedRes] = await Promise.all([
+    d365FetchSupport(
+      env,
+      `/incidents?$filter=statecode eq 0 and ${accountFilter}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$orderby=createdon asc&$top=200`,
+      { headers: formattedHeader },
+    ),
+    d365FetchSupport(
+      env,
+      `/incidents?$filter=statecode eq 1 and modifiedon ge ${sinceIso} and ${accountFilter}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$orderby=modifiedon desc&$top=200`,
+      { headers: formattedHeader },
+    ),
+  ]);
+
+  if (!openRes.ok)     throw new HTTPException(502, { message: `D365 open-cases query failed: ${await openRes.text()}` });
+  if (!resolvedRes.ok) throw new HTTPException(502, { message: `D365 resolved-cases query failed: ${await resolvedRes.text()}` });
+
+  const openData     = await openRes.json()     as { value: any[] };
+  const resolvedData = await resolvedRes.json() as { value: any[] };
+
+  const openCases = openData.value.map((r) => {
+    const ageDays = Math.floor((now - new Date(r.createdon).getTime()) / (1000 * 60 * 60 * 24));
+    return {
+      ticketNumber: r.ticketnumber ?? "",
+      title:    r.title ?? "",
+      severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? null,
+      status:   r["statuscode@OData.Community.Display.V1.FormattedValue"]   ?? "Active",
+      createdOn:  r.createdon,
+      modifiedOn: r.modifiedon,
+      ageDays,
+    };
+  });
+
+  const resolvedCases = resolvedData.value.map((r) => {
+    const days = Math.max(0, Math.round((new Date(r.modifiedon).getTime() - new Date(r.createdon).getTime()) / (1000 * 60 * 60 * 24)));
+    return {
+      ticketNumber: r.ticketnumber ?? "",
+      title:    r.title ?? "",
+      severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? null,
+      status:   "Resolved",
+      daysToResolve: days,
+    };
+  });
+
+  const stale = openCases.filter((c) => c.ageDays >= DIGEST_STALE_DAYS).length;
+  const stuckOnCustomer = openCases.filter((c) =>
+    c.status === "Waiting on Customer" &&
+    c.modifiedOn && new Date(c.modifiedOn).getTime() <= staleCutoff
+  ).length;
+
+  return {
+    accountName,
+    recipientName,
+    windowDays: DIGEST_WINDOW_DAYS,
+    kpis: {
+      open:     openCases.length,
+      resolved: resolvedCases.length,
+      stale,
+      stuckOnCustomer,
+    },
+    openCases:     openCases.slice(0, DIGEST_LIST_LIMIT).map(({ createdOn: _c, modifiedOn: _m, ...rest }) => rest),
+    resolvedCases: resolvedCases.slice(0, DIGEST_LIST_LIMIT),
+    appUrl,
+  };
+}
+
+// GET /api/support/digests/preview?accountId=...&accountName=...
+app.get("/digests/preview", async (c) => {
+  const auth = c.get("auth");
+  if (!isSupportSupervisor(auth)) throw new HTTPException(403, { message: "Supervisor only" });
+
+  const accountId = c.req.query("accountId")?.trim() ?? "";
+  const accountName = c.req.query("accountName")?.trim() ?? "";
+  if (!accountId || !accountName) return c.json({ error: "accountId and accountName are required" }, 400);
+  if (!isUuid(accountId)) return c.json({ error: "Invalid accountId" }, 400);
+
+  const appUrl = c.env.APP_URL ?? "";
+  const data = await buildDigestData(c.env, accountId, accountName, null, appUrl);
+  const rendered = supportDigestEmail(data);
+  return c.json({ data, subject: rendered.subject, html: rendered.html });
+});
+
+// POST /api/support/digests/send
+// body: { accountId, accountName, recipients: [{ name?, email }] }
+app.post("/digests/send", async (c) => {
+  const auth = c.get("auth");
+  if (!isSupportSupervisor(auth)) throw new HTTPException(403, { message: "Supervisor only" });
+
+  const body = await c.req.json() as {
+    accountId: string;
+    accountName: string;
+    recipients: Array<{ name?: string | null; email: string }>;
+  };
+
+  if (!body.accountId || !body.accountName) return c.json({ error: "accountId and accountName are required" }, 400);
+  if (!isUuid(body.accountId)) return c.json({ error: "Invalid accountId" }, 400);
+  const recipients = (body.recipients ?? []).filter((r) => r.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+  if (recipients.length === 0) return c.json({ error: "At least one valid recipient email is required" }, 400);
+
+  const appUrl = c.env.APP_URL ?? "";
+  // Personalize the salutation only when sending to a single named recipient.
+  const recipientName = recipients.length === 1 ? (recipients[0].name ?? null) : null;
+  const data = await buildDigestData(c.env, body.accountId, body.accountName, recipientName, appUrl);
+  const rendered = supportDigestEmail(data);
+
+  await sendEmail(c.env, {
+    to: recipients.map((r) => r.email),
+    subject: rendered.subject,
+    html: rendered.html,
+  });
+
+  // Record to history so supervisors can see what's been sent to whom
+  const id = crypto.randomUUID();
+  await c.env.DB.prepare(`
+    INSERT INTO support_digests
+      (id, account_id, account_name, recipients, sent_by_user_id, sent_by_name, sent_by_email,
+       open_cases_count, resolved_cases_count, stale_cases_count, stuck_cases_count)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?)
+  `).bind(
+    id, body.accountId, body.accountName, JSON.stringify(recipients),
+    auth.user.id, auth.user.name ?? null, auth.user.email,
+    data.kpis.open, data.kpis.resolved, data.kpis.stale, data.kpis.stuckOnCustomer,
+  ).run();
+
+  return c.json({ id, ok: true });
+});
+
+// GET /api/support/digests/history?limit=50
+app.get("/digests/history", async (c) => {
+  const auth = c.get("auth");
+  if (!isSupportSupervisor(auth)) throw new HTTPException(403, { message: "Supervisor only" });
+
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
+  const rows = await c.env.DB
+    .prepare(`SELECT id, account_id, account_name, recipients, sent_by_name, sent_by_email,
+                     open_cases_count, resolved_cases_count, stale_cases_count, stuck_cases_count, sent_at
+              FROM support_digests
+              ORDER BY sent_at DESC
+              LIMIT ?`)
+    .bind(limit)
+    .all();
+
+  return c.json((rows.results ?? []).map((r: any) => ({
+    id: r.id,
+    accountId: r.account_id,
+    accountName: r.account_name,
+    recipients: JSON.parse(r.recipients ?? "[]"),
+    sentByName: r.sent_by_name,
+    sentByEmail: r.sent_by_email,
+    kpis: {
+      open: r.open_cases_count, resolved: r.resolved_cases_count,
+      stale: r.stale_cases_count, stuckOnCustomer: r.stuck_cases_count,
+    },
+    sentAt: r.sent_at,
   })));
 });
 
@@ -121,7 +486,7 @@ app.get("/cases", async (c) => {
   }
 
   const top = search ? 100 : 500;
-  const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,_customerid_value";
+  const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value";
   const expand = "owninguser($select=fullname)";
   const res = await d365FetchSupport(
     c.env,
@@ -143,6 +508,7 @@ app.get("/cases", async (c) => {
     status: r["statuscode@OData.Community.Display.V1.FormattedValue"] ?? (STATE_MAP[r.statecode] ?? "Active"),
     state: STATE_MAP[r.statecode] ?? "Active",
     createdOn: r.createdon,
+    modifiedOn: r.modifiedon,
     owner: r.owninguser?.fullname ?? null,
     accountName: r["_customerid_value@OData.Community.Display.V1.FormattedValue"] ?? null,
   })));
@@ -151,6 +517,7 @@ app.get("/cases", async (c) => {
 // GET /api/support/cases/:id
 app.get("/cases/:id", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
 
   const select = "incidentid,ticketnumber,title,description,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value,_primarycontactid_value,_amc_notificationcontact1_value,_am_escalationengineer_value";
   const expand = "owninguser($select=fullname,systemuserid)";
@@ -233,6 +600,11 @@ app.post("/cases", async (c) => {
     return c.json({ error: "Title and description are required" }, 400);
   }
 
+  for (const field of ["accountId", "primaryContactId", "notificationContactId", "escalationEngineerId"] as const) {
+    const v = body[field];
+    if (v && !isUuid(v)) return c.json({ error: `Invalid ${field}` }, 400);
+  }
+
   const severitycode = body.severitycode ?? DEFAULT_SEVERITY;
   if (!internal && !CUSTOMER_SEVERITY_VALUES.has(severitycode)) {
     return c.json({ error: "Invalid severity" }, 400);
@@ -311,6 +683,7 @@ app.post("/cases", async (c) => {
 // POST /api/support/cases/:id/notes
 app.post("/cases/:id/notes", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as { text: string };
 
@@ -335,6 +708,7 @@ app.post("/cases/:id/notes", async (c) => {
 // POST /api/support/cases/:id/attachments
 app.post("/cases/:id/attachments", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as { filename: string; mimetype: string; documentbody: string; notetext?: string };
 
@@ -363,6 +737,7 @@ app.post("/cases/:id/attachments", async (c) => {
 // POST /api/support/cases/:id/status
 app.post("/cases/:id/status", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as { action: string; comment?: string };
   const internal = isInternal(auth.role);
@@ -430,6 +805,7 @@ app.post("/cases/:id/status", async (c) => {
 // PATCH /api/support/cases/:id/contacts
 app.patch("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const auth = c.get("auth");
   const body = await c.req.json() as {
     primaryContactId?: string | null;
@@ -437,6 +813,12 @@ app.patch("/cases/:id/contacts", async (c) => {
     escalationEngineerId?: string | null;
     ownerId?: string | null;
   };
+
+  // Reject malformed UUIDs in any of the bind fields before they reach OData.
+  for (const field of ["primaryContactId", "notificationContactId", "escalationEngineerId", "ownerId"] as const) {
+    const v = body[field];
+    if (v && !isUuid(v)) return c.json({ error: `Invalid ${field}` }, 400);
+  }
 
   const payload: any = {};
   if ("primaryContactId" in body) {
@@ -466,6 +848,7 @@ app.patch("/cases/:id/contacts", async (c) => {
 // GET /api/support/cases/:id/contacts
 app.get("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts?$select=contactid,fullname,emailaddress1&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };
@@ -475,8 +858,9 @@ app.get("/cases/:id/contacts", async (c) => {
 // POST /api/support/cases/:id/contacts
 app.post("/cases/:id/contacts", async (c) => {
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
   const body = await c.req.json() as { contactId: string };
-  if (!body.contactId) return c.json({ error: "contactId required" }, 400);
+  if (!body.contactId || !isUuid(body.contactId)) return c.json({ error: "contactId required" }, 400);
 
   const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts/$ref`, {
     method: "POST",
@@ -492,6 +876,7 @@ app.post("/cases/:id/contacts", async (c) => {
 // DELETE /api/support/cases/:id/contacts/:contactId
 app.delete("/cases/:id/contacts/:contactId", async (c) => {
   const { id, contactId } = c.req.param();
+  if (!isUuid(id) || !isUuid(contactId)) return c.json({ error: "Invalid id" }, 400);
   const res = await d365FetchSupport(c.env, `/incidents(${id})/incident_customer_contacts(${contactId})/$ref`, { method: "DELETE" });
   if (!res.ok) {
     const error = await res.text();
@@ -503,6 +888,7 @@ app.delete("/cases/:id/contacts/:contactId", async (c) => {
 // GET /api/support/cases/:id/attachments/:annotId/download
 app.get("/cases/:id/attachments/:annotId/download", async (c) => {
   const { annotId } = c.req.param();
+  if (!isUuid(annotId)) return c.json({ error: "Invalid annotation id" }, 400);
   const res = await d365FetchSupport(c.env, `/annotations(${annotId})?$select=filename,mimetype,documentbody`);
   if (!res.ok) return c.json({ error: "Not found" }, 404);
 
@@ -533,12 +919,25 @@ app.get("/accounts", async (c) => {
   return c.json(data.value.map((a: any) => ({ id: a.accountid, name: a.name })));
 });
 
+// GET /api/support/accounts/:id/last-vendor — most recent UCaaS sold-tech row
+// for an account. Lets engineers see the customer's platform at a glance from
+// the case detail page.
+app.get("/accounts/:id/last-vendor", async (c) => {
+  const auth = c.get("auth");
+  if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+  const id = c.req.param("id");
+  if (!isUuid(id)) return c.json({ error: "Invalid account id" }, 400);
+  const result = await getLastUcaasVendor(c.env, id);
+  return c.json(result ?? { vendor: null });
+});
+
 // GET /api/support/accounts/:id/contacts
 app.get("/accounts/:id/contacts", async (c) => {
   const auth = c.get("auth");
   if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
 
   const { id } = c.req.param();
+  if (!isUuid(id)) return c.json({ error: "Invalid account id" }, 400);
   const res = await d365FetchSupport(c.env, `/contacts?$filter=_parentcustomerid_value eq '${id}'&$select=contactid,fullname,emailaddress1&$orderby=fullname`);
   if (!res.ok) return c.json([]);
   const data = await res.json() as { value: any[] };

@@ -7,6 +7,7 @@ export interface AppUser {
   organization_name: string | null;
   role: AppRole;
   is_active: number;
+  is_support_supervisor?: number; // additive flag — supervisor-only digest feature
   dynamics_account_id: string | null;
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions

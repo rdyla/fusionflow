@@ -1,6 +1,7 @@
 import type { OppFormData, OppCalcResult } from "../../lib/calcSupport";
 import { fmt, fmtFull } from "../../lib/calcSupport";
 import { MSO_TIERS, getMsoTier } from "../../lib/msoTiers";
+import CustomerCombobox from "./CustomerCombobox";
 
 const ADV_APP_PRODUCTS: Record<string, string[]> = {
   zoom: ["Zoom Virtual Agent (ZVA)", "Zoom Revenue Accelerator (ZRA)", "Zoom Quality Management (QM)", "Zoom Workforce Management (WFM)", "Zoom AI Expert Assist", "Workvivo", "Custom API / Integration"],
@@ -13,6 +14,14 @@ interface Props {
   calc: OppCalcResult;
   canOverride: boolean;
   onChange: (patch: Partial<OppFormData>) => void;
+  /** Proposal-level customer ref (FK to local customers table + cached name).
+   *  Tracked separately from form.customerName so the agreement template can
+   *  keep using freeform text while we still persist the CRM linkage.
+   *  hasCrmLink reflects whether cs_proposals.customer_id is currently set. */
+  customer: { customerName: string | null; hasCrmLink: boolean };
+  /** Fires only on commit events from the picker (pick from dropdown, blur
+   *  with text, or clear) — not on every keystroke. Network calls go here. */
+  onCustomerCommit: (next: { dynamicsAccountId: string | null; customerName: string | null }) => void;
 }
 
 const OPP_TYPES = ["UCaaS Only", "CCaaS Only", "UCaaS + CCaaS", "Advanced Applications"] as const;
@@ -25,7 +34,7 @@ function calcEndDate(start: string, term: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export default function CalculatorForm({ form, calc, canOverride, onChange }: Props) {
+export default function CalculatorForm({ form, calc, canOverride, onChange, customer, onCustomerCommit }: Props) {
   const msoTier = getMsoTier(form.msoTier);
 
   function setField<K extends keyof OppFormData>(key: K, value: OppFormData[K]) {
@@ -103,8 +112,18 @@ export default function CalculatorForm({ form, calc, canOverride, onChange }: Pr
         <div style={S.sectionTitle}>Deal Details</div>
         <div style={{ ...S.row, gridTemplateColumns: "2fr 1fr" }}>
           <label style={S.label}>
-            <span>Customer Name</span>
-            <input className="ms-input" value={form.customerName} onChange={(e) => setField("customerName", e.target.value)} placeholder="e.g. Acme Corp" />
+            <span>Customer</span>
+            <CustomerCombobox
+              value={customer}
+              onChange={(next) => {
+                // Mirror the picked / typed name into the form so the
+                // agreement template uses it. No network calls here —
+                // proposal-level FK persistence happens on commit.
+                onChange({ customerName: next.customerName ?? "" });
+              }}
+              onCommit={onCustomerCommit}
+              placeholder="Search CRM customers or type a name…"
+            />
           </label>
           <label style={S.label}>
             <span>Term (years)</span>

@@ -10,6 +10,7 @@ import {
   type User,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import { resolveVendorBadge } from "../lib/vendorBadge";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
@@ -92,6 +93,7 @@ export default function CustomerDetailPage() {
   const [solutions, setSolutions] = useState<CustomerSolution[]>([]);
   const [projects, setProjects] = useState<CustomerProject[]>([]);
   const [optimizations, setOptimizations] = useState<CustomerOptimization[]>([]);
+  const [lastVendor, setLastVendor] = useState<{ vendor: string | null; techType?: string | null; soldOn?: string | null } | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [pfTeamPhotoMap, setPfTeamPhotoMap] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
@@ -126,6 +128,9 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     if (!id) return;
     api.users().then(setUsers).catch(() => {}); // admin-only; non-admins get empty list gracefully
+    // Best-effort fetch of most-recent UCaaS vendor (D365 — don't block page)
+    api.customerLastVendor(id).then(setLastVendor).catch(() => {});
+
     Promise.all([
       api.customer(id),
       api.customerContacts(id),
@@ -332,7 +337,36 @@ export default function CustomerDetailPage() {
         </button>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
           <div>
-            <h1 style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", margin: 0 }}>{customer.name}</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <h1 style={{ fontSize: 26, fontWeight: 800, color: "#1e293b", margin: 0 }}>{customer.name}</h1>
+              {(() => {
+                const badge = resolveVendorBadge(lastVendor?.vendor);
+                if (!badge) return null;
+                const tooltip = lastVendor?.soldOn
+                  ? `${lastVendor.techType ?? "UCaaS"} · sold ${fmt(lastVendor.soldOn)}`
+                  : (lastVendor?.techType ?? "UCaaS");
+                return (
+                  <span
+                    title={tooltip}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      padding: "4px 10px",
+                      borderRadius: 14,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      letterSpacing: "0.02em",
+                      background: `${badge.color}1a`,
+                      color: badge.color,
+                      border: `1px solid ${badge.color}40`,
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {badge.label}
+                  </span>
+                );
+              })()}
+            </div>
             {(customer.address_city || customer.address_state) && (
               <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
                 {[customer.address_city, customer.address_state].filter(Boolean).join(", ")}

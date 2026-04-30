@@ -1,9 +1,6 @@
-import { WELCOME_SECTION_META, type WelcomeSectionId } from "../../shared/welcomeSections";
-import type { SolutionType } from "../../shared/solutionTypes";
-
 const APP_NAME = "CloudConnect by Packet Fusion";
 
-function escapeHtml(s: string | null | undefined): string {
+export function escapeHtml(s: string | null | undefined): string {
   return (s ?? "")
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -12,7 +9,7 @@ function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
-function base(body: string, _appUrl = ""): string {
+export function base(body: string, _appUrl = ""): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${APP_NAME}</title></head>
@@ -37,7 +34,7 @@ function base(body: string, _appUrl = ""): string {
 </html>`;
 }
 
-function ctaButton(label: string, url: string): string {
+export function ctaButton(label: string, url: string): string {
   return `<a href="${url}" style="display:inline-block;margin-top:20px;padding:10px 22px;background:#0078d4;color:#fff;font-weight:600;font-size:14px;text-decoration:none;border-radius:4px;">${label}</a>`;
 }
 
@@ -45,7 +42,7 @@ function pill(label: string, color: string): string {
   return `<span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:600;background:${color}1a;color:${color};border:1px solid ${color}40;">${label}</span>`;
 }
 
-function detail(label: string, value: string): string {
+export function detail(label: string, value: string): string {
   return `<tr>
     <td style="padding:6px 14px 6px 0;font-size:13px;color:rgba(240,246,255,0.45);white-space:nowrap;vertical-align:top;">${label}</td>
     <td style="padding:6px 0;font-size:13px;color:rgba(240,246,255,0.9);">${value}</td>
@@ -447,197 +444,105 @@ export function highRiskAdded(data: {
   return pmRiskNotification({ ...data, severity: "high", status: "open", isNew: true });
 }
 
-// ── Project Welcome Package ────────────────────────────────────────────────────
+// ── Support Activity Digest (sent by supervisors to customers) ─────────────────
 
-function initialsAvatar(name: string, size = 48): string {
-  const initials = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#0891b2;color:#f0f6ff;font-size:${Math.floor(size * 0.4)}px;font-weight:700;line-height:${size}px;text-align:center;letter-spacing:0.02em;">${escapeHtml(initials || "?")}</div>`;
+const DIGEST_SEVERITY_COLOR: Record<string, string> = {
+  P1: "#d13438", P2: "#ff8c00", P3: "#0891b2",
+  E1: "#d13438", E2: "#ff8c00",
+};
+
+function digestKpiCell(label: string, value: number, accent: string | null): string {
+  const valueColor = accent ?? "#f0f6ff";
+  return `
+    <td style="padding:12px;text-align:center;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;width:25%;">
+      <div style="font-size:24px;font-weight:800;color:${valueColor};line-height:1.1;">${value}</div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin-top:4px;">${label}</div>
+    </td>`;
 }
 
-function teamMemberRow(m: { name: string; role: string; photoUrl: string | null; email: string | null }): string {
-  const photo = m.photoUrl
-    ? `<img src="${escapeHtml(m.photoUrl)}" alt="" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;">`
-    : initialsAvatar(m.name);
-  const email = m.email
-    ? `<div style="font-size:12px;color:rgba(240,246,255,0.45);margin-top:1px;"><a href="mailto:${escapeHtml(m.email)}" style="color:#00c8e0;text-decoration:none;">${escapeHtml(m.email)}</a></div>`
-    : "";
-  return `<tr>
-    <td style="padding:8px 14px 8px 0;vertical-align:middle;width:48px;">${photo}</td>
-    <td style="padding:8px 0;vertical-align:middle;">
-      <div style="font-size:13px;font-weight:600;color:#f0f6ff;">${escapeHtml(m.name)}</div>
-      <div style="font-size:12px;color:rgba(240,246,255,0.6);">${escapeHtml(m.role)}</div>
-      ${email}
-    </td>
-  </tr>`;
+function digestCaseRow(c: { ticketNumber: string; title: string; severity: string | null; status: string; ageDays?: number; daysToResolve?: number }): string {
+  const sev = c.severity ?? "—";
+  const sevColor = DIGEST_SEVERITY_COLOR[sev] ?? "#94a3b8";
+  const meta = c.ageDays !== undefined
+    ? `${escapeHtml(c.status)} · ${c.ageDays}d open`
+    : c.daysToResolve !== undefined
+      ? `Resolved in ${c.daysToResolve}d`
+      : escapeHtml(c.status);
+  return `
+    <tr>
+      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;font-family:monospace;color:rgba(240,246,255,0.7);white-space:nowrap;vertical-align:top;">${escapeHtml(c.ticketNumber)}</td>
+      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);vertical-align:top;">
+        <div style="font-size:13px;color:#f0f6ff;line-height:1.4;">${escapeHtml(c.title)}</div>
+        <div style="font-size:11px;color:rgba(240,246,255,0.45);margin-top:2px;">${meta}</div>
+      </td>
+      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);text-align:right;vertical-align:top;white-space:nowrap;">${pill(sev, sevColor)}</td>
+    </tr>`;
 }
 
-type WelcomeTeamMember = { name: string; role: string; photoUrl: string | null; email: string | null };
-type WelcomeTeamSection = { label: string; members: WelcomeTeamMember[] };
+export type DigestEmailData = {
+  accountName: string;
+  recipientName?: string | null;
+  windowDays: number;
+  kpis: {
+    open: number;
+    resolved: number;
+    stale: number;
+    stuckOnCustomer: number;
+  };
+  openCases: Array<{ ticketNumber: string; title: string; severity: string | null; status: string; ageDays: number }>;
+  resolvedCases: Array<{ ticketNumber: string; title: string; severity: string | null; status: string; daysToResolve: number }>;
+  appUrl: string;
+};
 
-type WelcomeSectionMap = Partial<Record<WelcomeSectionId, boolean>>;
+export function supportDigestEmail(data: DigestEmailData): { subject: string; html: string } {
+  const accountName = escapeHtml(data.accountName);
+  const greeting = data.recipientName
+    ? `Hi ${escapeHtml(data.recipientName)},`
+    : `Hello,`;
+  const w = data.windowDays;
 
-/**
- * Render the HTML body for a single welcome-email section. Adding a new section
- * ID to `WELCOME_SECTION_META` requires a matching case here.
- *
- * Returning an empty string suppresses the section (e.g., adminAccess needs a
- * distributionListEmail to be meaningful).
- */
-function renderWelcomeSection(
-  id: WelcomeSectionId,
-  ctx: { distributionListEmail: string | null },
-  psCard: (heading: string, innerHtml: string) => string
-): string {
-  const meta = WELCOME_SECTION_META.find((m) => m.id === id);
-  if (!meta) return "";
-  switch (id) {
-    case "adminAccess":
-      if (!ctx.distributionListEmail) return "";
-      return psCard(
-        meta.label,
-        `To configure and support your platform, please grant administrator access in your cloud portal to
-         <a href="mailto:${escapeHtml(ctx.distributionListEmail)}" style="color:#7de3f3;text-decoration:underline;">${escapeHtml(ctx.distributionListEmail)}</a>.
-         This covers the implementation and ongoing support after your transition. We'll walk through the steps with your Implementation Engineer during the first technical meeting.`
-      );
-    case "porting":
-      return psCard(
-        meta.label,
-        `<ul style="margin:0;padding-left:18px;">
-          <li style="margin:0 0 8px;">Request a <strong>Customer Service Record (CSR)</strong> from your voice carrier(s). Carriers typically return it within a couple of business days — it lists every number and service on the account.</li>
-          <li style="margin:0 0 8px;">Send us a copy of your most recent phone bill(s) and identify the <strong>authorized contact</strong> on the account.</li>
-          <li style="margin:0;">Send us the list of numbers to port (analog, fax, back-office — anything that rings). Excel, CSV, or plain text works.</li>
-        </ul>`
-      );
-    case "timeline":
-      return psCard(
-        meta.label,
-        `Please be prepared to discuss target go-live date(s) and production timing at kickoff so we can plan resourcing accordingly.`
-      );
-  }
-}
+  const openRows = data.openCases.length
+    ? data.openCases.map(digestCaseRow).join("")
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:rgba(240,246,255,0.45);text-align:center;font-style:italic;">No open cases — nice and quiet.</td></tr>`;
 
-export function welcomePackage(data: {
-  projectName: string;
-  customerName: string | null;
-  pmName: string;
-  pmCustomNote: string;
-  portalUrl: string;
-  kickoffMeetingUrl: string | null;
-  kickoffWhen: string | null;
-  kickoffDate: string | null;
-  targetGoLiveDate: string | null;
-  solution: string | null;
-  solutionTypes: readonly SolutionType[];
-  teamSections: WelcomeTeamSection[];
-  distributionListEmail: string | null;
-  sections: WelcomeSectionMap;
-}): string {
-  const projectName = escapeHtml(data.projectName);
-  const customerName = escapeHtml(data.customerName ?? "");
-  const pmName = escapeHtml(data.pmName);
-  const noteHtml = escapeHtml(data.pmCustomNote).replace(/\r?\n/g, "<br>");
+  const resolvedRows = data.resolvedCases.length
+    ? data.resolvedCases.map(digestCaseRow).join("")
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:rgba(240,246,255,0.45);text-align:center;font-style:italic;">No cases resolved in the last ${w} days.</td></tr>`;
 
-  const summaryRows = [
-    data.customerName ? detail("Customer", customerName) : "",
-    data.solution ? detail("Solution", escapeHtml(data.solution)) : "",
-    data.kickoffDate ? detail("Kickoff", escapeHtml(data.kickoffDate)) : "",
-    data.targetGoLiveDate ? detail("Target Go-Live", escapeHtml(data.targetGoLiveDate)) : "",
-    detail("Project Manager", pmName),
-  ].filter(Boolean).join("");
-
-  const kickoffContent = (() => {
-    if (!data.kickoffMeetingUrl) return "";
-    const raw = data.kickoffMeetingUrl.trim();
-    if (!raw) return "";
-    // Auto-linkify standalone http(s) URLs; render everything else as-is with
-    // line breaks preserved so dial-ins, access codes, and mixed free-form
-    // text (RingCentral / 8x8 / Dialpad / Zoom / etc.) all render cleanly.
-    const urlRe = /https?:\/\/[^\s<>"]+/g;
-    const escaped = escapeHtml(raw);
-    const linkified = escaped.replace(urlRe, (m) =>
-      `<a href="${m}" style="color:#7de3f3;text-decoration:underline;word-break:break-all;">${m}</a>`
-    );
-    return linkified.replace(/\r?\n/g, "<br>");
-  })();
-
-  const kickoffWhenLine = data.kickoffWhen && data.kickoffWhen.trim()
-    ? `<div style="color:#e8eef7;font-size:13px;font-weight:600;margin-bottom:8px;">${escapeHtml(data.kickoffWhen.trim())}</div>`
-    : "";
-
-  const kickoffBlock = (kickoffContent || kickoffWhenLine)
-    ? `<div style="background:#14323c;border:1px solid #2a6d7e;border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:6px;">Kickoff Meeting</div>
-        ${kickoffWhenLine}
-        ${kickoffContent ? `<div style="color:#e8eef7;font-size:14px;line-height:1.55;word-break:break-word;">${kickoffContent}</div>` : ""}
-      </div>`
-    : "";
-
-  const teamSections = data.teamSections.filter((s) => s.members.length > 0);
-  const teamBlock = teamSections.length
-    ? teamSections.map((section) => `
-        <div style="margin:22px 0 6px;">
-          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">${escapeHtml(section.label)}</div>
-          <table style="border-collapse:collapse;width:100%;">
-            ${section.members.map(teamMemberRow).join("")}
-          </table>
-        </div>
-      `).join("")
-    : "";
-
-  // ── Optional PS sections (admin access / porting / timeline) ────────────────
-  // Shared card styling for the three optional boilerplate blocks — solid dark
-  // backgrounds survive email-client dark-mode normalization (Zoom web app etc.)
-  const psCard = (heading: string, innerHtml: string) => `
-    <div style="background:#1a2a3e;border:1px solid #2a3a51;border-radius:6px;padding:16px 18px;margin:18px 0 6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:10px;">${escapeHtml(heading)}</div>
-      <div style="font-size:13.5px;color:#e8eef7;line-height:1.6;">${innerHtml}</div>
-    </div>`;
-
-  // Walk the catalog, render enabled sections applicable to this project's solution types.
-  // Kickoff block sits inline between Admin Access and Porting (historical layout);
-  // keep that placement by inserting it after the adminAccess block if present.
-  const sectionsHtml = WELCOME_SECTION_META
-    .filter((meta) =>
-      (meta.appliesTo === "all" || meta.appliesTo.some((t) => data.solutionTypes.includes(t))) &&
-      data.sections[meta.id] === true
-    )
-    .map((meta) => {
-      const rendered = renderWelcomeSection(meta.id, { distributionListEmail: data.distributionListEmail }, psCard);
-      // Kickoff block has always rendered immediately after adminAccess in the prior layout —
-      // preserve that by splicing it in after adminAccess only.
-      if (meta.id === "adminAccess" && rendered) {
-        return `${rendered}${kickoffBlock}`;
-      }
-      return rendered;
-    })
-    .filter(Boolean)
-    .join("");
-
-  // If adminAccess is filtered out (not enabled, suppressed, or not applicable), the kickoff
-  // block still needs a placement — render it between the summary and the first section.
-  const adminAccessRendered = data.sections.adminAccess === true && data.distributionListEmail;
-  const kickoffBlockFallback = !adminAccessRendered ? kickoffBlock : "";
-
-  return base(`
-    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f6ff;">Welcome to ${projectName}</h2>
-    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.6);line-height:1.6;">
-      A note from <strong style="color:rgba(240,246,255,0.9);">${pmName}</strong>, your Project Manager.
+  const html = base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Support Activity Summary</h2>
+    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.7);line-height:1.6;">
+      ${greeting}<br><br>
+      Here's a snapshot of <strong style="color:#00c8e0;">${accountName}</strong>'s support activity from the last ${w} days.
     </p>
-    ${data.pmCustomNote.trim()
-      ? `<div style="background:rgba(255,255,255,0.04);border-left:3px solid #00c8e0;padding:14px 18px;margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.85);line-height:1.65;">${noteHtml}</div>`
-      : ""}
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Project Summary</div>
-      <table style="border-collapse:collapse;">${summaryRows}</table>
-    </div>
-    ${kickoffBlockFallback}
-    ${sectionsHtml}
-    ${teamBlock}
-    ${ctaButton("Open Project Portal", data.portalUrl)}
-  `, data.portalUrl);
+
+    <table cellpadding="0" cellspacing="6" style="border-collapse:separate;width:100%;margin-bottom:18px;">
+      <tr>
+        ${digestKpiCell("Open", data.kpis.open, null)}
+        ${digestKpiCell(`Resolved (${w}d)`, data.kpis.resolved, "#22c55e")}
+        ${digestKpiCell(`Stale 7d+`, data.kpis.stale, data.kpis.stale > 0 ? "#d13438" : null)}
+        ${digestKpiCell("Awaiting You", data.kpis.stuckOnCustomer, data.kpis.stuckOnCustomer > 0 ? "#ff8c00" : null)}
+      </tr>
+    </table>
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin:20px 0 6px;">Open Cases</div>
+    <table style="border-collapse:collapse;width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:6px;">
+      ${openRows}
+    </table>
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin:20px 0 6px;">Recently Resolved</div>
+    <table style="border-collapse:collapse;width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:6px;">
+      ${resolvedRows}
+    </table>
+
+    <p style="margin:24px 0 0;font-size:13px;color:rgba(240,246,255,0.55);line-height:1.6;">
+      Need to open a new case or follow up on an existing one? Use the support portal — it's the fastest way to reach the team.
+    </p>
+    ${ctaButton("Open Support Portal", `${data.appUrl}/support/cases`)}
+  `, data.appUrl);
+
+  return {
+    subject: `Support Activity Summary — ${data.accountName}`,
+    html,
+  };
 }

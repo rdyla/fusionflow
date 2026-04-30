@@ -34,11 +34,13 @@ app.get("/", async (c) => {
 
   const baseSelect = `
       SELECT p.id, p.name, p.creator_id, p.created_at, p.updated_at,
+        p.customer_id, COALESCE(cust.name, p.customer_name) as customer_name,
         u.name as creator_name, u.email as creator_email,
         (SELECT COUNT(*) FROM cs_versions v WHERE v.proposal_id = p.id) as version_count,
         (SELECT v2.calc_result FROM cs_versions v2 WHERE v2.proposal_id = p.id ORDER BY v2.version_num DESC LIMIT 1) as latest_calc
       FROM cs_proposals p
-      LEFT JOIN users u ON u.id = p.creator_id`;
+      LEFT JOIN users u ON u.id = p.creator_id
+      LEFT JOIN customers cust ON cust.id = p.customer_id`;
 
   const stmt = seeAll
     ? c.env.DB.prepare(`${baseSelect} ORDER BY p.updated_at DESC`)
@@ -47,6 +49,7 @@ app.get("/", async (c) => {
   const rows = await stmt
     .all<{
       id: string; name: string; creator_id: string; created_at: string; updated_at: string;
+      customer_id: string | null; customer_name: string | null;
       creator_name: string | null; creator_email: string | null;
       version_count: number; latest_calc: string | null;
     }>();
@@ -56,6 +59,8 @@ app.get("/", async (c) => {
     name: r.name,
     creatorId: r.creator_id,
     creatorName: r.creator_name ?? r.creator_email ?? "Unknown",
+    customerId: r.customer_id,
+    customerName: r.customer_name,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
     versionCount: r.version_count,
@@ -67,7 +72,66 @@ app.get("/", async (c) => {
 
 // ── Create a proposal ─────────────────────────────────────────────────────────
 
-const CreateSchema = z.object({ name: z.string().min(1).max(200) });
+const CustomerRefSchema = z.object({
+  // Local customers.id (rare — set when caller already knows the FK).
+  customerId: z.string().nullable().optional(),
+  // D365 account GUID — used for find-or-create against the local customers
+  // table when the picker just handed us a CRM hit.
+  dynamicsAccountId: z.string().nullable().optional(),
+  // Free-text fallback name (or canonical name from a CRM pick — both are fine).
+  customerName: z.string().max(500).nullable().optional(),
+});
+
+const CreateSchema = z.object({
+  name: z.string().min(1).max(200),
+}).extend(CustomerRefSchema.shape);
+
+type CustomerRef = z.infer<typeof CustomerRefSchema>;
+
+// Resolves a customer ref → { id, name } pair. Returns nulls when nothing
+// useful was provided. Resolution order:
+//   1. customerId → look up local row by id (validates it exists, gets name).
+//   2. dynamicsAccountId → find-or-create local row keyed on crm_account_id.
+//   3. customerName only → free-text fallback, no FK.
+async function resolveCustomerRef(
+  db: D1Database,
+  ref: CustomerRef,
+): Promise<{ id: string | null; name: string | null }> {
+  const trimmedName = ref.customerName?.trim() || null;
+
+  if (ref.customerId) {
+    const row = await db
+      .prepare("SELECT name FROM customers WHERE id = ? LIMIT 1")
+      .bind(ref.customerId)
+      .first<{ name: string }>();
+    if (row) return { id: ref.customerId, name: row.name };
+    // FK miss → fall through to other resolution paths
+  }
+
+  if (ref.dynamicsAccountId) {
+    // Find existing local customer for this D365 account.
+    const existing = await db
+      .prepare("SELECT id, name FROM customers WHERE crm_account_id = ? LIMIT 1")
+      .bind(ref.dynamicsAccountId)
+      .first<{ id: string; name: string }>();
+    if (existing) return { id: existing.id, name: existing.name };
+
+    // Auto-create a local customer for this CRM account so the proposal can
+    // hold a real FK (matching the existing CustomersPage pattern). Requires
+    // a name — refuse to create a nameless local customer.
+    if (trimmedName) {
+      const newId = crypto.randomUUID();
+      const now = new Date().toISOString();
+      await db
+        .prepare("INSERT INTO customers (id, name, crm_account_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+        .bind(newId, trimmedName, ref.dynamicsAccountId, now, now)
+        .run();
+      return { id: newId, name: trimmedName };
+    }
+  }
+
+  return { id: null, name: trimmedName };
+}
 
 app.post("/", async (c) => {
   const auth = c.get("auth");
@@ -79,12 +143,24 @@ app.post("/", async (c) => {
 
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
+  const cust = await resolveCustomerRef(c.env.DB, parsed.data);
+
   await c.env.DB
-    .prepare("INSERT INTO cs_proposals (id, name, creator_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
-    .bind(id, parsed.data.name.trim(), auth.user.id, now, now)
+    .prepare("INSERT INTO cs_proposals (id, name, creator_id, customer_id, customer_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(id, parsed.data.name.trim(), auth.user.id, cust.id, cust.name, now, now)
     .run();
 
-  return c.json({ id, name: parsed.data.name.trim(), creatorId: auth.user.id, createdAt: now, updatedAt: now, versionCount: 0, latestCalc: null });
+  return c.json({
+    id,
+    name: parsed.data.name.trim(),
+    creatorId: auth.user.id,
+    customerId: cust.id,
+    customerName: cust.name,
+    createdAt: now,
+    updatedAt: now,
+    versionCount: 0,
+    latestCalc: null,
+  });
 });
 
 // ── Get a single proposal with all versions ───────────────────────────────────
@@ -98,13 +174,15 @@ app.get("/:id", async (c) => {
   const proposal = await c.env.DB
     .prepare(`
       SELECT p.id, p.name, p.creator_id, p.created_at, p.updated_at,
+        p.customer_id, COALESCE(cust.name, p.customer_name) as customer_name,
         u.name as creator_name, u.email as creator_email
       FROM cs_proposals p
       LEFT JOIN users u ON u.id = p.creator_id
+      LEFT JOIN customers cust ON cust.id = p.customer_id
       WHERE p.id = ?
     `)
     .bind(id)
-    .first<{ id: string; name: string; creator_id: string; created_at: string; updated_at: string; creator_name: string | null; creator_email: string | null }>();
+    .first<{ id: string; name: string; creator_id: string; created_at: string; updated_at: string; customer_id: string | null; customer_name: string | null; creator_name: string | null; creator_email: string | null }>();
 
   if (!proposal) return c.json({ error: "Not found" }, 404);
   // Users can only access their own proposals
@@ -127,6 +205,8 @@ app.get("/:id", async (c) => {
     name: proposal.name,
     creatorId: proposal.creator_id,
     creatorName: proposal.creator_name ?? proposal.creator_email ?? "Unknown",
+    customerId: proposal.customer_id,
+    customerName: proposal.customer_name,
     createdAt: proposal.created_at,
     updatedAt: proposal.updated_at,
     versions: (versions.results ?? []).map((v) => ({
@@ -141,7 +221,11 @@ app.get("/:id", async (c) => {
   });
 });
 
-// ── Rename a proposal ─────────────────────────────────────────────────────────
+// ── Update a proposal (rename and/or change customer) ─────────────────────────
+
+const UpdateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+}).extend(CustomerRefSchema.shape);
 
 app.patch("/:id", async (c) => {
   const auth = c.get("auth");
@@ -149,8 +233,8 @@ app.patch("/:id", async (c) => {
 
   const { id } = c.req.param();
   const body = await c.req.json().catch(() => null);
-  const parsed = CreateSchema.safeParse(body);
-  if (!parsed.success) return c.json({ error: "name is required" }, 400);
+  const parsed = UpdateSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: "Invalid payload" }, 400);
 
   const proposal = await c.env.DB
     .prepare("SELECT creator_id FROM cs_proposals WHERE id = ?")
@@ -160,9 +244,27 @@ app.patch("/:id", async (c) => {
 
   if (!canEditProposal(auth, proposal.creator_id)) return c.json({ error: "Forbidden" }, 403);
 
+  // Build dynamic SET clause from whichever fields the caller sent.
+  const sets: string[] = [];
+  const binds: (string | null)[] = [];
+  if (parsed.data.name !== undefined) {
+    sets.push("name = ?");
+    binds.push(parsed.data.name.trim());
+  }
+  if ("customerId" in parsed.data || "dynamicsAccountId" in parsed.data || "customerName" in parsed.data) {
+    const cust = await resolveCustomerRef(c.env.DB, parsed.data);
+    sets.push("customer_id = ?", "customer_name = ?");
+    binds.push(cust.id, cust.name);
+  }
+  if (sets.length === 0) return c.json({ ok: true });
+
+  sets.push("updated_at = ?");
+  binds.push(new Date().toISOString());
+  binds.push(id);
+
   await c.env.DB
-    .prepare("UPDATE cs_proposals SET name = ?, updated_at = ? WHERE id = ?")
-    .bind(parsed.data.name.trim(), new Date().toISOString(), id)
+    .prepare(`UPDATE cs_proposals SET ${sets.join(", ")} WHERE id = ?`)
+    .bind(...binds)
     .run();
 
   return c.json({ ok: true });
@@ -227,10 +329,19 @@ app.post("/:id/versions", async (c) => {
     .bind(versionId, id, nextNum, parsed.data.label ?? null, JSON.stringify(parsed.data.formData), JSON.stringify(parsed.data.calcResult), auth.user.id, now)
     .run();
 
-  // Update proposal updated_at
+  // Keep proposal.customer_name in sync with whatever the form currently
+  // holds, so the list view reflects the latest saved value (and so old
+  // pre-#58 proposals get backfilled on their next save). Doesn't touch
+  // customer_id — that's set explicitly via PATCH /:id when a CRM-linked
+  // customer is picked.
+  const formCustomerName = (parsed.data.formData as { customerName?: unknown }).customerName;
+  const cachedName = typeof formCustomerName === "string" && formCustomerName.trim()
+    ? formCustomerName.trim()
+    : null;
+
   await c.env.DB
-    .prepare("UPDATE cs_proposals SET updated_at = ? WHERE id = ?")
-    .bind(now, id)
+    .prepare("UPDATE cs_proposals SET customer_name = COALESCE(?, customer_name), updated_at = ? WHERE id = ?")
+    .bind(cachedName, now, id)
     .run();
 
   return c.json({ id: versionId, versionNum: nextNum, savedAt: now });

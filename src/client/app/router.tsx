@@ -28,6 +28,8 @@ import SupportCasesPage from "../pages/SupportCasesPage";
 import SupportCaseDetailPage from "../pages/SupportCaseDetailPage";
 import SupportNewCasePage from "../pages/SupportNewCasePage";
 import SupportCaseConfirmationPage from "../pages/SupportCaseConfirmationPage";
+import SupportDashboardPage from "../pages/SupportDashboardPage";
+import SupportDigestsPage from "../pages/SupportDigestsPage";
 import RoadmapPage from "../pages/RoadmapPage";
 import AdminRoadmapPage from "../pages/AdminRoadmapPage";
 
@@ -80,6 +82,8 @@ export default function Router() {
           <Route path="/admin/templates" element={<AdminTemplatesPage />} />
           <Route path="/admin/roadmap" element={<AdminRoadmapPage />} />
           <Route element={<SupportWrapper />}>
+            <Route path="/support/dashboard" element={<SupportDashboardPage />} />
+            <Route path="/support/digests" element={<SupportDigestsPage />} />
             <Route path="/support/cases" element={<SupportCasesPage />} />
             <Route path="/support/cases/new" element={<SupportNewCasePage />} />
             <Route path="/support/cases/confirmation" element={<SupportCaseConfirmationPage />} />

@@ -235,6 +235,23 @@ export default function CloudSupportWorkspacePage() {
             calc={calc}
             canOverride={canOverride}
             onChange={handleFormChange}
+            customer={{ customerName: proposal.customerName ?? null, hasCrmLink: !!proposal.customerId }}
+            onCustomerCommit={async (next) => {
+              // Fires only on commit events (pick / blur / clear) — not every
+              // keystroke — so per-stroke setCustomer + get races no longer
+              // overwrite the input mid-type.
+              setProposal((prev) => prev ? { ...prev, customerName: next.customerName, customerId: next.dynamicsAccountId ? prev.customerId : null } : prev);
+              try {
+                const ref = next.dynamicsAccountId
+                  ? { dynamicsAccountId: next.dynamicsAccountId, customerName: next.customerName }
+                  : { customerId: null, customerName: next.customerName };
+                await csApi.setCustomer(proposal.id, ref);
+                const fresh = await csApi.get(proposal.id);
+                setProposal((prev) => prev ? { ...prev, customerId: fresh.customerId, customerName: fresh.customerName } : prev);
+              } catch (e) {
+                showToast(e instanceof Error ? e.message : "Failed to link customer", "error");
+              }
+            }}
           />
 
           {/* Sticky summary panel */}

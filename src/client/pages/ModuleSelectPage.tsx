@@ -132,7 +132,9 @@ export default function ModuleSelectPage() {
     ? MODULES.filter((m) => m.route === "/dashboard" || m.route === "/solutions" || m.route === "/support/cases").map((m) =>
         m.route === "/dashboard" ? { ...m, route: "/projects" } : m
       )
-    : MODULES.filter((m) => !m.visibleTo || m.visibleTo.includes(userRole));
+    : MODULES
+        .filter((m) => !m.visibleTo || m.visibleTo.includes(userRole))
+        .map((m) => m.route === "/support/cases" ? { ...m, route: "/support/dashboard" } : m);
 
   function handleCardClick(mod: Module) {
     if (mod.route) {
@@ -164,14 +166,9 @@ export default function ModuleSelectPage() {
             Cloud<span style={{ color: "#22c55e" }}>Connect</span>
           </div>
         </div>
-        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "rgba(240,246,255,0.78)" }}>
-          Engage. Deliver. Grow.
+        <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "#ffffff" }}>
+          Connecting the Dots to Cloud
         </h1>
-        {!isMobile && (
-          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.65)", maxWidth: 500, margin: "0 auto", lineHeight: 1.65, fontWeight: 300 }}>
-            From the first discovery call to long-term growth, every client engagement moves through a deliberate journey — built to deliver clarity, momentum, and measurable outcomes.
-          </p>
-        )}
       </section>
 
       {/* Modules — white section */}
