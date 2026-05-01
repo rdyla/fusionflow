@@ -16,7 +16,7 @@ app.get("/me", (c) => {
 app.get("/users", async (c) => {
   const rows = await c.env.DB
     .prepare(
-      `SELECT id, name, email, role, organization_name
+      `SELECT id, name, email, role, organization_name, is_project_resource
        FROM users
        WHERE is_active = 1
        ORDER BY name ASC`
