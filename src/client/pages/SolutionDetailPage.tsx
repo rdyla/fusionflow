@@ -1266,6 +1266,11 @@ export default function SolutionDetailPage() {
       {/* ── Labor Estimate Tab ── */}
       {tab === "labor" && (
         <div>
+          {solution.pricing_mode === "basic" && (
+            <div style={{ marginBottom: 16, padding: "12px 16px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 13, color: "#0369a1" }}>
+              <strong>Basic pricing mode is on.</strong> The labor estimate is not used for SOW pricing while in basic mode — pricing comes from the seat-count tier on the Scope tab. Switch to Advanced if you need the workstream-driven calc.
+            </div>
+          )}
           {/* Sub-tabs when multiple canonical types apply — same UX as Assessment tab. */}
           {canonicalNaTypes.length > 1 && (
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>

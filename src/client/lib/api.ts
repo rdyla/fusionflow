@@ -112,6 +112,8 @@ export type Solution = {
   add_ons: AddOn[];
   blended_rate: number;
   sow_total_amount: number | null;
+  pricing_mode: "basic" | "advanced";
+  basic_seat_count: number | null;
   // Joined fields
   partner_ae_display_name: string | null;
   customer_pf_ae_name: string | null;
@@ -1397,6 +1399,8 @@ export const api = {
       linked_project_id: string | null;
       add_ons: AddOn[];
       blended_rate: number;
+      pricing_mode: "basic" | "advanced";
+      basic_seat_count: number | null;
     }>
   ) =>
     request<Solution>(`/solutions/${id}`, {
