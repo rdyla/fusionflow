@@ -178,6 +178,11 @@ export default function ProjectDetailPage() {
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
   const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number } | null>(null);
 
+  // Manual phase creation
+  const [newPhaseName, setNewPhaseName] = useState("");
+  const [creatingPhase, setCreatingPhase] = useState(false);
+  const [showNewPhaseInput, setShowNewPhaseInput] = useState(false);
+
   const { showToast } = useToast();
 
   const groupedTasks = useMemo(
@@ -1060,6 +1065,11 @@ export default function ProjectDetailPage() {
         <div className="ms-section-card">
           <div className="ms-section-title">Tasks by Phase</div>
           <div style={{ display: "grid", gap: 24 }}>
+            {phases.length === 0 && (
+              <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
+                No phases yet. Apply a template above, or add phases manually below.
+              </div>
+            )}
             {groupedTasks.map(({ phase, tasks: phaseTasks }) => {
               const isCollapsed = collapsedPhases.has(phase.id);
               const toggleCollapse = () => setCollapsedPhases((prev) => {
@@ -1219,6 +1229,75 @@ export default function ProjectDetailPage() {
               </div>
               );
             })}
+
+            {canEdit && (
+              showNewPhaseInput ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, borderTop: phases.length > 0 ? "1px dashed #e2e8f0" : "none" }}>
+                  <input
+                    type="text"
+                    autoFocus
+                    placeholder="Phase name"
+                    value={newPhaseName}
+                    onChange={(e) => setNewPhaseName(e.target.value)}
+                    onKeyDown={async (e) => {
+                      if (e.key === "Enter" && newPhaseName.trim() && !creatingPhase && project) {
+                        setCreatingPhase(true);
+                        try {
+                          const created = await api.createPhase(project.id, { name: newPhaseName.trim() });
+                          setPhases((prev) => [...prev, created]);
+                          setNewPhaseName("");
+                          setShowNewPhaseInput(false);
+                        } catch {
+                          showToast("Failed to create phase", "error");
+                        } finally {
+                          setCreatingPhase(false);
+                        }
+                      } else if (e.key === "Escape") {
+                        setNewPhaseName("");
+                        setShowNewPhaseInput(false);
+                      }
+                    }}
+                    style={{ flex: 1, fontSize: 13, padding: "6px 10px", border: "1px solid #d1d5db", borderRadius: 4, background: "#fff", color: "#1e293b" }}
+                  />
+                  <button
+                    className="ms-btn-primary"
+                    disabled={!newPhaseName.trim() || creatingPhase}
+                    onClick={async () => {
+                      if (!project) return;
+                      setCreatingPhase(true);
+                      try {
+                        const created = await api.createPhase(project.id, { name: newPhaseName.trim() });
+                        setPhases((prev) => [...prev, created]);
+                        setNewPhaseName("");
+                        setShowNewPhaseInput(false);
+                      } catch {
+                        showToast("Failed to create phase", "error");
+                      } finally {
+                        setCreatingPhase(false);
+                      }
+                    }}
+                    style={{ fontSize: 12, padding: "5px 14px" }}
+                  >
+                    {creatingPhase ? "Creating…" : "Create"}
+                  </button>
+                  <button
+                    className="ms-btn-ghost"
+                    onClick={() => { setNewPhaseName(""); setShowNewPhaseInput(false); }}
+                    style={{ fontSize: 12, padding: "5px 12px" }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="ms-btn-ghost"
+                  onClick={() => setShowNewPhaseInput(true)}
+                  style={{ alignSelf: "start", border: "1px dashed #cbd5e1", color: "#64748b", marginTop: phases.length > 0 ? 8 : 0 }}
+                >
+                  + Add Phase
+                </button>
+              )
+            )}
           </div>
         </div>
         </>

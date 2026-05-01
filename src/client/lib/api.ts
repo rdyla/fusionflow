@@ -978,6 +978,20 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  createPhase: (
+    projectId: string,
+    payload: {
+      name: string;
+      planned_start?: string | null;
+      planned_end?: string | null;
+      status?: "not_started" | "in_progress" | "completed";
+    }
+  ) =>
+    request<Phase>(`/projects/${projectId}/phases`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   searchDynamicsAccounts: (q: string) =>
     request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
 
