@@ -306,10 +306,15 @@ function buildSowHtml(
     : calcSowTotal(laborHoursTotal, addOns, blendedRate);
 
   // Basic mode prepends a sizing line above any add-ons so the customer sees
-  // the tier price as the first investment item.
+  // the tier price as the first investment item. The customer-facing label
+  // shows the actual seat count entered (e.g. "35 seats"), not the internal
+  // tier band ("26–50 seats") — the band is a sales-side pricing reference,
+  // not something to expose on the deliverable.
+  const basicSeatCount = isBasic ? Number(solution.basic_seat_count) || 0 : 0;
+  const basicSeatLabel = basicSeatCount === 1 ? "1 seat" : `${basicSeatCount} seats`;
   const basicSizingItem = (isBasic && basicTier)
     ? `<div class="investment-item">
-         <div class="ii-desc">UCaaS Implementation${esc(` (${basicTier.label})`)}</div>
+         <div class="ii-desc">UCaaS Implementation${esc(` (${basicSeatLabel})`)}</div>
          <div class="ii-detail">${fmtUsd(basicTier.price)}</div>
        </div>`
     : "";
@@ -759,14 +764,18 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
                     </td>
                   </tr>
                 )}
-                {isBasicMode && previewBasicTier && (
-                  <tr style={{ borderTop: "2px solid #17C662", background: "#f0fdf4" }}>
-                    <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
-                      <span>UCaaS Implementation ({previewBasicTier.label})</span>
-                      <span>${previewBasicTier.price.toLocaleString()}</span>
-                    </td>
-                  </tr>
-                )}
+                {isBasicMode && previewBasicTier && (() => {
+                  const seats = Number(solution.basic_seat_count) || 0;
+                  const seatLabel = seats === 1 ? "1 seat" : `${seats} seats`;
+                  return (
+                    <tr style={{ borderTop: "2px solid #17C662", background: "#f0fdf4" }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
+                        <span>UCaaS Implementation ({seatLabel})</span>
+                        <span>${previewBasicTier.price.toLocaleString()}</span>
+                      </td>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
