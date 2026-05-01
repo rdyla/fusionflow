@@ -41,6 +41,7 @@ export type User = {
   role: string;
   is_active: number;
   is_support_supervisor?: number;
+  is_project_resource?: number;
   avatar_url?: string | null;
   dynamics_account_id?: string | null;
   manager_id?: string | null;
@@ -1320,6 +1321,7 @@ export const api = {
       role?: "admin" | "executive" | "pm" | "pf_ae" | "pf_sa" | "pf_csm" | "pf_engineer" | "partner_ae" | "client";
       is_active?: number;
       is_support_supervisor?: number;
+      is_project_resource?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
       zoom_user_id?: string | null;

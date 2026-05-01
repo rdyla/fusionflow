@@ -813,8 +813,8 @@ export default function SolutionDetailPage() {
                 <select className="ms-input" value={addSolutionStaffUser} onChange={(e) => setAddSolutionStaffUser(e.target.value)}>
                   <option value="">— Select team member —</option>
                   {users.filter((u) => {
-                    if (addSolutionStaffRole === "pm") return u.role === "pm";
-                    if (addSolutionStaffRole === "pf_engineer") return u.role === "pf_engineer";
+                    if (addSolutionStaffRole === "pm") return u.role === "pm" || u.is_project_resource === 1;
+                    if (addSolutionStaffRole === "pf_engineer") return u.role === "pf_engineer" || u.is_project_resource === 1;
                     if (addSolutionStaffRole === "pf_ae")  return u.role === "pf_ae";
                     if (addSolutionStaffRole === "pf_sa")  return u.role === "pf_sa";
                     if (addSolutionStaffRole === "pf_csm") return u.role === "pf_csm";
