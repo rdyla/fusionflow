@@ -28,6 +28,45 @@ app.get("/:id/phases", async (c) => {
   return c.json(rows.results ?? []);
 });
 
+const createPhaseSchema = z.object({
+  name: z.string().min(1).max(120),
+  planned_start: z.string().nullable().optional(),
+  planned_end: z.string().nullable().optional(),
+  status: z.enum(["not_started", "in_progress", "completed"]).optional(),
+});
+
+app.post("/:id/phases", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const parsed = createPhaseSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const { name, planned_start, planned_end, status } = parsed.data;
+
+  // Append: new phase gets max(sort_order) + 1, or 0 if this is the first.
+  const maxRow = await db
+    .prepare("SELECT COALESCE(MAX(sort_order), -1) AS max_so FROM phases WHERE project_id = ?")
+    .bind(projectId)
+    .first<{ max_so: number }>();
+  const sortOrder = (maxRow?.max_so ?? -1) + 1;
+
+  const id = crypto.randomUUID();
+  await db
+    .prepare(
+      `INSERT INTO phases (id, project_id, name, sort_order, planned_start, planned_end, status)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(id, projectId, name.trim(), sortOrder, planned_start ?? null, planned_end ?? null, status ?? "not_started")
+    .run();
+
+  const created = await db.prepare("SELECT * FROM phases WHERE id = ? LIMIT 1").bind(id).first();
+  return c.json(created, 201);
+});
+
 const updatePhaseSchema = z.object({
   status: z.enum(["not_started", "in_progress", "completed"]).optional(),
   planned_start: z.string().nullable().optional(),
