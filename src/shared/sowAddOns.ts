@@ -112,3 +112,26 @@ export function calcSowTotal(
 export function readAddOnsFromRow<T extends { add_ons?: unknown }>(row: T): AddOn[] {
   return parseAddOns(row.add_ons);
 }
+
+/** Basic-mode SOW total. Uses a flat tier price as the pre-add-on subtotal
+ *  instead of (laborHours × rate). Add-on math is identical: hours-kind
+ *  add-ons still bill at the blended rate, percentage discounts apply to
+ *  the tier price. Returned shape matches calcSowTotal so the UI doesn't
+ *  need to fork. */
+export function calcBasicSowTotal(
+  tierPrice: number,
+  addOns: readonly AddOn[],
+  rate: number,
+): SowTotalBreakdown {
+  const safePrice = Number(tierPrice) || 0;
+  const safeRate  = Number(rate) || DEFAULT_BLENDED_RATE;
+  const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, safePrice, safeRate) }));
+  const addOnNet = addOnEffects.reduce((sum, e) => sum + e.dollar, 0);
+  return {
+    laborHours: 0,
+    laborSubtotal: safePrice,
+    addOnEffects,
+    addOnNet,
+    total: safePrice + addOnNet,
+  };
+}
