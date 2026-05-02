@@ -130,6 +130,15 @@ const SOLUTION_DRIVERS: Record<string, DriverDef[]> = {
 
 // ── Computation helpers ─────────────────────────────────────────────────────
 
+/** Coerce a count-shaped answer to a number. Accepts arrays (uses .length,
+ *  matching NA storage) or raw numbers (matching direct-input storage where
+ *  the user just enters "how many integrations"). Anything else → 0. */
+function asCount(val: unknown): number {
+  if (Array.isArray(val)) return val.length;
+  if (typeof val === "number" && Number.isFinite(val) && val >= 0) return Math.floor(val);
+  return 0;
+}
+
 function isNonEmpty(val: unknown): boolean {
   if (val === null || val === undefined || val === "") return false;
   if (Array.isArray(val)) return val.length > 0;
@@ -226,12 +235,12 @@ function computeEstimate(
 
     if (driver.bands) {
       // count_band_add
-      const count = Array.isArray(val) ? val.length : 0;
+      const count = asCount(val);
       const hours = matchBand(count, driver.bands);
       addToWorkstreams(driver.workstreams, hours, driver.id, driver.field, `${count} items → band match`);
     } else if (driver.repeaterPerItem !== undefined) {
       // repeater_count_add
-      const count = Array.isArray(val) ? val.length : 0;
+      const count = asCount(val);
       const hours = Math.min(count * driver.repeaterPerItem, driver.repeaterMax ?? Infinity);
       addToWorkstreams(driver.workstreams, hours, driver.id, driver.field, `${count} items × ${driver.repeaterPerItem}h`);
     } else if (driver.nonEmptyAdds !== undefined) {
@@ -285,10 +294,27 @@ function computeEstimate(
     ? { low: 0.85, high: 1.2 }
     : { low: 0.75, high: 1.35 };
 
+  // Per-workstream spread: overridden hours are user-supplied, no spread
+  // applied to them. If the user overrides every workstream, low === expected
+  // === high (the "I priced this myself" case). Calculated workstreams still
+  // get the confidence-driven spread.
+  let lowTotal = 0;
+  let highTotal = 0;
+  for (const ws of WORKSTREAMS) {
+    const fh = finalHours[ws] || 0;
+    if (overrides[ws] !== undefined) {
+      lowTotal += fh;
+      highTotal += fh;
+    } else {
+      lowTotal += fh * spreads.low;
+      highTotal += fh * spreads.high;
+    }
+  }
+
   const totals = {
-    low: Math.round(expectedTotal * spreads.low),
+    low: Math.round(lowTotal),
     expected: expectedTotal,
-    high: Math.round(expectedTotal * spreads.high),
+    high: Math.round(highTotal),
   };
 
   // Risk flags
@@ -326,17 +352,17 @@ function computeComplexityScore(category: string, answers: Record<string, unknow
     add(migPts, "Migration required", answers["migration_required"] === "partial" ? "Partial migration" : "Full migration");
     const portPts = { yes: 30, partial: 15, no: 0 }[answers["number_porting_required"] as string] ?? 0;
     add(portPts, "Number porting required", answers["number_porting_required"] === "partial" ? "Partial porting" : "Full porting");
-    const epCount = Array.isArray(answers["endpoint_types_required"]) ? answers["endpoint_types_required"].length : 0;
+    const epCount = asCount(answers["endpoint_types_required"]);
     add(Math.min(epCount * 5, 20), "Endpoint type variety", `${epCount} endpoint type${epCount !== 1 ? "s" : ""}`);
   } else if (category === "ccaas") {
-    const chanCount = Array.isArray(answers["channels_required_phase_1"]) ? answers["channels_required_phase_1"].length : 0;
+    const chanCount = asCount(answers["channels_required_phase_1"]);
     add(Math.min(chanCount * 10, 40), "Channels in scope (phase 1)", `${chanCount} channel${chanCount !== 1 ? "s" : ""}`);
-    const routeCount = Array.isArray(answers["routing_capabilities_required"]) ? answers["routing_capabilities_required"].length : 0;
+    const routeCount = asCount(answers["routing_capabilities_required"]);
     add(Math.min(routeCount * 8, 32), "Routing capabilities required", `${routeCount} capability type${routeCount !== 1 ? "s" : ""}`);
     if (answers["wfm_required"] === "yes_phase_1") add(15, "WFM included in phase 1", "In scope");
     if (answers["qm_required"] === "yes_phase_1") add(15, "QM included in phase 1", "In scope");
   } else if (category === "ci") {
-    const methCount = Array.isArray(answers["methodology_elements_to_track"]) ? answers["methodology_elements_to_track"].length : 0;
+    const methCount = asCount(answers["methodology_elements_to_track"]);
     add(Math.min(methCount * 5, 30), "Methodology elements tracked", `${methCount} element${methCount !== 1 ? "s" : ""}`);
     if (answers["custom_trackers_required"] === "yes_phase_1") add(15, "Custom trackers in phase 1", "In scope");
     if (answers["custom_scorecards_required"] === "yes_phase_1") add(15, "Custom scorecards in phase 1", "In scope");
@@ -345,7 +371,7 @@ function computeComplexityScore(category: string, answers: Record<string, unknow
   } else if (category === "virtual_agent") {
     const intentPts = ({ "1_10": 5, "1_5": 5, "6_15": 15, "11_25": 20, "16_30": 30, "26_50": 40, "31_60": 45, "51_plus": 55, "60_plus": 60 } as Record<string, number>)[answers["estimated_intent_count"] as string] ?? 0;
     add(intentPts, "Intent count", String(answers["estimated_intent_count"] ?? "").replace(/_/g, "–"));
-    const intCount = Array.isArray(answers["integration_use_cases_required"]) ? answers["integration_use_cases_required"].length : 0;
+    const intCount = asCount(answers["integration_use_cases_required"]);
     add(Math.min(intCount * 8, 40), "Integration use cases", `${intCount} use case${intCount !== 1 ? "s" : ""}`);
     const contentPts = ({ ready: 0, ready_now: 0, needs_review: 20, needs_cleanup: 20, needs_creation: 35, significant_gaps: 35, unknown: 10 } as Record<string, number>)[answers["content_quality_readiness"] as string] ?? 0;
     const contentLabels: Record<string, string> = { needs_review: "Content needs review", needs_cleanup: "Content needs cleanup", needs_creation: "Content needs creation", significant_gaps: "Content has significant gaps", unknown: "Content readiness unknown" };
@@ -411,6 +437,7 @@ function shapeEstimateRow(row: Record<string, unknown>) {
     final_hours: parseJson(row.final_hours, {}),
     overrides: parseJson(row.overrides, {}),
     risk_flags: parseJson(row.risk_flags, []),
+    direct_inputs: row.direct_inputs ? parseJson(row.direct_inputs, null) : null,
   };
 }
 
@@ -446,6 +473,11 @@ app.get("/:id/labor-estimates/:type", async (c) => {
 // PUT /api/solutions/:id/labor-estimates/:type
 const upsertSchema = z.object({
   overrides: z.record(z.string(), z.number()).optional().default({}),
+  // When provided, direct_inputs is used in place of the per-type
+  // needs_assessments answers. Same shape — keys match the field names
+  // computeEstimate() reads. null clears any previously-stored direct
+  // inputs and falls back to NA.
+  direct_inputs: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
 app.put("/:id/labor-estimates/:type", async (c) => {
@@ -471,13 +503,36 @@ app.put("/:id/labor-estimates/:type", async (c) => {
   const parsed = upsertSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { overrides } = parsed.data;
+  const { overrides, direct_inputs: directInputsBody } = parsed.data;
 
-  // Per-type NA answers drive per-type labor calc.
-  const naRow = await c.env.DB.prepare(
-    "SELECT answers FROM needs_assessments WHERE solution_id = ? AND solution_type = ? LIMIT 1"
-  ).bind(solutionId, solutionType).first() as { answers: string } | null;
-  const answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
+  // Resolve answers. If direct_inputs is in the request body, it wins
+  // (and gets persisted). If null is sent explicitly, clear any stored
+  // direct inputs and fall back to NA. If undefined (not in body), keep
+  // whatever was previously stored.
+  const existingRow = await c.env.DB.prepare(
+    "SELECT direct_inputs FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first() as { direct_inputs: string | null } | null;
+
+  let directInputsToPersist: Record<string, unknown> | null;
+  if (directInputsBody !== undefined) {
+    directInputsToPersist = directInputsBody;
+  } else {
+    directInputsToPersist = existingRow?.direct_inputs
+      ? parseJson<Record<string, unknown> | null>(existingRow.direct_inputs, null)
+      : null;
+  }
+
+  // direct_inputs (if non-empty) supersedes the NA. Empty / null falls back.
+  const hasDirectInputs = directInputsToPersist !== null && Object.keys(directInputsToPersist).length > 0;
+  let answers: Record<string, unknown>;
+  if (hasDirectInputs) {
+    answers = directInputsToPersist as Record<string, unknown>;
+  } else {
+    const naRow = await c.env.DB.prepare(
+      "SELECT answers FROM needs_assessments WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+    ).bind(solutionId, solutionType).first() as { answers: string } | null;
+    answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
+  }
 
   const category = solutionTypeToCategory(solutionType);
 
@@ -493,6 +548,8 @@ app.put("/:id/labor-estimates/:type", async (c) => {
     "SELECT id FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
   ).bind(solutionId, solutionType).first();
 
+  const directInputsForDb = directInputsToPersist === null ? null : JSON.stringify(directInputsToPersist);
+
   if (existing) {
     await c.env.DB.prepare(`
       UPDATE labor_estimates
@@ -500,6 +557,7 @@ app.put("/:id/labor-estimates/:type", async (c) => {
           complexity = ?, pre_override_hours = ?, final_hours = ?, overrides = ?,
           total_low = ?, total_expected = ?, total_high = ?,
           confidence_score = ?, confidence_band = ?, risk_flags = ?,
+          direct_inputs = ?,
           updated_at = datetime('now')
       WHERE solution_id = ? AND solution_type = ?
     `).bind(
@@ -513,6 +571,7 @@ app.put("/:id/labor-estimates/:type", async (c) => {
       estimate.totals.low, estimate.totals.expected, estimate.totals.high,
       estimate.confidence.score, estimate.confidence.band,
       JSON.stringify(estimate.riskFlags),
+      directInputsForDb,
       solutionId, solutionType
     ).run();
   } else {
@@ -521,8 +580,8 @@ app.put("/:id/labor-estimates/:type", async (c) => {
       INSERT INTO labor_estimates
         (id, solution_id, solution_type, solution_type_category, base_hours, driver_adjustments, complexity,
          pre_override_hours, final_hours, overrides, total_low, total_expected, total_high,
-         confidence_score, confidence_band, risk_flags)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         confidence_score, confidence_band, risk_flags, direct_inputs)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
       id, solutionId, solutionType, estimate.solutionTypeCategory,
       JSON.stringify(estimate.baseHours),
@@ -533,7 +592,8 @@ app.put("/:id/labor-estimates/:type", async (c) => {
       JSON.stringify(estimate.overrides),
       estimate.totals.low, estimate.totals.expected, estimate.totals.high,
       estimate.confidence.score, estimate.confidence.band,
-      JSON.stringify(estimate.riskFlags)
+      JSON.stringify(estimate.riskFlags),
+      directInputsForDb
     ).run();
   }
 
