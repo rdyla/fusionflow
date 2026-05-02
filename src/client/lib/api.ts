@@ -848,6 +848,9 @@ export type LaborEstimate = {
   confidence_score: number;
   confidence_band: string;
   risk_flags: string[];
+  /** When non-null, the engine used these values instead of the per-type
+   *  needs_assessments answers. Same key/value shape as NA answers. */
+  direct_inputs: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -1618,7 +1621,13 @@ export const api = {
     request<LaborEstimate[]>(`/solutions/${solutionId}/labor-estimates`),
   laborEstimate: (solutionId: string, solutionType: string) =>
     request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`),
-  upsertLaborEstimate: (solutionId: string, solutionType: string, body: { overrides?: Record<string, number> }) =>
+  upsertLaborEstimate: (solutionId: string, solutionType: string, body: {
+    overrides?: Record<string, number>;
+    /** Pass an object to set/update direct inputs (used in place of NA).
+     *  Pass null to clear them and fall back to the NA. Omit to leave
+     *  whatever's currently stored alone. */
+    direct_inputs?: Record<string, unknown> | null;
+  }) =>
     request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`, {
       method: "PUT",
       body: JSON.stringify(body),
