@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type LaborEstimate } from "../../lib/api";
+import { api, type LaborEstimate, type Solution } from "../../lib/api";
+import {
+  UCAAS_BASIC_TIERS,
+  UCAAS_BASIC_MAX_SEATS,
+  getUcaasBasicTier,
+  canUseBasicPricing,
+} from "../../../shared/ucaasBasicPricing";
 
 const WORKSTREAM_LABELS: Record<string, string> = {
   discovery_requirements: "Discovery & Requirements",
@@ -117,8 +123,17 @@ function serializeInputs(fields: InputFieldDef[], state: Record<string, string>)
   return out;
 }
 
+type PricingMode = "basic" | "advanced";
+
+function fmtUsd(n: number): string {
+  const sign = n < 0 ? "-" : "";
+  return sign + "$" + Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 type Props = {
-  solutionId: string;
+  /** Full solution row — needed for pricing_mode, basic_seat_count, and
+   *  solution_types (Basic mode is gated to pure-UCaaS). */
+  solution: Solution;
   solutionType: string;
   estimate: LaborEstimate | null;
   hasAssessment: boolean;
@@ -128,9 +143,13 @@ type Props = {
   naAnswers?: Record<string, unknown> | null;
   canEdit: boolean;
   onEstimateChange: (estimate: LaborEstimate | null) => void;
+  /** Notify the parent when pricing-mode-related fields on the solution
+   *  change (so the Scope tab's SowAddOnsEditor sees the new state). */
+  onSolutionChange: (next: Partial<Solution>) => void;
 };
 
-export default function LaborEstimateView({ solutionId, solutionType, estimate, hasAssessment, naAnswers, canEdit, onEstimateChange }: Props) {
+export default function LaborEstimateView({ solution, solutionType, estimate, hasAssessment, naAnswers, canEdit, onEstimateChange, onSolutionChange }: Props) {
+  const solutionId = solution.id;
   const [overrides, setOverrides] = useState<Record<string, string>>(
     estimate ? Object.fromEntries(Object.entries(estimate.overrides).map(([k, v]) => [k, String(v)])) : {}
   );
@@ -168,6 +187,48 @@ export default function LaborEstimateView({ solutionId, solutionType, estimate, 
   const inputSource: "direct" | "needs_assessment" | "none" = estimate?.direct_inputs
     ? "direct"
     : (hasAssessment ? "needs_assessment" : "none");
+
+  // ── Pricing mode (consolidated onto the Labor tab) ─────────────────────────
+  // The pricing-mode toggle lives here because it controls which view of the
+  // labor data the user actually wants — basic skips the workstream calc
+  // entirely; advanced is everything. Stored on the solution row, so the
+  // SowAddOnsEditor on the Scope tab just reads it.
+  const basicAvailable = canUseBasicPricing(solution.solution_types);
+  const [pricingMode, setPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
+  const [seatCount, setSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
+  const [savedPricingMode, setSavedPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
+  const [savedSeatCount, setSavedSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
+  const [savingPricing, setSavingPricing] = useState(false);
+
+  // Re-sync local pricing state when the solution prop changes (e.g. after
+  // a save on a different surface, or the parent reload finishes).
+  useEffect(() => {
+    setPricingMode(solution.pricing_mode ?? "advanced");
+    setSeatCount(solution.basic_seat_count ?? null);
+    setSavedPricingMode(solution.pricing_mode ?? "advanced");
+    setSavedSeatCount(solution.basic_seat_count ?? null);
+  }, [solution.pricing_mode, solution.basic_seat_count]);
+
+  // Combo solutions (e.g. UCaaS + CCaaS) lose access to basic. Force advanced.
+  const effectiveMode: PricingMode = !basicAvailable && pricingMode === "basic" ? "advanced" : pricingMode;
+  const tier = effectiveMode === "basic" ? getUcaasBasicTier(seatCount) : null;
+  const seatCountOver = effectiveMode === "basic" && seatCount !== null && seatCount > UCAAS_BASIC_MAX_SEATS;
+  const pricingDirty = effectiveMode !== savedPricingMode || (effectiveMode === "basic" && seatCount !== savedSeatCount);
+
+  async function savePricing() {
+    setSavingPricing(true);
+    try {
+      const updated = await api.updateSolution(solution.id, {
+        pricing_mode: effectiveMode,
+        basic_seat_count: effectiveMode === "basic" ? (seatCount ?? null) : null,
+      });
+      onSolutionChange(updated);
+      setSavedPricingMode(effectiveMode);
+      setSavedSeatCount(effectiveMode === "basic" ? (seatCount ?? null) : null);
+    } finally {
+      setSavingPricing(false);
+    }
+  }
 
   async function generate(keepOverrides = false) {
     setSaving(true);
@@ -284,6 +345,118 @@ export default function LaborEstimateView({ solutionId, solutionType, estimate, 
     setDirectInputs(seed);
   }
 
+  // ── Pricing Mode card (always at top of Labor tab) ────────────────────────
+  const pricingAccent = "#003B5C";
+  const pricingAccentGreen = "#17C662";
+
+  const pricingModeCard = (
+    <div className="ms-card">
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          Pricing Mode
+        </h3>
+        <div style={{ display: "inline-flex", border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
+          {(["basic", "advanced"] as const).map((m) => {
+            const selected = effectiveMode === m;
+            const disabled = m === "basic" && !basicAvailable;
+            return (
+              <button
+                key={m}
+                type="button"
+                disabled={!canEdit || disabled}
+                onClick={() => setPricingMode(m)}
+                style={{
+                  padding: "6px 18px",
+                  fontSize: 12,
+                  fontWeight: 600,
+                  background: selected ? pricingAccent : "#fff",
+                  color: selected ? "#fff" : disabled ? "#cbd5e1" : "#1e293b",
+                  border: "none",
+                  borderRight: m === "basic" ? "1px solid #cbd5e1" : "none",
+                  cursor: !canEdit || disabled ? "not-allowed" : "pointer",
+                  textTransform: "capitalize",
+                }}
+                title={disabled ? "Basic pricing is only available for pure UCaaS solutions." : undefined}
+              >
+                {m}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 14px", lineHeight: 1.5 }}>
+        {effectiveMode === "basic"
+          ? "Basic pricing replaces the labor calculator with a flat tier price by seat count for sub-100-seat UCaaS deployments. No workstream estimate needed."
+          : "Advanced pricing uses the full labor calculator — workstream hours derived from inputs (direct or from the needs assessment), then priced at the blended rate."}
+      </p>
+
+      {effectiveMode === "basic" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, alignItems: "stretch", marginBottom: 14 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Seat Count</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={1}
+                step={1}
+                value={seatCount ?? ""}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setSeatCount(Number.isFinite(n) && n > 0 ? n : null);
+                }}
+                disabled={!canEdit}
+                placeholder="e.g. 50"
+              />
+            </label>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, fontSize: 12 }}>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: tier ? pricingAccent : "#94a3b8" }}>
+                  {tier ? `${tier.label} — ${fmtUsd(tier.price)}` : seatCountOver ? "Out of range" : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier Price</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: tier ? pricingAccentGreen : "#94a3b8" }}>{tier ? fmtUsd(tier.price) : "—"}</div>
+              </div>
+            </div>
+          </div>
+
+          {seatCountOver && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fff7ed", border: "1px solid #fde68a", borderRadius: 6, fontSize: 13, color: "#92400e" }}>
+              Basic pricing covers up to {UCAAS_BASIC_MAX_SEATS} seats. For larger deployments, switch to Advanced.
+            </div>
+          )}
+
+          <div style={{ marginBottom: 14, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 12, color: "#0369a1" }}>
+            <strong>Tier ladder:</strong>{" "}
+            {UCAAS_BASIC_TIERS.map((t, i) => (
+              <span key={t.maxSeats}>
+                {i > 0 && " · "}
+                {t.label}: {fmtUsd(t.price)}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
+      {canEdit && pricingDirty && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <button
+            className="ms-btn-primary"
+            onClick={savePricing}
+            disabled={savingPricing}
+            style={{ background: pricingAccent }}
+          >
+            {savingPricing ? "Saving…" : "Save Pricing Mode"}
+          </button>
+          <span style={{ fontSize: 12, color: "#f59e0b" }}>Unsaved changes</span>
+        </div>
+      )}
+    </div>
+  );
+
   const calcInputsCard = supportsDirectInputs && canEdit ? (
     <div className="ms-card">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
@@ -372,10 +545,21 @@ export default function LaborEstimateView({ solutionId, solutionType, estimate, 
     </div>
   ) : null;
 
-  // No estimate yet
+  // Basic pricing mode replaces the labor calc entirely — no workstreams, no
+  // direct inputs, no NA. Just the pricing card.
+  if (effectiveMode === "basic") {
+    return (
+      <div style={{ display: "grid", gap: 20 }}>
+        {pricingModeCard}
+      </div>
+    );
+  }
+
+  // No estimate yet (Advanced mode)
   if (!estimate) {
     return (
       <div style={{ display: "grid", gap: 20 }}>
+        {pricingModeCard}
         {calcInputsCard}
         <div className="ms-card" style={{ textAlign: "center", padding: 48 }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
@@ -413,6 +597,7 @@ export default function LaborEstimateView({ solutionId, solutionType, estimate, 
   return (
     <div style={{ display: "grid", gap: 20 }}>
 
+      {pricingModeCard}
       {calcInputsCard}
 
       {/* ── Summary header ── */}
