@@ -1150,16 +1150,22 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
       <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
-          {/* Sizing confirmation form */}
-          <SowSizingForm
-            solution={solution}
-            needsAssessments={needsAssessments}
-            canEdit={canEdit}
-            onSaved={(saved) => {
-              setSowData(saved);
-              setSolution(prev => prev ? { ...prev, sow_data: JSON.stringify(saved) } : prev);
-            }}
-          />
+          {/* Sizing confirmation form — hidden in Basic mode. Basic pricing
+              already collects every input it needs on the Labor tab, so the
+              sizing form is redundant there. The SOW document handles the
+              empty sizing case gracefully (skips the Confirmed Solution
+              Sizing section entirely). */}
+          {solution.pricing_mode !== "basic" && (
+            <SowSizingForm
+              solution={solution}
+              needsAssessments={needsAssessments}
+              canEdit={canEdit}
+              onSaved={(saved) => {
+                setSowData(saved);
+                setSolution(prev => prev ? { ...prev, sow_data: JSON.stringify(saved) } : prev);
+              }}
+            />
+          )}
 
           {/* Add-ons + blended rate → SOW total */}
           <SowAddOnsEditor
