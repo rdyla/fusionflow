@@ -139,6 +139,32 @@ function asCount(val: unknown): number {
   return 0;
 }
 
+/** Bin a raw user count into the band string the calc engine expects.
+ *  Lets the UI accept a direct number without changing the calc model. */
+function userCountToBand(n: number): string | null {
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (n <= 25)  return "1_25";
+  if (n <= 100) return "26_100";
+  if (n <= 250) return "101_250";
+  if (n <= 500) return "251_500";
+  return "500_plus";
+}
+
+/** Pre-process the answers map before drivers/complexity/confidence run.
+ *  Currently: if `user_count` is a number and `user_count_band` is unset,
+ *  derive the band so the existing band-keyed mapping driver finds it. */
+function normalizeAnswers(answers: Record<string, unknown>): Record<string, unknown> {
+  const out = { ...answers };
+  if (out.user_count_band === undefined || out.user_count_band === null || out.user_count_band === "") {
+    const n = Number(out.user_count);
+    if (Number.isFinite(n) && n > 0) {
+      const band = userCountToBand(n);
+      if (band) out.user_count_band = band;
+    }
+  }
+  return out;
+}
+
 function isNonEmpty(val: unknown): boolean {
   if (val === null || val === undefined || val === "") return false;
   if (Array.isArray(val)) return val.length > 0;
@@ -195,10 +221,14 @@ interface LaborEstimateData {
 
 function computeEstimate(
   category: string,
-  answers: Record<string, unknown>,
+  rawAnswers: Record<string, unknown>,
   overrides: Record<string, number>,
   baseHoursOverride?: Record<string, number>
 ): LaborEstimateData {
+  // Translate direct-input numbers (e.g. user_count: 50) into the band-keyed
+  // shape the driver mapping expects. NA answers come pre-banded so this is
+  // a no-op for them.
+  const answers = normalizeAnswers(rawAnswers);
   const base = { ...(baseHoursOverride ?? BASE_HOURS[category]) } as Record<string, number>;
   const adjustments: Record<string, number> = {};
   for (const ws of WORKSTREAMS) adjustments[ws] = 0;
