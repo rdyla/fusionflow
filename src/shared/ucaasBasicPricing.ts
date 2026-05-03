@@ -1,14 +1,13 @@
 /**
  * UCaaS basic-mode pricing formula.
  *
- * Replaces the original tier ladder ($4500/$5400/$6250 by seat band capped
- * at 100 seats) with a transparent formula that scales without bands:
+ * Transparent formula that scales without bands:
  *
- *   hours = 20
+ *   hours = 20                            (base)
  *         + 0.05 × users
- *         + 2 × max(0, sites − 1)
- *         + 6 × max(0, go_lives − 1)
- *         + 2 × onsite_sites               (travel time at blended rate)
+ *         + 2 × sites                     (every site, including the first)
+ *         + 6 × go_lives                  (every go-live, including the first)
+ *         + 2 × onsite_sites              (travel time at blended rate)
  *
  *   labor          = hours × blended_rate
  *   training       = $290 × training_sessions
@@ -17,15 +16,15 @@
  *   pm             = pre_pm × 0.15
  *   total          = pre_pm + pm
  *
- * 1 site and 1 go-live are baked into the 20-hour base. Add-ons (charges,
- * discounts) apply on top of `total` via the existing add-ons system.
+ * Add-ons (charges, discounts) apply on top of `total` via the existing
+ * add-ons system.
  */
 
 export type UcaasBasicInputs = {
   users: number;
-  /** Total sites in scope. 1 is included in the 20h base. */
+  /** Total sites in scope. Each site adds 2h labor. */
   sites: number;
-  /** Total go-live events. 1 is included in the 20h base. */
+  /** Total go-live events. Each go-live adds 6h labor. */
   go_lives: number;
   /** Optional flat-cost add-ons (training_sessions × $290). */
   training_sessions: number;
@@ -45,23 +44,23 @@ export const UCAAS_BASIC_DEFAULTS: UcaasBasicInputs = {
 };
 
 // ── Formula constants ──────────────────────────────────────────────────────
-export const BASE_HOURS                  = 20;
-export const HOURS_PER_USER              = 0.05;
-export const HOURS_PER_ADDITIONAL_SITE   = 2;
-export const HOURS_PER_ADDITIONAL_GOLIVE = 6;
-export const HOURS_PER_ONSITE_SITE       = 2;
-export const TRAINING_SESSION_COST       = 290;
-export const ONSITE_DEVICE_COST          = 36.25;
-export const PM_MULTIPLIER               = 0.15;
-export const DEFAULT_BLENDED_RATE        = 165;
+export const BASE_HOURS            = 20;
+export const HOURS_PER_USER        = 0.05;
+export const HOURS_PER_SITE        = 2;
+export const HOURS_PER_GOLIVE      = 6;
+export const HOURS_PER_ONSITE_SITE = 2;
+export const TRAINING_SESSION_COST = 290;
+export const ONSITE_DEVICE_COST    = 36.25;
+export const PM_MULTIPLIER         = 0.15;
+export const DEFAULT_BLENDED_RATE  = 165;
 
 export type UcaasBasicBreakdown = {
   /** Each component of the hours total, surfaced for the calculator detail view. */
   components: {
     base: number;
     users: number;
-    additionalSites: number;
-    additionalGoLives: number;
+    sites: number;
+    goLives: number;
     onsiteTravel: number;
   };
   /** Total billable hours from the formula. */
@@ -99,14 +98,14 @@ export function calcUcaasBasicBreakdown(
   const safeRate        = Number(blendedRate) || DEFAULT_BLENDED_RATE;
 
   const components = {
-    base:              BASE_HOURS,
-    users:             HOURS_PER_USER * users,
-    additionalSites:   HOURS_PER_ADDITIONAL_SITE   * (sites - 1),
-    additionalGoLives: HOURS_PER_ADDITIONAL_GOLIVE * (goLives - 1),
-    onsiteTravel:      HOURS_PER_ONSITE_SITE       * onsiteSites,
+    base:         BASE_HOURS,
+    users:        HOURS_PER_USER  * users,
+    sites:        HOURS_PER_SITE  * sites,
+    goLives:      HOURS_PER_GOLIVE * goLives,
+    onsiteTravel: HOURS_PER_ONSITE_SITE * onsiteSites,
   };
 
-  const hours = components.base + components.users + components.additionalSites + components.additionalGoLives + components.onsiteTravel;
+  const hours = components.base + components.users + components.sites + components.goLives + components.onsiteTravel;
   const laborSubtotal = hours * safeRate;
   const trainingTotal = TRAINING_SESSION_COST * trainingCount;
   const deviceInstallTotal = ONSITE_DEVICE_COST * onsiteDevices;

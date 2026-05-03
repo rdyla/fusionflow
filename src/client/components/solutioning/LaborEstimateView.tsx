@@ -444,7 +444,7 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
       </div>
       <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 14px", lineHeight: 1.5 }}>
         {effectiveMode === "tiered" && "Tiered pricing uses a fixed-price ladder by seat count for sub-100-seat UCaaS deployments. Fastest path to a quote — no formula, no estimate."}
-        {effectiveMode === "basic" && "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per additional site + 6h per additional go-live, plus optional training and on-site work, +15% PM."}
+        {effectiveMode === "basic" && "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per site + 6h per go-live, plus optional training and on-site work, +15% PM."}
         {effectiveMode === "advanced" && "Advanced pricing uses the full labor calculator — workstream hours derived from inputs (direct or from the needs assessment), then priced at the blended rate."}
       </p>
 
@@ -528,7 +528,7 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
                 onChange={(e) => updateBasicInput("sites", Math.max(1, parseInt(e.target.value, 10) || 1))}
                 disabled={!canEdit}
               />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>1 in base · +2h each more</span>
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>2h each</span>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Go-Lives</span>
@@ -541,7 +541,7 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
                 onChange={(e) => updateBasicInput("go_lives", Math.max(1, parseInt(e.target.value, 10) || 1))}
                 disabled={!canEdit}
               />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>1 in base · +6h each more</span>
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>6h each</span>
             </label>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Training Sessions</span>
@@ -590,8 +590,8 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
             <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4, columnGap: 16, color: "#475569" }}>
               <div>Base</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.base}h</div>
               <div>Users ({basicInputs.users} × 0.05h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.users.toFixed(2)}h</div>
-              <div>Additional sites ({Math.max(0, basicInputs.sites - 1)} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.additionalSites}h</div>
-              <div>Additional go-lives ({Math.max(0, basicInputs.go_lives - 1)} × 6h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.additionalGoLives}h</div>
+              <div>Sites ({basicInputs.sites} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.sites}h</div>
+              <div>Go-lives ({basicInputs.go_lives} × 6h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.goLives}h</div>
               <div>On-site travel ({basicInputs.onsite_sites} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.onsiteTravel}h</div>
               <div style={{ paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>Total hours × ${blendedRateForBasic}/hr</div>
               <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>{fmtUsd(basicBreakdown.laborSubtotal)}</div>
