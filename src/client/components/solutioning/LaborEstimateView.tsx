@@ -378,7 +378,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
 
   // ── Pricing Mode card (always at top of Labor tab) ────────────────────────
   const pricingAccent = "#003B5C";
-  const pricingAccentGreen = "#17C662";
 
   const pricingModeCard = (
     <div className="ms-card">
