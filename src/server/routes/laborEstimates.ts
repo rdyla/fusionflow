@@ -93,7 +93,15 @@ const SOLUTION_DRIVERS: Record<string, DriverDef[]> = {
     { id: "ucaas_common_area_devices", field: "common_area_or_shared_device_count_band", workstreams: ["implementation_configuration", "testing_uat"], mapping: { "0": 0, "1_10": 2, "11_50": 6, "51_plus": 12 } },
     { id: "ucaas_calling_capabilities", field: "user_calling_capabilities_required", workstreams: ["solution_design", "implementation_configuration", "testing_uat"], bands: { "0": 0, "1_3": 2, "4_6": 4, "7_9": 8, "10_plus": 12 } },
     { id: "ucaas_call_flow_components", field: "call_flow_components_required", workstreams: ["solution_design", "implementation_configuration", "testing_uat"], bands: { "0": 0, "1_2": 3, "3_5": 8, "6_7": 14, "8_plus": 20 } },
-    { id: "ucaas_endpoint_mix", field: "endpoint_types_required", workstreams: ["implementation_configuration", "testing_uat", "training_enablement"], bands: { "0": 0, "1_2": 2, "3_4": 6, "5_6": 10, "7_plus": 14 } },
+    // Per-device-type analog endpoint drivers (replaces the old ucaas_endpoint_mix
+    // banded driver). Each device count contributes a fixed hours-per-unit rate.
+    { id: "ucaas_analog_fax",       field: "analog_fax_count",         workstreams: ["implementation_configuration", "testing_uat"], repeaterPerItem: 1 },
+    { id: "ucaas_paging_system",    field: "paging_system_count",      workstreams: ["implementation_configuration", "testing_uat"], repeaterPerItem: 4 },
+    { id: "ucaas_door_phone",       field: "door_phone_count",         workstreams: ["implementation_configuration", "testing_uat"], repeaterPerItem: 3 },
+    { id: "ucaas_gate_controller",  field: "gate_controller_count",    workstreams: ["implementation_configuration", "testing_uat"], repeaterPerItem: 3 },
+    { id: "ucaas_other_analog",     field: "other_analog_device_count", workstreams: ["implementation_configuration", "testing_uat"], repeaterPerItem: 2 },
+    // DID porting blocks — administrative work per number block.
+    { id: "ucaas_did_porting_blocks", field: "did_porting_blocks", workstreams: ["migration_data_porting"], repeaterPerItem: 0.25 },
     { id: "ucaas_integrations", field: "integrations_required", workstreams: ["integration", "testing_uat", "solution_design"], bands: { "0": 0, "1_2": 4, "3_4": 10, "5_6": 16, "7_plus": 24 } },
     { id: "ucaas_number_porting", field: "number_porting_required", workstreams: ["migration_data_porting", "project_management", "testing_uat"], mapping: { yes: 16, partial: 8, no: 0 } },
     { id: "ucaas_fax_analog", field: "fax_or_analog_required", workstreams: ["solution_design", "implementation_configuration", "testing_uat"], mapping: { yes_phase_1: 12, yes_future_phase: 4, no: 0 } },
@@ -151,8 +159,11 @@ function userCountToBand(n: number): string | null {
 }
 
 /** Pre-process the answers map before drivers/complexity/confidence run.
- *  Currently: if `user_count` is a number and `user_count_band` is unset,
- *  derive the band so the existing band-keyed mapping driver finds it. */
+ *  - `user_count` (number) → derives `user_count_band` for the existing band-keyed driver.
+ *  - per-device counts (analog_fax_count, paging_system_count, etc.) → synthesize
+ *    `endpoint_types_required` as an array of category strings so the existing
+ *    complexity scoring + confidence keep counting it.
+ */
 function normalizeAnswers(answers: Record<string, unknown>): Record<string, unknown> {
   const out = { ...answers };
   if (out.user_count_band === undefined || out.user_count_band === null || out.user_count_band === "") {
@@ -161,6 +172,15 @@ function normalizeAnswers(answers: Record<string, unknown>): Record<string, unkn
       const band = userCountToBand(n);
       if (band) out.user_count_band = band;
     }
+  }
+  if (out.endpoint_types_required === undefined || out.endpoint_types_required === null) {
+    const types: string[] = [];
+    if (asCount(out.analog_fax_count)         > 0) types.push("analog_fax");
+    if (asCount(out.paging_system_count)      > 0) types.push("paging_system");
+    if (asCount(out.door_phone_count)         > 0) types.push("door_phone");
+    if (asCount(out.gate_controller_count)    > 0) types.push("gate_controller");
+    if (asCount(out.other_analog_device_count) > 0) types.push("other_analog_device");
+    if (types.length > 0) out.endpoint_types_required = types;
   }
   return out;
 }
