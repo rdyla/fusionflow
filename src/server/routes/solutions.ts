@@ -321,8 +321,16 @@ const updateSolutionSchema = z.object({
   linked_project_id: z.string().nullable().optional(),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
-  pricing_mode: z.enum(["basic", "advanced"]).optional(),
+  pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
   basic_seat_count: z.number().int().positive().nullable().optional(),
+  basic_inputs: z.object({
+    users:             z.number().int().min(0),
+    sites:             z.number().int().min(1),
+    go_lives:          z.number().int().min(1),
+    training_sessions: z.number().int().min(0),
+    onsite_sites:      z.number().int().min(0),
+    onsite_devices:    z.number().int().min(0),
+  }).nullable().optional(),
 });
 
 app.patch("/:id", async (c) => {
@@ -369,6 +377,10 @@ app.patch("/:id", async (c) => {
     } else if (key === "pricing_mode" || key === "basic_seat_count") {
       fields.push(`${key} = ?`);
       values.push(value);
+      pricingTouched = true;
+    } else if (key === "basic_inputs") {
+      fields.push("basic_inputs = ?");
+      values.push(value === null ? null : JSON.stringify(value));
       pricingTouched = true;
     } else {
       fields.push(`${key} = ?`);

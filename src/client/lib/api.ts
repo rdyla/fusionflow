@@ -54,6 +54,7 @@ export type User = {
 // with the same enum used across the app.
 import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
 import type { AddOn } from "../../shared/sowAddOns";
+import type { UcaasBasicInputs } from "../../shared/ucaasBasicPricing";
 export type { SolutionType, OtherTechnology };
 export type { AddOn };
 
@@ -112,8 +113,11 @@ export type Solution = {
   add_ons: AddOn[];
   blended_rate: number;
   sow_total_amount: number | null;
-  pricing_mode: "basic" | "advanced";
+  pricing_mode: "tiered" | "basic" | "advanced";
+  /** Legacy seat-count column — preserved for one release while basic_inputs takes over. */
   basic_seat_count: number | null;
+  /** Formula-driven basic-mode inputs. Replaces basic_seat_count going forward. */
+  basic_inputs: UcaasBasicInputs | null;
   // Joined fields
   partner_ae_display_name: string | null;
   customer_pf_ae_name: string | null;
@@ -848,6 +852,9 @@ export type LaborEstimate = {
   confidence_score: number;
   confidence_band: string;
   risk_flags: string[];
+  /** When non-null, the engine used these values instead of the per-type
+   *  needs_assessments answers. Same key/value shape as NA answers. */
+  direct_inputs: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -1399,8 +1406,9 @@ export const api = {
       linked_project_id: string | null;
       add_ons: AddOn[];
       blended_rate: number;
-      pricing_mode: "basic" | "advanced";
+      pricing_mode: "tiered" | "basic" | "advanced";
       basic_seat_count: number | null;
+      basic_inputs: UcaasBasicInputs | null;
     }>
   ) =>
     request<Solution>(`/solutions/${id}`, {
@@ -1618,7 +1626,13 @@ export const api = {
     request<LaborEstimate[]>(`/solutions/${solutionId}/labor-estimates`),
   laborEstimate: (solutionId: string, solutionType: string) =>
     request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`),
-  upsertLaborEstimate: (solutionId: string, solutionType: string, body: { overrides?: Record<string, number> }) =>
+  upsertLaborEstimate: (solutionId: string, solutionType: string, body: {
+    overrides?: Record<string, number>;
+    /** Pass an object to set/update direct inputs (used in place of NA).
+     *  Pass null to clear them and fall back to the NA. Omit to leave
+     *  whatever's currently stored alone. */
+    direct_inputs?: Record<string, unknown> | null;
+  }) =>
     request<LaborEstimate>(`/solutions/${solutionId}/labor-estimates/${solutionType}`, {
       method: "PUT",
       body: JSON.stringify(body),

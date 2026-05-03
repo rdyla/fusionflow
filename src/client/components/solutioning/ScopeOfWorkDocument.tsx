@@ -1,7 +1,7 @@
 import type { NeedsAssessment, LaborEstimate, Solution } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE, type AddOn } from "../../../shared/sowAddOns";
-import { getUcaasBasicTier } from "../../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
 import logoUrl from "../../assets/packetfusion-fullcolor.png";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -259,8 +259,13 @@ function buildSowHtml(
   // (laborHours × rate). Workstream list still renders so the customer sees
   // scope, but the "Total Estimated Effort: Xh" footer is suppressed (there
   // is no labor model in basic mode).
-  const isBasic = solution.pricing_mode === "basic";
-  const basicTier = isBasic ? getUcaasBasicTier(solution.basic_seat_count) : null;
+  const isTiered = solution.pricing_mode === "tiered";
+  const isBasic  = solution.pricing_mode === "basic";
+  const isFlat   = isTiered || isBasic;
+  const tieredTier = isTiered ? getUcaasTieredTier(solution.basic_seat_count) : null;
+  const basicBreakdown = isBasic && solution.basic_inputs
+    ? calcUcaasBasicBreakdown(solution.basic_inputs, solution.blended_rate || DEFAULT_BLENDED_RATE)
+    : null;
 
   const wbsRows = WORKSTREAM_ORDER
     .filter((ws) => hasLabor ? (unifiedHours[ws] ?? 0) > 0 : true)
@@ -273,7 +278,7 @@ function buildSowHtml(
       </tr>`;
     }).join("");
 
-  const wbsFooter = (hasLabor && !isBasic)
+  const wbsFooter = (hasLabor && !isFlat)
     ? `<tr class="total-row">
         <td><strong>Total Estimated Effort</strong></td>
         <td class="ws-total"><strong>${laborHoursTotal}h</strong></td>
@@ -288,7 +293,7 @@ function buildSowHtml(
         </tr></thead>
         <tbody>${wbsRows}${wbsFooter}</tbody>
       </table>`
-    : `<p class="na-note">${isBasic
+    : `<p class="na-note">${isFlat
         ? "Workstream list is generated from the standard UCaaS deployment scope."
         : "A labor estimate has not yet been generated for this solution."}</p>`;
 
@@ -301,18 +306,65 @@ function buildSowHtml(
   // only aggregate dollar figure the customer sees.
   const addOns: AddOn[] = solution.add_ons ?? [];
   const blendedRate = solution.blended_rate || DEFAULT_BLENDED_RATE;
-  const breakdown = isBasic
-    ? calcBasicSowTotal(basicTier?.price ?? 0, addOns, blendedRate)
+  // Pre-add-on subtotal for the calc. Tiered uses tier price, basic uses
+  // the formula breakdown total, advanced uses (laborHours × rate).
+  const flatSubtotal = isTiered
+    ? (tieredTier?.price ?? 0)
+    : (isBasic ? (basicBreakdown?.total ?? 0) : 0);
+  const breakdown = isFlat
+    ? calcBasicSowTotal(flatSubtotal, addOns, blendedRate)
     : calcSowTotal(laborHoursTotal, addOns, blendedRate);
 
-  // Basic mode prepends a sizing line above any add-ons so the customer sees
-  // the tier price as the first investment item.
-  const basicSizingItem = (isBasic && basicTier)
-    ? `<div class="investment-item">
-         <div class="ii-desc">UCaaS Implementation${esc(` (${basicTier.label})`)}</div>
-         <div class="ii-detail">${fmtUsd(basicTier.price)}</div>
-       </div>`
-    : "";
+  // Flat-mode investment block: render the components as discrete line items
+  // so the customer sees what they're paying for. Description + quantity
+  // only — no per-unit rate, no PM math (internal pricing mechanics stay
+  // internal). Tiered: a single line. Basic: implementation, optional
+  // training, optional devices, PM.
+  const flatLineItems: { desc: string; detail: string; amount: number }[] = [];
+  if (isTiered && tieredTier) {
+    const seats = Number(solution.basic_seat_count) || 0;
+    const seatLabel = seats === 1 ? "1 seat" : `${seats} seats`;
+    flatLineItems.push({
+      desc: "UCaaS Implementation",
+      detail: seatLabel,
+      amount: tieredTier.price,
+    });
+  } else if (isBasic && basicBreakdown && solution.basic_inputs) {
+    const inputs = solution.basic_inputs;
+    const userLabel = inputs.users === 1 ? "1 user" : `${inputs.users} users`;
+    const sitesLabel = inputs.sites > 1 ? `, ${inputs.sites} sites` : "";
+    flatLineItems.push({
+      desc: "UCaaS Implementation",
+      detail: `${userLabel}${sitesLabel}`,
+      amount: basicBreakdown.laborSubtotal,
+    });
+    if (inputs.training_sessions > 0) {
+      flatLineItems.push({
+        desc: "Training Sessions",
+        detail: inputs.training_sessions === 1 ? "1 session" : `${inputs.training_sessions} sessions`,
+        amount: basicBreakdown.trainingTotal,
+      });
+    }
+    if (inputs.onsite_devices > 0) {
+      flatLineItems.push({
+        desc: "On-site Device Installation",
+        detail: inputs.onsite_devices === 1 ? "1 device" : `${inputs.onsite_devices} devices`,
+        amount: basicBreakdown.deviceInstallTotal,
+      });
+    }
+    flatLineItems.push({
+      desc: "Project Management",
+      detail: "",
+      amount: basicBreakdown.pm,
+    });
+  }
+
+  const flatLineItemsHtml = flatLineItems.map((item) => (
+    `<div class="investment-item">
+       <div class="ii-desc">${esc(item.desc)}${item.detail ? `<div class="ii-note">${esc(item.detail)}</div>` : ""}</div>
+       <div class="ii-detail">${fmtUsd(item.amount)}</div>
+     </div>`
+  )).join("");
 
   const investmentItems = addOns.map((a, i) => {
     const dollar = breakdown.addOnEffects[i]?.dollar ?? 0;
@@ -332,11 +384,11 @@ function buildSowHtml(
     </div>`;
   }).join("");
 
-  const hasInvestment = (isBasic && basicTier !== null) || hasLabor || addOns.length > 0;
+  const hasInvestment = flatLineItems.length > 0 || hasLabor || addOns.length > 0;
 
-  const investmentItemsHtml = (basicSizingItem || addOns.length > 0)
-    ? `<div class="investment-items-heading">${isBasic ? "Solution &amp; Custom Scope Items" : "Custom Scope Items"}</div>
-       <div class="investment-items">${basicSizingItem}${investmentItems}</div>`
+  const investmentItemsHtml = (flatLineItemsHtml || addOns.length > 0)
+    ? `<div class="investment-items-heading">${isFlat ? "Project Investment" : "Custom Scope Items"}</div>
+       <div class="investment-items">${flatLineItemsHtml}${investmentItems}</div>`
     : "";
 
   const totalHtml = hasInvestment
@@ -352,8 +404,8 @@ function buildSowHtml(
 
   const investmentHtml = hasInvestment
     ? `${investmentItemsHtml}${totalHtml}${paymentTermsHtml}`
-    : `<p class="na-note">${isBasic
-        ? "Enter a seat count on the Scope tab to populate basic-mode pricing."
+    : `<p class="na-note">${isFlat
+        ? "Fill the calculator inputs on the Labor tab to populate pricing."
         : "Investment details will be available once a labor estimate is generated."}</p>`;
 
   // ── Section 3: Assumptions & Customer Responsibilities ───────────────────
@@ -687,8 +739,14 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
   const hasEstimate = laborEstimates.length > 0;
   const previewUnifiedHours = unifyFinalHours(laborEstimates);
   const previewLaborTotal = laborEstimates.reduce((sum, le) => sum + (le.total_expected ?? 0), 0);
-  const isBasicMode = solution.pricing_mode === "basic";
-  const previewBasicTier = isBasicMode ? getUcaasBasicTier(solution.basic_seat_count) : null;
+  const isTieredMode  = solution.pricing_mode === "tiered";
+  const isBasicMode   = solution.pricing_mode === "basic";
+  const isFlatMode    = isTieredMode || isBasicMode;
+  const previewTieredTier = isTieredMode ? getUcaasTieredTier(solution.basic_seat_count) : null;
+  const previewBasicBreakdown = isBasicMode && solution.basic_inputs
+    ? calcUcaasBasicBreakdown(solution.basic_inputs, solution.blended_rate || DEFAULT_BLENDED_RATE)
+    : null;
+  const previewFlatReady = (isTieredMode && previewTieredTier) || (isBasicMode && previewBasicBreakdown);
 
   function openPrintWindow() {
     const html = buildSowHtml(solution, needsAssessment, laborEstimates, scopeText, logoUrl, sowData);
@@ -709,8 +767,8 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
         </button>
         <div style={{ fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>
           {!hasNa && <span style={{ color: "#f59e0b", marginRight: 12 }}>⚠ No needs assessment — some sections will be blank</span>}
-          {!hasEstimate && !isBasicMode && <span style={{ color: "#f59e0b" }}>⚠ No labor estimate — effort section will be blank</span>}
-          {isBasicMode && !previewBasicTier && <span style={{ color: "#f59e0b" }}>⚠ Basic pricing mode — enter a seat count on the Scope tab to populate the SOW total</span>}
+          {!hasEstimate && !isFlatMode && <span style={{ color: "#f59e0b" }}>⚠ No labor estimate — effort section will be blank</span>}
+          {isFlatMode && !previewFlatReady && <span style={{ color: "#f59e0b" }}>⚠ {isTieredMode ? "Tiered" : "Basic"} pricing mode — fill the calculator inputs on the Labor tab to populate the SOW total</span>}
         </div>
       </div>
 
@@ -732,7 +790,7 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
         </div>
 
         {/* Workstream summary table — preview only */}
-        {(hasEstimate || isBasicMode) && (
+        {(hasEstimate || isFlatMode) && (
           <div style={{ marginBottom: 16 }}>
             <div style={{ fontSize: 11, fontWeight: 700, color: "#03395f", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>
               Work Breakdown
@@ -745,13 +803,13 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
               </thead>
               <tbody>
                 {WORKSTREAM_ORDER
-                  .filter((ws) => isBasicMode ? true : (previewUnifiedHours[ws] ?? 0) > 0)
+                  .filter((ws) => isFlatMode ? true : (previewUnifiedHours[ws] ?? 0) > 0)
                   .map((ws) => (
                     <tr key={ws} style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <td style={{ padding: "8px 12px", color: "#334155" }}>{WORKSTREAM_LABELS[ws]}</td>
                     </tr>
                   ))}
-                {!isBasicMode && (
+                {!isFlatMode && (
                   <tr style={{ borderTop: "2px solid #0b9aad", background: "#f0f9ff" }}>
                     <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
                       <span>Total Estimated Effort</span>
@@ -759,20 +817,36 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
                     </td>
                   </tr>
                 )}
-                {isBasicMode && previewBasicTier && (
-                  <tr style={{ borderTop: "2px solid #17C662", background: "#f0fdf4" }}>
-                    <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
-                      <span>UCaaS Implementation ({previewBasicTier.label})</span>
-                      <span>${previewBasicTier.price.toLocaleString()}</span>
-                    </td>
-                  </tr>
-                )}
+                {isTieredMode && previewTieredTier && (() => {
+                  const seats = Number(solution.basic_seat_count) || 0;
+                  const seatLabel = seats === 1 ? "1 seat" : `${seats} seats`;
+                  return (
+                    <tr style={{ borderTop: "2px solid #17C662", background: "#f0fdf4" }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
+                        <span>UCaaS Implementation ({seatLabel})</span>
+                        <span>${previewTieredTier.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </td>
+                    </tr>
+                  );
+                })()}
+                {isBasicMode && previewBasicBreakdown && solution.basic_inputs && (() => {
+                  const users = solution.basic_inputs.users;
+                  const userLabel = users === 1 ? "1 user" : `${users} users`;
+                  return (
+                    <tr style={{ borderTop: "2px solid #17C662", background: "#f0fdf4" }}>
+                      <td style={{ padding: "10px 12px", fontWeight: 700, color: "#03395f", display: "flex", justifyContent: "space-between" }}>
+                        <span>UCaaS Implementation ({userLabel})</span>
+                        <span>${previewBasicBreakdown.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      </td>
+                    </tr>
+                  );
+                })()}
               </tbody>
             </table>
           </div>
         )}
 
-        {!hasEstimate && !isBasicMode && (
+        {!hasEstimate && !isFlatMode && (
           <div style={{ padding: "12px 16px", background: "#fff7ed", border: "1px solid #fde68a", borderRadius: 6, fontSize: 13, color: "#92400e", marginBottom: 16 }}>
             Generate a labor estimate on the Labor Estimate tab to populate the effort section of the SOW.
           </div>

@@ -8,26 +8,18 @@ import {
   calcBasicSowTotal,
   type AddOnKind,
 } from "../../../shared/sowAddOns";
-import {
-  UCAAS_BASIC_TIERS,
-  UCAAS_BASIC_MAX_SEATS,
-  getUcaasBasicTier,
-  canUseBasicPricing,
-} from "../../../shared/ucaasBasicPricing";
-
-type PricingMode = "basic" | "advanced";
+import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
 
 type Props = {
   solution: Solution;
-  /** Aggregated final hours across every type's labor estimate. */
+  /** Aggregated final hours across every type's labor estimate. Used in
+   *  Advanced mode for the labor subtotal display. Ignored in Basic mode. */
   laborHoursTotal: number;
   canEdit: boolean;
   onSaved: (next: {
     add_ons: AddOn[];
     blended_rate: number;
     sow_total_amount: number;
-    pricing_mode: PricingMode;
-    basic_seat_count: number | null;
   }) => void;
 };
 
@@ -44,8 +36,6 @@ function newId(): string {
 export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, onSaved }: Props) {
   const [addOns, setAddOns] = useState<AddOn[]>(solution.add_ons ?? []);
   const [rate, setRate] = useState<number>(solution.blended_rate || DEFAULT_BLENDED_RATE);
-  const [pricingMode, setPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
-  const [seatCount, setSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
@@ -53,19 +43,28 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
   useEffect(() => {
     setAddOns(solution.add_ons ?? []);
     setRate(solution.blended_rate || DEFAULT_BLENDED_RATE);
-    setPricingMode(solution.pricing_mode ?? "advanced");
-    setSeatCount(solution.basic_seat_count ?? null);
-  }, [solution.add_ons, solution.blended_rate, solution.pricing_mode, solution.basic_seat_count]);
+  }, [solution.add_ons, solution.blended_rate]);
 
-  const basicAvailable = canUseBasicPricing(solution.solution_types);
-  // If a solution becomes a combo while it was on basic, force-display advanced.
-  const effectiveMode: PricingMode = !basicAvailable && pricingMode === "basic" ? "advanced" : pricingMode;
-  const tier = effectiveMode === "basic" ? getUcaasBasicTier(seatCount) : null;
-  const seatCountOver = effectiveMode === "basic" && seatCount !== null && seatCount > UCAAS_BASIC_MAX_SEATS;
+  // Pricing mode + relevant inputs are set on the Labor tab; this component
+  // just reads them off the solution row and shows the resulting totals.
+  const isTiered = solution.pricing_mode === "tiered";
+  const isBasic  = solution.pricing_mode === "basic";
+  const isFlat   = isTiered || isBasic; // both bypass the labor estimate
+  const tieredTier = isTiered ? getUcaasTieredTier(solution.basic_seat_count) : null;
+  const basicBreakdown = isBasic && solution.basic_inputs
+    ? calcUcaasBasicBreakdown(solution.basic_inputs, rate)
+    : null;
 
-  const breakdown = effectiveMode === "basic"
-    ? calcBasicSowTotal(tier?.price ?? 0, addOns, rate)
+  // Pre-add-on subtotal: tier price for tiered, formula total for basic, hours×rate for advanced.
+  let flatSubtotal = 0;
+  if (isTiered) flatSubtotal = tieredTier?.price ?? 0;
+  if (isBasic)  flatSubtotal = basicBreakdown?.total ?? 0;
+
+  const breakdown = isFlat
+    ? calcBasicSowTotal(flatSubtotal, addOns, rate)
     : calcSowTotal(laborHoursTotal, addOns, rate);
+
+  const flatReady = (isTiered && tieredTier) || (isBasic && basicBreakdown);
 
   function updateAddOn(idx: number, patch: Partial<AddOn>) {
     setAddOns((prev) => prev.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
@@ -83,16 +82,12 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
       const updated = await api.updateSolution(solution.id, {
         add_ons: addOns,
         blended_rate: rate,
-        pricing_mode: effectiveMode,
-        basic_seat_count: effectiveMode === "basic" ? (seatCount ?? null) : null,
       });
       setSavedAt(new Date().toLocaleTimeString());
       onSaved({
         add_ons: updated.add_ons ?? addOns,
         blended_rate: updated.blended_rate ?? rate,
         sow_total_amount: updated.sow_total_amount ?? breakdown.total,
-        pricing_mode: updated.pricing_mode ?? effectiveMode,
-        basic_seat_count: updated.basic_seat_count ?? null,
       });
     } finally {
       setSaving(false);
@@ -101,9 +96,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
 
   const dirty =
     JSON.stringify(addOns) !== JSON.stringify(solution.add_ons ?? []) ||
-    rate !== (solution.blended_rate || DEFAULT_BLENDED_RATE) ||
-    effectiveMode !== (solution.pricing_mode ?? "advanced") ||
-    (seatCount ?? null) !== (solution.basic_seat_count ?? null);
+    rate !== (solution.blended_rate || DEFAULT_BLENDED_RATE);
 
   const accent = "#003B5C";
   const accentGreen = "#17C662";
@@ -118,145 +111,74 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
           <span style={{ fontSize: 12, color: "#10b981" }}>Saved {savedAt}</span>
         )}
       </div>
-      <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-        {effectiveMode === "basic"
-          ? "Basic pricing uses a flat tier price by seat count for sub-100-seat UCaaS deployments. Add-ons stack on top of the tier price."
-          : "Labor hours come from the labor estimate. Add-ons charge or discount against that, then everything is priced at the blended rate."}
-      </p>
 
-      {/* Pricing mode toggle */}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, padding: "10px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Pricing Mode</span>
-        <div style={{ display: "inline-flex", border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
-          {(["basic", "advanced"] as const).map((m) => {
-            const selected = effectiveMode === m;
-            const disabled = m === "basic" && !basicAvailable;
-            return (
-              <button
-                key={m}
-                type="button"
-                disabled={!canEdit || disabled}
-                onClick={() => setPricingMode(m)}
-                style={{
-                  padding: "5px 14px",
-                  fontSize: 12,
-                  fontWeight: 600,
-                  background: selected ? accent : "#fff",
-                  color: selected ? "#fff" : disabled ? "#cbd5e1" : "#1e293b",
-                  border: "none",
-                  borderRight: m === "basic" ? "1px solid #cbd5e1" : "none",
-                  cursor: !canEdit || disabled ? "not-allowed" : "pointer",
-                  textTransform: "capitalize",
-                }}
-              >
-                {m}
-              </button>
-            );
-          })}
-        </div>
-        {!basicAvailable && (
-          <span style={{ fontSize: 12, color: "#94a3b8" }}>
-            Basic pricing is only available for pure UCaaS solutions.
-          </span>
-        )}
+      {/* Pricing-mode pointer — read-only here; toggle + inputs live on the Labor tab. */}
+      <div style={{ marginBottom: 14, padding: "8px 12px", background: isFlat ? "#f0f9ff" : "#f8fafc", border: `1px solid ${isFlat ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 6, fontSize: 12, color: "#475569", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+        <span>
+          Pricing mode: <strong style={{ color: isFlat ? "#0369a1" : "#1e293b", textTransform: "capitalize" }}>{solution.pricing_mode ?? "advanced"}</strong>
+          {isTiered && tieredTier && <> · {tieredTier.label} — {fmtUsd(tieredTier.price)}</>}
+          {isTiered && !tieredTier && solution.basic_seat_count != null && <> · seat count out of range</>}
+          {isTiered && solution.basic_seat_count == null && <> · no seat count set</>}
+          {isBasic && solution.basic_inputs && (
+            <> · {solution.basic_inputs.users} user{solution.basic_inputs.users === 1 ? "" : "s"} · {fmtUsd(basicBreakdown?.total ?? 0)}</>
+          )}
+          {isBasic && !solution.basic_inputs && <> · no inputs set</>}
+        </span>
+        <span style={{ color: "#94a3b8" }}>Set on the Labor tab</span>
       </div>
 
-      {effectiveMode === "basic" ? (
-        /* Basic mode — seat count + tier display */
-        <div style={{ display: "grid", gridTemplateColumns: "180px 180px 1fr", gap: 16, alignItems: "stretch", marginBottom: 16 }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Seat Count</span>
-            <input
-              className="ms-input"
-              type="number"
-              min={1}
-              step={1}
-              value={seatCount ?? ""}
-              onChange={(e) => {
-                const n = parseInt(e.target.value, 10);
-                setSeatCount(Number.isFinite(n) && n > 0 ? n : null);
-              }}
-              disabled={!canEdit}
-              placeholder="e.g. 50"
-            />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Blended Rate ($/hr)</span>
-            <input
-              className="ms-input"
-              type="number"
-              min={0}
-              step={1}
-              value={rate || ""}
-              onChange={(e) => setRate(Number(e.target.value) || 0)}
-              disabled={!canEdit}
-              placeholder={String(DEFAULT_BLENDED_RATE)}
-              title="Used only for hours-kind add-ons in basic mode"
-            />
-          </label>
-          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, fontSize: 12 }}>
-            <div>
-              <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: tier ? accent : "#94a3b8" }}>
-                {tier ? `${tier.label} — ${fmtUsd(tier.price)}` : seatCountOver ? "Out of range" : "—"}
+      <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
+        {isTiered && "Add-ons stack on top of the tier price. Blended rate is used only for hours-kind add-ons."}
+        {isBasic && "Add-ons stack on top of the formula total. Blended rate is used only for hours-kind add-ons."}
+        {!isFlat && "Labor hours come from the labor estimate. Add-ons charge or discount against that, then everything is priced at the blended rate."}
+      </p>
+
+      {/* Rate + summary row */}
+      <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16, alignItems: "stretch", marginBottom: 16 }}>
+        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Blended Rate ($/hr)</span>
+          <input
+            className="ms-input"
+            type="number"
+            min={0}
+            step={1}
+            value={rate || ""}
+            onChange={(e) => setRate(Number(e.target.value) || 0)}
+            disabled={!canEdit}
+            placeholder={String(DEFAULT_BLENDED_RATE)}
+            title={isFlat ? "Used only for hours-kind add-ons in tiered/basic mode" : undefined}
+          />
+        </label>
+        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: isFlat ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 12, fontSize: 12 }}>
+          {isFlat ? (
+            <>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{isTiered ? "Tier Price" : "Basic Subtotal"}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: flatReady ? accent : "#94a3b8" }}>{flatReady ? fmtUsd(flatSubtotal) : "—"}</div>
               </div>
-            </div>
-            <div>
-              <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: tier ? accentGreen : "#94a3b8" }}>{tier ? fmtUsd(breakdown.total) : "—"}</div>
-            </div>
-          </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: flatReady ? accentGreen : "#94a3b8" }}>{flatReady ? fmtUsd(breakdown.total) : "—"}</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Labor Hours</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{breakdown.laborHours}h</div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Labor Subtotal</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmtUsd(breakdown.laborSubtotal)}</div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: accentGreen }}>{fmtUsd(breakdown.total)}</div>
+              </div>
+            </>
+          )}
         </div>
-      ) : (
-        /* Advanced mode — labor hours + rate + breakdown */
-        <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 16, alignItems: "stretch", marginBottom: 16 }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Blended Rate ($/hr)</span>
-            <input
-              className="ms-input"
-              type="number"
-              min={0}
-              step={1}
-              value={rate || ""}
-              onChange={(e) => setRate(Number(e.target.value) || 0)}
-              disabled={!canEdit}
-              placeholder={String(DEFAULT_BLENDED_RATE)}
-            />
-          </label>
-          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, fontSize: 12 }}>
-            <div>
-              <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Labor Hours</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{breakdown.laborHours}h</div>
-            </div>
-            <div>
-              <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Labor Subtotal</div>
-              <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmtUsd(breakdown.laborSubtotal)}</div>
-            </div>
-            <div>
-              <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: accentGreen }}>{fmtUsd(breakdown.total)}</div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {effectiveMode === "basic" && seatCountOver && (
-        <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fff7ed", border: "1px solid #fde68a", borderRadius: 6, fontSize: 13, color: "#92400e" }}>
-          Basic pricing covers up to {UCAAS_BASIC_MAX_SEATS} seats. For larger deployments, switch to Advanced.
-        </div>
-      )}
-
-      {effectiveMode === "basic" && (
-        <div style={{ marginBottom: 16, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 12, color: "#0369a1" }}>
-          <strong>Tier ladder:</strong>{" "}
-          {UCAAS_BASIC_TIERS.map((t, i) => (
-            <span key={t.maxSeats}>
-              {i > 0 && " · "}
-              {t.label}: {fmtUsd(t.price)}
-            </span>
-          ))}
-        </div>
-      )}
+      </div>
 
       {/* Add-on rows */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
