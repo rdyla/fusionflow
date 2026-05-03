@@ -54,16 +54,10 @@ type InputFieldDef =
   | { key: string; label: string; type: "count"; placeholder?: string; help?: string };
 
 const UCAAS_INPUT_FIELDS: InputFieldDef[] = [
-  {
-    key: "user_count_band", label: "Seat count", type: "select",
-    options: [
-      { value: "1_25",     label: "1–25 seats" },
-      { value: "26_100",   label: "26–100 seats" },
-      { value: "101_250",  label: "101–250 seats" },
-      { value: "251_500",  label: "251–500 seats" },
-      { value: "500_plus", label: "500+ seats" },
-    ],
-  },
+  // user_count is a direct numeric input. The server bins it into the
+  // band-keyed driver mapping at calc time, so existing band-driven NA
+  // solutions still work unchanged.
+  { key: "user_count", label: "User count", type: "count", placeholder: "e.g. 50", help: "Total seats in scope" },
   {
     key: "deployment_type", label: "Deployment type", type: "select",
     options: [
@@ -99,12 +93,29 @@ const INPUT_FIELDS_BY_TYPE: Record<string, InputFieldDef[]> = {
   ucaas: UCAAS_INPUT_FIELDS,
 };
 
+/** Midpoint seat count for each legacy band — used to pre-fill the new
+ *  numeric user_count input from existing NA / direct-input data that
+ *  only has the banded user_count_band string. */
+const USER_COUNT_BAND_MIDPOINTS: Record<string, string> = {
+  "1_25":     "13",
+  "26_100":   "63",
+  "101_250":  "175",
+  "251_500":  "375",
+  "500_plus": "500",
+};
+
 /** Pull the value for a calculator-input field out of an answer-shaped record.
  *  Handles the NA shape (arrays for count fields) by reducing to length. */
 function readInputValue(field: InputFieldDef, source: Record<string, unknown> | null | undefined): string {
   if (!source) return "";
   const raw = source[field.key];
-  if (raw == null) return "";
+  if (raw == null) {
+    // user_count: legacy fallback when only the banded value exists.
+    if (field.key === "user_count" && typeof source["user_count_band"] === "string") {
+      return USER_COUNT_BAND_MIDPOINTS[source["user_count_band"]] ?? "";
+    }
+    return "";
+  }
   if (field.type === "count") {
     if (Array.isArray(raw)) return String(raw.length);
     if (typeof raw === "number") return String(raw);
