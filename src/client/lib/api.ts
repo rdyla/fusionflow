@@ -54,6 +54,7 @@ export type User = {
 // with the same enum used across the app.
 import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
 import type { AddOn } from "../../shared/sowAddOns";
+import type { UcaasBasicInputs } from "../../shared/ucaasBasicPricing";
 export type { SolutionType, OtherTechnology };
 export type { AddOn };
 
@@ -113,7 +114,10 @@ export type Solution = {
   blended_rate: number;
   sow_total_amount: number | null;
   pricing_mode: "basic" | "advanced";
+  /** Legacy seat-count column — preserved for one release while basic_inputs takes over. */
   basic_seat_count: number | null;
+  /** Formula-driven basic-mode inputs. Replaces basic_seat_count going forward. */
+  basic_inputs: UcaasBasicInputs | null;
   // Joined fields
   partner_ae_display_name: string | null;
   customer_pf_ae_name: string | null;
@@ -1404,6 +1408,7 @@ export const api = {
       blended_rate: number;
       pricing_mode: "basic" | "advanced";
       basic_seat_count: number | null;
+      basic_inputs: UcaasBasicInputs | null;
     }>
   ) =>
     request<Solution>(`/solutions/${id}`, {

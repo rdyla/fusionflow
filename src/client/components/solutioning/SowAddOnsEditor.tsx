@@ -8,7 +8,7 @@ import {
   calcBasicSowTotal,
   type AddOnKind,
 } from "../../../shared/sowAddOns";
-import { getUcaasBasicTier } from "../../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown } from "../../../shared/ucaasBasicPricing";
 
 type Props = {
   solution: Solution;
@@ -45,13 +45,15 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
     setRate(solution.blended_rate || DEFAULT_BLENDED_RATE);
   }, [solution.add_ons, solution.blended_rate]);
 
-  // Pricing mode + seat count are set on the Labor tab; this component just
+  // Pricing mode + basic inputs are set on the Labor tab; this component just
   // reads them off the solution row and shows the resulting totals.
   const isBasic = solution.pricing_mode === "basic";
-  const tier = isBasic ? getUcaasBasicTier(solution.basic_seat_count) : null;
+  const basicBreakdown = isBasic && solution.basic_inputs
+    ? calcUcaasBasicBreakdown(solution.basic_inputs, rate)
+    : null;
 
   const breakdown = isBasic
-    ? calcBasicSowTotal(tier?.price ?? 0, addOns, rate)
+    ? calcBasicSowTotal(basicBreakdown?.total ?? 0, addOns, rate)
     : calcSowTotal(laborHoursTotal, addOns, rate);
 
   function updateAddOn(idx: number, patch: Partial<AddOn>) {
@@ -100,13 +102,14 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
         )}
       </div>
 
-      {/* Pricing-mode pointer — read-only here; toggle lives on the Labor tab. */}
+      {/* Pricing-mode pointer — read-only here; toggle + inputs live on the Labor tab. */}
       <div style={{ marginBottom: 14, padding: "8px 12px", background: isBasic ? "#f0f9ff" : "#f8fafc", border: `1px solid ${isBasic ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 6, fontSize: 12, color: "#475569", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span>
           Pricing mode: <strong style={{ color: isBasic ? "#0369a1" : "#1e293b", textTransform: "capitalize" }}>{solution.pricing_mode ?? "advanced"}</strong>
-          {isBasic && tier && <> · {tier.label} — {fmtUsd(tier.price)}</>}
-          {isBasic && !tier && solution.basic_seat_count != null && <> · seat count out of range</>}
-          {isBasic && solution.basic_seat_count == null && <> · no seat count set</>}
+          {isBasic && solution.basic_inputs && (
+            <> · {solution.basic_inputs.users} user{solution.basic_inputs.users === 1 ? "" : "s"} · {fmtUsd(basicBreakdown?.total ?? 0)}</>
+          )}
+          {isBasic && !solution.basic_inputs && <> · no inputs set</>}
         </span>
         <span style={{ color: "#94a3b8" }}>Set on the Labor tab</span>
       </div>
@@ -137,12 +140,12 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
           {isBasic ? (
             <>
               <div>
-                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier Price</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: tier ? accent : "#94a3b8" }}>{tier ? fmtUsd(tier.price) : "—"}</div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Basic Subtotal</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: basicBreakdown ? accent : "#94a3b8" }}>{basicBreakdown ? fmtUsd(basicBreakdown.total) : "—"}</div>
               </div>
               <div>
                 <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: tier ? accentGreen : "#94a3b8" }}>{tier ? fmtUsd(breakdown.total) : "—"}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: basicBreakdown ? accentGreen : "#94a3b8" }}>{basicBreakdown ? fmtUsd(breakdown.total) : "—"}</div>
               </div>
             </>
           ) : (
