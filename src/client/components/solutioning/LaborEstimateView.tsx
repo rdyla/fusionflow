@@ -3,7 +3,11 @@ import { api, type LaborEstimate, type Solution } from "../../lib/api";
 import {
   calcUcaasBasicBreakdown,
   canUseBasicPricing,
+  canUseTieredPricing,
+  getUcaasTieredTier,
   UCAAS_BASIC_DEFAULTS,
+  UCAAS_TIERED_TIERS,
+  UCAAS_TIERED_MAX_SEATS,
   TRAINING_SESSION_COST,
   ONSITE_DEVICE_COST,
   PM_MULTIPLIER,
@@ -127,7 +131,7 @@ function serializeInputs(fields: InputFieldDef[], state: Record<string, string>)
   return out;
 }
 
-type PricingMode = "basic" | "advanced";
+type PricingMode = "tiered" | "basic" | "advanced";
 
 function fmtUsd(n: number): string {
   const sign = n < 0 ? "-" : "";
@@ -193,15 +197,17 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     : (hasAssessment ? "needs_assessment" : "none");
 
   // ── Pricing mode (consolidated onto the Labor tab) ─────────────────────────
-  // The pricing-mode toggle lives here because it controls which view of the
-  // labor data the user actually wants — basic skips the workstream calc
-  // entirely; advanced is everything. Stored on the solution row, so the
-  // SowAddOnsEditor on the Scope tab just reads it.
+  // Three modes:
+  //   - tiered:   fixed-price ladder for sub-100-seat UCaaS (uses basic_seat_count)
+  //   - basic:    formula-driven UCaaS, any size (uses basic_inputs)
+  //   - advanced: full labor calculator, any solution type
+  // Tiered + basic both require pure UCaaS solutions; combos force advanced.
+  const tieredAvailable = canUseTieredPricing(solution.solution_types);
   const basicAvailable = canUseBasicPricing(solution.solution_types);
   const [pricingMode, setPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
-  // Initialize from basic_inputs; fall back to legacy basic_seat_count for solutions
-  // that haven't been touched since the formula migration (so users see their
-  // existing seat count preserved).
+  // Tiered mode reads/writes basic_seat_count.
+  const [tieredSeatCount, setTieredSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
+  // Basic mode reads/writes basic_inputs (with a back-fill from basic_seat_count for old rows).
   const initialInputs = (): UcaasBasicInputs => {
     if (solution.basic_inputs) return solution.basic_inputs;
     if (solution.basic_seat_count != null) return { ...UCAAS_BASIC_DEFAULTS, users: solution.basic_seat_count };
@@ -209,6 +215,7 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
   };
   const [basicInputs, setBasicInputs] = useState<UcaasBasicInputs>(initialInputs);
   const [savedPricingMode, setSavedPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
+  const [savedTieredSeatCount, setSavedTieredSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
   const [savedBasicInputs, setSavedBasicInputs] = useState<UcaasBasicInputs>(initialInputs);
   const [savingPricing, setSavingPricing] = useState(false);
 
@@ -221,18 +228,27 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
           ? { ...UCAAS_BASIC_DEFAULTS, users: solution.basic_seat_count }
           : { ...UCAAS_BASIC_DEFAULTS });
     setPricingMode(solution.pricing_mode ?? "advanced");
+    setTieredSeatCount(solution.basic_seat_count ?? null);
     setBasicInputs(next);
     setSavedPricingMode(solution.pricing_mode ?? "advanced");
+    setSavedTieredSeatCount(solution.basic_seat_count ?? null);
     setSavedBasicInputs(next);
   }, [solution.pricing_mode, solution.basic_inputs, solution.basic_seat_count]);
 
-  // Combo solutions (e.g. UCaaS + CCaaS) lose access to basic. Force advanced.
-  const effectiveMode: PricingMode = !basicAvailable && pricingMode === "basic" ? "advanced" : pricingMode;
+  // Combo solutions force advanced.
+  const effectiveMode: PricingMode = (() => {
+    if (pricingMode === "tiered" && !tieredAvailable) return "advanced";
+    if (pricingMode === "basic" && !basicAvailable) return "advanced";
+    return pricingMode;
+  })();
   const blendedRateForBasic = solution.blended_rate || DEFAULT_BLENDED_RATE;
   const basicBreakdown = useMemo(
     () => calcUcaasBasicBreakdown(basicInputs, blendedRateForBasic),
     [basicInputs, blendedRateForBasic],
   );
+  const tieredTier = effectiveMode === "tiered" ? getUcaasTieredTier(tieredSeatCount) : null;
+  const tieredOver = effectiveMode === "tiered" && tieredSeatCount !== null && tieredSeatCount > UCAAS_TIERED_MAX_SEATS;
+
   const inputsDirtyVsSaved =
     basicInputs.users             !== savedBasicInputs.users ||
     basicInputs.sites             !== savedBasicInputs.sites ||
@@ -240,7 +256,10 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     basicInputs.training_sessions !== savedBasicInputs.training_sessions ||
     basicInputs.onsite_sites      !== savedBasicInputs.onsite_sites ||
     basicInputs.onsite_devices    !== savedBasicInputs.onsite_devices;
-  const pricingDirty = effectiveMode !== savedPricingMode || (effectiveMode === "basic" && inputsDirtyVsSaved);
+  const pricingDirty =
+    effectiveMode !== savedPricingMode ||
+    (effectiveMode === "basic" && inputsDirtyVsSaved) ||
+    (effectiveMode === "tiered" && (tieredSeatCount ?? null) !== (savedTieredSeatCount ?? null));
 
   function updateBasicInput<K extends keyof UcaasBasicInputs>(key: K, value: UcaasBasicInputs[K]) {
     setBasicInputs((prev) => ({ ...prev, [key]: value }));
@@ -251,10 +270,14 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     try {
       const updated = await api.updateSolution(solution.id, {
         pricing_mode: effectiveMode,
+        // Tiered mode persists basic_seat_count; clear it in other modes.
+        basic_seat_count: effectiveMode === "tiered" ? (tieredSeatCount ?? null) : null,
+        // Basic mode persists basic_inputs; clear it in other modes.
         basic_inputs: effectiveMode === "basic" ? basicInputs : null,
       });
       onSolutionChange(updated);
       setSavedPricingMode(effectiveMode);
+      setSavedTieredSeatCount(effectiveMode === "tiered" ? (tieredSeatCount ?? null) : null);
       setSavedBasicInputs(effectiveMode === "basic" ? basicInputs : { ...UCAAS_BASIC_DEFAULTS });
     } finally {
       setSavingPricing(false);
@@ -386,9 +409,14 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
           Pricing Mode
         </h3>
         <div style={{ display: "inline-flex", border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
-          {(["basic", "advanced"] as const).map((m) => {
+          {(["tiered", "basic", "advanced"] as const).map((m, i, arr) => {
             const selected = effectiveMode === m;
-            const disabled = m === "basic" && !basicAvailable;
+            const disabled = (m === "tiered" && !tieredAvailable) || (m === "basic" && !basicAvailable);
+            const title = disabled
+              ? (m === "tiered"
+                  ? "Tiered pricing is only available for pure UCaaS solutions (sub-100 seats)."
+                  : "Basic pricing is only available for pure UCaaS solutions.")
+              : undefined;
             return (
               <button
                 key={m}
@@ -402,11 +430,11 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
                   background: selected ? pricingAccent : "#fff",
                   color: selected ? "#fff" : disabled ? "#cbd5e1" : "#1e293b",
                   border: "none",
-                  borderRight: m === "basic" ? "1px solid #cbd5e1" : "none",
+                  borderRight: i < arr.length - 1 ? "1px solid #cbd5e1" : "none",
                   cursor: !canEdit || disabled ? "not-allowed" : "pointer",
                   textTransform: "capitalize",
                 }}
-                title={disabled ? "Basic pricing is only available for pure UCaaS solutions." : undefined}
+                title={title}
               >
                 {m}
               </button>
@@ -415,10 +443,61 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
         </div>
       </div>
       <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 14px", lineHeight: 1.5 }}>
-        {effectiveMode === "basic"
-          ? "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per additional site + 6h per additional go-live, plus optional training and on-site work, +15% PM."
-          : "Advanced pricing uses the full labor calculator — workstream hours derived from inputs (direct or from the needs assessment), then priced at the blended rate."}
+        {effectiveMode === "tiered" && "Tiered pricing uses a fixed-price ladder by seat count for sub-100-seat UCaaS deployments. Fastest path to a quote — no formula, no estimate."}
+        {effectiveMode === "basic" && "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per additional site + 6h per additional go-live, plus optional training and on-site work, +15% PM."}
+        {effectiveMode === "advanced" && "Advanced pricing uses the full labor calculator — workstream hours derived from inputs (direct or from the needs assessment), then priced at the blended rate."}
       </p>
+
+      {effectiveMode === "tiered" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, alignItems: "stretch", marginBottom: 14 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Seat Count</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={1}
+                step={1}
+                value={tieredSeatCount ?? ""}
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  setTieredSeatCount(Number.isFinite(n) && n > 0 ? n : null);
+                }}
+                disabled={!canEdit}
+                placeholder="e.g. 50"
+              />
+            </label>
+            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, fontSize: 12 }}>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: tieredTier ? pricingAccent : "#94a3b8" }}>
+                  {tieredTier ? `${tieredTier.label} — ${fmtUsd(tieredTier.price)}` : tieredOver ? "Out of range" : "—"}
+                </div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier Price</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: tieredTier ? "#17C662" : "#94a3b8" }}>{tieredTier ? fmtUsd(tieredTier.price) : "—"}</div>
+              </div>
+            </div>
+          </div>
+
+          {tieredOver && (
+            <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fff7ed", border: "1px solid #fde68a", borderRadius: 6, fontSize: 13, color: "#92400e" }}>
+              Tiered pricing covers up to {UCAAS_TIERED_MAX_SEATS} seats. For larger deployments, switch to Basic (formula) or Advanced.
+            </div>
+          )}
+
+          <div style={{ marginBottom: 14, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 12, color: "#0369a1" }}>
+            <strong>Tier ladder:</strong>{" "}
+            {UCAAS_TIERED_TIERS.map((t, i) => (
+              <span key={t.maxSeats}>
+                {i > 0 && " · "}
+                {t.label}: {fmtUsd(t.price)}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
 
       {effectiveMode === "basic" && (
         <>
@@ -639,9 +718,9 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     </div>
   ) : null;
 
-  // Basic pricing mode replaces the labor calc entirely — no workstreams, no
-  // direct inputs, no NA. Just the pricing card.
-  if (effectiveMode === "basic") {
+  // Tiered and Basic both replace the labor calc entirely — no workstreams,
+  // no direct inputs, no NA. Just the pricing card.
+  if (effectiveMode === "tiered" || effectiveMode === "basic") {
     return (
       <div style={{ display: "grid", gap: 20 }}>
         {pricingModeCard}
