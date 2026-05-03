@@ -113,7 +113,7 @@ export type Solution = {
   add_ons: AddOn[];
   blended_rate: number;
   sow_total_amount: number | null;
-  pricing_mode: "basic" | "advanced";
+  pricing_mode: "tiered" | "basic" | "advanced";
   /** Legacy seat-count column — preserved for one release while basic_inputs takes over. */
   basic_seat_count: number | null;
   /** Formula-driven basic-mode inputs. Replaces basic_seat_count going forward. */
@@ -1406,7 +1406,7 @@ export const api = {
       linked_project_id: string | null;
       add_ons: AddOn[];
       blended_rate: number;
-      pricing_mode: "basic" | "advanced";
+      pricing_mode: "tiered" | "basic" | "advanced";
       basic_seat_count: number | null;
       basic_inputs: UcaasBasicInputs | null;
     }>

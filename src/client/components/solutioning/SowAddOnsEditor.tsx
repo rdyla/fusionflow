@@ -8,7 +8,7 @@ import {
   calcBasicSowTotal,
   type AddOnKind,
 } from "../../../shared/sowAddOns";
-import { calcUcaasBasicBreakdown } from "../../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
 
 type Props = {
   solution: Solution;
@@ -45,16 +45,26 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
     setRate(solution.blended_rate || DEFAULT_BLENDED_RATE);
   }, [solution.add_ons, solution.blended_rate]);
 
-  // Pricing mode + basic inputs are set on the Labor tab; this component just
-  // reads them off the solution row and shows the resulting totals.
-  const isBasic = solution.pricing_mode === "basic";
+  // Pricing mode + relevant inputs are set on the Labor tab; this component
+  // just reads them off the solution row and shows the resulting totals.
+  const isTiered = solution.pricing_mode === "tiered";
+  const isBasic  = solution.pricing_mode === "basic";
+  const isFlat   = isTiered || isBasic; // both bypass the labor estimate
+  const tieredTier = isTiered ? getUcaasTieredTier(solution.basic_seat_count) : null;
   const basicBreakdown = isBasic && solution.basic_inputs
     ? calcUcaasBasicBreakdown(solution.basic_inputs, rate)
     : null;
 
-  const breakdown = isBasic
-    ? calcBasicSowTotal(basicBreakdown?.total ?? 0, addOns, rate)
+  // Pre-add-on subtotal: tier price for tiered, formula total for basic, hours×rate for advanced.
+  let flatSubtotal = 0;
+  if (isTiered) flatSubtotal = tieredTier?.price ?? 0;
+  if (isBasic)  flatSubtotal = basicBreakdown?.total ?? 0;
+
+  const breakdown = isFlat
+    ? calcBasicSowTotal(flatSubtotal, addOns, rate)
     : calcSowTotal(laborHoursTotal, addOns, rate);
+
+  const flatReady = (isTiered && tieredTier) || (isBasic && basicBreakdown);
 
   function updateAddOn(idx: number, patch: Partial<AddOn>) {
     setAddOns((prev) => prev.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
@@ -103,9 +113,12 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
       </div>
 
       {/* Pricing-mode pointer — read-only here; toggle + inputs live on the Labor tab. */}
-      <div style={{ marginBottom: 14, padding: "8px 12px", background: isBasic ? "#f0f9ff" : "#f8fafc", border: `1px solid ${isBasic ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 6, fontSize: 12, color: "#475569", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ marginBottom: 14, padding: "8px 12px", background: isFlat ? "#f0f9ff" : "#f8fafc", border: `1px solid ${isFlat ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 6, fontSize: 12, color: "#475569", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span>
-          Pricing mode: <strong style={{ color: isBasic ? "#0369a1" : "#1e293b", textTransform: "capitalize" }}>{solution.pricing_mode ?? "advanced"}</strong>
+          Pricing mode: <strong style={{ color: isFlat ? "#0369a1" : "#1e293b", textTransform: "capitalize" }}>{solution.pricing_mode ?? "advanced"}</strong>
+          {isTiered && tieredTier && <> · {tieredTier.label} — {fmtUsd(tieredTier.price)}</>}
+          {isTiered && !tieredTier && solution.basic_seat_count != null && <> · seat count out of range</>}
+          {isTiered && solution.basic_seat_count == null && <> · no seat count set</>}
           {isBasic && solution.basic_inputs && (
             <> · {solution.basic_inputs.users} user{solution.basic_inputs.users === 1 ? "" : "s"} · {fmtUsd(basicBreakdown?.total ?? 0)}</>
           )}
@@ -115,9 +128,9 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
       </div>
 
       <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-        {isBasic
-          ? "Add-ons stack on top of the basic-mode tier price. Blended rate is used only for hours-kind add-ons."
-          : "Labor hours come from the labor estimate. Add-ons charge or discount against that, then everything is priced at the blended rate."}
+        {isTiered && "Add-ons stack on top of the tier price. Blended rate is used only for hours-kind add-ons."}
+        {isBasic && "Add-ons stack on top of the formula total. Blended rate is used only for hours-kind add-ons."}
+        {!isFlat && "Labor hours come from the labor estimate. Add-ons charge or discount against that, then everything is priced at the blended rate."}
       </p>
 
       {/* Rate + summary row */}
@@ -133,19 +146,19 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
             onChange={(e) => setRate(Number(e.target.value) || 0)}
             disabled={!canEdit}
             placeholder={String(DEFAULT_BLENDED_RATE)}
-            title={isBasic ? "Used only for hours-kind add-ons in basic mode" : undefined}
+            title={isFlat ? "Used only for hours-kind add-ons in tiered/basic mode" : undefined}
           />
         </label>
-        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: isBasic ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 12, fontSize: 12 }}>
-          {isBasic ? (
+        <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: isFlat ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 12, fontSize: 12 }}>
+          {isFlat ? (
             <>
               <div>
-                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Basic Subtotal</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: basicBreakdown ? accent : "#94a3b8" }}>{basicBreakdown ? fmtUsd(basicBreakdown.total) : "—"}</div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{isTiered ? "Tier Price" : "Basic Subtotal"}</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: flatReady ? accent : "#94a3b8" }}>{flatReady ? fmtUsd(flatSubtotal) : "—"}</div>
               </div>
               <div>
                 <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: basicBreakdown ? accentGreen : "#94a3b8" }}>{basicBreakdown ? fmtUsd(breakdown.total) : "—"}</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: flatReady ? accentGreen : "#94a3b8" }}>{flatReady ? fmtUsd(breakdown.total) : "—"}</div>
               </div>
             </>
           ) : (

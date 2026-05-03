@@ -1150,12 +1150,12 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
       <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
-          {/* Sizing confirmation form — hidden in Basic mode. Basic pricing
-              already collects every input it needs on the Labor tab, so the
-              sizing form is redundant there. The SOW document handles the
-              empty sizing case gracefully (skips the Confirmed Solution
+          {/* Sizing confirmation form — hidden in Tiered and Basic modes.
+              Both already collect every input they need on the Labor tab,
+              so the sizing form is redundant there. The SOW document handles
+              the empty sizing case gracefully (skips the Confirmed Solution
               Sizing section entirely). */}
-          {solution.pricing_mode !== "basic" && (
+          {solution.pricing_mode !== "basic" && solution.pricing_mode !== "tiered" && (
             <SowSizingForm
               solution={solution}
               needsAssessments={needsAssessments}

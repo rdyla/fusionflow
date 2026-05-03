@@ -143,3 +143,43 @@ export function canUseBasicPricing(solutionTypes: readonly string[] | null | und
   if (!solutionTypes) return false;
   return solutionTypes.length === 1 && solutionTypes[0] === "ucaas";
 }
+
+// ── Tiered mode ────────────────────────────────────────────────────────────
+//
+// Fixed-price ladder for sub-100-seat UCaaS deployments. Used when sales
+// wants the fastest possible quote — no formula, just a band lookup.
+// Pure UCaaS only AND capped at 100 seats. Larger deals must use Basic
+// (formula) or Advanced (full calc).
+
+export type UcaasTier = {
+  /** Inclusive upper bound on seat count for this tier. */
+  maxSeats: number;
+  /** Flat tier price in USD. */
+  price: number;
+  /** Customer-facing label (used in the SOW). */
+  label: string;
+};
+
+export const UCAAS_TIERED_TIERS: readonly UcaasTier[] = [
+  { maxSeats: 25,  price: 4500, label: "Up to 25 seats" },
+  { maxSeats: 50,  price: 5400, label: "26–50 seats" },
+  { maxSeats: 100, price: 6250, label: "51–100 seats" },
+] as const;
+
+export const UCAAS_TIERED_MAX_SEATS = 100;
+
+/** Look up the tier that applies to a given seat count.
+ *  Returns null for invalid (≤0, NaN) or out-of-range (>100) inputs. */
+export function getUcaasTieredTier(seatCount: number | null | undefined): UcaasTier | null {
+  const n = Number(seatCount);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  for (const tier of UCAAS_TIERED_TIERS) {
+    if (n <= tier.maxSeats) return tier;
+  }
+  return null;
+}
+
+/** True iff this solution can use tiered pricing — pure UCaaS, sub-100. */
+export function canUseTieredPricing(solutionTypes: readonly string[] | null | undefined): boolean {
+  return canUseBasicPricing(solutionTypes);
+}

@@ -321,7 +321,7 @@ const updateSolutionSchema = z.object({
   linked_project_id: z.string().nullable().optional(),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
-  pricing_mode: z.enum(["basic", "advanced"]).optional(),
+  pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
   basic_seat_count: z.number().int().positive().nullable().optional(),
   basic_inputs: z.object({
     users:             z.number().int().min(0),

@@ -1,31 +1,33 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { calcSowTotal, calcBasicSowTotal, parseAddOns, DEFAULT_BLENDED_RATE } from "../../shared/sowAddOns";
-import { calcUcaasBasicBreakdown, parseBasicInputs } from "../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown, parseBasicInputs, getUcaasTieredTier } from "../../shared/ucaasBasicPricing";
 
 /**
  * Recomputes solutions.sow_total_amount.
  *
  * Branches on pricing_mode:
- *   - 'basic'   → formula-driven UCaaS price (from basic_inputs JSON) + add-ons
- *   - default   → (Σ labor_estimates.total_expected) × blended_rate + add-ons
+ *   - 'tiered'   → fixed tier price by seat band (looked up from basic_seat_count) + add-ons
+ *   - 'basic'    → formula-driven UCaaS price (from basic_inputs JSON) + add-ons
+ *   - default    → (Σ labor_estimates.total_expected) × blended_rate + add-ons
  *
  * Called from:
- *   - solutions PATCH when add_ons / blended_rate / pricing_mode / basic_inputs touched
+ *   - solutions PATCH when add_ons / blended_rate / pricing_mode / basic_inputs / basic_seat_count touched
  *   - labor-estimates PUT/DELETE so the saved total reflects current hours (advanced only)
  *
  * Idempotent. No-op if the solution doesn't exist (avoids races during
- * delete-cascade flows). When basic mode is selected without inputs (e.g. a
- * fresh solution before the user has filled the form), sow_total_amount is
- * 0 to make the not-yet-priced state visible.
+ * delete-cascade flows). When tiered or basic mode is selected without the
+ * relevant inputs (or out of range for tiered), sow_total_amount is set
+ * to 0 to make the not-yet-priced state visible.
  */
 export async function recomputeSowTotal(db: D1Database, solutionId: string): Promise<number | null> {
   const solution = await db
-    .prepare("SELECT add_ons, blended_rate, pricing_mode, basic_inputs FROM solutions WHERE id = ? LIMIT 1")
+    .prepare("SELECT add_ons, blended_rate, pricing_mode, basic_seat_count, basic_inputs FROM solutions WHERE id = ? LIMIT 1")
     .bind(solutionId)
     .first<{
       add_ons: string | null;
       blended_rate: number | null;
       pricing_mode: string | null;
+      basic_seat_count: number | null;
       basic_inputs: string | null;
     }>();
   if (!solution) return null;
@@ -34,7 +36,10 @@ export async function recomputeSowTotal(db: D1Database, solutionId: string): Pro
   const rate = Number(solution.blended_rate) || DEFAULT_BLENDED_RATE;
 
   let total: number;
-  if (solution.pricing_mode === "basic") {
+  if (solution.pricing_mode === "tiered") {
+    const tier = getUcaasTieredTier(solution.basic_seat_count);
+    total = tier ? calcBasicSowTotal(tier.price, addOns, rate).total : 0;
+  } else if (solution.pricing_mode === "basic") {
     const inputs = parseBasicInputs(solution.basic_inputs);
     if (!inputs) {
       total = 0;
