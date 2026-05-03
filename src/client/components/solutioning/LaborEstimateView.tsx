@@ -68,9 +68,16 @@ const UCAAS_INPUT_FIELDS: InputFieldDef[] = [
       { value: "replacement",           label: "Like-for-like replacement" },
     ],
   },
-  { key: "integrations_required",      label: "Integrations",          type: "count", placeholder: "0", help: "How many third-party systems integrate?" },
-  { key: "endpoint_types_required",    label: "Endpoint types",        type: "count", placeholder: "0", help: "Distinct endpoint device types in scope" },
-  { key: "call_flow_components_required", label: "Call flow components", type: "count", placeholder: "0", help: "Queues, IVRs, hunt groups, etc." },
+  { key: "integrations_required",         label: "Integrations",          type: "count", placeholder: "0", help: "How many third-party systems integrate?" },
+  // Per-device-type analog endpoint inputs (replaces the old endpoint_types
+  // banded field). Each one is a fixed hours-per-unit rate.
+  { key: "analog_fax_count",              label: "Analog Fax",            type: "count", placeholder: "0", help: "1h each" },
+  { key: "paging_system_count",           label: "Paging System",         type: "count", placeholder: "0", help: "4h each" },
+  { key: "door_phone_count",              label: "Door Phone",            type: "count", placeholder: "0", help: "3h each" },
+  { key: "gate_controller_count",         label: "Gate Controller",       type: "count", placeholder: "0", help: "3h each" },
+  { key: "other_analog_device_count",     label: "Other Analog Device",   type: "count", placeholder: "0", help: "2h each" },
+  { key: "did_porting_blocks",            label: "DID Porting Blocks",    type: "count", placeholder: "0", help: "15m each" },
+  { key: "call_flow_components_required", label: "Call flow components",  type: "count", placeholder: "0", help: "Queues, IVRs, hunt groups, etc." },
   {
     key: "number_porting_required", label: "Number porting", type: "select",
     options: [
