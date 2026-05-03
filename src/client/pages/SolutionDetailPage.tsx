@@ -240,7 +240,7 @@ export default function SolutionDetailPage() {
   }
 
   const isClient = currentRole === "client";
-  const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae";
+  const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae" || currentRole === "pf_sa";
   const canEditNA = canEdit || isClient;
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;

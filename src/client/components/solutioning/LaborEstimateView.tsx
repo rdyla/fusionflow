@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type LaborEstimate, type Solution } from "../../lib/api";
 import {
-  UCAAS_BASIC_TIERS,
-  UCAAS_BASIC_MAX_SEATS,
-  getUcaasBasicTier,
+  calcUcaasBasicBreakdown,
   canUseBasicPricing,
+  UCAAS_BASIC_DEFAULTS,
+  TRAINING_SESSION_COST,
+  ONSITE_DEVICE_COST,
+  PM_MULTIPLIER,
+  type UcaasBasicInputs,
 } from "../../../shared/ucaasBasicPricing";
+import { DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
 
 const WORKSTREAM_LABELS: Record<string, string> = {
   discovery_requirements: "Discovery & Requirements",
@@ -195,36 +199,63 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
   // SowAddOnsEditor on the Scope tab just reads it.
   const basicAvailable = canUseBasicPricing(solution.solution_types);
   const [pricingMode, setPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
-  const [seatCount, setSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
+  // Initialize from basic_inputs; fall back to legacy basic_seat_count for solutions
+  // that haven't been touched since the formula migration (so users see their
+  // existing seat count preserved).
+  const initialInputs = (): UcaasBasicInputs => {
+    if (solution.basic_inputs) return solution.basic_inputs;
+    if (solution.basic_seat_count != null) return { ...UCAAS_BASIC_DEFAULTS, users: solution.basic_seat_count };
+    return { ...UCAAS_BASIC_DEFAULTS };
+  };
+  const [basicInputs, setBasicInputs] = useState<UcaasBasicInputs>(initialInputs);
   const [savedPricingMode, setSavedPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
-  const [savedSeatCount, setSavedSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
+  const [savedBasicInputs, setSavedBasicInputs] = useState<UcaasBasicInputs>(initialInputs);
   const [savingPricing, setSavingPricing] = useState(false);
 
   // Re-sync local pricing state when the solution prop changes (e.g. after
   // a save on a different surface, or the parent reload finishes).
   useEffect(() => {
+    const next = solution.basic_inputs
+      ? solution.basic_inputs
+      : (solution.basic_seat_count != null
+          ? { ...UCAAS_BASIC_DEFAULTS, users: solution.basic_seat_count }
+          : { ...UCAAS_BASIC_DEFAULTS });
     setPricingMode(solution.pricing_mode ?? "advanced");
-    setSeatCount(solution.basic_seat_count ?? null);
+    setBasicInputs(next);
     setSavedPricingMode(solution.pricing_mode ?? "advanced");
-    setSavedSeatCount(solution.basic_seat_count ?? null);
-  }, [solution.pricing_mode, solution.basic_seat_count]);
+    setSavedBasicInputs(next);
+  }, [solution.pricing_mode, solution.basic_inputs, solution.basic_seat_count]);
 
   // Combo solutions (e.g. UCaaS + CCaaS) lose access to basic. Force advanced.
   const effectiveMode: PricingMode = !basicAvailable && pricingMode === "basic" ? "advanced" : pricingMode;
-  const tier = effectiveMode === "basic" ? getUcaasBasicTier(seatCount) : null;
-  const seatCountOver = effectiveMode === "basic" && seatCount !== null && seatCount > UCAAS_BASIC_MAX_SEATS;
-  const pricingDirty = effectiveMode !== savedPricingMode || (effectiveMode === "basic" && seatCount !== savedSeatCount);
+  const blendedRateForBasic = solution.blended_rate || DEFAULT_BLENDED_RATE;
+  const basicBreakdown = useMemo(
+    () => calcUcaasBasicBreakdown(basicInputs, blendedRateForBasic),
+    [basicInputs, blendedRateForBasic],
+  );
+  const inputsDirtyVsSaved =
+    basicInputs.users             !== savedBasicInputs.users ||
+    basicInputs.sites             !== savedBasicInputs.sites ||
+    basicInputs.go_lives          !== savedBasicInputs.go_lives ||
+    basicInputs.training_sessions !== savedBasicInputs.training_sessions ||
+    basicInputs.onsite_sites      !== savedBasicInputs.onsite_sites ||
+    basicInputs.onsite_devices    !== savedBasicInputs.onsite_devices;
+  const pricingDirty = effectiveMode !== savedPricingMode || (effectiveMode === "basic" && inputsDirtyVsSaved);
+
+  function updateBasicInput<K extends keyof UcaasBasicInputs>(key: K, value: UcaasBasicInputs[K]) {
+    setBasicInputs((prev) => ({ ...prev, [key]: value }));
+  }
 
   async function savePricing() {
     setSavingPricing(true);
     try {
       const updated = await api.updateSolution(solution.id, {
         pricing_mode: effectiveMode,
-        basic_seat_count: effectiveMode === "basic" ? (seatCount ?? null) : null,
+        basic_inputs: effectiveMode === "basic" ? basicInputs : null,
       });
       onSolutionChange(updated);
       setSavedPricingMode(effectiveMode);
-      setSavedSeatCount(effectiveMode === "basic" ? (seatCount ?? null) : null);
+      setSavedBasicInputs(effectiveMode === "basic" ? basicInputs : { ...UCAAS_BASIC_DEFAULTS });
     } finally {
       setSavingPricing(false);
     }
@@ -386,57 +417,121 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
       </div>
       <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 14px", lineHeight: 1.5 }}>
         {effectiveMode === "basic"
-          ? "Basic pricing replaces the labor calculator with a flat tier price by seat count for sub-100-seat UCaaS deployments. No workstream estimate needed."
+          ? "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per additional site + 6h per additional go-live, plus optional training and on-site work, +15% PM."
           : "Advanced pricing uses the full labor calculator — workstream hours derived from inputs (direct or from the needs assessment), then priced at the blended rate."}
       </p>
 
       {effectiveMode === "basic" && (
         <>
-          <div style={{ display: "grid", gridTemplateColumns: "200px 1fr", gap: 16, alignItems: "stretch", marginBottom: 14 }}>
+          {/* 6-field input grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Seat Count</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Users</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={0}
+                step={1}
+                value={basicInputs.users || ""}
+                onChange={(e) => updateBasicInput("users", parseInt(e.target.value, 10) || 0)}
+                disabled={!canEdit}
+                placeholder="e.g. 50"
+              />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>0.05h each</span>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Sites</span>
               <input
                 className="ms-input"
                 type="number"
                 min={1}
                 step={1}
-                value={seatCount ?? ""}
-                onChange={(e) => {
-                  const n = parseInt(e.target.value, 10);
-                  setSeatCount(Number.isFinite(n) && n > 0 ? n : null);
-                }}
+                value={basicInputs.sites || ""}
+                onChange={(e) => updateBasicInput("sites", Math.max(1, parseInt(e.target.value, 10) || 1))}
                 disabled={!canEdit}
-                placeholder="e.g. 50"
               />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>1 in base · +2h each more</span>
             </label>
-            <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, fontSize: 12 }}>
-              <div>
-                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: tier ? pricingAccent : "#94a3b8" }}>
-                  {tier ? `${tier.label} — ${fmtUsd(tier.price)}` : seatCountOver ? "Out of range" : "—"}
-                </div>
-              </div>
-              <div>
-                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Tier Price</div>
-                <div style={{ fontSize: 16, fontWeight: 800, color: tier ? pricingAccentGreen : "#94a3b8" }}>{tier ? fmtUsd(tier.price) : "—"}</div>
-              </div>
-            </div>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Go-Lives</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={1}
+                step={1}
+                value={basicInputs.go_lives || ""}
+                onChange={(e) => updateBasicInput("go_lives", Math.max(1, parseInt(e.target.value, 10) || 1))}
+                disabled={!canEdit}
+              />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>1 in base · +6h each more</span>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Training Sessions</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={0}
+                step={1}
+                value={basicInputs.training_sessions || ""}
+                onChange={(e) => updateBasicInput("training_sessions", parseInt(e.target.value, 10) || 0)}
+                disabled={!canEdit}
+              />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>flat ${TRAINING_SESSION_COST} each</span>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>On-site Travel (sites)</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={0}
+                step={1}
+                value={basicInputs.onsite_sites || ""}
+                onChange={(e) => updateBasicInput("onsite_sites", parseInt(e.target.value, 10) || 0)}
+                disabled={!canEdit}
+              />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>+2h labor per site</span>
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>On-site Devices</span>
+              <input
+                className="ms-input"
+                type="number"
+                min={0}
+                step={1}
+                value={basicInputs.onsite_devices || ""}
+                onChange={(e) => updateBasicInput("onsite_devices", parseInt(e.target.value, 10) || 0)}
+                disabled={!canEdit}
+              />
+              <span style={{ fontSize: 11, color: "#94a3b8" }}>flat ${ONSITE_DEVICE_COST} each</span>
+            </label>
           </div>
 
-          {seatCountOver && (
-            <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fff7ed", border: "1px solid #fde68a", borderRadius: 6, fontSize: 13, color: "#92400e" }}>
-              Basic pricing covers up to {UCAAS_BASIC_MAX_SEATS} seats. For larger deployments, switch to Advanced.
+          {/* Detailed breakdown for the calculator user */}
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 16px", marginBottom: 14, fontSize: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Calculation</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4, columnGap: 16, color: "#475569" }}>
+              <div>Base</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.base}h</div>
+              <div>Users ({basicInputs.users} × 0.05h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.users.toFixed(2)}h</div>
+              <div>Additional sites ({Math.max(0, basicInputs.sites - 1)} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.additionalSites}h</div>
+              <div>Additional go-lives ({Math.max(0, basicInputs.go_lives - 1)} × 6h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.additionalGoLives}h</div>
+              <div>On-site travel ({basicInputs.onsite_sites} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.onsiteTravel}h</div>
+              <div style={{ paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>Total hours × ${blendedRateForBasic}/hr</div>
+              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>{fmtUsd(basicBreakdown.laborSubtotal)}</div>
+              {basicInputs.training_sessions > 0 && (<>
+                <div>Training ({basicInputs.training_sessions} × ${TRAINING_SESSION_COST})</div>
+                <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{fmtUsd(basicBreakdown.trainingTotal)}</div>
+              </>)}
+              {basicInputs.onsite_devices > 0 && (<>
+                <div>On-site device install ({basicInputs.onsite_devices} × ${ONSITE_DEVICE_COST})</div>
+                <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{fmtUsd(basicBreakdown.deviceInstallTotal)}</div>
+              </>)}
+              <div style={{ paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>Subtotal</div>
+              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>{fmtUsd(basicBreakdown.prePmSubtotal)}</div>
+              <div>Project Management ({(PM_MULTIPLIER * 100).toFixed(0)}%)</div>
+              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{fmtUsd(basicBreakdown.pm)}</div>
+              <div style={{ paddingTop: 6, borderTop: "2px solid #17C662", fontWeight: 800, color: "#1e293b" }}>Total</div>
+              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 6, borderTop: "2px solid #17C662", fontWeight: 800, color: "#17C662" }}>{fmtUsd(basicBreakdown.total)}</div>
             </div>
-          )}
-
-          <div style={{ marginBottom: 14, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 12, color: "#0369a1" }}>
-            <strong>Tier ladder:</strong>{" "}
-            {UCAAS_BASIC_TIERS.map((t, i) => (
-              <span key={t.maxSeats}>
-                {i > 0 && " · "}
-                {t.label}: {fmtUsd(t.price)}
-              </span>
-            ))}
           </div>
         </>
       )}
