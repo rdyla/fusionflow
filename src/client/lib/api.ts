@@ -11,6 +11,23 @@ function getImpersonationHeaders(): Record<string, string> {
   }
 }
 
+/**
+ * Error thrown by `request()` for any non-2xx response. Carries the HTTP
+ * status and the parsed response body so callers can switch on the status
+ * (e.g. 409 with structured data for the solution-types orphan-cleanup
+ * confirm dialog).
+ */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly body: Record<string, unknown> | null,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: {
@@ -26,8 +43,11 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => null) as { error?: string; message?: string } | null;
-    throw new Error(body?.error ?? body?.message ?? `API error: ${res.status}`);
+    const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+    const message = (typeof body?.error === "string" ? body.error : null)
+      ?? (typeof body?.message === "string" ? body.message : null)
+      ?? `API error: ${res.status}`;
+    throw new ApiError(res.status, message, body);
   }
 
   return res.json();
@@ -1409,6 +1429,10 @@ export const api = {
       pricing_mode: "tiered" | "basic" | "advanced";
       basic_seat_count: number | null;
       basic_inputs: UcaasBasicInputs | null;
+      /** If a solution_types update would orphan needs_assessments / labor_estimates rows
+       *  for removed types, the server returns 409 unless this flag is set. The client
+       *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */
+      force: boolean;
     }>
   ) =>
     request<Solution>(`/solutions/${id}`, {
