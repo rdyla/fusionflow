@@ -836,6 +836,24 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
             ))}
           </div>
         )}
+
+        {/* Total Investment — solution-wide ($), mirrors what the SOW shows.
+            Tiered + Basic modes show their own totals up in pricingModeCard;
+            Advanced needs the same prominence so the dollar isn't buried in
+            the Scope tab. */}
+        <div style={{ marginTop: 16, borderTop: "1px solid #e2e8f0", paddingTop: 14, display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", color: "#64748b", marginBottom: 4 }}>
+              Total Investment
+            </div>
+            <div style={{ fontSize: 11, color: "#94a3b8" }}>
+              Labor + add-ons − discounts at ${(solution.blended_rate || 165).toLocaleString()}/hr blended rate. Edit on the Scope tab.
+            </div>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: "#17C662", lineHeight: 1, fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>
+            {solution.sow_total_amount != null ? fmtUsd(solution.sow_total_amount) : "—"}
+          </div>
+        </div>
       </div>
 
       {/* ── Complexity factors ── */}
