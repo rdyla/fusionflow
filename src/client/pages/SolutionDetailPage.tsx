@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
+import { api, ApiError, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
@@ -190,8 +190,38 @@ export default function SolutionDetailPage() {
       const updated = await api.updateSolution(id, patch);
       setSolution(updated);
       showToast("Saved.", "success");
-    } catch {
-      showToast("Save failed", "error");
+    } catch (err) {
+      // 409 with orphan_cleanup_required body: re-prompt the user with what
+      // would be deleted, then retry with force=true on confirm.
+      if (err instanceof ApiError && err.status === 409 && err.body?.error === "orphan_cleanup_required") {
+        const orphans = (err.body.orphans as Array<{ label: string; hasNeedsAssessment: boolean; hasLaborEstimate: boolean; laborHours: number }> | undefined) ?? [];
+        const lines = orphans.map((o) => {
+          const bits: string[] = [];
+          if (o.hasNeedsAssessment) bits.push("needs assessment");
+          if (o.hasLaborEstimate) bits.push(`labor estimate (${o.laborHours}h)`);
+          return `• ${o.label}: ${bits.join(" + ")}`;
+        });
+        const proceed = window.confirm(
+          `Removing these solution types will permanently delete:\n\n${lines.join("\n")}\n\nThis cannot be undone. Continue?`
+        );
+        if (proceed) {
+          try {
+            const updated = await api.updateSolution(id, { ...patch, force: true });
+            setSolution(updated);
+            // Refresh per-type NA + labor dicts so the now-deleted entries drop out.
+            await load();
+            showToast("Saved. Removed-type data cleaned up.", "success");
+            setSaving(false);
+            return;
+          } catch (retryErr) {
+            showToast(retryErr instanceof Error ? retryErr.message : "Save failed", "error");
+          }
+        }
+        // user cancelled — leave state as-is, no toast
+        setSaving(false);
+        return;
+      }
+      showToast(err instanceof Error ? err.message : "Save failed", "error");
     } finally {
       setSaving(false);
     }

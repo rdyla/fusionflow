@@ -331,6 +331,10 @@ const updateSolutionSchema = z.object({
     onsite_sites:      z.number().int().min(0),
     onsite_devices:    z.number().int().min(0),
   }).nullable().optional(),
+  /** Bypass the orphan-cleanup confirm flow — server hard-deletes per-type
+   *  needs_assessments + labor_estimates rows for any solution_types being
+   *  removed. The picker UI sets this on the retry after the confirm dialog. */
+  force: z.boolean().optional(),
 });
 
 app.patch("/:id", async (c) => {
@@ -339,15 +343,59 @@ app.patch("/:id", async (c) => {
   const solutionId = c.req.param("id");
 
   const existing = await db
-    .prepare("SELECT id, name FROM solutions WHERE id = ? LIMIT 1")
+    .prepare("SELECT id, name, solution_types FROM solutions WHERE id = ? LIMIT 1")
     .bind(solutionId)
-    .first<{ id: string; name: string }>();
+    .first<{ id: string; name: string; solution_types: string }>();
   if (!existing) throw new HTTPException(404, { message: "Solution not found" });
 
   const parsed = updateSolutionSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const updates = parsed.data;
+  const force = updates.force === true;
+  // strip from the values we actually persist — `force` is a control flag, not a column
+  delete (updates as { force?: boolean }).force;
+
+  // Orphan-cleanup gate: if solution_types is being changed and a type is being
+  // removed, check for existing per-type NA / labor estimate rows. Return 409
+  // with details unless `force: true` is set. On force, hard-delete the orphan
+  // rows after the column update so SOW totals + UI stay consistent.
+  let orphanTypes: SolutionType[] = [];
+  if (Array.isArray(updates.solution_types)) {
+    const previousTypes = parseSolutionTypes(existing.solution_types);
+    const nextTypes = updates.solution_types;
+    const removed = previousTypes.filter((t) => !nextTypes.includes(t));
+    if (removed.length > 0) {
+      const placeholders = removed.map(() => "?").join(",");
+      const naRows = await db
+        .prepare(`SELECT solution_type FROM needs_assessments WHERE solution_id = ? AND solution_type IN (${placeholders})`)
+        .bind(solutionId, ...removed)
+        .all<{ solution_type: SolutionType }>();
+      const leRows = await db
+        .prepare(`SELECT solution_type, total_expected FROM labor_estimates WHERE solution_id = ? AND solution_type IN (${placeholders})`)
+        .bind(solutionId, ...removed)
+        .all<{ solution_type: SolutionType; total_expected: number | null }>();
+
+      const naByType = new Set((naRows.results ?? []).map((r) => r.solution_type));
+      const leByType = new Map((leRows.results ?? []).map((r) => [r.solution_type, Number(r.total_expected) || 0]));
+
+      orphanTypes = removed.filter((t) => naByType.has(t) || leByType.has(t));
+
+      if (orphanTypes.length > 0 && !force) {
+        return c.json({
+          error: "orphan_cleanup_required",
+          message: "Removing these solution types will delete their per-type needs assessments and labor estimates. Re-send with force=true to confirm.",
+          orphans: orphanTypes.map((t) => ({
+            type: t,
+            label: joinSolutionTypeLabels([t]),
+            hasNeedsAssessment: naByType.has(t),
+            hasLaborEstimate: leByType.has(t),
+            laborHours: leByType.get(t) ?? 0,
+          })),
+        }, 409);
+      }
+    }
+  }
 
   const fields: string[] = [];
   const values: unknown[] = [];
@@ -395,6 +443,22 @@ app.patch("/:id", async (c) => {
     .prepare(`UPDATE solutions SET ${fields.join(", ")} WHERE id = ?`)
     .bind(...values, solutionId)
     .run();
+
+  // Hard-delete orphan per-type rows for any types just removed (gated by the
+  // 409 confirm above). Touches both NA + labor estimates; recompute SOW total
+  // since labor hours just dropped.
+  if (orphanTypes.length > 0) {
+    const placeholders = orphanTypes.map(() => "?").join(",");
+    await db
+      .prepare(`DELETE FROM needs_assessments WHERE solution_id = ? AND solution_type IN (${placeholders})`)
+      .bind(solutionId, ...orphanTypes)
+      .run();
+    await db
+      .prepare(`DELETE FROM labor_estimates WHERE solution_id = ? AND solution_type IN (${placeholders})`)
+      .bind(solutionId, ...orphanTypes)
+      .run();
+    pricingTouched = true;
+  }
 
   if (pricingTouched) {
     await recomputeSowTotal(db, solutionId);
