@@ -185,13 +185,12 @@ function buildSowHtml(
   if (sowData) {
     const rows: string[] = [];
 
-    const hasUcaas = !!(sowData.ucaas.basic_users || sowData.ucaas.advanced_users || sowData.ucaas.common_area || sowData.ucaas.conference_rooms || sowData.ucaas.operators);
+    // Common Area + Operators dropped — captured by NA / advanced labor drivers.
+    const hasUcaas = !!(sowData.ucaas.basic_users || sowData.ucaas.advanced_users || sowData.ucaas.conference_rooms);
     if (hasUcaas) {
       if (sowData.ucaas.basic_users)          rows.push(dataRow("UCaaS · Basic Users",          sowData.ucaas.basic_users));
       if (sowData.ucaas.advanced_users)       rows.push(dataRow("UCaaS · Advanced Users",       sowData.ucaas.advanced_users));
-      if (sowData.ucaas.common_area)          rows.push(dataRow("UCaaS · Common Area",           sowData.ucaas.common_area));
       if (sowData.ucaas.conference_rooms)     rows.push(dataRow("UCaaS · Conference Rooms",      sowData.ucaas.conference_rooms));
-      if (sowData.ucaas.operators)            rows.push(dataRow("UCaaS · Operators",             sowData.ucaas.operators));
       if (sowData.ucaas.additional_did)       rows.push(dataRow("UCaaS · Additional DIDs",       sowData.ucaas.additional_did));
       if (sowData.ucaas.additional_toll_free) rows.push(dataRow("UCaaS · Toll Free Numbers",     sowData.ucaas.additional_toll_free));
       if (sowData.ucaas.ms_teams_type && sowData.ucaas.ms_teams_type !== "none") {
@@ -228,16 +227,10 @@ function buildSowHtml(
     if (sowData.shared.sites_count)               rows.push(dataRow("Sites",                   sowData.shared.sites_count));
     if (sowData.shared.phases_count)              rows.push(dataRow("Phases / Go-Lives",        sowData.shared.phases_count));
     if (sowData.shared.implementation_strategy)   rows.push(dataRow("Implementation Strategy", sowData.shared.implementation_strategy));
-    if (sowData.shared.porting_required === true) {
-      const portingDetail = `Yes — Carrier: ${sowData.shared.porting_carrier || "TBD"}, DIDs: ${sowData.shared.porting_did_count || "TBD"}`;
-      rows.push(dataRow("Number Porting", portingDetail));
-    }
-    if (sowData.shared.fax_count)             rows.push(dataRow("Fax Machines",         sowData.shared.fax_count));
-    if (sowData.shared.ata_count)             rows.push(dataRow("ATA Adapters",          sowData.shared.ata_count));
-    if (sowData.shared.overhead_paging_count) rows.push(dataRow("Overhead Paging",       sowData.shared.overhead_paging_count));
-    if (sowData.shared.ip_paging_count)       rows.push(dataRow("IP Paging Speakers",    sowData.shared.ip_paging_count));
-    const sowCost = sowData.shared.sow_cost_after || sowData.shared.sow_cost_before;
-    if (sowCost)                              rows.push(dataRow("SOW Investment",         sowCost));
+    // Number Porting + Analog/ATA Devices dropped — covered by NA per-device drivers
+    // (analog_fax_count, paging_system_count, etc.) and number_porting_required +
+    // did_porting_blocks. SOW Investment dropped — Total Investment row in
+    // section 2.2 is the single source of truth (sow_total_amount).
     if (sowData.additional_notes)             rows.push(dataRow("Sizing Notes",           sowData.additional_notes));
 
     if (rows.length > 0) {
