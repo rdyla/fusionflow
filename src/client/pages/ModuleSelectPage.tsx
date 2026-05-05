@@ -167,7 +167,7 @@ export default function ModuleSelectPage() {
           </div>
         </div>
         <h1 style={{ fontFamily: "'avenir-lt-pro', sans-serif", fontSize: isMobile ? "26px" : "clamp(28px, 3.5vw, 44px)", fontWeight: 700, lineHeight: 1.1, letterSpacing: "0.01em", marginBottom: 14, color: "#ffffff" }}>
-          Connecting the Dots to Cloud
+          Connecting the Dots in the Cloud
         </h1>
       </section>
 
