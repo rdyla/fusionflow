@@ -32,6 +32,18 @@ export type AddOn = {
 
 export const DEFAULT_BLENDED_RATE = 165;
 
+/** SOW totals get rounded to the nearest multiple of this for clean customer-
+ *  facing pricing — Excel `=MROUND(A1, 250)` equivalent. Applied only to the
+ *  final total in calcSowTotal / calcBasicSowTotal; intermediate values
+ *  (labor subtotal, add-on effects) stay unrounded so PMs see the raw math
+ *  and the customer just sees a clean final number. */
+export const MROUND_INCREMENT = 250;
+
+export function mround(value: number, increment: number = MROUND_INCREMENT): number {
+  if (!Number.isFinite(value) || increment <= 0) return value;
+  return Math.round(value / increment) * increment;
+}
+
 export function isAddOnKind(v: unknown): v is AddOnKind {
   return typeof v === "string" && (ADD_ON_KINDS as readonly string[]).includes(v);
 }
@@ -99,12 +111,13 @@ export function calcSowTotal(
   const laborSubtotal = safeHours * safeRate;
   const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, laborSubtotal, safeRate) }));
   const addOnNet = addOnEffects.reduce((sum, e) => sum + e.dollar, 0);
+  // MROUND only the final customer-facing total; breakdown values stay raw.
   return {
     laborHours: safeHours,
     laborSubtotal,
     addOnEffects,
     addOnNet,
-    total: laborSubtotal + addOnNet,
+    total: mround(laborSubtotal + addOnNet),
   };
 }
 
@@ -127,11 +140,12 @@ export function calcBasicSowTotal(
   const safeRate  = Number(rate) || DEFAULT_BLENDED_RATE;
   const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, safePrice, safeRate) }));
   const addOnNet = addOnEffects.reduce((sum, e) => sum + e.dollar, 0);
+  // MROUND only the final customer-facing total; breakdown values stay raw.
   return {
     laborHours: 0,
     laborSubtotal: safePrice,
     addOnEffects,
     addOnNet,
-    total: safePrice + addOnNet,
+    total: mround(safePrice + addOnNet),
   };
 }

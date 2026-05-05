@@ -331,9 +331,7 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
           <div style={{ ...GRID4, marginBottom: 20 }}>
             <Field label="Basic Users"><Num value={sow.ucaas.basic_users} onChange={v => upd("ucaas", { ...sow.ucaas, basic_users: v })} canEdit={canEdit} /></Field>
             <Field label="Advanced Users"><Num value={sow.ucaas.advanced_users} onChange={v => upd("ucaas", { ...sow.ucaas, advanced_users: v })} canEdit={canEdit} /></Field>
-            <Field label="Common Area"><Num value={sow.ucaas.common_area} onChange={v => upd("ucaas", { ...sow.ucaas, common_area: v })} canEdit={canEdit} /></Field>
             <Field label="Conference Rooms"><Num value={sow.ucaas.conference_rooms} onChange={v => upd("ucaas", { ...sow.ucaas, conference_rooms: v })} canEdit={canEdit} /></Field>
-            <Field label="Operators / Receptionists"><Num value={sow.ucaas.operators} onChange={v => upd("ucaas", { ...sow.ucaas, operators: v })} canEdit={canEdit} /></Field>
             <Field label="Additional DIDs"><Num value={sow.ucaas.additional_did} onChange={v => upd("ucaas", { ...sow.ucaas, additional_did: v })} canEdit={canEdit} /></Field>
             <Field label="Toll Free Numbers"><Num value={sow.ucaas.additional_toll_free} onChange={v => upd("ucaas", { ...sow.ucaas, additional_toll_free: v })} canEdit={canEdit} /></Field>
             <Field label="MS Teams Type">
@@ -458,31 +456,6 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
               { value: "cloudcare", label: "CloudCare" },
             ]} />
           </Field>
-        </div>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Number Porting</p>
-        <div style={{ ...GRID3, marginBottom: 20 }}>
-          <Field label="Porting Required"><YN value={sow.shared.porting_required} onChange={v => upd("shared", { ...sow.shared, porting_required: v })} canEdit={canEdit} /></Field>
-          {sow.shared.porting_required && (
-            <>
-              <Field label="Carrier"><Txt value={sow.shared.porting_carrier} onChange={v => upd("shared", { ...sow.shared, porting_carrier: v })} canEdit={canEdit} placeholder="Carrier name" /></Field>
-              <Field label="# of DIDs"><Num value={sow.shared.porting_did_count} onChange={v => upd("shared", { ...sow.shared, porting_did_count: v })} canEdit={canEdit} /></Field>
-            </>
-          )}
-        </div>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Analog / ATA Devices</p>
-        <div style={{ ...GRID4, marginBottom: 20 }}>
-          <Field label="Fax Machines"><Num value={sow.shared.fax_count} onChange={v => upd("shared", { ...sow.shared, fax_count: v })} canEdit={canEdit} /></Field>
-          <Field label="ATA Adapters"><Num value={sow.shared.ata_count} onChange={v => upd("shared", { ...sow.shared, ata_count: v })} canEdit={canEdit} /></Field>
-          <Field label="Overhead Paging (Analog)"><Num value={sow.shared.overhead_paging_count} onChange={v => upd("shared", { ...sow.shared, overhead_paging_count: v })} canEdit={canEdit} /></Field>
-          <Field label="IP Paging Speakers"><Num value={sow.shared.ip_paging_count} onChange={v => upd("shared", { ...sow.shared, ip_paging_count: v })} canEdit={canEdit} /></Field>
-        </div>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>SOW Investment</p>
-        <div style={{ ...GRID2, marginBottom: 20 }}>
-          <Field label="SOW Cost (Before Discounts)"><Txt value={sow.shared.sow_cost_before} onChange={v => upd("shared", { ...sow.shared, sow_cost_before: v })} canEdit={canEdit} placeholder="$" /></Field>
-          <Field label="SOW Cost (After Discounts)"><Txt value={sow.shared.sow_cost_after} onChange={v => upd("shared", { ...sow.shared, sow_cost_after: v })} canEdit={canEdit} placeholder="$" /></Field>
         </div>
 
         <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Additional Notes</p>
