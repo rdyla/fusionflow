@@ -1816,6 +1816,10 @@ export const api = {
       `/projects/${projectId}/meeting-prep/${meetingType}/test`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
+  meetingPrepSendHtml: (projectId: string, meetingType: MeetingType, sendId: string) =>
+    request<{ subject: string; html: string; sentAt: string }>(
+      `/projects/${projectId}/meeting-prep/${meetingType}/sends/${sendId}/html`
+    ),
   meetingPrepSend: (projectId: string, meetingType: MeetingType, draft: MeetingPrepDraft) =>
     request<{ ok: boolean; sentTo: string[]; sentAt: string }>(
       `/projects/${projectId}/meeting-prep/${meetingType}/send`,
@@ -1835,6 +1839,9 @@ export type MeetingPrepSendRecord = {
   sentBy: string | null;
   sentAt: string;
   recipientCount: number;
+  /** True if the rendered HTML body was persisted (sends from before the
+   *  body_html column was added will be false). */
+  hasBody?: boolean;
 };
 
 export type MeetingPrepOptions = {

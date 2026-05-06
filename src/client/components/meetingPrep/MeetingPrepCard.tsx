@@ -7,8 +7,82 @@
  */
 
 import { useEffect, useState } from "react";
-import { api, type MeetingPrepOptions, type MeetingType } from "../../lib/api";
+import { api, type MeetingPrepOptions, type MeetingPrepSendRecord, type MeetingType } from "../../lib/api";
 import MeetingPrepModal from "./MeetingPrepModal";
+
+function SendRow({
+  projectId,
+  meetingType,
+  record,
+  sectionLabel,
+}: {
+  projectId: string;
+  meetingType: MeetingType;
+  record: MeetingPrepSendRecord;
+  sectionLabel: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggle() {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (html !== null || loading || !record.hasBody) return;
+    setLoading(true);
+    setError(null);
+    api.meetingPrepSendHtml(projectId, meetingType, record.id)
+      .then((res) => setHtml(res.html))
+      .catch((e) => setError((e as Error).message))
+      .finally(() => setLoading(false));
+  }
+
+  const canPreview = record.hasBody;
+
+  return (
+    <div style={{ padding: "4px 0", fontSize: 12, borderBottom: "1px dashed #f1f5f9" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {record.label || sectionLabel}
+          </div>
+          {record.label && (
+            <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {record.subject}
+            </div>
+          )}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#64748b", whiteSpace: "nowrap" }}>
+          <span>{formatWhen(record.sentAt)} · {record.recipientCount} recip.</span>
+          {canPreview && (
+            <button
+              type="button"
+              onClick={toggle}
+              style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#0b9aad", cursor: "pointer" }}
+            >
+              {open ? "Hide" : "View"}
+            </button>
+          )}
+        </div>
+      </div>
+      {open && canPreview && (
+        <div style={{ marginTop: 8 }}>
+          {loading && <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading…</div>}
+          {error && <div style={{ color: "#d13438", fontSize: 12 }}>{error}</div>}
+          {html !== null && (
+            <iframe
+              title={`Email preview — ${record.subject}`}
+              srcDoc={html}
+              sandbox=""
+              style={{ width: "100%", height: 420, border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff" }}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Props = {
   projectId: string;
@@ -100,21 +174,7 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend }: Pro
       {hasSends && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #e2e8f0" }}>
           {history.map((h) => (
-            <div key={h.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "4px 0", fontSize: 12 }}>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {h.label || labels.sectionLabel}
-                </div>
-                {h.label && (
-                  <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {h.subject}
-                  </div>
-                )}
-              </div>
-              <div style={{ color: "#64748b", whiteSpace: "nowrap" }}>
-                {formatWhen(h.sentAt)} · {h.recipientCount} recip.
-              </div>
-            </div>
+            <SendRow key={h.id} projectId={projectId} meetingType={meetingType} record={h} sectionLabel={labels.sectionLabel} />
           ))}
         </div>
       )}
