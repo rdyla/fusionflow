@@ -185,6 +185,8 @@ export type DashboardSummaryResponse = {
   phaseDistribution: { phase_name: string; count: number }[];
   vendorDistribution: { label: string; count: number }[];
   typeDistribution: { label: string; count: number }[];
+  aeDistribution: { id: string | null; label: string; count: number }[];
+  isSalesLeader: boolean;
 };
 
 export type Project = {
@@ -984,7 +986,13 @@ export const api = {
     if (params.page)     q.set("page",     String(params.page));
     return request<{ items: (Task & { project_name: string; phase_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
   },
-  projects: () => request<Project[]>("/projects"),
+  projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (filters?.pf_ae_id) qs.set("pf_ae_id", filters.pf_ae_id);
+    if (filters?.partner_ae_id) qs.set("partner_ae_id", filters.partner_ae_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<Project[]>(`/projects${suffix}`);
+  },
   project: (id: string) => request<Project>(`/projects/${id}`),
 
   phases: (projectId: string) => request<Phase[]>(`/projects/${projectId}/phases`),

@@ -178,6 +178,32 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings)
     .all<{ label: string; count: number }>();
 
+  // Sales-leader detection: AE role with direct reports under them.
+  const isSalesLeader = (auth.role === "pf_ae" || auth.role === "partner_ae") && teamIds.length > 1;
+
+  let aeDistribution: { id: string | null; label: string; count: number }[] = [];
+  if (isSalesLeader) {
+    const aeQuery = auth.role === "pf_ae"
+      ? `SELECT u.id AS id, COALESCE(u.name, 'Unassigned') AS label, COUNT(*) AS count
+         FROM projects p
+         LEFT JOIN customers c ON c.id = p.customer_id
+         LEFT JOIN users u ON u.id = c.pf_ae_user_id
+         WHERE p.id IN (${projectSubquery})
+         GROUP BY u.id
+         ORDER BY count DESC`
+      : `SELECT id, label, COUNT(*) AS count FROM (
+           SELECT u.id AS id, COALESCE(u.name, 'Unassigned') AS label
+           FROM projects p
+           LEFT JOIN project_staff ps ON ps.project_id = p.id AND ps.staff_role = 'partner_ae'
+           LEFT JOIN users u ON u.id = ps.user_id
+           WHERE p.id IN (${projectSubquery})
+         )
+         GROUP BY id
+         ORDER BY count DESC`;
+    const aeRes = await db.prepare(aeQuery).bind(...filterBindings).all<{ id: string | null; label: string; count: number }>();
+    aeDistribution = aeRes.results ?? [];
+  }
+
   // Per-type counts: a project with multiple solution_types contributes to each bucket.
   // Projects with empty/null solution_types fall into the 'Unknown' bucket.
   const typeDistribution = await db
@@ -213,6 +239,8 @@ app.get("/summary", async (c) => {
     phaseDistribution: phaseDistribution.results ?? [],
     vendorDistribution: vendorDistribution.results ?? [],
     typeDistribution: typeDistribution.results ?? [],
+    aeDistribution,
+    isSalesLeader,
   });
 });
 
