@@ -16,7 +16,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { canEditProject } from "../services/accessService";
+import { canEditProject, canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
@@ -76,12 +76,14 @@ type SendHistoryRow = {
   recipient_emails: string;
   sent_by_user_id: string | null;
   sent_at: string;
+  has_body: number;
 };
 
 async function loadSendHistory(db: D1Database, projectId: string, meetingType: MeetingType) {
   const rows = await db
     .prepare(
-      `SELECT id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at
+      `SELECT id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at,
+              CASE WHEN body_html IS NOT NULL AND body_html != '' THEN 1 ELSE 0 END AS has_body
        FROM meeting_prep_sends
        WHERE project_id = ? AND meeting_type = ?
        ORDER BY sent_at DESC`
@@ -94,6 +96,7 @@ async function loadSendHistory(db: D1Database, projectId: string, meetingType: M
     subject: r.subject,
     sentBy: r.sent_by_user_id,
     sentAt: r.sent_at,
+    hasBody: r.has_body === 1,
     recipientCount: (() => {
       try {
         const arr = JSON.parse(r.recipient_emails);
@@ -181,7 +184,8 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.param("projectId");
   const meetingType = parseMeetingTypeParam(c);
-  if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
+  const editor = await canEditProject(c.env.DB, auth.user, projectId);
+  if (!editor && !(await canViewProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
@@ -191,10 +195,11 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
   const { contacts, staff } = await loadRecipientCandidates(c.env.DB, project);
   const history = await loadSendHistory(c.env.DB, projectId, meetingType);
 
-  // Customer SharePoint files — tolerate missing config / folder
+  // SharePoint listing is only used by the send modal, which non-editors
+  // can't open. Skip the network call for read-only viewers.
   let sharepointFiles: Array<{ name: string; webUrl: string; size: number | null; mimeType: string | null }> = [];
   let sharepointUrl: string | null = null;
-  if (project.customer_id) {
+  if (editor && project.customer_id) {
     const customer = await c.env.DB
       .prepare("SELECT sharepoint_url FROM customers WHERE id = ? LIMIT 1")
       .bind(project.customer_id)
@@ -508,8 +513,8 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
 
   await c.env.DB
     .prepare(
-      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at, body_html)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       sendId,
@@ -519,7 +524,8 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
       subject,
       JSON.stringify(recipientEmails),
       auth.user.id,
-      now
+      now,
+      html
     )
     .run();
 
@@ -531,6 +537,32 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
   }
 
   return c.json({ ok: true, sentTo: recipientEmails, sentAt: now, sendId });
+});
+
+// ── Get a single send's stored HTML body ─────────────────────────────────────
+
+app.get("/:projectId/meeting-prep/:meetingType/sends/:sendId/html", async (c) => {
+  const auth = c.get("auth");
+  const projectId = c.req.param("projectId");
+  const meetingType = parseMeetingTypeParam(c);
+  const sendId = c.req.param("sendId");
+  if (!(await canViewProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const row = await c.env.DB
+    .prepare(
+      `SELECT subject, body_html, sent_at
+       FROM meeting_prep_sends
+       WHERE id = ? AND project_id = ? AND meeting_type = ?
+       LIMIT 1`
+    )
+    .bind(sendId, projectId, meetingType)
+    .first<{ subject: string; body_html: string | null; sent_at: string }>();
+  if (!row) throw new HTTPException(404, { message: "Send not found" });
+  if (!row.body_html) throw new HTTPException(404, { message: "Body not stored for this send" });
+
+  return c.json({ subject: row.subject, html: row.body_html, sentAt: row.sent_at });
 });
 
 export default app;

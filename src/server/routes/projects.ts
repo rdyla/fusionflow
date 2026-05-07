@@ -60,6 +60,27 @@ app.get("/", async (c) => {
     bindings.push(demoVendor);
   }
 
+  // Optional drill-down filters (e.g. from the dashboard "By AE" donut).
+  // `none` is a sentinel for projects with no AE assignment.
+  const pfAeId = c.req.query("pf_ae_id");
+  if (pfAeId) {
+    if (pfAeId === "none") {
+      sql += " AND (customer_id IS NULL OR customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id IS NULL))";
+    } else {
+      sql += " AND customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id = ?)";
+      bindings.push(pfAeId);
+    }
+  }
+  const partnerAeId = c.req.query("partner_ae_id");
+  if (partnerAeId) {
+    if (partnerAeId === "none") {
+      sql += " AND id NOT IN (SELECT project_id FROM project_staff WHERE staff_role = 'partner_ae')";
+    } else {
+      sql += " AND id IN (SELECT project_id FROM project_staff WHERE staff_role = 'partner_ae' AND user_id = ?)";
+      bindings.push(partnerAeId);
+    }
+  }
+
   sql += " ORDER BY updated_at DESC";
 
   const rows = await db.prepare(sql).bind(...bindings).all();

@@ -89,16 +89,19 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
+type DonutDatum = { label: string; count: number; id?: string | null };
 function DonutChart({
   data,
   colorMap,
   fallbackColors,
   centerLabel = "projects",
+  onSliceClick,
 }: {
-  data: { label: string; count: number }[];
+  data: DonutDatum[];
   colorMap?: Record<string, string>;
   fallbackColors?: string[];
   centerLabel?: string;
+  onSliceClick?: (item: DonutDatum) => void;
 }) {
   const palette = fallbackColors ?? PHASE_COLORS;
   const total = data.reduce((s, d) => s + d.count, 0);
@@ -111,8 +114,8 @@ function DonutChart({
     return colorMap?.[label] ?? palette[idx % palette.length];
   }
 
-  function slice(count: number, color: string, idx: number) {
-    const angle = (count / total) * 2 * Math.PI;
+  function slice(d: DonutDatum, color: string, idx: number) {
+    const angle = (d.count / total) * 2 * Math.PI;
     const start = cumAngle;
     const end = cumAngle + angle;
     cumAngle = end;
@@ -128,25 +131,39 @@ function DonutChart({
         fill={color}
         stroke="#021a2e"
         strokeWidth={2}
-      />
+        style={onSliceClick ? { cursor: "pointer" } : undefined}
+        onClick={onSliceClick ? () => onSliceClick(d) : undefined}
+      >
+        <title>{`${d.label}: ${d.count}`}</title>
+      </path>
     );
   }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
       <svg width={144} height={144} viewBox="0 0 144 144" style={{ flexShrink: 0 }}>
-        {data.map((d, i) => slice(d.count, colorFor(d.label, i), i))}
+        {data.map((d, i) => slice(d, colorFor(d.label, i), i))}
         <text x={cx} y={cy - 5} textAnchor="middle" fill="#1e293b" fontSize={20} fontWeight={700}>{total}</text>
         <text x={cx} y={cy + 11} textAnchor="middle" fill="#64748b" fontSize={9}>{centerLabel}</text>
       </svg>
       <div style={{ flex: 1, minWidth: 0 }}>
-        {data.map((d, i) => (
-          <div key={d.label} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: colorFor(d.label, i) }} />
-            <span style={{ fontSize: 12, color: "#334155", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", flexShrink: 0 }}>{d.count}</span>
-          </div>
-        ))}
+        {data.map((d, i) => {
+          const clickable = !!onSliceClick;
+          return (
+            <div
+              key={d.label}
+              role={clickable ? "button" : undefined}
+              tabIndex={clickable ? 0 : undefined}
+              onClick={clickable ? () => onSliceClick!(d) : undefined}
+              onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSliceClick!(d); } } : undefined}
+              style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, cursor: clickable ? "pointer" : "default" }}
+            >
+              <span style={{ width: 9, height: 9, borderRadius: 2, flexShrink: 0, background: colorFor(d.label, i) }} />
+              <span style={{ fontSize: 12, color: "#334155", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.label}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#1e293b", flexShrink: 0 }}>{d.count}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -187,13 +204,51 @@ function PhaseFlowIndicator({ phases }: { phases: PhaseEntry[] }) {
   );
 }
 
-function MetricCard({ title, value, accent }: { title: string; value: number; accent?: string }) {
-  return (
-    <div className="ms-metric-card">
+function MetricCard({
+  title,
+  value,
+  accent,
+  to,
+  onClick,
+}: {
+  title: string;
+  value: number;
+  accent?: string;
+  to?: string;
+  onClick?: () => void;
+}) {
+  const interactive = (to || onClick) && value > 0;
+  const inner = (
+    <>
       <div className="ms-metric-label">{title}</div>
       <div className="ms-metric-value" style={accent ? { color: accent } : undefined}>{value}</div>
-    </div>
+    </>
   );
+  const interactiveStyle: React.CSSProperties = interactive
+    ? { cursor: "pointer", transition: "transform 120ms ease, box-shadow 120ms ease" }
+    : {};
+  if (to && interactive) {
+    return (
+      <Link to={to} className="ms-metric-card" style={{ ...interactiveStyle, textDecoration: "none", color: "inherit", display: "block" }}>
+        {inner}
+      </Link>
+    );
+  }
+  if (onClick && interactive) {
+    return (
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+        className="ms-metric-card"
+        style={interactiveStyle}
+      >
+        {inner}
+      </div>
+    );
+  }
+  return <div className="ms-metric-card">{inner}</div>;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -245,6 +300,16 @@ export default function DashboardPage() {
   const [taskSearch, setTaskSearch]       = useState("");
   const [taskSearchInput, setTaskSearchInput] = useState("");
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const tasksRef = useRef<HTMLDivElement | null>(null);
+  const blockersRef = useRef<HTMLDivElement | null>(null);
+
+  function scrollToTasks() {
+    if (taskStatus !== "all") setTaskStatus("all");
+    requestAnimationFrame(() => tasksRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  }
+  function scrollToBlockers() {
+    blockersRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   useEffect(() => {
     api.dashboardSummary().then((d) => {
@@ -298,7 +363,7 @@ export default function DashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
   }
 
-  const { user, summary, projects, projectPhases, openBlockers, phaseDistribution, vendorDistribution, typeDistribution } = data;
+  const { user, summary, projects, projectPhases, openBlockers, phaseDistribution, vendorDistribution, typeDistribution, aeDistribution, isSalesLeader } = data;
 
   // Build a map from project_id → sorted phases
   const phasesByProject = projectPhases.reduce<Record<string, PhaseEntry[]>>((acc, ph) => {
@@ -341,9 +406,19 @@ export default function DashboardPage() {
       {/* Metric cards */}
       <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
         <MetricCard title="Active Projects" value={summary.activeProjects} />
-        <MetricCard title="At Risk" value={summary.atRiskProjects} accent={summary.atRiskProjects > 0 ? "#ff8c00" : undefined} />
-        <MetricCard title="Open Tasks" value={summary.openTasks} />
-        <MetricCard title="Open Blockers" value={summary.openBlockers} accent={summary.openBlockers > 0 ? "#d13438" : undefined} />
+        <MetricCard
+          title="At Risk"
+          value={summary.atRiskProjects}
+          accent={summary.atRiskProjects > 0 ? "#ff8c00" : undefined}
+          to="/projects?health=at_risk"
+        />
+        <MetricCard title="Open Tasks" value={summary.openTasks} onClick={scrollToTasks} />
+        <MetricCard
+          title="Open Blockers"
+          value={summary.openBlockers}
+          accent={summary.openBlockers > 0 ? "#d13438" : undefined}
+          onClick={scrollToBlockers}
+        />
       </div>
 
       {/* Distribution charts */}
@@ -357,12 +432,25 @@ export default function DashboardPage() {
           />
         </div>
         <div className="ms-section-card">
-          <div className="ms-section-title">By Vendor</div>
-          <DonutChart
-            data={vendorData}
-            colorMap={VENDOR_COLORS}
-            centerLabel="projects"
-          />
+          <div className="ms-section-title">{isSalesLeader ? "By AE" : "By Vendor"}</div>
+          {isSalesLeader ? (
+            <DonutChart
+              data={aeDistribution}
+              fallbackColors={PHASE_COLORS}
+              centerLabel="projects"
+              onSliceClick={(item) => {
+                const param = user.role === "pf_ae" ? "pf_ae_id" : "partner_ae_id";
+                const id = item.id ?? "none";
+                navigate(`/projects?${param}=${encodeURIComponent(id)}&ae_name=${encodeURIComponent(item.label)}`);
+              }}
+            />
+          ) : (
+            <DonutChart
+              data={vendorData}
+              colorMap={VENDOR_COLORS}
+              centerLabel="projects"
+            />
+          )}
         </div>
         <div className="ms-section-card">
           <div className="ms-section-title">By Solution Type</div>
@@ -457,7 +545,7 @@ export default function DashboardPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 20, alignItems: "start" }}>
 
         {/* Tasks panel */}
-        <div className="ms-card" style={{ overflow: "hidden" }}>
+        <div ref={tasksRef} className="ms-card" style={{ overflow: "hidden", scrollMarginTop: 16 }}>
           {/* Header + filters */}
           <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
@@ -599,7 +687,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Open Blockers sidebar */}
-        <div className="ms-card" style={{ overflow: "hidden" }}>
+        <div ref={blockersRef} className="ms-card" style={{ overflow: "hidden", scrollMarginTop: 16 }}>
           <div style={{ padding: "14px 16px", borderBottom: "1px solid rgba(0,0,0,0.07)", fontWeight: 700, fontSize: 13, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Open Blockers
           </div>
