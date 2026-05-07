@@ -239,30 +239,129 @@ export default function AdminUsersPage() {
     }))
     .filter((g) => g.users.length > 0);
 
-  // Partner tabs (Zoom, RingCentral, etc.): group by manager (reports to)
-  const userById = Object.fromEntries(users.map((u) => [u.id, u]));
-  const managerIds = Array.from(new Set(visibleUsers.map((u) => u.manager_id ?? null)));
-  // Sort: managers with names first (alphabetically), then unassigned last
-  const sortedManagerIds = [
-    ...managerIds
-      .filter((id) => id !== null && userById[id!])
-      .sort((a, b) => (userById[a!]?.name ?? "").localeCompare(userById[b!]?.name ?? "")),
-    null,
-  ];
-  const managerGrouped: { label: string; color: string; users: User[] }[] = sortedManagerIds
-    .map((managerId) => ({
-      label: managerId && userById[managerId]
-        ? `Reports to: ${userById[managerId].name ?? userById[managerId].email}`
-        : "Unassigned",
-      color: managerId ? "#107c10" : "#94a3b8",
-      users: visibleUsers
-        .filter((u) => (u.manager_id ?? null) === managerId)
-        .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
-    }))
-    .filter((g) => g.users.length > 0);
+  // Partner tabs (Zoom, RingCentral, etc.): render as a true reporting tree
+  // (DFS pre-order, depth-indented). Anyone whose manager isn't in this org
+  // becomes a root in this view — the chain stops at the org boundary.
+  const visibleIds = new Set(visibleUsers.map((u) => u.id));
+  const childrenByParent = new Map<string | null, User[]>();
+  for (const u of visibleUsers) {
+    const parent = u.manager_id && visibleIds.has(u.manager_id) ? u.manager_id : null;
+    const arr = childrenByParent.get(parent) ?? [];
+    arr.push(u);
+    childrenByParent.set(parent, arr);
+  }
+  for (const [, kids] of childrenByParent) {
+    kids.sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email));
+  }
+  const treeRows: { user: User; depth: number }[] = [];
+  const seen = new Set<string>();
+  (function visit(parentId: string | null, depth: number) {
+    for (const child of childrenByParent.get(parentId) ?? []) {
+      if (seen.has(child.id)) continue; // cycle guard
+      seen.add(child.id);
+      treeRows.push({ user: child, depth });
+      visit(child.id, depth + 1);
+    }
+  })(null, 0);
 
   const isPartnerTab = orgTab !== "all" && orgTab !== "Packet Fusion";
-  const groupedUsers = isPartnerTab ? managerGrouped : roleGrouped;
+  const groupedUsers = roleGrouped;
+
+  function renderUserRow(user: User, depth: number) {
+    const perm = (user.cs_permission ?? "none") as CsPerm;
+    const effectivePerm = user.role === "admin" ? "power_user" : perm;
+    return (
+      <tr key={user.id}>
+        <td style={{ fontWeight: 500 }}>
+          {depth > 0 && (
+            <span
+              aria-hidden="true"
+              style={{
+                display: "inline-block",
+                width: depth * 18,
+                marginRight: 6,
+                color: "#cbd5e1",
+                fontFamily: "monospace",
+                fontSize: 12,
+                letterSpacing: 0,
+                userSelect: "none",
+                verticalAlign: "middle",
+              }}
+            >
+              {"│  ".repeat(Math.max(0, depth - 1))}└─
+            </span>
+          )}
+          {user.name ?? "—"}
+        </td>
+        <td>{user.email}</td>
+        {orgTab === "all" && <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>}
+        <td>
+          <span
+            className="ms-badge"
+            style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
+          >
+            {ROLE_LABELS[user.role as Role] ?? user.role}
+          </span>
+        </td>
+        <td>
+          {user.role === "partner_ae" ? (
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+          ) : effectivePerm === "none" ? (
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+          ) : (
+            <span
+              className="ms-badge"
+              style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
+            >
+              {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
+            </span>
+          )}
+        </td>
+        <td>
+          <span
+            className="ms-badge"
+            style={{ background: user.is_active ? "#dff6dd" : "#fde7e9", color: user.is_active ? "#107c10" : "#d13438", border: `1px solid ${user.is_active ? "#107c10" : "#d13438"}40` }}
+          >
+            {user.is_active ? "Active" : "Inactive"}
+          </span>
+        </td>
+        <td>
+          <button
+            onClick={(e) => toggleMenu(e, user.id)}
+            style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
+          >
+            ⋮
+          </button>
+          {openMenu?.id === user.id && (
+            <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, bottom: openMenu.bottom, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+              <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
+              <MenuItem
+                onClick={() => { toggleActive(user); setOpenMenu(null); }}
+                color={user.is_active ? "#d13438" : "#107c10"}
+              >
+                {user.is_active ? "Deactivate" : "Activate"}
+              </MenuItem>
+              {user.role !== "admin" && user.is_active && (
+                <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
+                  View As
+                </MenuItem>
+              )}
+              {user.role !== "admin" && (
+                <>
+                  <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
+                  <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
+                    Delete
+                  </MenuItem>
+                </>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+    );
+  }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading users...</div>;
 
@@ -317,6 +416,8 @@ export default function AdminUsersPage() {
           <tbody>
             {visibleUsers.length === 0 ? (
               <tr><td colSpan={orgTab === "all" ? 7 : 6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users in this org.</td></tr>
+            ) : isPartnerTab ? (
+              treeRows.map(({ user, depth }) => renderUserRow(user, depth))
             ) : (
               groupedUsers.flatMap(({ label, color, users: groupUsers }) => [
                 <tr key={`group-${label}`}>
@@ -333,81 +434,7 @@ export default function AdminUsersPage() {
                     {label} · {groupUsers.length}
                   </td>
                 </tr>,
-                ...groupUsers.map((user) => {
-                  const perm = (user.cs_permission ?? "none") as CsPerm;
-                  const effectivePerm = user.role === "admin" ? "power_user" : perm;
-                  return (
-                  <tr key={user.id}>
-                    <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
-                    <td>{user.email}</td>
-                    {orgTab === "all" && <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>}
-                    <td>
-                      <span
-                        className="ms-badge"
-                        style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
-                      >
-                        {ROLE_LABELS[user.role as Role] ?? user.role}
-                      </span>
-                    </td>
-                    <td>
-                      {user.role === "partner_ae" ? (
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                      ) : effectivePerm === "none" ? (
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                      ) : (
-                        <span
-                          className="ms-badge"
-                          style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
-                        >
-                          {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className="ms-badge"
-                        style={{ background: user.is_active ? "#dff6dd" : "#fde7e9", color: user.is_active ? "#107c10" : "#d13438", border: `1px solid ${user.is_active ? "#107c10" : "#d13438"}40` }}
-                      >
-                        {user.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        onClick={(e) => toggleMenu(e, user.id)}
-                        style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
-                      >
-                        ⋮
-                      </button>
-                      {openMenu?.id === user.id && (
-                        <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, bottom: openMenu.bottom, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
-                          <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
-                          <MenuItem
-                            onClick={() => { toggleActive(user); setOpenMenu(null); }}
-                            color={user.is_active ? "#d13438" : "#107c10"}
-                          >
-                            {user.is_active ? "Deactivate" : "Activate"}
-                          </MenuItem>
-                          {user.role !== "admin" && user.is_active && (
-                            <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
-                              View As
-                            </MenuItem>
-                          )}
-                          {user.role !== "admin" && (
-                            <>
-                              <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
-                              <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
-                                Delete
-                              </MenuItem>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                  );
-                })
+                ...groupUsers.map((user) => renderUserRow(user, 0)),
               ])
             )}
           </tbody>
