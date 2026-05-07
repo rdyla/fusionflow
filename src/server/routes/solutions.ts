@@ -111,9 +111,13 @@ function accessClause(role: string, teamIds: string[], accountId?: string | null
     if (!accountId) return { where: "1=0", bindings: [] };
     return { where: "s.dynamics_account_id = ?", bindings: [accountId] };
   }
-  // partner_ae
+  // partner_ae — match either the legacy single field OR any solution_staff row
+  // (multi-AE support; mirrors the project_staff pattern)
   const ph = inPlaceholders(teamIds);
-  return { where: `s.partner_ae_user_id IN (${ph})`, bindings: [...teamIds] };
+  return {
+    where: `(s.partner_ae_user_id IN (${ph}) OR s.id IN (SELECT solution_id FROM solution_staff WHERE staff_role = 'partner_ae' AND user_id IN (${ph})))`,
+    bindings: [...teamIds, ...teamIds],
+  };
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
