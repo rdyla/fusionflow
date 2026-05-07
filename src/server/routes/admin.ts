@@ -195,6 +195,37 @@ app.get("/users/:id/references", async (c) => {
     feature_request_votes: "Feature request votes",
     cs_proposals: "Cloud Support proposals",
     support_tickets: "Support tickets",
+    users: "Users",
+  };
+
+  // Human-readable role label for each known FK column. Critical for tables
+  // that reference users from multiple columns (e.g. solutions has PF SA + PF
+  // CSM + partner AE) — without this an admin can't tell *why* the user is
+  // tied to a row.
+  const FRIENDLY_COLUMN: Record<string, string> = {
+    created_by:            "Created by",
+    created_by_id:         "Created by",
+    creator_id:            "Created by",
+    submitter_id:          "Submitted by",
+    pm_user_id:            "PM",
+    pf_ae_user_id:         "PF AE",
+    pf_sa_user_id:         "PF SA",
+    pf_csm_user_id:        "PF CSM",
+    partner_ae_user_id:    "Partner AE",
+    vendor_ae_user_id:     "Vendor AE",
+    assignee_user_id:      "Assignee",
+    owner_user_id:         "Owner",
+    owner_id:              "Owner",
+    author_user_id:        "Author",
+    uploaded_by:           "Uploaded by",
+    sa_user_id:            "SA",
+    csm_user_id:           "CSM",
+    ae_user_id:            "AE",
+    graduated_by:          "Graduated by",
+    conducted_by_user_id:  "Conducted by",
+    reviewed_by_user_id:   "Reviewed by",
+    user_id:               "Linked user",
+    manager_id:            "Manager of",
   };
 
   type Ref = { table: string; column: string; onDelete: string };
@@ -235,7 +266,8 @@ app.get("/users/:id/references", async (c) => {
       return { entity: r.table, count: 0, blocking: false, samples: [] };
     }
     const friendly = FRIENDLY_TABLE[r.table] ?? r.table;
-    const entity = `${friendly} (${r.column})`;
+    const role = FRIENDLY_COLUMN[r.column] ?? r.column;
+    const entity = `${friendly} (${role})`;
     const onDel = r.onDelete;
     const blocking = onDel !== "SET NULL" && onDel !== "CASCADE" && onDel !== "SET DEFAULT";
 
