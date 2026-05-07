@@ -71,6 +71,20 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState<Partial<User & { role: Role; manager_id: string | null }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deleteRefs, setDeleteRefs] = useState<{
+    blocked: boolean;
+    buckets: { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] }[];
+  } | null>(null);
+  const [deleteRefsLoading, setDeleteRefsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!deletingUser) { setDeleteRefs(null); return; }
+    setDeleteRefsLoading(true);
+    api.adminUserReferences(deletingUser.id)
+      .then(setDeleteRefs)
+      .catch(() => setDeleteRefs(null))
+      .finally(() => setDeleteRefsLoading(false));
+  }, [deletingUser]);
   const [openMenu, setOpenMenu] = useState<{ id: string; top?: number; bottom?: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
@@ -495,13 +509,63 @@ export default function AdminUsersPage() {
       {/* Delete Confirm */}
       {deletingUser && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setDeletingUser(null); }}>
-          <div className="ms-modal" style={{ maxWidth: 420 }}>
+          <div className="ms-modal" style={{ maxWidth: 540 }}>
             <h2 style={{ color: "#d13438" }}>Delete User</h2>
-            <p style={{ color: "#475569", margin: "12px 0 20px" }}>
-              Permanently delete <strong style={{ color: "#1e293b" }}>{deletingUser.name ?? deletingUser.email}</strong>? This removes them from all project access and cannot be undone.
+            <p style={{ color: "#475569", margin: "12px 0 12px" }}>
+              Permanently delete <strong style={{ color: "#1e293b" }}>{deletingUser.name ?? deletingUser.email}</strong>? This cannot be undone.
             </p>
+
+            {deleteRefsLoading && (
+              <div style={{ color: "#94a3b8", fontSize: 13, padding: "8px 0" }}>Checking what's tied to this user…</div>
+            )}
+
+            {!deleteRefsLoading && deleteRefs && deleteRefs.buckets.length > 0 && (
+              <div style={{ margin: "8px 0 16px", border: "1px solid #e2e8f0", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ padding: "8px 12px", background: "#f8fafc", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  Tied to this user
+                </div>
+                {deleteRefs.buckets.map((b) => (
+                  <details key={b.entity} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <summary style={{ padding: "8px 12px", cursor: b.samples.length > 0 ? "pointer" : "default", display: "flex", alignItems: "center", gap: 8, listStyle: b.samples.length > 0 ? undefined : "none" }}>
+                      <span
+                        title={b.blocking ? "Will block delete until reassigned" : "Auto-handled on delete"}
+                        style={{ width: 8, height: 8, borderRadius: "50%", background: b.blocking ? "#d13438" : "#94a3b8", flexShrink: 0 }}
+                      />
+                      <span style={{ fontSize: 13, color: "#1e293b", flex: 1 }}>{b.entity}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: b.blocking ? "#d13438" : "#475569" }}>{b.count}</span>
+                    </summary>
+                    {b.samples.length > 0 && (
+                      <div style={{ padding: "4px 12px 8px 28px" }}>
+                        {b.samples.map((s) => (
+                          <div key={s.id} style={{ fontSize: 12, color: "#64748b", padding: "2px 0" }}>{s.label}</div>
+                        ))}
+                        {b.count > b.samples.length && (
+                          <div style={{ fontSize: 11, color: "#94a3b8", padding: "2px 0", fontStyle: "italic" }}>
+                            …and {b.count - b.samples.length} more
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </details>
+                ))}
+              </div>
+            )}
+
+            {!deleteRefsLoading && deleteRefs?.blocked && (
+              <p style={{ fontSize: 12, color: "#d13438", margin: "0 0 12px" }}>
+                The red items will block the delete. Reassign or remove them first, or just deactivate the user instead.
+              </p>
+            )}
+
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="ms-btn-primary" style={{ background: "#d13438", borderColor: "#d13438" }} onClick={handleDelete}>Delete</button>
+              <button
+                className="ms-btn-primary"
+                style={{ background: "#d13438", borderColor: "#d13438", opacity: deleteRefs?.blocked ? 0.55 : 1 }}
+                disabled={deleteRefsLoading || (deleteRefs?.blocked ?? false)}
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
               <button className="ms-btn-secondary" onClick={() => setDeletingUser(null)}>Cancel</button>
             </div>
           </div>

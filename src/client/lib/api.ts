@@ -1337,6 +1337,12 @@ export const api = {
   adminDeleteUser: (id: string) =>
     request<{ success: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
 
+  adminUserReferences: (id: string) =>
+    request<{
+      blocked: boolean;
+      buckets: { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] }[];
+    }>(`/admin/users/${id}/references`),
+
   adminCreateUser: (payload: {
     email: string;
     name?: string;

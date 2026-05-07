@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, type DashboardSummaryResponse, type Task } from "../lib/api";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
+import { SOLUTION_TYPE_LABELS, canonicalizeSolutionType, type SolutionType } from "../../shared/solutionTypes";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
@@ -31,17 +32,26 @@ const VENDOR_COLORS: Record<string, string> = {
   Unknown:     "#94a3b8",
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  ucaas:   "UCaaS",
-  ccaas:   "CCaaS",
-  ci:      "Conv. Intelligence",
-  va:      "AI Virtual Agent",
-  zoom_ra: "Zoom Rev. Accel.",
-  zoom_va: "Zoom Virtual Agent",
-  rc_ace:  "RC ACE",
-  rc_air:  "RC AIR",
-  Unknown: "Unknown",
-};
+// Reverse map: lowercased canonical display label → SolutionType key. Lets us
+// catch legacy rows that stored the display value (e.g. "Workforce Management")
+// alongside rows that stored the canonical key.
+const REVERSE_TYPE_LABEL: Record<string, SolutionType> = Object.fromEntries(
+  Object.entries(SOLUTION_TYPE_LABELS).map(([k, v]) => [v.toLowerCase(), k as SolutionType])
+);
+
+function normalizeTypeLabel(raw: string | null | undefined): string {
+  const trimmed = (raw ?? "").trim();
+  if (!trimmed || trimmed.toLowerCase() === "unknown") return "Unknown";
+  const lower = trimmed.toLowerCase();
+  // (1) canonical key match — folds case variants and legacy aliases
+  const canon = canonicalizeSolutionType(lower);
+  if (canon) return SOLUTION_TYPE_LABELS[canon];
+  // (2) display-value match — catches legacy rows that stored the label literally
+  const reverse = REVERSE_TYPE_LABEL[lower];
+  if (reverse) return SOLUTION_TYPE_LABELS[reverse];
+  // (3) preserve the raw string so unrecognized values don't silently merge into "Unknown"
+  return trimmed;
+}
 const TYPE_COLORS = [
   "#0891b2", "#8764b8", "#059669", "#ff8c00",
   "#e74856", "#038387", "#94a3b8",
@@ -382,14 +392,11 @@ export default function DashboardPage() {
     }, {})
   );
 
-  // Normalize + merge solution type labels (DB may store raw keys like "ucaas" or display values like "UCaaS")
-  const REVERSE_TYPE: Record<string, string> = Object.fromEntries(
-    Object.entries(TYPE_LABELS).map(([, v]) => [v.toLowerCase(), v])
-  );
+  // Merge case/alias variants (e.g. "ucaas" + "UCaaS" + "UCAAS") into one slice
+  // by routing every raw value through the shared canonical-label resolver.
   const typeData = Object.values(
     typeDistribution.reduce<Record<string, { label: string; count: number }>>((acc, d) => {
-      const raw = d.label ?? "";
-      const label = TYPE_LABELS[raw] ?? REVERSE_TYPE[raw.toLowerCase()] ?? raw;
+      const label = normalizeTypeLabel(d.label);
       acc[label] = { label, count: (acc[label]?.count ?? 0) + d.count };
       return acc;
     }, {})
