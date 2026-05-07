@@ -7,6 +7,7 @@ import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
 import { scoreAssessment } from "../lib/scoringEngine";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -26,6 +27,9 @@ function assertOptimizeEdit(role: string) {
 
 app.get("/accounts", async (c) => {
   assertOptimizeAccess(c.get("auth").role);
+  const demoVendor = await getDemoVendor(c.env.DB);
+  const vendorClause = demoVendor ? "WHERE LOWER(p.vendor) = ?" : "";
+  const vendorBinding = demoVendor ? [demoVendor] : [];
   const rows = await c.env.DB.prepare(`
     SELECT
       oa.id, oa.project_id, oa.graduated_at, oa.graduation_method,
@@ -45,8 +49,9 @@ app.get("/accounts", async (c) => {
     LEFT JOIN users ae  ON ae.id  = cust.pf_ae_user_id
     LEFT JOIN users sa  ON sa.id  = cust.pf_sa_user_id
     LEFT JOIN users csm ON csm.id = cust.pf_csm_user_id
+    ${vendorClause}
     ORDER BY oa.graduated_at DESC
-  `).all();
+  `).bind(...vendorBinding).all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 

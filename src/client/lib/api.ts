@@ -1825,6 +1825,15 @@ export const api = {
       `/projects/${projectId}/meeting-prep/${meetingType}/send`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
+
+  // ── Settings ─────────────────────────────────────────────────────────────────
+  publicSettings: () => request<{ demoVendor: "zoom" | "ringcentral" | null }>("/settings/public"),
+  adminGetDemoMode: () => request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode"),
+  adminSetDemoMode: (vendor: "zoom" | "ringcentral" | null) =>
+    request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode", {
+      method: "PUT",
+      body: JSON.stringify({ vendor }),
+    }),
 };
 
 // ── Meeting prep types ─────────────────────────────────────────────────────

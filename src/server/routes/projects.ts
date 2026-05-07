@@ -11,6 +11,7 @@ import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -51,6 +52,13 @@ app.get("/", async (c) => {
     bindings = [auth.user.dynamics_account_id];
   }
   // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
+
+  // Demo-mode vendor lens: silently filters every list view to a single vendor.
+  const demoVendor = await getDemoVendor(db);
+  if (demoVendor) {
+    sql += " AND LOWER(vendor) = ?";
+    bindings.push(demoVendor);
+  }
 
   // Optional drill-down filters (e.g. from the dashboard "By AE" donut).
   // `none` is a sentinel for projects with no AE assignment.
@@ -148,7 +156,12 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { name, customer_name, customer_id: customerIdInput, vendor, solution_types, kickoff_date, target_go_live_date, pm_user_id: pmInput, dynamics_account_id, crm_case_id } = parsed.data;
+  const { name, customer_name, customer_id: customerIdInput, vendor: vendorInput, solution_types, kickoff_date, target_go_live_date, pm_user_id: pmInput, dynamics_account_id, crm_case_id } = parsed.data;
+
+  // Demo mode pins the vendor on every newly-created project.
+  const demoVendor = await getDemoVendor(db);
+  const vendor = demoVendor ? demoVendor : vendorInput;
+
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
 

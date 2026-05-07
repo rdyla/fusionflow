@@ -7,6 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getDemoVendor, setDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -441,6 +442,27 @@ app.post("/run-health-scoring", async (c) => {
   }
 
   return c.json({ scored });
+});
+
+// ── Settings: demo mode (vendor lens for partner demos) ──────────────────────
+
+app.get("/settings/demo-mode", async (c) => {
+  const vendor = await getDemoVendor(c.env.DB);
+  return c.json({ vendor });
+});
+
+const demoModeSchema = z.object({
+  vendor: z.enum(["zoom", "ringcentral"]).nullable(),
+});
+
+app.put("/settings/demo-mode", async (c) => {
+  const auth = c.get("auth");
+  const parsed = demoModeSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "vendor must be 'zoom', 'ringcentral', or null" });
+  }
+  await setDemoVendor(c.env.DB, parsed.data.vendor, auth.user.id);
+  return c.json({ vendor: parsed.data.vendor });
 });
 
 export default app;
