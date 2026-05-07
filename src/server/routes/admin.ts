@@ -158,6 +158,127 @@ app.patch("/users/:id", async (c) => {
   return c.json(updated);
 });
 
+// Inspection: which entities currently reference this user. Used by the
+// delete-confirmation modal so admins can see what's tied to the user before
+// they hit Delete (and helps explain FK errors when a delete fails).
+//
+// `blocking` means the FK has no ON DELETE SET NULL/CASCADE — the row will
+// stop the user-delete with a SQLITE FK constraint error until reassigned.
+app.get("/users/:id/references", async (c) => {
+  const db = c.env.DB;
+  const userId = c.req.param("id");
+  const exists = await db.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(userId).first();
+  if (!exists) throw new HTTPException(404, { message: "User not found" });
+
+  type Bucket = { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] };
+
+  // Each spec lists the bind values for both queries so the helper handles the
+  // (rare) cases where the user id needs to appear more than once.
+  const SPECS: Array<{
+    entity: string;
+    blocking: boolean;
+    countSql: string;
+    sampleSql: string;
+    binds: string[];
+  }> = [
+    // ── Hard FK blockers (no ON DELETE clause = RESTRICT) ──────────────────
+    {
+      entity: "Project staff assignments",
+      blocking: true,
+      countSql: "SELECT COUNT(*) AS count FROM project_staff WHERE user_id = ?",
+      sampleSql: `SELECT ps.id, p.name || ' — ' || ps.staff_role AS label
+        FROM project_staff ps JOIN projects p ON p.id = ps.project_id
+        WHERE ps.user_id = ? ORDER BY p.updated_at DESC LIMIT 5`,
+      binds: [userId],
+    },
+    {
+      entity: "Solution staff assignments",
+      blocking: true,
+      countSql: "SELECT COUNT(*) AS count FROM solution_staff WHERE user_id = ?",
+      sampleSql: `SELECT ss.id, s.name || ' — ' || ss.staff_role AS label
+        FROM solution_staff ss JOIN solutions s ON s.id = ss.solution_id
+        WHERE ss.user_id = ? ORDER BY s.updated_at DESC LIMIT 5`,
+      binds: [userId],
+    },
+    {
+      entity: "Prospecting accounts owned",
+      blocking: true,
+      countSql: "SELECT COUNT(*) AS count FROM prospecting_accounts WHERE owner_id = ?",
+      sampleSql: "SELECT id, name AS label FROM prospecting_accounts WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 5",
+      binds: [userId],
+    },
+    {
+      entity: "Projects as PM",
+      blocking: true,
+      countSql: "SELECT COUNT(*) AS count FROM projects WHERE pm_user_id = ?",
+      sampleSql: "SELECT id, name AS label FROM projects WHERE pm_user_id = ? ORDER BY updated_at DESC LIMIT 5",
+      binds: [userId],
+    },
+    {
+      entity: "Tasks assigned",
+      blocking: true,
+      countSql: "SELECT COUNT(*) AS count FROM tasks WHERE assignee_user_id = ?",
+      sampleSql: `SELECT t.id, p.name || ' — ' || t.title AS label
+        FROM tasks t JOIN projects p ON p.id = t.project_id
+        WHERE t.assignee_user_id = ? ORDER BY t.due_date ASC LIMIT 5`,
+      binds: [userId],
+    },
+    {
+      entity: "Blockers owned",
+      blocking: true,
+      countSql: "SELECT COUNT(*) AS count FROM risks WHERE owner_user_id = ?",
+      sampleSql: `SELECT r.id, p.name || ' — ' || r.title AS label
+        FROM risks r JOIN projects p ON p.id = r.project_id
+        WHERE r.owner_user_id = ? LIMIT 5`,
+      binds: [userId],
+    },
+    {
+      entity: "Solutions (legacy partner AE field)",
+      blocking: false,
+      countSql: "SELECT COUNT(*) AS count FROM solutions WHERE partner_ae_user_id = ?",
+      sampleSql: "SELECT id, name AS label FROM solutions WHERE partner_ae_user_id = ? ORDER BY updated_at DESC LIMIT 5",
+      binds: [userId],
+    },
+    // ── Soft references (SET NULL or CASCADE — won't block delete) ────────
+    {
+      entity: "Customer team assignments (will clear on delete)",
+      blocking: false,
+      countSql: "SELECT COUNT(*) AS count FROM customers WHERE pf_ae_user_id = ? OR pf_sa_user_id = ? OR pf_csm_user_id = ?",
+      sampleSql: `SELECT id, name AS label FROM customers
+        WHERE pf_ae_user_id = ? OR pf_sa_user_id = ? OR pf_csm_user_id = ?
+        ORDER BY name LIMIT 5`,
+      binds: [userId, userId, userId],
+    },
+    {
+      entity: "Project access grants (auto-removed on delete)",
+      blocking: false,
+      countSql: "SELECT COUNT(*) AS count FROM project_access WHERE user_id = ?",
+      sampleSql: `SELECT pa.id, p.name AS label FROM project_access pa
+        JOIN projects p ON p.id = pa.project_id WHERE pa.user_id = ? LIMIT 5`,
+      binds: [userId],
+    },
+    {
+      entity: "Notifications (cascade on delete)",
+      blocking: false,
+      countSql: "SELECT COUNT(*) AS count FROM notifications WHERE user_id = ?",
+      sampleSql: "SELECT id, type AS label FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5",
+      binds: [userId],
+    },
+  ];
+
+  const buckets: Bucket[] = await Promise.all(SPECS.map(async (s) => {
+    const cnt = await db.prepare(s.countSql).bind(...s.binds).first<{ count: number }>();
+    const count = cnt?.count ?? 0;
+    if (count === 0) return { entity: s.entity, count: 0, blocking: s.blocking, samples: [] };
+    const samples = await db.prepare(s.sampleSql).bind(...s.binds).all<{ id: string; label: string }>();
+    return { entity: s.entity, count, blocking: s.blocking, samples: samples.results ?? [] };
+  }));
+
+  const visible = buckets.filter((b) => b.count > 0);
+  const blocked = visible.some((b) => b.blocking);
+  return c.json({ blocked, buckets: visible });
+});
+
 app.delete("/users/:id", async (c) => {
   const db = c.env.DB;
   const userId = c.req.param("id");
@@ -166,7 +287,17 @@ app.delete("/users/:id", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "User not found" });
 
   await db.prepare("DELETE FROM project_access WHERE user_id = ?").bind(userId).run();
-  await db.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+  try {
+    await db.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/FOREIGN KEY|constraint/i.test(msg)) {
+      throw new HTTPException(409, {
+        message: "User is still referenced by other records. Open the delete dialog to see what's tied to them, reassign those, then try again.",
+      });
+    }
+    throw err;
+  }
 
   return c.json({ success: true });
 });

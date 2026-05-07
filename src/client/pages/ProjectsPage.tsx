@@ -5,6 +5,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
 import { useDemoMode } from "../lib/demoMode";
+import { resolveVendorBadge } from "../lib/vendorBadge";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -335,7 +336,18 @@ export default function ProjectsPage() {
                     </Link>
                   </td>
                   <td style={{ color: "#64748b" }}>{project.customer_name ?? "—"}</td>
-                  <td style={{ color: "#64748b" }}>{project.vendor ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>
+                    {(() => {
+                      const v = resolveVendorBadge(project.vendor);
+                      if (!v) return "—";
+                      return (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: v.color, flexShrink: 0 }} />
+                          <span style={{ color: "#1e293b" }}>{v.label}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>
                     {project.status ? (
                       <Badge
