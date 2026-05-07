@@ -77,12 +77,14 @@ export default function AdminUsersPage() {
   } | null>(null);
   const [deleteRefsLoading, setDeleteRefsLoading] = useState(false);
 
+  const [deleteRefsError, setDeleteRefsError] = useState<string | null>(null);
   useEffect(() => {
-    if (!deletingUser) { setDeleteRefs(null); return; }
+    if (!deletingUser) { setDeleteRefs(null); setDeleteRefsError(null); return; }
     setDeleteRefsLoading(true);
+    setDeleteRefsError(null);
     api.adminUserReferences(deletingUser.id)
       .then(setDeleteRefs)
-      .catch(() => setDeleteRefs(null))
+      .catch((e) => { setDeleteRefs(null); setDeleteRefsError(e instanceof Error ? e.message : "Couldn't load references"); })
       .finally(() => setDeleteRefsLoading(false));
   }, [deletingUser]);
   const [openMenu, setOpenMenu] = useState<{ id: string; top?: number; bottom?: number; right: number } | null>(null);
@@ -517,6 +519,18 @@ export default function AdminUsersPage() {
 
             {deleteRefsLoading && (
               <div style={{ color: "#94a3b8", fontSize: 13, padding: "8px 0" }}>Checking what's tied to this user…</div>
+            )}
+
+            {!deleteRefsLoading && deleteRefsError && (
+              <div style={{ color: "#d13438", fontSize: 12, padding: "8px 0" }}>
+                Couldn't load references ({deleteRefsError}). The delete may still fail if the user is referenced elsewhere.
+              </div>
+            )}
+
+            {!deleteRefsLoading && !deleteRefsError && deleteRefs && deleteRefs.buckets.length === 0 && (
+              <div style={{ color: "#107c10", fontSize: 12, padding: "8px 0" }}>
+                ✓ No other records reference this user — safe to delete.
+              </div>
             )}
 
             {!deleteRefsLoading && deleteRefs && deleteRefs.buckets.length > 0 && (

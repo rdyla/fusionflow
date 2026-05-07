@@ -162,119 +162,114 @@ app.patch("/users/:id", async (c) => {
 // delete-confirmation modal so admins can see what's tied to the user before
 // they hit Delete (and helps explain FK errors when a delete fails).
 //
-// `blocking` means the FK has no ON DELETE SET NULL/CASCADE — the row will
-// stop the user-delete with a SQLITE FK constraint error until reassigned.
+// Strategy: introspect every table's foreign keys (PRAGMA foreign_key_list)
+// to find columns pointing at users(id), then count rows referencing this
+// user in each. `blocking` is true when the FK has neither ON DELETE SET NULL
+// nor CASCADE — those are the rows that'll fail the delete with a SQLITE FK
+// constraint error until reassigned.
 app.get("/users/:id/references", async (c) => {
   const db = c.env.DB;
   const userId = c.req.param("id");
   const exists = await db.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(userId).first();
   if (!exists) throw new HTTPException(404, { message: "User not found" });
 
+  // Friendly labels for the most common tables; everything else falls back to
+  // the raw table name with column suffix.
+  const FRIENDLY_TABLE: Record<string, string> = {
+    project_staff: "Project staff",
+    solution_staff: "Solution staff",
+    prospecting_accounts: "Prospecting accounts",
+    projects: "Projects",
+    tasks: "Tasks",
+    risks: "Blockers",
+    solutions: "Solutions",
+    customers: "Customers",
+    project_access: "Project access grants",
+    notifications: "Notifications",
+    notes: "Notes",
+    documents: "Documents",
+    task_comments: "Task comments",
+    optimize_accounts: "Optimize accounts",
+    impact_assessments: "Impact assessments",
+    feature_requests: "Feature requests",
+    feature_request_votes: "Feature request votes",
+    cs_proposals: "Cloud Support proposals",
+    support_tickets: "Support tickets",
+  };
+
+  type Ref = { table: string; column: string; onDelete: string };
+  const tableRows = await db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
+    )
+    .all<{ name: string }>();
+
+  const refs: Ref[] = [];
+  for (const row of tableRows.results ?? []) {
+    // PRAGMA foreign_key_list doesn't accept binds; the table name comes from
+    // sqlite_master (trusted), but we still validate it matches an identifier.
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name)) continue;
+    try {
+      const fkRes = await db.prepare(`PRAGMA foreign_key_list("${row.name}")`).all<{
+        table: string;
+        from: string;
+        on_delete: string;
+      }>();
+      for (const fk of fkRes.results ?? []) {
+        if (fk.table === "users") {
+          refs.push({ table: row.name, column: fk.from, onDelete: (fk.on_delete ?? "").toUpperCase() });
+        }
+      }
+    } catch {
+      // Skip tables PRAGMA chokes on; we'll still surface every table we can introspect.
+    }
+  }
+
   type Bucket = { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] };
 
-  // Each spec lists the bind values for both queries so the helper handles the
-  // (rare) cases where the user id needs to appear more than once.
-  const SPECS: Array<{
-    entity: string;
-    blocking: boolean;
-    countSql: string;
-    sampleSql: string;
-    binds: string[];
-  }> = [
-    // ── Hard FK blockers (no ON DELETE clause = RESTRICT) ──────────────────
-    {
-      entity: "Project staff assignments",
-      blocking: true,
-      countSql: "SELECT COUNT(*) AS count FROM project_staff WHERE user_id = ?",
-      sampleSql: `SELECT ps.id, p.name || ' — ' || ps.staff_role AS label
-        FROM project_staff ps JOIN projects p ON p.id = ps.project_id
-        WHERE ps.user_id = ? ORDER BY p.updated_at DESC LIMIT 5`,
-      binds: [userId],
-    },
-    {
-      entity: "Solution staff assignments",
-      blocking: true,
-      countSql: "SELECT COUNT(*) AS count FROM solution_staff WHERE user_id = ?",
-      sampleSql: `SELECT ss.id, s.name || ' — ' || ss.staff_role AS label
-        FROM solution_staff ss JOIN solutions s ON s.id = ss.solution_id
-        WHERE ss.user_id = ? ORDER BY s.updated_at DESC LIMIT 5`,
-      binds: [userId],
-    },
-    {
-      entity: "Prospecting accounts owned",
-      blocking: true,
-      countSql: "SELECT COUNT(*) AS count FROM prospecting_accounts WHERE owner_id = ?",
-      sampleSql: "SELECT id, name AS label FROM prospecting_accounts WHERE owner_id = ? ORDER BY updated_at DESC LIMIT 5",
-      binds: [userId],
-    },
-    {
-      entity: "Projects as PM",
-      blocking: true,
-      countSql: "SELECT COUNT(*) AS count FROM projects WHERE pm_user_id = ?",
-      sampleSql: "SELECT id, name AS label FROM projects WHERE pm_user_id = ? ORDER BY updated_at DESC LIMIT 5",
-      binds: [userId],
-    },
-    {
-      entity: "Tasks assigned",
-      blocking: true,
-      countSql: "SELECT COUNT(*) AS count FROM tasks WHERE assignee_user_id = ?",
-      sampleSql: `SELECT t.id, p.name || ' — ' || t.title AS label
-        FROM tasks t JOIN projects p ON p.id = t.project_id
-        WHERE t.assignee_user_id = ? ORDER BY t.due_date ASC LIMIT 5`,
-      binds: [userId],
-    },
-    {
-      entity: "Blockers owned",
-      blocking: true,
-      countSql: "SELECT COUNT(*) AS count FROM risks WHERE owner_user_id = ?",
-      sampleSql: `SELECT r.id, p.name || ' — ' || r.title AS label
-        FROM risks r JOIN projects p ON p.id = r.project_id
-        WHERE r.owner_user_id = ? LIMIT 5`,
-      binds: [userId],
-    },
-    {
-      entity: "Solutions (legacy partner AE field)",
-      blocking: false,
-      countSql: "SELECT COUNT(*) AS count FROM solutions WHERE partner_ae_user_id = ?",
-      sampleSql: "SELECT id, name AS label FROM solutions WHERE partner_ae_user_id = ? ORDER BY updated_at DESC LIMIT 5",
-      binds: [userId],
-    },
-    // ── Soft references (SET NULL or CASCADE — won't block delete) ────────
-    {
-      entity: "Customer team assignments (will clear on delete)",
-      blocking: false,
-      countSql: "SELECT COUNT(*) AS count FROM customers WHERE pf_ae_user_id = ? OR pf_sa_user_id = ? OR pf_csm_user_id = ?",
-      sampleSql: `SELECT id, name AS label FROM customers
-        WHERE pf_ae_user_id = ? OR pf_sa_user_id = ? OR pf_csm_user_id = ?
-        ORDER BY name LIMIT 5`,
-      binds: [userId, userId, userId],
-    },
-    {
-      entity: "Project access grants (auto-removed on delete)",
-      blocking: false,
-      countSql: "SELECT COUNT(*) AS count FROM project_access WHERE user_id = ?",
-      sampleSql: `SELECT pa.id, p.name AS label FROM project_access pa
-        JOIN projects p ON p.id = pa.project_id WHERE pa.user_id = ? LIMIT 5`,
-      binds: [userId],
-    },
-    {
-      entity: "Notifications (cascade on delete)",
-      blocking: false,
-      countSql: "SELECT COUNT(*) AS count FROM notifications WHERE user_id = ?",
-      sampleSql: "SELECT id, type AS label FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 5",
-      binds: [userId],
-    },
-  ];
+  // For each FK ref: count rows where column = userId, fetch up to 5 samples.
+  // Some tables don't have an `id` PK or a sensible label column — fall back
+  // to the column name as the sample label in those cases.
+  const buckets: Bucket[] = await Promise.all(refs.map(async (r) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(r.column)) {
+      return { entity: r.table, count: 0, blocking: false, samples: [] };
+    }
+    const friendly = FRIENDLY_TABLE[r.table] ?? r.table;
+    const entity = `${friendly} (${r.column})`;
+    const onDel = r.onDelete;
+    const blocking = onDel !== "SET NULL" && onDel !== "CASCADE" && onDel !== "SET DEFAULT";
 
-  const buckets: Bucket[] = await Promise.all(SPECS.map(async (s) => {
-    const cnt = await db.prepare(s.countSql).bind(...s.binds).first<{ count: number }>();
+    const cnt = await db
+      .prepare(`SELECT COUNT(*) AS count FROM "${r.table}" WHERE "${r.column}" = ?`)
+      .bind(userId)
+      .first<{ count: number }>();
     const count = cnt?.count ?? 0;
-    if (count === 0) return { entity: s.entity, count: 0, blocking: s.blocking, samples: [] };
-    const samples = await db.prepare(s.sampleSql).bind(...s.binds).all<{ id: string; label: string }>();
-    return { entity: s.entity, count, blocking: s.blocking, samples: samples.results ?? [] };
+    if (count === 0) return { entity, count: 0, blocking, samples: [] };
+
+    // Build a sample SELECT using only columns that actually exist on this
+    // table — pick the first available identifier and label columns from
+    // priority lists. SQLite will throw "no such column" for any reference
+    // to a missing column, so we *must* introspect first.
+    let samples: { id: string; label: string }[] = [];
+    try {
+      const colsRes = await db.prepare(`PRAGMA table_info("${r.table}")`).all<{ name: string }>();
+      const cols = new Set((colsRes.results ?? []).map((cc) => cc.name));
+      const idCol = ["id"].find((cn) => cols.has(cn));
+      const labelCol = ["name", "title", "subject", "type", "label"].find((cn) => cols.has(cn));
+      const idExpr = idCol ? `"${idCol}"` : "''";
+      const labelExpr = labelCol ? `COALESCE(NULLIF("${labelCol}", ''), ${idExpr})` : idExpr;
+      const sampleRes = await db
+        .prepare(`SELECT ${idExpr} AS id, ${labelExpr} AS label FROM "${r.table}" WHERE "${r.column}" = ? LIMIT 5`)
+        .bind(userId)
+        .all<{ id: string; label: string }>();
+      samples = sampleRes.results ?? [];
+    } catch {
+      // Best-effort — leave samples empty if anything fails.
+    }
+    return { entity, count, blocking, samples };
   }));
 
-  const visible = buckets.filter((b) => b.count > 0);
+  const visible = buckets.filter((b) => b.count > 0).sort((a, b) => Number(b.blocking) - Number(a.blocking));
   const blocked = visible.some((b) => b.blocking);
   return c.json({ blocked, buckets: visible });
 });
