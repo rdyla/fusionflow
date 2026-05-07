@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { getAccountTeam, getLastUcaasVendor } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -141,6 +142,13 @@ app.get("/", async (c) => {
   if (auth.role === "client" && auth.user.dynamics_account_id) {
     sql += " AND c.crm_account_id = ?";
     bindings.push(auth.user.dynamics_account_id);
+  }
+
+  // Demo-mode vendor lens: only customers with ≥1 matching-vendor project.
+  const demoVendor = await getDemoVendor(db);
+  if (demoVendor) {
+    sql += " AND EXISTS (SELECT 1 FROM projects p WHERE p.customer_id = c.id AND LOWER(p.vendor) = ?)";
+    bindings.push(demoVendor);
   }
 
   sql += " ORDER BY c.name ASC";
@@ -448,15 +456,19 @@ app.get("/:id/solutions", async (c) => {
   const auth = c.get("auth");
   if (!canViewCustomers(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
 
+  const demoVendor = await getDemoVendor(c.env.DB);
+  const vendorClause = demoVendor ? " AND LOWER(s.vendor) = ?" : "";
+  const vendorBinding = demoVendor ? [demoVendor] : [];
+
   const rows = await c.env.DB
     .prepare(`
       SELECT s.id, s.name, s.vendor, s.solution_types, s.other_technologies, s.status,
              s.created_at, s.updated_at, s.linked_project_id, s.dynamics_account_id, s.journeys
       FROM solutions s
-      WHERE s.customer_id = ?
+      WHERE s.customer_id = ?${vendorClause}
       ORDER BY s.updated_at DESC
     `)
-    .bind(c.req.param("id"))
+    .bind(c.req.param("id"), ...vendorBinding)
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionRow));
 });
@@ -465,6 +477,10 @@ app.get("/:id/projects", async (c) => {
   const auth = c.get("auth");
   if (!canViewCustomers(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
 
+  const demoVendor = await getDemoVendor(c.env.DB);
+  const vendorClause = demoVendor ? " AND LOWER(p.vendor) = ?" : "";
+  const vendorBinding = demoVendor ? [demoVendor] : [];
+
   const rows = await c.env.DB
     .prepare(`
       SELECT p.id, p.name, p.vendor, p.solution_types, p.status, p.health,
@@ -472,10 +488,10 @@ app.get("/:id/projects", async (c) => {
              p.pm_user_id, p.created_at, p.updated_at,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
       FROM projects p
-      WHERE p.customer_id = ? AND (p.archived = 0 OR p.archived IS NULL)
+      WHERE p.customer_id = ? AND (p.archived = 0 OR p.archived IS NULL)${vendorClause}
       ORDER BY p.updated_at DESC
     `)
-    .bind(c.req.param("id"))
+    .bind(c.req.param("id"), ...vendorBinding)
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
@@ -484,16 +500,20 @@ app.get("/:id/optimizations", async (c) => {
   const auth = c.get("auth");
   if (!canViewCustomers(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
 
+  const demoVendor = await getDemoVendor(c.env.DB);
+  const vendorClause = demoVendor ? " AND LOWER(p.vendor) = ?" : "";
+  const vendorBinding = demoVendor ? [demoVendor] : [];
+
   const rows = await c.env.DB
     .prepare(`
       SELECT oa.id, oa.project_id, oa.optimize_status, oa.graduated_at, oa.next_review_date,
              p.name AS project_name, p.vendor, p.solution_types, p.actual_go_live_date
       FROM optimize_accounts oa
       JOIN projects p ON p.id = oa.project_id
-      WHERE oa.customer_id = ?
+      WHERE oa.customer_id = ?${vendorClause}
       ORDER BY oa.graduated_at DESC
     `)
-    .bind(c.req.param("id"))
+    .bind(c.req.param("id"), ...vendorBinding)
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });

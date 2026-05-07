@@ -4,6 +4,7 @@ import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type
 import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
+import { useDemoMode } from "../lib/demoMode";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -97,6 +98,7 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { demoVendor } = useDemoMode();
 
   // Dynamics account search state
   const [dynQuery, setDynQuery] = useState("");
@@ -420,7 +422,14 @@ export default function ProjectsPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <label className="ms-label">
                   <span>Vendor</span>
-                  <input className="ms-input" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. Cisco, Zoom" />
+                  <input
+                    className="ms-input"
+                    value={demoVendor ? (demoVendor === "zoom" ? "Zoom" : "RingCentral") : form.vendor}
+                    onChange={(e) => setForm({ ...form, vendor: e.target.value })}
+                    placeholder="e.g. Cisco, Zoom"
+                    disabled={!!demoVendor}
+                    style={demoVendor ? { background: "#f1f5f9", color: "#64748b" } : undefined}
+                  />
                 </label>
                 <label className="ms-label">
                   <span>Kickoff Date</span>

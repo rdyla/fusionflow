@@ -22,6 +22,7 @@ import {
 } from "../../shared/solutionTypes";
 import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
 import { recomputeSowTotal } from "../lib/sowTotal";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -123,9 +124,15 @@ app.get("/", async (c) => {
     ? await getTeamUserIds(auth.user.id, c.env.DB)
     : [auth.user.id];
   const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+
+  // Demo-mode vendor lens
+  const demoVendor = await getDemoVendor(c.env.DB);
+  const vendorClause = demoVendor ? " AND LOWER(s.vendor) = ?" : "";
+  const vendorBinding = demoVendor ? [demoVendor] : [];
+
   const rows = await c.env.DB
-    .prepare(`${SOLUTION_SELECT} WHERE ${where} ORDER BY s.updated_at DESC`)
-    .bind(...bindings)
+    .prepare(`${SOLUTION_SELECT} WHERE ${where}${vendorClause} ORDER BY s.updated_at DESC`)
+    .bind(...bindings, ...vendorBinding)
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionRow));
 });
@@ -159,9 +166,12 @@ app.post("/", async (c) => {
 
   const journeys = parsed.data.journeys ?? [];
   const journeysJson = journeys.length > 0 ? JSON.stringify(journeys) : null;
-  const vendor = journeys.length > 0
+  const derivedVendor = journeys.length > 0
     ? deriveVendorFromJourneys(journeys)
     : (parsed.data.vendor ?? "tbd");
+  // Demo mode pins the vendor on every newly-created solution.
+  const demoVendor = await getDemoVendor(db);
+  const vendor = demoVendor ?? derivedVendor;
 
   // Explicit types on the payload win; otherwise derive from journeys. Default
   // to ["ucaas"] only if nothing was supplied, preserving the legacy fallback.

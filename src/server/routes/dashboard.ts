@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -41,6 +42,16 @@ app.get("/summary", async (c) => {
     filterBindings = [auth.user.dynamics_account_id];
   }
   // pf_sa, pf_csm, admin, and executive: no filter — portfolio-wide visibility
+
+  // Demo-mode vendor lens: every aggregation is scoped through projectFilter,
+  // so layering a vendor AND clause here is enough to filter the entire response.
+  const demoVendor = await getDemoVendor(db);
+  if (demoVendor) {
+    projectFilter = projectFilter
+      ? `${projectFilter} AND LOWER(vendor) = ?`
+      : "WHERE LOWER(vendor) = ?";
+    filterBindings = [...filterBindings, demoVendor];
+  }
 
   const projectSubquery = projectFilter
     ? `SELECT id FROM projects ${projectFilter}`
