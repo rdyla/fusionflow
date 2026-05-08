@@ -6,6 +6,7 @@ import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
 import { useDemoMode } from "../lib/demoMode";
 import { resolveVendorBadge } from "../lib/vendorBadge";
+import { humanize } from "../lib/format";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -87,9 +88,9 @@ function FilterPill({ label, color, onClear }: { label: string; color: string; o
   );
 }
 
-function Badge({ label, color }: { label: string; color: string }) {
+function Badge({ label, color, style }: { label: string; color: string; style?: React.CSSProperties }) {
   return (
-    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40` }}>
+    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40`, ...style }}>
       {label}
     </span>
   );
@@ -351,8 +352,9 @@ export default function ProjectsPage() {
                   <td>
                     {project.status ? (
                       <Badge
-                        label={project.status.replace("_", " ")}
+                        label={humanize(project.status)}
                         color={STATUS_COLOR[project.status] ?? "#94a3b8"}
+                        style={{ textTransform: "none" }}
                       />
                     ) : "—"}
                   </td>
@@ -360,7 +362,7 @@ export default function ProjectsPage() {
                     {project.health ? (
                       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }} />
-                        <span style={{ fontSize: 13 }}>{project.health.replace("_", " ")}</span>
+                        <span style={{ fontSize: 13 }}>{humanize(project.health)}</span>
                       </span>
                     ) : "—"}
                   </td>

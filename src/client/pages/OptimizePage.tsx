@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type OptimizeAccount, type OptimizeEligible, type User, type DynamicsAccount, type CrmAccountTeam, type Project } from "../lib/api";
+import { humanize } from "../lib/format";
 import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
@@ -165,11 +166,11 @@ export default function OptimizePage() {
     setGraduating(projectId);
     try {
       await api.optimizeGraduate(projectId);
-      showToast("Project graduated to Optimize.", "success");
+      showToast("Project marked complete and moved to Optimize.", "success");
       await load();
       setShowGraduateModal(false);
     } catch {
-      showToast("Failed to graduate project", "error");
+      showToast("Failed to complete project", "error");
     } finally {
       setGraduating(null);
     }
@@ -189,7 +190,7 @@ export default function OptimizePage() {
         <div style={{ display: "flex", gap: 10 }}>
           {eligible.length > 0 && (
             <button className="ms-btn-secondary" onClick={() => setShowGraduateModal(true)}>
-              Graduate Project ({eligible.length})
+              Complete Project ({eligible.length})
             </button>
           )}
           <button className="ms-btn-primary" onClick={() => setShowDirectModal(true)}>
@@ -203,9 +204,9 @@ export default function OptimizePage() {
           <div style={{ fontSize: 32, marginBottom: 12 }}>🎯</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#475569", marginBottom: 8 }}>No Optimize accounts yet</div>
           <div style={{ fontSize: 13 }}>
-            Projects automatically graduate here when all implementation phases are complete.
+            Projects automatically appear here when all implementation phases are complete.
             {eligible.length > 0 && (
-              <span> Or manually graduate an eligible project above.</span>
+              <span> Or manually mark an eligible project complete using the button above.</span>
             )}
           </div>
         </div>
@@ -215,7 +216,7 @@ export default function OptimizePage() {
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Graduated</th>
+                <th>Completed</th>
                 <th>Status</th>
                 <th>AE</th>
                 <th>SA</th>
@@ -243,8 +244,8 @@ export default function OptimizePage() {
                     ); })()}
                   </td>
                   <td>
-                    <span className="ms-badge" style={{ background: (STATUS_COLOR[a.optimize_status] ?? "#94a3b8") + "1a", color: STATUS_COLOR[a.optimize_status] ?? "#94a3b8", border: `1px solid ${(STATUS_COLOR[a.optimize_status] ?? "#94a3b8")}40` }}>
-                      {a.optimize_status}
+                    <span className="ms-badge" style={{ background: (STATUS_COLOR[a.optimize_status] ?? "#94a3b8") + "1a", color: STATUS_COLOR[a.optimize_status] ?? "#94a3b8", border: `1px solid ${(STATUS_COLOR[a.optimize_status] ?? "#94a3b8")}40`, textTransform: "none" }}>
+                      {humanize(a.optimize_status)}
                     </span>
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.ae_name ?? "—"}</td>
@@ -492,13 +493,13 @@ export default function OptimizePage() {
         </div>
       )}
 
-      {/* Graduate Modal */}
+      {/* Complete Project Modal */}
       {showGraduateModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowGraduateModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 520 }}>
-            <h2>Graduate to Optimize</h2>
+            <h2>Complete Project</h2>
             <p style={{ color: "#475569", fontSize: 13, margin: "8px 0 16px" }}>
-              These projects have all implementation phases completed and are eligible for the Optimize lifecycle.
+              These projects have all implementation phases completed. Marking them complete moves them into the Optimize lifecycle for ongoing review and roadmap planning.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {eligible.map((p) => (
@@ -513,7 +514,7 @@ export default function OptimizePage() {
                     onClick={() => handleGraduate(p.id)}
                     style={{ minWidth: 100 }}
                   >
-                    {graduating === p.id ? "Graduating..." : "Graduate"}
+                    {graduating === p.id ? "Completing…" : "Complete"}
                   </button>
                 </div>
               ))}

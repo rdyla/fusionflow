@@ -262,12 +262,13 @@ export default function AdminRoadmapPage() {
                           style={{
                             fontSize: 10, background: PRIORITY_COLOR[item.priority] + "18",
                             color: PRIORITY_COLOR[item.priority], border: `1px solid ${PRIORITY_COLOR[item.priority]}35`,
+                            textTransform: "none",
                           }}
                         >
                           {PRIORITY_LABELS[item.priority]}
                         </span>
                         {item.category && (
-                          <span className="ms-badge" style={{ fontSize: 10, background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0" }}>
+                          <span className="ms-badge" style={{ fontSize: 10, background: "#f1f5f9", color: "#64748b", border: "1px solid #e2e8f0", textTransform: "none" }}>
                             {CATEGORY_LABELS[item.category]}
                           </span>
                         )}

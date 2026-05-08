@@ -313,7 +313,7 @@ export default function OptimizeAccountPage() {
         {/* Meta row — milestone stats */}
         <div style={{ display: "flex", gap: 24, marginTop: 12, flexWrap: "wrap" }}>
           {[
-            { label: "Graduated", value: account.graduated_at ? account.graduated_at.slice(0, 10) : "—" },
+            { label: "Completed", value: account.graduated_at ? account.graduated_at.slice(0, 10) : "—" },
             { label: "Next Review", value: account.next_review_date ?? "—" },
             { label: "Last Score", value: account.last_assessment_score != null ? `${account.last_assessment_score}` : "—", scoreColor: account.last_assessment_score != null ? (account.last_assessment_score >= 80 ? "#22c55e" : account.last_assessment_score >= 60 ? "#0b9aad" : account.last_assessment_score >= 40 ? "#f59e0b" : "#d13438") : undefined },
           ].map(({ label, value, scoreColor }: { label: string; value: string; scoreColor?: string }) => (

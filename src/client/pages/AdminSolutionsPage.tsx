@@ -103,7 +103,7 @@ function SolutionTable({
                 </td>
                 <td style={{ color: "#64748b", fontSize: 13 }}><SolutionTypePills types={s.solution_types} /></td>
                 <td>
-                  <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status]}1a`, color: STATUS_COLOR[s.status], border: `1px solid ${STATUS_COLOR[s.status]}40` }}>
+                  <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status]}1a`, color: STATUS_COLOR[s.status], border: `1px solid ${STATUS_COLOR[s.status]}40`, textTransform: "none" }}>
                     {STATUS_LABELS[s.status] ?? s.status}
                   </span>
                 </td>

@@ -185,12 +185,13 @@ export default function RoadmapPage() {
                       color: STATUS_COLOR[item.status],
                       border: `1px solid ${STATUS_COLOR[item.status]}40`,
                       fontSize: 11,
+                      textTransform: "none",
                     }}
                   >
                     {STATUS_LABELS[item.status]}
                   </span>
                   {item.category && (
-                    <span className="ms-badge" style={{ background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0", fontSize: 11 }}>
+                    <span className="ms-badge" style={{ background: "#f1f5f9", color: "#475569", border: "1px solid #e2e8f0", fontSize: 11, textTransform: "none" }}>
                       {CATEGORY_LABELS[item.category]}
                     </span>
                   )}

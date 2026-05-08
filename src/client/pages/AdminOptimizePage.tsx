@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type OptimizeAccount, type User } from "../lib/api";
+import { humanize } from "../lib/format";
 import { useToast } from "../components/ui/ToastProvider";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -96,7 +97,7 @@ export default function AdminOptimizePage() {
   }
 
   async function handleRemove(account: OptimizeAccount) {
-    if (!window.confirm(`Remove "${account.project_name}" from Optimize? This will de-graduate the account but not delete the underlying project.`)) return;
+    if (!window.confirm(`Remove "${account.project_name}" from Optimize? This stops Optimize tracking but leaves the project intact.`)) return;
     try {
       await api.optimizeDeleteAccount(account.project_id);
       setAccounts((prev) => prev.filter((a) => a.project_id !== account.project_id));
@@ -223,7 +224,7 @@ function AccountTable({
             <th>CSM</th>
             <th>Last Score</th>
             <th>Next Review</th>
-            <th>Graduated</th>
+            <th>Completed</th>
             <th>Method</th>
             <th></th>
           </tr>
@@ -250,8 +251,8 @@ function AccountTable({
                   </td>
                   <td style={{ color: "#64748b" }}>{a.customer_name ?? "—"}</td>
                   <td>
-                    <span className="ms-badge" style={{ background: `${STATUS_COLORS[a.optimize_status]}1a`, color: STATUS_COLORS[a.optimize_status], border: `1px solid ${STATUS_COLORS[a.optimize_status]}40`, textTransform: "capitalize" }}>
-                      {a.optimize_status}
+                    <span className="ms-badge" style={{ background: `${STATUS_COLORS[a.optimize_status]}1a`, color: STATUS_COLORS[a.optimize_status], border: `1px solid ${STATUS_COLORS[a.optimize_status]}40`, textTransform: "none" }}>
+                      {humanize(a.optimize_status)}
                     </span>
                   </td>
                   <td style={{ color: "#475569", fontSize: 13 }}>{a.sa_name ?? "—"}</td>

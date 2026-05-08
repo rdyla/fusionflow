@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, type DashboardSummaryResponse, type Task } from "../lib/api";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { SOLUTION_TYPE_LABELS, canonicalizeSolutionType, type SolutionType } from "../../shared/solutionTypes";
+import { humanize } from "../lib/format";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
@@ -75,11 +76,6 @@ const PHASE_STATUS_COLOR: Record<string, string> = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function healthLabel(h: string | null) {
-  if (!h) return "—";
-  return h.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function formatDate(d: string | null) {
   if (!d) return "—";
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T00:00:00" : d;
@@ -88,11 +84,11 @@ function formatDate(d: string | null) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function Badge({ label, color }: { label: string; color: string }) {
+function Badge({ label, color, style }: { label: string; color: string; style?: React.CSSProperties }) {
   return (
     <span
       className="ms-badge"
-      style={{ background: color + "1a", color, border: `1px solid ${color}40` }}
+      style={{ background: color + "1a", color, border: `1px solid ${color}40`, ...style }}
     >
       {label}
     </span>
@@ -538,7 +534,7 @@ export default function DashboardPage() {
                   <td>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[p.health ?? ""] ?? "#94a3b8", flexShrink: 0 }} />
-                      <span style={{ fontSize: 13, color: isCompleted ? "#94a3b8" : "#334155" }}>{healthLabel(p.health)}</span>
+                      <span style={{ fontSize: 13, color: isCompleted ? "#94a3b8" : "#334155" }}>{humanize(p.health)}</span>
                     </span>
                   </td>
                 </tr>
@@ -664,12 +660,13 @@ export default function DashboardPage() {
                     <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
                       {t.status && t.status !== "not_started" && (
                         <Badge
-                          label={TASK_STATUS_LABEL[t.status] ?? t.status}
+                          label={TASK_STATUS_LABEL[t.status] ?? humanize(t.status)}
                           color={TASK_STATUS_COLOR[t.status] ?? "#94a3b8"}
+                          style={{ textTransform: "none" }}
                         />
                       )}
                       {t.priority && (
-                        <Badge label={t.priority} color={PRIORITY_COLOR[t.priority] ?? "#94a3b8"} />
+                        <Badge label={humanize(t.priority)} color={PRIORITY_COLOR[t.priority] ?? "#94a3b8"} style={{ textTransform: "none" }} />
                       )}
                     </div>
                   </div>
@@ -713,7 +710,7 @@ export default function DashboardPage() {
                       {r.project_name}
                     </Link>
                   </div>
-                  {r.severity && <Badge label={r.severity} color={SEVERITY_COLOR[r.severity] ?? "#94a3b8"} />}
+                  {r.severity && <Badge label={humanize(r.severity)} color={SEVERITY_COLOR[r.severity] ?? "#94a3b8"} style={{ textTransform: "none" }} />}
                 </div>
               ))}
             </div>

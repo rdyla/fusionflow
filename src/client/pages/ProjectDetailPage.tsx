@@ -30,6 +30,7 @@ import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
+import { humanize } from "../lib/format";
 
 type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
@@ -73,9 +74,9 @@ function fmtBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-function Badge({ label, color }: { label: string; color: string }) {
+function Badge({ label, color, style }: { label: string; color: string; style?: React.CSSProperties }) {
   return (
-    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40` }}>
+    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40`, ...style }}>
       {label}
     </span>
   );
@@ -765,7 +766,7 @@ export default function ProjectDetailPage() {
             <div className="ms-info-label">Status</div>
             <div className="ms-info-value">
               {project.status ? (
-                <Badge label={project.status.replace("_", " ")} color={STATUS_COLOR[project.status] ?? "#94a3b8"} />
+                <Badge label={humanize(project.status)} color={STATUS_COLOR[project.status] ?? "#94a3b8"} style={{ textTransform: "none" }} />
               ) : "—"}
             </div>
           </div>
@@ -775,7 +776,7 @@ export default function ProjectDetailPage() {
               {project.health ? (
                 <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8" }} />
-                  {project.health.replace("_", " ")}
+                  {humanize(project.health)}
                   <span style={{
                     fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
                     padding: "1px 6px", borderRadius: 10,
@@ -1135,7 +1136,7 @@ export default function ProjectDetailPage() {
                         <option value="completed">Completed</option>
                       </select>
                     </label>
-                    <Badge label={(phase.status ?? "not_started").replaceAll("_", " ")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} />
+                    <Badge label={humanize(phase.status ?? "not_started")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
                   </div>
                 </div>
                 {!isCollapsed && <div style={{ display: "grid", gap: 6 }}>
@@ -1159,7 +1160,7 @@ export default function ProjectDetailPage() {
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                            <Badge label={task.status?.replaceAll("_", " ") ?? "unknown"} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} />
+                            <Badge label={humanize(task.status, "Unknown")} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} style={{ textTransform: "none" }} />
                             <button
                               className="ms-btn-secondary"
                               style={{ fontSize: 11, padding: "3px 10px" }}

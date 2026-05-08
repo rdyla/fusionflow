@@ -221,7 +221,7 @@ app.get("/users/:id/references", async (c) => {
     sa_user_id:            "SA",
     csm_user_id:           "CSM",
     ae_user_id:            "AE",
-    graduated_by:          "Graduated by",
+    graduated_by:          "Completed by",
     conducted_by_user_id:  "Conducted by",
     reviewed_by_user_id:   "Reviewed by",
     user_id:               "Linked user",
