@@ -334,10 +334,12 @@ app.delete("/users/:id", async (c) => {
 app.get("/projects", async (c) => {
   const rows = await c.env.DB
     .prepare(
-      `SELECT id, name, customer_name, vendor, solution_types, status, health,
-              kickoff_date, target_go_live_date, archived, created_at, updated_at
-       FROM projects
-       ORDER BY updated_at DESC`
+      `SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_types, p.status, p.health,
+              p.kickoff_date, p.target_go_live_date, p.archived, p.created_at, p.updated_at,
+              CASE WHEN oa.project_id IS NOT NULL THEN 1 ELSE 0 END AS in_optimize
+       FROM projects p
+       LEFT JOIN optimize_accounts oa ON oa.project_id = p.id
+       ORDER BY p.updated_at DESC`
     )
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
@@ -368,8 +370,20 @@ app.delete("/projects/:id", async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
+  const existing = await db.prepare("SELECT id, name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ id: string; name: string }>();
   if (!existing) throw new HTTPException(404, { message: "Project not found" });
+
+  const optimizeLink = await db
+    .prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1")
+    .bind(projectId)
+    .first();
+  if (optimizeLink) {
+    throw new HTTPException(409, {
+      message:
+        `"${existing.name}" is in Optimize. Remove it from Optimize first ` +
+        `(Admin → Optimize Accounts → Remove), then delete the project.`,
+    });
+  }
 
   // Cascade delete in dependency order
   await db.prepare("DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId).run();
