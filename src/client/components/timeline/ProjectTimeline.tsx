@@ -434,7 +434,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
                         <div style={{ fontWeight: 600, color: "#1e293b", fontSize: 14 }}>{phase.name}</div>
                         <span
                           className="ms-badge"
-                          style={{ background: color + "1a", color, border: `1px solid ${color}40` }}
+                          style={{ background: color + "1a", color, border: `1px solid ${color}40`, textTransform: "none" }}
                         >
                           {STATUS_LABEL[phase.status ?? "not_started"] ?? phase.status}
                         </span>

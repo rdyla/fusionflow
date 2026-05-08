@@ -142,7 +142,7 @@ function ProjectTable({
                       <span>{p.name}</span>
                       {inOptimize && (
                         <span
-                          title="This project has been graduated to Optimize"
+                          title="This project is marked complete and tracked in Optimize"
                           style={{
                             fontSize: 10,
                             fontWeight: 600,

@@ -564,12 +564,12 @@ export default function CustomerDetailPage() {
                 <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => navigate(`/solutions/${s.id}`)}>
                   <td style={{ fontWeight: 600, color: "#1e293b" }}>{s.name}</td>
                   <td>
-                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)" }}>
+                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)", textTransform: "none" }}>
                       {journeyBadgeText((s as CustomerSolution & { journeys?: string | null }).journeys ?? null, s.solution_types)}
                     </span>
                   </td>
                   <td>
-                    <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status] ?? "#94a3b8"}1a`, color: STATUS_COLOR[s.status] ?? "#94a3b8", border: `1px solid ${STATUS_COLOR[s.status] ?? "#94a3b8"}40` }}>
+                    <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status] ?? "#94a3b8"}1a`, color: STATUS_COLOR[s.status] ?? "#94a3b8", border: `1px solid ${STATUS_COLOR[s.status] ?? "#94a3b8"}40`, textTransform: "none" }}>
                       {capitalize(s.status)}
                     </span>
                   </td>
