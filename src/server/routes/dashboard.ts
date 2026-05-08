@@ -43,13 +43,16 @@ app.get("/summary", async (c) => {
   }
   // pf_sa, pf_csm, admin, and executive: no filter — portfolio-wide visibility
 
+  // Always exclude archived projects from dashboard aggregations.
+  projectFilter = projectFilter
+    ? `${projectFilter} AND (archived = 0 OR archived IS NULL)`
+    : "WHERE (archived = 0 OR archived IS NULL)";
+
   // Demo-mode vendor lens: every aggregation is scoped through projectFilter,
   // so layering a vendor AND clause here is enough to filter the entire response.
   const demoVendor = await getDemoVendor(db);
   if (demoVendor) {
-    projectFilter = projectFilter
-      ? `${projectFilter} AND LOWER(vendor) = ?`
-      : "WHERE LOWER(vendor) = ?";
+    projectFilter = `${projectFilter} AND LOWER(vendor) = ?`;
     filterBindings = [...filterBindings, demoVendor];
   }
 

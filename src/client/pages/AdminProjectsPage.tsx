@@ -46,6 +46,13 @@ export default function AdminProjectsPage() {
   }
 
   async function handleDelete(project: Project) {
+    if (project.in_optimize) {
+      showToast(
+        `"${project.name}" is in Optimize. Remove it from Optimize first (Admin → Optimize Accounts → Remove), then delete the project.`,
+        "error"
+      );
+      return;
+    }
     if (!window.confirm(`Permanently delete "${project.name}"? This cannot be undone.`)) return;
     try {
       await api.adminDeleteProject(project.id);
@@ -126,33 +133,69 @@ function ProjectTable({
               </td>
             </tr>
           ) : (
-            projects.map((p) => (
-              <tr key={p.id}>
-                <td style={{ fontWeight: 500 }}>{p.name}</td>
-                <td style={{ color: "#64748b" }}>{p.customer_name ?? "—"}</td>
-                <td style={{ color: "#64748b" }}>{p.vendor ?? "—"}</td>
-                <td style={{ color: "#64748b" }}>{p.status ?? "—"}</td>
-                <td style={{ color: "#94a3b8", fontSize: 12 }}>{p.updated_at?.slice(0, 10) ?? "—"}</td>
-                <td>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      className="ms-btn-ghost"
-                      onClick={() => onToggleArchive(p)}
-                      style={p.archived ? { color: "#107c10", borderColor: "rgba(16,124,16,0.35)" } : {}}
-                    >
-                      {p.archived ? "Unarchive" : "Archive"}
-                    </button>
-                    <button
-                      className="ms-btn-ghost"
-                      onClick={() => onDelete(p)}
-                      style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))
+            projects.map((p) => {
+              const inOptimize = !!p.in_optimize;
+              return (
+                <tr key={p.id}>
+                  <td style={{ fontWeight: 500 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span>{p.name}</span>
+                      {inOptimize && (
+                        <span
+                          title="This project has been graduated to Optimize"
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            color: "#0b6cad",
+                            background: "rgba(11,108,173,0.1)",
+                            border: "1px solid rgba(11,108,173,0.25)",
+                            borderRadius: 4,
+                            padding: "2px 6px",
+                          }}
+                        >
+                          In Optimize
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ color: "#64748b" }}>{p.customer_name ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{p.vendor ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>{p.status ?? "—"}</td>
+                  <td style={{ color: "#94a3b8", fontSize: 12 }}>{p.updated_at?.slice(0, 10) ?? "—"}</td>
+                  <td>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="ms-btn-ghost"
+                        onClick={() => onToggleArchive(p)}
+                        style={p.archived ? { color: "#107c10", borderColor: "rgba(16,124,16,0.35)" } : {}}
+                      >
+                        {p.archived ? "Unarchive" : "Archive"}
+                      </button>
+                      <button
+                        className="ms-btn-ghost"
+                        onClick={() => onDelete(p)}
+                        disabled={inOptimize}
+                        title={
+                          inOptimize
+                            ? "Remove this project from Optimize before deleting (Admin → Optimize Accounts → Remove)."
+                            : undefined
+                        }
+                        style={{
+                          color: "#d13438",
+                          borderColor: "rgba(209,52,56,0.35)",
+                          opacity: inOptimize ? 0.4 : 1,
+                          cursor: inOptimize ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>

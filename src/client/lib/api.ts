@@ -205,6 +205,7 @@ export type Project = {
   customer_id: string | null;
   dynamics_account_id: string | null;
   archived: number | null;
+  in_optimize?: number | null;
   crm_case_id: string | null;
   crm_opportunity_id: string | null;
   customer_display_name: string | null;
