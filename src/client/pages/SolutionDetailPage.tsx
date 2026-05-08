@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { api, ApiError, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate } from "../lib/api";
+import { api, ApiError, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate, type SolutionStaffMember } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
@@ -118,20 +118,64 @@ export default function SolutionDetailPage() {
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
 
-  // Vendor AE modal
-  const [showVendorAeModal, setShowVendorAeModal] = useState(false);
-  const [vendorAeMode, setVendorAeMode] = useState<"existing" | "new">("existing");
-  const [vendorAeUserId, setVendorAeUserId] = useState("");
-  const [vendorAeNewName, setVendorAeNewName] = useState("");
-  const [vendorAeNewEmail, setVendorAeNewEmail] = useState("");
-  const [savingVendorAe, setSavingVendorAe] = useState(false);
-
   // Solution staff (kept for modal state only)
   const [showSolutionStaffModal, setShowSolutionStaffModal] = useState(false);
   const [addSolutionStaffUser, setAddSolutionStaffUser] = useState("");
   const [addSolutionStaffRole, setAddSolutionStaffRole] = useState("");
   const [addingSolutionStaff, setAddingSolutionStaff] = useState(false);
   const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
+
+  // Partner AE multi-assignment (mirrors the projects pattern; backed by solution_staff)
+  const [solutionStaff, setSolutionStaff] = useState<SolutionStaffMember[]>([]);
+  const [showPartnerModal, setShowPartnerModal] = useState(false);
+  const [partnerMode, setPartnerMode] = useState<"existing" | "invite">("existing");
+  const [addPartnerUserId, setAddPartnerUserId] = useState("");
+  const [invitePartnerName, setInvitePartnerName] = useState("");
+  const [invitePartnerEmail, setInvitePartnerEmail] = useState("");
+  const [invitePartnerOrg, setInvitePartnerOrg] = useState("");
+  const [addingPartner, setAddingPartner] = useState(false);
+
+  async function handleAddPartner() {
+    if (!id) return;
+    setAddingPartner(true);
+    try {
+      let added: SolutionStaffMember;
+      if (partnerMode === "existing") {
+        if (!addPartnerUserId) return;
+        added = await api.addSolutionStaff(id, { user_id: addPartnerUserId, staff_role: "partner_ae" });
+      } else {
+        if (!invitePartnerName.trim() || !invitePartnerEmail.trim()) return;
+        added = await api.inviteSolutionPartnerAe(id, {
+          email: invitePartnerEmail.trim(),
+          name: invitePartnerName.trim(),
+          organization_name: invitePartnerOrg.trim() || null,
+        });
+      }
+      setSolutionStaff((prev) => prev.some((s) => s.id === added.id) ? prev : [...prev, added]);
+      setShowPartnerModal(false);
+      setAddPartnerUserId("");
+      setInvitePartnerName("");
+      setInvitePartnerEmail("");
+      setInvitePartnerOrg("");
+      setPartnerMode("existing");
+      showToast(partnerMode === "invite" ? "Partner AE invited and added." : "Partner AE added.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to add partner AE", "error");
+    } finally {
+      setAddingPartner(false);
+    }
+  }
+
+  async function handleRemovePartner(staffId: string) {
+    if (!id) return;
+    try {
+      await api.removeSolutionStaff(id, staffId);
+      setSolutionStaff((prev) => prev.filter((s) => s.id !== staffId));
+      showToast("Partner AE removed.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to remove partner AE", "error");
+    }
+  }
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -140,6 +184,10 @@ export default function SolutionDetailPage() {
     setSolution(s);
     setUsers(u);
     setCurrentRole(me.role);
+    // Staff list is non-critical to the page load — tolerate 403/network errors
+    // (e.g. for roles whose backend gate hasn't been relaxed yet) so the page
+    // still renders. The chip section just shows empty when the fetch fails.
+    api.solutionStaff(id).then(setSolutionStaff).catch(() => setSolutionStaff([]));
     setOverview({
       name: s.name,
       customer_name: s.customer_name,
@@ -628,44 +676,62 @@ export default function SolutionDetailPage() {
             )}
           </div>
 
-          {/* ── Vendor AE ── */}
+          {/* ── Partner AEs (multi) ── */}
           {(() => {
-            const vendorLabel =
-              solution.vendor === "zoom" ? "Zoom AE" :
-              solution.vendor === "ringcentral" ? "RingCentral AE" :
-              solution.vendor === "microsoft_teams" ? "Microsoft Teams AE" :
-              solution.vendor === "webex" ? "Webex AE" :
-              "Vendor AE";
-            const displayName = solution.partner_ae_display_name ?? solution.partner_ae_name;
-            const displayEmail = solution.partner_ae_email;
+            const sectionLabel =
+              solution.vendor === "zoom" ? "Zoom AEs" :
+              solution.vendor === "ringcentral" ? "RingCentral AEs" :
+              solution.vendor === "microsoft_teams" ? "Microsoft Teams AEs" :
+              solution.vendor === "webex" ? "Webex AEs" :
+              "Partner AEs";
+            const partnerStaff = solutionStaff.filter((s) => s.staff_role === "partner_ae");
+            const assignablePartners = users.filter(
+              (u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id),
+            );
             return (
               <div className="ms-card">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: displayName ? 14 : 0 }}>
-                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{vendorLabel}</h3>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: partnerStaff.length > 0 ? 14 : 0 }}>
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{sectionLabel}</h3>
                   {canEdit && (
-                    <button className="ms-btn-secondary" onClick={() => {
-                      setVendorAeMode("existing");
-                      setVendorAeUserId(solution.partner_ae_user_id ?? "");
-                      setVendorAeNewName("");
-                      setVendorAeNewEmail("");
-                      setShowVendorAeModal(true);
-                    }}>
-                      {displayName ? "Change" : `+ Assign ${vendorLabel}`}
+                    <button
+                      className="ms-btn-secondary"
+                      disabled={assignablePartners.length === 0}
+                      onClick={() => { setAddPartnerUserId(""); setShowPartnerModal(true); }}
+                      title={assignablePartners.length === 0 ? "All available partner AEs are already assigned" : undefined}
+                    >
+                      + Add Partner AE
                     </button>
                   )}
                 </div>
-                {displayName ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "linear-gradient(135deg, rgba(11,154,173,0.2), rgba(99,193,234,0.15))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 14, fontWeight: 700, color: "#0b9aad" }}>
-                      {displayName.trim()[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{displayName}</div>
-                      {displayEmail && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{displayEmail}</div>}
-                    </div>
+                {partnerStaff.length > 0 ? (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {partnerStaff.map((s) => {
+                      const userRow = users.find((u) => u.id === s.user_id);
+                      const display = s.name ?? userRow?.name ?? s.email;
+                      const initial = (display ?? s.email).trim()[0]?.toUpperCase() ?? "?";
+                      const org = userRow?.organization_name ?? null;
+                      return (
+                        <span
+                          key={s.id}
+                          title={`Partner AE${org ? ` · ${org}` : ""} · ${s.email}`}
+                          style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 6px 4px 4px", background: "rgba(16,124,16,0.07)", border: "1px solid rgba(16,124,16,0.2)", borderRadius: 24, fontSize: 13 }}
+                        >
+                          <span style={{ width: 26, height: 26, borderRadius: "50%", background: "rgba(16,124,16,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#107c10", flexShrink: 0 }}>{initial}</span>
+                          <span style={{ color: "#1e293b", fontWeight: 500 }}>{display}</span>
+                          {org && <span style={{ color: "#94a3b8", fontSize: 11 }}>{org}</span>}
+                          {canEdit && (
+                            <button
+                              onClick={() => handleRemovePartner(s.id)}
+                              style={{ background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 4px" }}
+                              title="Remove"
+                            >×</button>
+                          )}
+                        </span>
+                      );
+                    })}
                   </div>
                 ) : (
-                  <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginTop: canEdit ? 0 : 4 }}>No {vendorLabel} assigned.</div>
+                  <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginTop: canEdit ? 0 : 4 }}>No partner AEs assigned yet.</div>
                 )}
               </div>
             );
@@ -736,85 +802,88 @@ export default function SolutionDetailPage() {
         </div>
       )}
 
-      {/* ── Vendor AE Modal ── */}
-      {showVendorAeModal && (() => {
-        const vendorLabel =
-          solution.vendor === "zoom" ? "Zoom AE" :
-          solution.vendor === "ringcentral" ? "RingCentral AE" :
-          solution.vendor === "microsoft_teams" ? "Microsoft Teams AE" :
-          solution.vendor === "webex" ? "Webex AE" :
-          "Vendor AE";
-        const partnerAeUsers = users.filter((u) => u.role === "partner_ae");
-        async function saveVendorAe() {
-          setSavingVendorAe(true);
-          try {
-            if (vendorAeMode === "existing") {
-              await save({ partner_ae_user_id: vendorAeUserId || null, partner_ae_name: null, partner_ae_email: null });
-            } else {
-              await save({ partner_ae_name: vendorAeNewName.trim() || null, partner_ae_email: vendorAeNewEmail.trim() || null, partner_ae_user_id: null });
-            }
-            setShowVendorAeModal(false);
-          } finally {
-            setSavingVendorAe(false);
-          }
-        }
+      {/* ── Add Partner AE Modal (multi) ── */}
+      {showPartnerModal && (() => {
+        const partnerStaff = solutionStaff.filter((s) => s.staff_role === "partner_ae");
+        const assignablePartners = users.filter(
+          (u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id),
+        );
+        const PARTNER_ORGS = ["Zoom", "RingCentral"];
+        const submitDisabled = addingPartner || (
+          partnerMode === "existing"
+            ? !addPartnerUserId
+            : !invitePartnerName.trim() || !invitePartnerEmail.trim()
+        );
         return (
-          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowVendorAeModal(false); }}>
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowPartnerModal(false); }}>
             <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Assign {vendorLabel}</h2>
-                <button onClick={() => setShowVendorAeModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Add Partner AE</h2>
+                <button onClick={() => setShowPartnerModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
               </div>
               <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
                 <div style={{ display: "flex", gap: 6 }}>
-                  {(["existing", "new"] as const).map((mode) => (
+                  {(["existing", "invite"] as const).map((mode) => (
                     <button
                       key={mode}
                       type="button"
-                      onClick={() => setVendorAeMode(mode)}
+                      onClick={() => setPartnerMode(mode)}
                       style={{
                         flex: 1, padding: "6px 0", fontSize: 12, borderRadius: 4, cursor: "pointer",
-                        border: `1px solid ${vendorAeMode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
-                        background: vendorAeMode === mode ? "rgba(99,193,234,0.1)" : "transparent",
-                        color: vendorAeMode === mode ? "#63c1ea" : "#94a3b8",
+                        border: `1px solid ${partnerMode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
+                        background: partnerMode === mode ? "rgba(99,193,234,0.1)" : "transparent",
+                        color: partnerMode === mode ? "#63c1ea" : "#94a3b8",
                       }}
                     >
                       {mode === "existing" ? "Existing User" : "Invite New"}
                     </button>
                   ))}
                 </div>
-                {vendorAeMode === "existing" ? (
+                {partnerMode === "existing" ? (
                   <label className="ms-label">
-                    <span>{vendorLabel}</span>
-                    <select className="ms-input" value={vendorAeUserId} onChange={(e) => setVendorAeUserId(e.target.value)}>
-                      <option value="">— None —</option>
-                      {partnerAeUsers.map((u) => (
+                    <span>Partner AE</span>
+                    <select className="ms-input" value={addPartnerUserId} onChange={(e) => setAddPartnerUserId(e.target.value)}>
+                      <option value="">— Select partner AE —</option>
+                      {assignablePartners.map((u) => (
                         <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
                       ))}
                     </select>
+                    {assignablePartners.length === 0 && (
+                      <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                        All known partner AEs are already assigned. Switch to "Invite New" to add someone new.
+                      </span>
+                    )}
                   </label>
                 ) : (
                   <div style={{ display: "grid", gap: 12 }}>
                     <label className="ms-label">
                       <span>Name</span>
-                      <input className="ms-input" placeholder="Full name" value={vendorAeNewName} onChange={(e) => setVendorAeNewName(e.target.value)} />
+                      <input className="ms-input" placeholder="Full name" value={invitePartnerName} onChange={(e) => setInvitePartnerName(e.target.value)} />
                     </label>
                     <label className="ms-label">
                       <span>Email (sends invite)</span>
-                      <input className="ms-input" type="email" placeholder={`ae@${solution.vendor === "zoom" ? "zoom.us" : "vendor.com"}`} value={vendorAeNewEmail} onChange={(e) => setVendorAeNewEmail(e.target.value)} />
+                      <input className="ms-input" type="email" placeholder={`ae@${solution.vendor === "zoom" ? "zoom.us" : solution.vendor === "ringcentral" ? "ringcentral.com" : "vendor.com"}`} value={invitePartnerEmail} onChange={(e) => setInvitePartnerEmail(e.target.value)} />
+                    </label>
+                    <label className="ms-label">
+                      <span>Organization</span>
+                      <select className="ms-input" value={invitePartnerOrg} onChange={(e) => setInvitePartnerOrg(e.target.value)}>
+                        <option value="">— Select organization —</option>
+                        {PARTNER_ORGS.map((o) => (
+                          <option key={o} value={o}>{o}</option>
+                        ))}
+                      </select>
+                      <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                        Reporting structure can be set later via Admin → Users.
+                      </span>
                     </label>
                   </div>
                 )}
               </div>
               <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-                <button
-                  className="ms-btn-primary"
-                  disabled={savingVendorAe || (vendorAeMode === "new" && (!vendorAeNewName.trim() || !vendorAeNewEmail.trim()))}
-                  onClick={saveVendorAe}
-                >
-                  {savingVendorAe ? "Saving…" : vendorAeMode === "new" ? "Invite & Assign" : "Assign"}
+                <button className="ms-btn-primary" disabled={submitDisabled} onClick={handleAddPartner}>
+                  {addingPartner ? "Adding…" : partnerMode === "invite" ? "Invite & Add" : "Add Partner AE"}
                 </button>
-                <button className="ms-btn-secondary" onClick={() => setShowVendorAeModal(false)}>Cancel</button>
+                <button className="ms-btn-secondary" onClick={() => setShowPartnerModal(false)}>Cancel</button>
               </div>
             </div>
           </div>
