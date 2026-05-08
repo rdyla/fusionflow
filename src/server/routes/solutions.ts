@@ -678,10 +678,10 @@ app.post("/:id/create-project", async (c) => {
 // ── Solution Staff ────────────────────────────────────────────────────────────
 
 app.get("/:id/staff", async (c) => {
-  const auth = c.get("auth");
-  const { role } = auth;
-  if (!["admin", "pm", "pf_ae", "pf_sa", "pf_csm"].includes(role)) throw new HTTPException(403, { message: "Forbidden" });
-
+  // Reading the staff list is not sensitive — any authenticated user who can
+  // open the solution detail page should be able to see who's on it (the
+  // chips in the UI render the same data). Mutations (POST/DELETE below)
+  // remain role-gated.
   const rows = await c.env.DB.prepare(`
     SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
            u.name, u.email, u.role, u.avatar_url

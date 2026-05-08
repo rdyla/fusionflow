@@ -180,11 +180,14 @@ export default function SolutionDetailPage() {
   const load = useCallback(async () => {
     if (!id) return;
     setNaView("sor"); // reset on every solution load so stale wizard state doesn't carry over
-    const [s, u, me, staff] = await Promise.all([api.solution(id), api.users(), api.me(), api.solutionStaff(id)]);
+    const [s, u, me] = await Promise.all([api.solution(id), api.users(), api.me()]);
     setSolution(s);
     setUsers(u);
     setCurrentRole(me.role);
-    setSolutionStaff(staff);
+    // Staff list is non-critical to the page load — tolerate 403/network errors
+    // (e.g. for roles whose backend gate hasn't been relaxed yet) so the page
+    // still renders. The chip section just shows empty when the fetch fails.
+    api.solutionStaff(id).then(setSolutionStaff).catch(() => setSolutionStaff([]));
     setOverview({
       name: s.name,
       customer_name: s.customer_name,
