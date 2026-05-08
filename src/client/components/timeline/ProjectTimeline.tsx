@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { Phase, Task, ZoomRecording } from "../../lib/api";
+
+const GANTT_COLLAPSED_KEY = "cloudconnect:timeline:gantt:collapsed";
 
 type PhaseUpdate = {
   status?: "not_started" | "in_progress" | "completed";
@@ -74,6 +76,15 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
+  const [ganttCollapsed, setGanttCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(GANTT_COLLAPSED_KEY) === "1";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(GANTT_COLLAPSED_KEY, ganttCollapsed ? "1" : "0");
+  }, [ganttCollapsed]);
 
   // ── Gantt ──────────────────────────────────────────────────────────────────
 
@@ -103,10 +114,40 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
     const months = getMonthsBetween(minMs, maxMs);
     const LABEL_W = 180;
 
+    const fmtMonth = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    const summary = `${phases.length} phase${phases.length === 1 ? "" : "s"} · ${datedTasks.length} dated task${datedTasks.length === 1 ? "" : "s"} · ${fmtMonth(rawMin)} → ${fmtMonth(rawMax)}`;
+
     ganttContent = (
       <div className="ms-section-card" style={{ marginBottom: 20 }}>
-        <div className="ms-section-title">Schedule</div>
-        <div style={{ overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <div className="ms-section-title" style={{ marginBottom: 0 }}>Schedule</div>
+          <button
+            type="button"
+            onClick={() => setGanttCollapsed((v) => !v)}
+            aria-label={ganttCollapsed ? "Expand schedule" : "Minimize schedule"}
+            title={ganttCollapsed ? "Expand schedule" : "Minimize schedule"}
+            style={{
+              background: "transparent",
+              border: "1px solid rgba(148,163,184,0.35)",
+              borderRadius: 6,
+              padding: "2px 8px",
+              fontSize: 12,
+              color: "#64748b",
+              cursor: "pointer",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 4,
+              flexShrink: 0,
+            }}
+          >
+            <span style={{ fontSize: 11, lineHeight: 1 }}>{ganttCollapsed ? "▸" : "▾"}</span>
+            <span>{ganttCollapsed ? "Expand" : "Minimize"}</span>
+          </button>
+        </div>
+        {ganttCollapsed ? (
+          <div style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}>{summary}</div>
+        ) : (
+        <div style={{ overflow: "hidden", marginTop: 12 }}>
           <div>
             {/* Month headers */}
             <div style={{ display: "flex", marginBottom: 8, paddingLeft: LABEL_W }}>
@@ -336,6 +377,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
             </div>
           </div>
         </div>
+        )}
       </div>
     );
   }
