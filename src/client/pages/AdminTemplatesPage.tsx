@@ -376,6 +376,11 @@ export default function AdminTemplatesPage() {
                             >
                               <PriorityBadge priority={task.priority} />
                               <span style={{ flex: 1, fontSize: 13, color: "#334155" }}>{task.title}</span>
+                              {task.default_assignee_role && (
+                                <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#64748b", background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 4, padding: "2px 6px" }}>
+                                  {task.default_assignee_role}
+                                </span>
+                              )}
                               <button
                                 onClick={() => handleDeleteTask(expandedDetail.id, phase.id, task)}
                                 style={{ fontSize: 11, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "2px 6px", borderRadius: 3 }}

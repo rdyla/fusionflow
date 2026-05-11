@@ -258,7 +258,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const tasks = await db
     .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
     .bind(template_id)
-    .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number }>();
+    .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
 
   // Load existing phases by name so we can reuse them instead of duplicating
   const existingPhases = await db
