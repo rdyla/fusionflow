@@ -297,15 +297,54 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     }
   }
 
+  // Build a role → user_id lookup so we can auto-assign template tasks at
+  // apply time. Roles come from template_tasks.default_assignee_role; the
+  // lookup is project-scoped (whoever the PM / IE is on THIS project).
+  //
+  // Resolution today:
+  //   pm  → projects.pm_user_id
+  //   ie  → first project_staff with staff_role='engineer' (by created_at)
+  //   pf  → fallback to PM (Packet Fusion generic, PM owns coordination)
+  //
+  // Roles that intentionally stay unassigned for now:
+  //   customer       — we don't track a single customer-side primary user
+  //   zoom_porting   — handled by porting-coordinator contacts (separate PR)
+  //   all            — multi-recipient
+  //   customer/ie    — joint action; needs multi-assignee to be meaningful
+  const projectRow = await db
+    .prepare("SELECT pm_user_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ pm_user_id: string | null }>();
+  const pmUserId = projectRow?.pm_user_id ?? null;
+
+  const ieRow = await db
+    .prepare(
+      "SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'engineer' ORDER BY created_at ASC LIMIT 1"
+    )
+    .bind(projectId)
+    .first<{ user_id: string }>();
+  const ieUserId = ieRow?.user_id ?? null;
+
+  const roleToUserId: Record<string, string | null> = {
+    pm: pmUserId,
+    pf: pmUserId,
+    ie: ieUserId,
+  };
+  const resolveAssignee = (role: string | null | undefined): string | null => {
+    if (!role) return null;
+    return roleToUserId[role.toLowerCase()] ?? null;
+  };
+
   let tasksCreated = 0;
   for (const task of tasks.results ?? []) {
     const newTaskId = crypto.randomUUID();
     const mappedPhaseId = task.phase_id ? (phaseIdMap[task.phase_id] ?? null) : null;
+    const assigneeUserId = resolveAssignee(task.default_assignee_role);
     await db
       .prepare(
-        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status) VALUES (?, ?, ?, ?, ?, 'not_started')"
+        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id) VALUES (?, ?, ?, ?, ?, 'not_started', ?)"
       )
-      .bind(newTaskId, projectId, mappedPhaseId, task.title, task.priority ?? "medium")
+      .bind(newTaskId, projectId, mappedPhaseId, task.title, task.priority ?? "medium", assigneeUserId)
       .run();
     tasksCreated++;
   }
