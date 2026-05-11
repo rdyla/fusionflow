@@ -527,6 +527,10 @@ export type Task = {
   phase_id: string | null;
   title: string;
   assignee_user_id: string | null;
+  /** Optional non-user assignee (currently the porting coordinator for
+   *  UCaaS projects). Set by apply-template; displayed alongside the
+   *  user assignee on the task row. */
+  assignee_contact_id: string | null;
   due_date: string | null;
   completed_at: string | null;
   status: string | null;
@@ -1187,6 +1191,7 @@ export const api = {
       title?: string;
       phase_id?: string | null;
       assignee_user_id?: string | null;
+      assignee_contact_id?: string | null;
       due_date?: string | null;
       scheduled_start?: string | null;
       scheduled_end?: string | null;
