@@ -1133,6 +1133,12 @@ export default function ProjectDetailPage() {
                             <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 3 }}>{task.title}</div>
                             <div style={{ fontSize: 12, color: "#64748b" }}>
                               Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
+                              {task.assignee_contact_id && (() => {
+                                const contact = contacts.find((c) => c.id === task.assignee_contact_id);
+                                return contact ? (
+                                  <> · <span style={{ fontWeight: 600, color: "#7c3aed" }}>{contact.contact_role ?? "Contact"}: {contact.name}</span></>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
@@ -1196,7 +1202,7 @@ export default function ProjectDetailPage() {
                   {canEdit && (
                     <button
                       className="ms-btn-ghost"
-                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, due_date: null, completed_at: null, status: "not_started", priority: null, scheduled_start: null, scheduled_end: null, pay_code_id: null, cost_code_id: null, crm_time_entry_id: null })}
+                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, assignee_contact_id: null, due_date: null, completed_at: null, status: "not_started", priority: null, scheduled_start: null, scheduled_end: null, pay_code_id: null, cost_code_id: null, crm_time_entry_id: null })}
                       style={{ alignSelf: "start", border: "1px dashed rgba(255,255,255,0.2)", color: "#64748b" }}
                     >
                       + Add Task
@@ -2566,6 +2572,7 @@ export default function ProjectDetailPage() {
                   <option>Executive Sponsor</option>
                   <option>Billing Contact</option>
                   <option>End User Champion</option>
+                  <option>Porting Coordinator</option>
                   <option>Other</option>
                 </select>
               </label>

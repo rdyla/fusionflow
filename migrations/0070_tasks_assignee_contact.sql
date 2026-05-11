@@ -1,0 +1,13 @@
+-- Tasks can optionally be assigned to a non-user contact in addition to (or
+-- instead of) a user. Used today for the porting coordinator — a partner-side
+-- contact for UCaaS projects with > 100 DIDs to port, who tracks the port
+-- but doesn't log into the portal.
+--
+-- The contact lives in project_contacts (existing) tagged with
+-- contact_role='Porting Coordinator'. The new column links a task to that
+-- contact row. assignee_user_id is still the primary assignee field —
+-- assignee_contact_id is additive context, not a replacement.
+--
+-- ON DELETE SET NULL so removing the contact orphans the task assignment
+-- (the user can re-pick), rather than blocking the delete.
+ALTER TABLE tasks ADD COLUMN assignee_contact_id TEXT REFERENCES project_contacts(id) ON DELETE SET NULL;
