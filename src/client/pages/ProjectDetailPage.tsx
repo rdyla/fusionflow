@@ -109,7 +109,6 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
-  const [editHealth, setEditHealth] = useState("");
   const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
   const [editingSolutionTypes, setEditingSolutionTypes] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
@@ -212,7 +211,6 @@ export default function ProjectDetailPage() {
         api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
-        setEditHealth(projectData.health ?? "");
         setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
@@ -305,7 +303,6 @@ export default function ProjectDetailPage() {
     try {
       const updated = await api.updateProject(project.id, {
         status: editStatus || undefined,
-        health: editHealth || undefined,
         target_go_live_date: editTargetGoLiveDate || undefined,
       });
       setProject(updated);
@@ -338,24 +335,6 @@ export default function ProjectDetailPage() {
       showToast(err instanceof Error ? err.message : "Failed to update solution types", "error");
     } finally {
       setSavingSolutionTypes(false);
-    }
-  }
-
-  async function handleClearHealthOverride() {
-    if (!project) return;
-    setSavingProject(true);
-    setSaveMessage(null);
-    try {
-      const updated = await api.updateProject(project.id, { clear_health_override: true });
-      setProject(updated);
-      setEditHealth(updated.health ?? "");
-      setSaveMessage("Health reset to auto.");
-      showToast("Health reset to auto-computed.", "success");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to reset health";
-      showToast(message, "error");
-    } finally {
-      setSavingProject(false);
     }
   }
 
@@ -728,7 +707,15 @@ export default function ProjectDetailPage() {
 
       {/* Project header card */}
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{project.name}</h1>
+        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+          {project.health && (
+            <span
+              title={`Health: ${humanize(project.health)}`}
+              style={{ width: 12, height: 12, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }}
+            />
+          )}
+          {project.name}
+        </h1>
 
         {/* Vendor + solution type badges (editable for admin/pm) */}
         <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
@@ -761,45 +748,6 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        {/* Summary info tiles */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Status</div>
-            <div className="ms-info-value">
-              {project.status ? (
-                <Badge label={humanize(project.status)} color={STATUS_COLOR[project.status] ?? "#94a3b8"} style={{ textTransform: "none" }} />
-              ) : "—"}
-            </div>
-          </div>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Health</div>
-            <div className="ms-info-value">
-              {project.health ? (
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8" }} />
-                  {humanize(project.health)}
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                    padding: "1px 6px", borderRadius: 10,
-                    background: project.health_override ? "rgba(124,58,237,0.12)" : "rgba(8,145,178,0.12)",
-                    color: project.health_override ? "#7c3aed" : "#0891b2",
-                    border: `1px solid ${project.health_override ? "rgba(124,58,237,0.3)" : "rgba(8,145,178,0.3)"}`,
-                  }}>
-                    {project.health_override ? "Manual" : "Auto"}
-                  </span>
-                </span>
-              ) : "—"}
-            </div>
-          </div>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Kickoff Date</div>
-            <div className="ms-info-value">{project.kickoff_date ? formatDate(project.kickoff_date) : "—"}</div>
-          </div>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Target Go-Live</div>
-            <div className="ms-info-value">{project.target_go_live_date ? formatDate(project.target_go_live_date) : "—"}</div>
-          </div>
-        </div>
       </div>
 
       {/* Tab navigation */}
@@ -948,15 +896,6 @@ export default function ProjectDetailPage() {
                   <option value="blocked">Blocked</option>
                   <option value="complete">Complete</option>
                 </select>
-                <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editHealth} onChange={(e) => setEditHealth(e.target.value)}>
-                  <option value="">Health</option>
-                  <option value="on_track">On Track</option>
-                  <option value="at_risk">At Risk</option>
-                  <option value="off_track">Off Track</option>
-                </select>
-                {project.health_override && (
-                  <button type="button" onClick={handleClearHealthOverride} style={{ fontSize: 11, color: "#0891b2", background: "rgba(8,145,178,0.08)", border: "1px solid rgba(8,145,178,0.25)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Reset Health</button>
-                )}
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
                   Go-Live
                   <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
