@@ -21,6 +21,7 @@ import {
   type ZoomRecordingFile,
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
+import ProjectExecutiveDashboard from "../components/project/ProjectExecutiveDashboard";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -32,7 +33,7 @@ import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 
-type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "timeline" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -806,7 +807,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -822,9 +823,8 @@ export default function ProjectDetailPage() {
         );
       })()}
 
-      {/* ── Overview ──────────────────────────────────────────────────────── */}
-      {tab === "overview" && (
-        <>
+      {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
+      {tab === "timeline" && (
         <ProjectTimeline
           phases={phases}
           tasks={tasks}
@@ -845,6 +845,19 @@ export default function ProjectDetailPage() {
             if (task) setEditingTask(task);
             setTab("tasks");
           }}
+        />
+      )}
+
+      {/* ── Overview (exec-friendly dashboard) ────────────────────────────── */}
+      {tab === "overview" && (
+        <>
+        <ProjectExecutiveDashboard
+          project={project}
+          phases={phases}
+          tasks={tasks}
+          risks={risks}
+          onViewBlockers={() => setTab("blockers")}
+          onViewTasks={() => setTab("tasks")}
         />
         <div style={{ display: "grid", gap: 16 }}>
           {/* ── Team & Controls (consolidated) ───────────────────────────── */}
