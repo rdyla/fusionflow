@@ -4,6 +4,7 @@ import {
   api, type Solution, type SolutionStatus, type User, type CrmAccountTeam,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import { useDemoMode } from "../lib/demoMode";
 
 // ── Journey data ──────────────────────────────────────────────────────────────
 
@@ -153,6 +154,7 @@ export default function SolutionsPage() {
   const [currentRole, setCurrentRole] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { demoVendor } = useDemoMode();
 
   useEffect(() => {
     api.me().then((me) => setCurrentRole(me.role)).catch(() => {});
@@ -279,7 +281,10 @@ export default function SolutionsPage() {
           )}
         </div>
         {currentRole !== "client" && (
-          <button className="ms-btn-primary" onClick={() => setShowCreate(true)}>+ New Solution</button>
+          <button className="ms-btn-primary" onClick={() => {
+            setForm({ ...EMPTY_FORM, ucaas_vendor: demoVendor ?? "" });
+            setShowCreate(true);
+          }}>+ New Solution</button>
         )}
       </div>
 
@@ -337,12 +342,12 @@ export default function SolutionsPage() {
                     <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{s.name}</div>
                   </td>
                   <td>
-                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block" }}>
+                    <span className="ms-badge" style={{ background: "rgba(99,193,234,0.12)", color: "#0891b2", border: "1px solid rgba(99,193,234,0.25)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "inline-block", textTransform: "none" }}>
                       {journeyBadgeText(s)}
                     </span>
                   </td>
                   <td>
-                    <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status]}1a`, color: STATUS_COLOR[s.status], border: `1px solid ${STATUS_COLOR[s.status]}40` }}>
+                    <span className="ms-badge" style={{ background: `${STATUS_COLOR[s.status]}1a`, color: STATUS_COLOR[s.status], border: `1px solid ${STATUS_COLOR[s.status]}40`, textTransform: "none" }}>
                       {STATUS_LABELS[s.status]}
                     </span>
                   </td>
@@ -377,7 +382,9 @@ export default function SolutionsPage() {
 
                   {/* Vendor tabs */}
                   <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-                    {(["zoom", "ringcentral", "agnostic"] as const).map((v) => {
+                    {(["zoom", "ringcentral", "agnostic"] as const)
+                      .filter((v) => !demoVendor || v === demoVendor)
+                      .map((v) => {
                       const labels: Record<string, string> = { zoom: "Zoom", ringcentral: "RingCentral", agnostic: "Agnostic" };
                       const active = form.ucaas_vendor === v;
                       return (

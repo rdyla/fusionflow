@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
+import { useDemoMode } from "../lib/demoMode";
+import { resolveVendorBadge } from "../lib/vendorBadge";
+import { humanize } from "../lib/format";
 
 const PHASE_STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -61,9 +64,33 @@ const HEALTH_COLOR: Record<string, string> = {
   off_track: "#d13438",
 };
 
-function Badge({ label, color }: { label: string; color: string }) {
+function FilterPill({ label, color, onClear }: { label: string; color: string; onClear: () => void }) {
   return (
-    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40` }}>
+    <span
+      className="ms-badge"
+      style={{
+        background: color + "1a",
+        color,
+        border: `1px solid ${color}40`,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+      }}
+    >
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label="Clear filter"
+        style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 14, lineHeight: 1, padding: 0 }}
+      >×</button>
+    </span>
+  );
+}
+
+function Badge({ label, color, style }: { label: string; color: string; style?: React.CSSProperties }) {
+  return (
+    <span className="ms-badge" style={{ background: color + "1a", color, border: `1px solid ${color}40`, ...style }}>
       {label}
     </span>
   );
@@ -97,6 +124,21 @@ export default function ProjectsPage() {
   const [saving, setSaving] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { demoVendor } = useDemoMode();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const healthFilter = searchParams.get("health");
+  const pfAeIdFilter = searchParams.get("pf_ae_id");
+  const partnerAeIdFilter = searchParams.get("partner_ae_id");
+  const aeNameFilter = searchParams.get("ae_name");
+  const filteredProjects = healthFilter
+    ? projects.filter((p) => p.health === healthFilter)
+    : projects;
+  const clearFilter = (key: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.delete(key);
+    if (key === "pf_ae_id" || key === "partner_ae_id") next.delete("ae_name");
+    setSearchParams(next, { replace: true });
+  };
 
   // Dynamics account search state
   const [dynQuery, setDynQuery] = useState("");
@@ -112,11 +154,15 @@ export default function ProjectsPage() {
   const [oppsLoading, setOppsLoading] = useState(false);
 
   useEffect(() => {
-    Promise.all([api.projects()])
-      .then(([p]) => { setProjects(p); })
+    setLoading(true);
+    api.projects({
+      pf_ae_id: pfAeIdFilter ?? undefined,
+      partner_ae_id: partnerAeIdFilter ?? undefined,
+    })
+      .then((p) => { setProjects(p); setError(null); })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [pfAeIdFilter, partnerAeIdFilter]);
 
   useEffect(() => {
     if (projects.length === 0) return;
@@ -232,6 +278,30 @@ export default function ProjectsPage() {
         </button>
       </div>
 
+      {(healthFilter || pfAeIdFilter || partnerAeIdFilter) && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 13, color: "#64748b" }}>Filter:</span>
+          {healthFilter && (
+            <FilterPill
+              label={`Health: ${healthFilter.replace("_", " ")}`}
+              color={HEALTH_COLOR[healthFilter] ?? "#94a3b8"}
+              onClear={() => clearFilter("health")}
+            />
+          )}
+          {(pfAeIdFilter || partnerAeIdFilter) && (
+            <FilterPill
+              label={`AE: ${aeNameFilter ?? (pfAeIdFilter === "none" || partnerAeIdFilter === "none" ? "Unassigned" : "selected")}`}
+              color="#0891b2"
+              onClear={() => clearFilter(pfAeIdFilter ? "pf_ae_id" : "partner_ae_id")}
+            />
+          )}
+          <span style={{ fontSize: 12, color: "#94a3b8" }}>
+            {filteredProjects.length} {filteredProjects.length === 1 ? "project" : "projects"}
+            {healthFilter ? ` of ${projects.length}` : ""}
+          </span>
+        </div>
+      )}
+
       <div className="ms-card" style={{ overflow: "hidden" }}>
         <table className="ms-table">
           <thead>
@@ -247,14 +317,16 @@ export default function ProjectsPage() {
             </tr>
           </thead>
           <tbody>
-            {projects.length === 0 ? (
+            {filteredProjects.length === 0 ? (
               <tr>
                 <td colSpan={8} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
-                  No projects yet.
+                  {healthFilter
+                    ? `No projects with health "${healthFilter.replace("_", " ")}".`
+                    : "No projects yet."}
                 </td>
               </tr>
             ) : (
-              projects.map((project) => (
+              filteredProjects.map((project) => (
                 <tr key={project.id}>
                   <td>
                     <Link
@@ -265,12 +337,24 @@ export default function ProjectsPage() {
                     </Link>
                   </td>
                   <td style={{ color: "#64748b" }}>{project.customer_name ?? "—"}</td>
-                  <td style={{ color: "#64748b" }}>{project.vendor ?? "—"}</td>
+                  <td style={{ color: "#64748b" }}>
+                    {(() => {
+                      const v = resolveVendorBadge(project.vendor);
+                      if (!v) return "—";
+                      return (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: v.color, flexShrink: 0 }} />
+                          <span style={{ color: "#1e293b" }}>{v.label}</span>
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td>
                     {project.status ? (
                       <Badge
-                        label={project.status.replace("_", " ")}
+                        label={humanize(project.status)}
                         color={STATUS_COLOR[project.status] ?? "#94a3b8"}
+                        style={{ textTransform: "none" }}
                       />
                     ) : "—"}
                   </td>
@@ -278,7 +362,7 @@ export default function ProjectsPage() {
                     {project.health ? (
                       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }} />
-                        <span style={{ fontSize: 13 }}>{project.health.replace("_", " ")}</span>
+                        <span style={{ fontSize: 13 }}>{humanize(project.health)}</span>
                       </span>
                     ) : "—"}
                   </td>
@@ -420,7 +504,14 @@ export default function ProjectsPage() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <label className="ms-label">
                   <span>Vendor</span>
-                  <input className="ms-input" value={form.vendor} onChange={(e) => setForm({ ...form, vendor: e.target.value })} placeholder="e.g. Cisco, Zoom" />
+                  <input
+                    className="ms-input"
+                    value={demoVendor ? (demoVendor === "zoom" ? "Zoom" : "RingCentral") : form.vendor}
+                    onChange={(e) => setForm({ ...form, vendor: e.target.value })}
+                    placeholder="e.g. Cisco, Zoom"
+                    disabled={!!demoVendor}
+                    style={demoVendor ? { background: "#f1f5f9", color: "#64748b" } : undefined}
+                  />
                 </label>
                 <label className="ms-label">
                   <span>Kickoff Date</span>

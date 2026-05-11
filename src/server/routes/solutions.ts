@@ -22,6 +22,7 @@ import {
 } from "../../shared/solutionTypes";
 import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
 import { recomputeSowTotal } from "../lib/sowTotal";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -97,6 +98,52 @@ function nameFromJourneys(customerName: string, journeys: string[], vendor: stri
   return `${customerName} — ${suffix}`;
 }
 
+/**
+ * Look up a partner_ae user by email; if missing, create one with the given
+ * name + organization_name and send an invite email. Used both by the
+ * create-solution endpoint (legacy single-AE field) and the new inline
+ * invite endpoint on the solution detail page.
+ */
+async function findOrCreatePartnerAe(
+  env: Bindings,
+  db: D1Database,
+  invitedByName: string,
+  payload: {
+    email: string;
+    name: string | null;
+    organization_name: string | null;
+    executionCtx?: { waitUntil: (p: Promise<unknown>) => void };
+  },
+): Promise<string | null> {
+  const email = payload.email.trim().toLowerCase();
+  if (!email) return null;
+  const existing = await db
+    .prepare("SELECT id FROM users WHERE lower(email) = ? LIMIT 1")
+    .bind(email)
+    .first<{ id: string }>();
+  if (existing) return existing.id;
+  if (!payload.name) return null; // can't create a user without at least a name
+
+  const newId = crypto.randomUUID();
+  await db
+    .prepare(
+      "INSERT INTO users (id, email, name, organization_name, role, is_active) VALUES (?, ?, ?, ?, 'partner_ae', 1)",
+    )
+    .bind(newId, email, payload.name, payload.organization_name)
+    .run();
+
+  const appUrl = env.APP_URL ?? "";
+  const sendInvite = sendEmail(env, {
+    to: email,
+    subject: "You've been invited to CloudConnect",
+    html: userInvite({ recipientName: payload.name, invitedByName, role: "partner_ae", appUrl }),
+  });
+  if (payload.executionCtx) payload.executionCtx.waitUntil(sendInvite);
+  else await sendInvite.catch(() => {}); // best-effort if no waitUntil available
+
+  return newId;
+}
+
 function accessClause(role: string, teamIds: string[], accountId?: string | null): { where: string; bindings: string[] } {
   if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
   if (role === "pf_ae") {
@@ -110,9 +157,13 @@ function accessClause(role: string, teamIds: string[], accountId?: string | null
     if (!accountId) return { where: "1=0", bindings: [] };
     return { where: "s.dynamics_account_id = ?", bindings: [accountId] };
   }
-  // partner_ae
+  // partner_ae — match either the legacy single field OR any solution_staff row
+  // (multi-AE support; mirrors the project_staff pattern)
   const ph = inPlaceholders(teamIds);
-  return { where: `s.partner_ae_user_id IN (${ph})`, bindings: [...teamIds] };
+  return {
+    where: `(s.partner_ae_user_id IN (${ph}) OR s.id IN (SELECT solution_id FROM solution_staff WHERE staff_role = 'partner_ae' AND user_id IN (${ph})))`,
+    bindings: [...teamIds, ...teamIds],
+  };
 }
 
 // ── List ──────────────────────────────────────────────────────────────────────
@@ -123,9 +174,15 @@ app.get("/", async (c) => {
     ? await getTeamUserIds(auth.user.id, c.env.DB)
     : [auth.user.id];
   const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+
+  // Demo-mode vendor lens
+  const demoVendor = await getDemoVendor(c.env.DB);
+  const vendorClause = demoVendor ? " AND LOWER(s.vendor) = ?" : "";
+  const vendorBinding = demoVendor ? [demoVendor] : [];
+
   const rows = await c.env.DB
-    .prepare(`${SOLUTION_SELECT} WHERE ${where} ORDER BY s.updated_at DESC`)
-    .bind(...bindings)
+    .prepare(`${SOLUTION_SELECT} WHERE ${where}${vendorClause} ORDER BY s.updated_at DESC`)
+    .bind(...bindings, ...vendorBinding)
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionRow));
 });
@@ -159,9 +216,12 @@ app.post("/", async (c) => {
 
   const journeys = parsed.data.journeys ?? [];
   const journeysJson = journeys.length > 0 ? JSON.stringify(journeys) : null;
-  const vendor = journeys.length > 0
+  const derivedVendor = journeys.length > 0
     ? deriveVendorFromJourneys(journeys)
     : (parsed.data.vendor ?? "tbd");
+  // Demo mode pins the vendor on every newly-created solution.
+  const demoVendor = await getDemoVendor(db);
+  const vendor = demoVendor ?? derivedVendor;
 
   // Explicit types on the payload win; otherwise derive from journeys. Default
   // to ["ucaas"] only if nothing was supplied, preserving the legacy fallback.
@@ -215,33 +275,12 @@ app.post("/", async (c) => {
   // Resolve partner AE: use existing user, find by email, or create + invite
   let resolvedPartnerAeUserId: string | null = partner_ae_user_id ?? null;
   if (!resolvedPartnerAeUserId && partner_ae_email) {
-    const existing = await db
-      .prepare("SELECT id FROM users WHERE lower(email) = lower(?) LIMIT 1")
-      .bind(partner_ae_email)
-      .first<{ id: string }>();
-
-    if (existing) {
-      resolvedPartnerAeUserId = existing.id;
-    } else if (partner_ae_name) {
-      const newUserId = crypto.randomUUID();
-      await db
-        .prepare("INSERT INTO users (id, email, name, role, is_active) VALUES (?, ?, ?, 'partner_ae', 1)")
-        .bind(newUserId, partner_ae_email.toLowerCase(), partner_ae_name)
-        .run();
-      resolvedPartnerAeUserId = newUserId;
-
-      const appUrl = c.env.APP_URL ?? "";
-      c.executionCtx.waitUntil(sendEmail(c.env, {
-        to: partner_ae_email,
-        subject: "You've been invited to CloudConnect",
-        html: userInvite({
-          recipientName: partner_ae_name,
-          invitedByName: auth.user.name ?? auth.user.email,
-          role: "partner_ae",
-          appUrl,
-        }),
-      }));
-    }
+    resolvedPartnerAeUserId = await findOrCreatePartnerAe(c.env, db, auth.user.name ?? auth.user.email, {
+      email: partner_ae_email,
+      name: partner_ae_name ?? null,
+      organization_name: null,
+      executionCtx: c.executionCtx,
+    });
   }
 
   await db
@@ -639,10 +678,10 @@ app.post("/:id/create-project", async (c) => {
 // ── Solution Staff ────────────────────────────────────────────────────────────
 
 app.get("/:id/staff", async (c) => {
-  const auth = c.get("auth");
-  const { role } = auth;
-  if (!["admin", "pm", "pf_ae", "pf_sa", "pf_csm"].includes(role)) throw new HTTPException(403, { message: "Forbidden" });
-
+  // Reading the staff list is not sensitive — any authenticated user who can
+  // open the solution detail page should be able to see who's on it (the
+  // chips in the UI render the same data). Mutations (POST/DELETE below)
+  // remain role-gated.
   const rows = await c.env.DB.prepare(`
     SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
            u.name, u.email, u.role, u.avatar_url
@@ -673,6 +712,55 @@ app.post("/:id/staff", async (c) => {
     FROM solution_staff ss JOIN users u ON u.id = ss.user_id
     WHERE ss.solution_id = ? AND ss.user_id = ? AND ss.staff_role = ? LIMIT 1
   `).bind(solutionId, user_id, staff_role).first();
+  return c.json(created, 201);
+});
+
+// Inline invite for partner AEs from the solution detail page. Looks up by
+// email; if missing, creates the user with role='partner_ae' (+ optional
+// organization_name) and sends an invite. Then assigns them to this solution
+// as a partner_ae solution_staff row in one round trip.
+const inviteSolutionPartnerAeSchema = z.object({
+  email: z.string().email(),
+  name: z.string().min(1).max(500),
+  organization_name: z.string().max(500).nullable().optional(),
+});
+
+app.post("/:id/invite-partner-ae", async (c) => {
+  const auth = c.get("auth");
+  if (!["admin", "pm", "pf_ae", "pf_sa"].includes(auth.role)) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const parsed = inviteSolutionPartnerAeSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "email and name required" });
+
+  const solutionId = c.req.param("id");
+  const exists = await c.env.DB.prepare("SELECT id FROM solutions WHERE id = ? LIMIT 1").bind(solutionId).first();
+  if (!exists) throw new HTTPException(404, { message: "Solution not found" });
+
+  const userId = await findOrCreatePartnerAe(c.env, c.env.DB, auth.user.name ?? auth.user.email, {
+    email: parsed.data.email,
+    name: parsed.data.name,
+    organization_name: parsed.data.organization_name ?? null,
+    executionCtx: c.executionCtx,
+  });
+  if (!userId) throw new HTTPException(400, { message: "Could not resolve partner AE" });
+
+  const staffId = crypto.randomUUID();
+  await c.env.DB
+    .prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, 'partner_ae')")
+    .bind(staffId, solutionId, userId)
+    .run();
+
+  const created = await c.env.DB
+    .prepare(`
+      SELECT ss.id, ss.solution_id, ss.user_id, ss.staff_role, ss.created_at,
+             u.name, u.email, u.role, u.avatar_url
+      FROM solution_staff ss JOIN users u ON u.id = ss.user_id
+      WHERE ss.solution_id = ? AND ss.user_id = ? AND ss.staff_role = 'partner_ae' LIMIT 1
+    `)
+    .bind(solutionId, userId)
+    .first();
   return c.json(created, 201);
 });
 

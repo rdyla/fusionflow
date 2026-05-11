@@ -4,6 +4,7 @@ import { api, type User, type SystemStatusResponse, type Notification, IMPERSONA
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { bootstrapDemoMode, setDemoMode, useDemoMode, type DemoVendor } from "../../lib/demoMode";
 
 const NOTIF_TYPE_LABELS: Record<string, string> = {
   task_assigned: "Task assigned",
@@ -88,6 +89,7 @@ export default function AppShell() {
         setCanProspect(["admin", "executive", "pf_ae", "partner_ae"].includes(res.role));
       })
       .catch(() => {});
+    bootstrapDemoMode();
   }, []);
 
   useEffect(() => {
@@ -433,6 +435,7 @@ export default function AppShell() {
                     <AdminMenuLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setAdminMenuOpen(false)}>Templates</AdminMenuLink>
                     <AdminMenuLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setAdminMenuOpen(false)}>Users</AdminMenuLink>
                     <AdminMenuLink to="/admin/roadmap" icon={NAV_ICONS.adminRoadmap} onClick={() => setAdminMenuOpen(false)}>Roadmap</AdminMenuLink>
+                    <DemoModeRow />
                   </div>
                 )}
               </div>
@@ -489,6 +492,35 @@ function SideLink({ to, children, end, onClick, icon }: { to: string; children: 
       {icon}
       {children}
     </NavLink>
+  );
+}
+
+function DemoModeRow() {
+  const { demoVendor } = useDemoMode();
+  const [saving, setSaving] = useState(false);
+
+  async function handleChange(next: DemoVendor) {
+    setSaving(true);
+    try { await setDemoMode(next); } finally { setSaving(false); }
+  }
+
+  return (
+    <div style={{ padding: "10px 14px", borderTop: "1px solid #f1f5f9", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+      <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Demo mode</span>
+      <select
+        value={demoVendor ?? "off"}
+        onChange={(e) => {
+          const v = e.target.value;
+          handleChange(v === "off" ? null : (v as DemoVendor));
+        }}
+        disabled={saving}
+        style={{ fontSize: 12, padding: "4px 8px", border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff", color: "#1e293b", cursor: saving ? "wait" : "pointer" }}
+      >
+        <option value="off">Off</option>
+        <option value="zoom">Zoom</option>
+        <option value="ringcentral">RingCentral</option>
+      </select>
+    </div>
   );
 }
 

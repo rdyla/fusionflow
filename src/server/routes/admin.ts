@@ -7,6 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getDemoVendor, setDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -157,6 +158,154 @@ app.patch("/users/:id", async (c) => {
   return c.json(updated);
 });
 
+// Inspection: which entities currently reference this user. Used by the
+// delete-confirmation modal so admins can see what's tied to the user before
+// they hit Delete (and helps explain FK errors when a delete fails).
+//
+// Strategy: introspect every table's foreign keys (PRAGMA foreign_key_list)
+// to find columns pointing at users(id), then count rows referencing this
+// user in each. `blocking` is true when the FK has neither ON DELETE SET NULL
+// nor CASCADE — those are the rows that'll fail the delete with a SQLITE FK
+// constraint error until reassigned.
+app.get("/users/:id/references", async (c) => {
+  const db = c.env.DB;
+  const userId = c.req.param("id");
+  const exists = await db.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(userId).first();
+  if (!exists) throw new HTTPException(404, { message: "User not found" });
+
+  // Friendly labels for the most common tables; everything else falls back to
+  // the raw table name with column suffix.
+  const FRIENDLY_TABLE: Record<string, string> = {
+    project_staff: "Project staff",
+    solution_staff: "Solution staff",
+    prospecting_accounts: "Prospecting accounts",
+    projects: "Projects",
+    tasks: "Tasks",
+    risks: "Blockers",
+    solutions: "Solutions",
+    customers: "Customers",
+    project_access: "Project access grants",
+    notifications: "Notifications",
+    notes: "Notes",
+    documents: "Documents",
+    task_comments: "Task comments",
+    optimize_accounts: "Optimize accounts",
+    impact_assessments: "Impact assessments",
+    feature_requests: "Feature requests",
+    feature_request_votes: "Feature request votes",
+    cs_proposals: "Cloud Support proposals",
+    support_tickets: "Support tickets",
+    users: "Users",
+  };
+
+  // Human-readable role label for each known FK column. Critical for tables
+  // that reference users from multiple columns (e.g. solutions has PF SA + PF
+  // CSM + partner AE) — without this an admin can't tell *why* the user is
+  // tied to a row.
+  const FRIENDLY_COLUMN: Record<string, string> = {
+    created_by:            "Created by",
+    created_by_id:         "Created by",
+    creator_id:            "Created by",
+    submitter_id:          "Submitted by",
+    pm_user_id:            "PM",
+    pf_ae_user_id:         "PF AE",
+    pf_sa_user_id:         "PF SA",
+    pf_csm_user_id:        "PF CSM",
+    partner_ae_user_id:    "Partner AE",
+    vendor_ae_user_id:     "Vendor AE",
+    assignee_user_id:      "Assignee",
+    owner_user_id:         "Owner",
+    owner_id:              "Owner",
+    author_user_id:        "Author",
+    uploaded_by:           "Uploaded by",
+    sa_user_id:            "SA",
+    csm_user_id:           "CSM",
+    ae_user_id:            "AE",
+    graduated_by:          "Completed by",
+    conducted_by_user_id:  "Conducted by",
+    reviewed_by_user_id:   "Reviewed by",
+    user_id:               "Linked user",
+    manager_id:            "Manager of",
+  };
+
+  type Ref = { table: string; column: string; onDelete: string };
+  const tableRows = await db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%'",
+    )
+    .all<{ name: string }>();
+
+  const refs: Ref[] = [];
+  for (const row of tableRows.results ?? []) {
+    // PRAGMA foreign_key_list doesn't accept binds; the table name comes from
+    // sqlite_master (trusted), but we still validate it matches an identifier.
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(row.name)) continue;
+    try {
+      const fkRes = await db.prepare(`PRAGMA foreign_key_list("${row.name}")`).all<{
+        table: string;
+        from: string;
+        on_delete: string;
+      }>();
+      for (const fk of fkRes.results ?? []) {
+        if (fk.table === "users") {
+          refs.push({ table: row.name, column: fk.from, onDelete: (fk.on_delete ?? "").toUpperCase() });
+        }
+      }
+    } catch {
+      // Skip tables PRAGMA chokes on; we'll still surface every table we can introspect.
+    }
+  }
+
+  type Bucket = { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] };
+
+  // For each FK ref: count rows where column = userId, fetch up to 5 samples.
+  // Some tables don't have an `id` PK or a sensible label column — fall back
+  // to the column name as the sample label in those cases.
+  const buckets: Bucket[] = await Promise.all(refs.map(async (r) => {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(r.column)) {
+      return { entity: r.table, count: 0, blocking: false, samples: [] };
+    }
+    const friendly = FRIENDLY_TABLE[r.table] ?? r.table;
+    const role = FRIENDLY_COLUMN[r.column] ?? r.column;
+    const entity = `${friendly} (${role})`;
+    const onDel = r.onDelete;
+    const blocking = onDel !== "SET NULL" && onDel !== "CASCADE" && onDel !== "SET DEFAULT";
+
+    const cnt = await db
+      .prepare(`SELECT COUNT(*) AS count FROM "${r.table}" WHERE "${r.column}" = ?`)
+      .bind(userId)
+      .first<{ count: number }>();
+    const count = cnt?.count ?? 0;
+    if (count === 0) return { entity, count: 0, blocking, samples: [] };
+
+    // Build a sample SELECT using only columns that actually exist on this
+    // table — pick the first available identifier and label columns from
+    // priority lists. SQLite will throw "no such column" for any reference
+    // to a missing column, so we *must* introspect first.
+    let samples: { id: string; label: string }[] = [];
+    try {
+      const colsRes = await db.prepare(`PRAGMA table_info("${r.table}")`).all<{ name: string }>();
+      const cols = new Set((colsRes.results ?? []).map((cc) => cc.name));
+      const idCol = ["id"].find((cn) => cols.has(cn));
+      const labelCol = ["name", "title", "subject", "type", "label"].find((cn) => cols.has(cn));
+      const idExpr = idCol ? `"${idCol}"` : "''";
+      const labelExpr = labelCol ? `COALESCE(NULLIF("${labelCol}", ''), ${idExpr})` : idExpr;
+      const sampleRes = await db
+        .prepare(`SELECT ${idExpr} AS id, ${labelExpr} AS label FROM "${r.table}" WHERE "${r.column}" = ? LIMIT 5`)
+        .bind(userId)
+        .all<{ id: string; label: string }>();
+      samples = sampleRes.results ?? [];
+    } catch {
+      // Best-effort — leave samples empty if anything fails.
+    }
+    return { entity, count, blocking, samples };
+  }));
+
+  const visible = buckets.filter((b) => b.count > 0).sort((a, b) => Number(b.blocking) - Number(a.blocking));
+  const blocked = visible.some((b) => b.blocking);
+  return c.json({ blocked, buckets: visible });
+});
+
 app.delete("/users/:id", async (c) => {
   const db = c.env.DB;
   const userId = c.req.param("id");
@@ -165,7 +314,17 @@ app.delete("/users/:id", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "User not found" });
 
   await db.prepare("DELETE FROM project_access WHERE user_id = ?").bind(userId).run();
-  await db.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+  try {
+    await db.prepare("DELETE FROM users WHERE id = ?").bind(userId).run();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/FOREIGN KEY|constraint/i.test(msg)) {
+      throw new HTTPException(409, {
+        message: "User is still referenced by other records. Open the delete dialog to see what's tied to them, reassign those, then try again.",
+      });
+    }
+    throw err;
+  }
 
   return c.json({ success: true });
 });
@@ -175,10 +334,12 @@ app.delete("/users/:id", async (c) => {
 app.get("/projects", async (c) => {
   const rows = await c.env.DB
     .prepare(
-      `SELECT id, name, customer_name, vendor, solution_types, status, health,
-              kickoff_date, target_go_live_date, archived, created_at, updated_at
-       FROM projects
-       ORDER BY updated_at DESC`
+      `SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_types, p.status, p.health,
+              p.kickoff_date, p.target_go_live_date, p.archived, p.created_at, p.updated_at,
+              CASE WHEN oa.project_id IS NOT NULL THEN 1 ELSE 0 END AS in_optimize
+       FROM projects p
+       LEFT JOIN optimize_accounts oa ON oa.project_id = p.id
+       ORDER BY p.updated_at DESC`
     )
     .all();
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
@@ -209,8 +370,20 @@ app.delete("/projects/:id", async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first();
+  const existing = await db.prepare("SELECT id, name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ id: string; name: string }>();
   if (!existing) throw new HTTPException(404, { message: "Project not found" });
+
+  const optimizeLink = await db
+    .prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1")
+    .bind(projectId)
+    .first();
+  if (optimizeLink) {
+    throw new HTTPException(409, {
+      message:
+        `"${existing.name}" is in Optimize. Remove it from Optimize first ` +
+        `(Admin → Optimize Accounts → Remove), then delete the project.`,
+    });
+  }
 
   // Cascade delete in dependency order
   await db.prepare("DELETE FROM task_comments WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId).run();
@@ -441,6 +614,27 @@ app.post("/run-health-scoring", async (c) => {
   }
 
   return c.json({ scored });
+});
+
+// ── Settings: demo mode (vendor lens for partner demos) ──────────────────────
+
+app.get("/settings/demo-mode", async (c) => {
+  const vendor = await getDemoVendor(c.env.DB);
+  return c.json({ vendor });
+});
+
+const demoModeSchema = z.object({
+  vendor: z.enum(["zoom", "ringcentral"]).nullable(),
+});
+
+app.put("/settings/demo-mode", async (c) => {
+  const auth = c.get("auth");
+  const parsed = demoModeSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "vendor must be 'zoom', 'ringcentral', or null" });
+  }
+  await setDemoVendor(c.env.DB, parsed.data.vendor, auth.user.id);
+  return c.json({ vendor: parsed.data.vendor });
 });
 
 export default app;

@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -41,6 +42,19 @@ app.get("/summary", async (c) => {
     filterBindings = [auth.user.dynamics_account_id];
   }
   // pf_sa, pf_csm, admin, and executive: no filter — portfolio-wide visibility
+
+  // Always exclude archived projects from dashboard aggregations.
+  projectFilter = projectFilter
+    ? `${projectFilter} AND (archived = 0 OR archived IS NULL)`
+    : "WHERE (archived = 0 OR archived IS NULL)";
+
+  // Demo-mode vendor lens: every aggregation is scoped through projectFilter,
+  // so layering a vendor AND clause here is enough to filter the entire response.
+  const demoVendor = await getDemoVendor(db);
+  if (demoVendor) {
+    projectFilter = `${projectFilter} AND LOWER(vendor) = ?`;
+    filterBindings = [...filterBindings, demoVendor];
+  }
 
   const projectSubquery = projectFilter
     ? `SELECT id FROM projects ${projectFilter}`
@@ -178,6 +192,32 @@ app.get("/summary", async (c) => {
     .bind(...filterBindings)
     .all<{ label: string; count: number }>();
 
+  // Sales-leader detection: AE role with direct reports under them.
+  const isSalesLeader = (auth.role === "pf_ae" || auth.role === "partner_ae") && teamIds.length > 1;
+
+  let aeDistribution: { id: string | null; label: string; count: number }[] = [];
+  if (isSalesLeader) {
+    const aeQuery = auth.role === "pf_ae"
+      ? `SELECT u.id AS id, COALESCE(u.name, 'Unassigned') AS label, COUNT(*) AS count
+         FROM projects p
+         LEFT JOIN customers c ON c.id = p.customer_id
+         LEFT JOIN users u ON u.id = c.pf_ae_user_id
+         WHERE p.id IN (${projectSubquery})
+         GROUP BY u.id
+         ORDER BY count DESC`
+      : `SELECT id, label, COUNT(*) AS count FROM (
+           SELECT u.id AS id, COALESCE(u.name, 'Unassigned') AS label
+           FROM projects p
+           LEFT JOIN project_staff ps ON ps.project_id = p.id AND ps.staff_role = 'partner_ae'
+           LEFT JOIN users u ON u.id = ps.user_id
+           WHERE p.id IN (${projectSubquery})
+         )
+         GROUP BY id
+         ORDER BY count DESC`;
+    const aeRes = await db.prepare(aeQuery).bind(...filterBindings).all<{ id: string | null; label: string; count: number }>();
+    aeDistribution = aeRes.results ?? [];
+  }
+
   // Per-type counts: a project with multiple solution_types contributes to each bucket.
   // Projects with empty/null solution_types fall into the 'Unknown' bucket.
   const typeDistribution = await db
@@ -213,6 +253,8 @@ app.get("/summary", async (c) => {
     phaseDistribution: phaseDistribution.results ?? [],
     vendorDistribution: vendorDistribution.results ?? [],
     typeDistribution: typeDistribution.results ?? [],
+    aeDistribution,
+    isSalesLeader,
   });
 });
 

@@ -185,6 +185,8 @@ export type DashboardSummaryResponse = {
   phaseDistribution: { phase_name: string; count: number }[];
   vendorDistribution: { label: string; count: number }[];
   typeDistribution: { label: string; count: number }[];
+  aeDistribution: { id: string | null; label: string; count: number }[];
+  isSalesLeader: boolean;
 };
 
 export type Project = {
@@ -203,6 +205,7 @@ export type Project = {
   customer_id: string | null;
   dynamics_account_id: string | null;
   archived: number | null;
+  in_optimize?: number | null;
   crm_case_id: string | null;
   crm_opportunity_id: string | null;
   customer_display_name: string | null;
@@ -984,7 +987,13 @@ export const api = {
     if (params.page)     q.set("page",     String(params.page));
     return request<{ items: (Task & { project_name: string; phase_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
   },
-  projects: () => request<Project[]>("/projects"),
+  projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string }) => {
+    const qs = new URLSearchParams();
+    if (filters?.pf_ae_id) qs.set("pf_ae_id", filters.pf_ae_id);
+    if (filters?.partner_ae_id) qs.set("partner_ae_id", filters.partner_ae_id);
+    const suffix = qs.toString() ? `?${qs.toString()}` : "";
+    return request<Project[]>(`/projects${suffix}`);
+  },
   project: (id: string) => request<Project>(`/projects/${id}`),
 
   phases: (projectId: string) => request<Phase[]>(`/projects/${projectId}/phases`),
@@ -1329,6 +1338,12 @@ export const api = {
   adminDeleteUser: (id: string) =>
     request<{ success: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
 
+  adminUserReferences: (id: string) =>
+    request<{
+      blocked: boolean;
+      buckets: { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] }[];
+    }>(`/admin/users/${id}/references`),
+
   adminCreateUser: (payload: {
     email: string;
     name?: string;
@@ -1489,6 +1504,11 @@ export const api = {
     }),
   removeSolutionStaff: (solutionId: string, staffId: string) =>
     request<{ success: boolean }>(`/solutions/${solutionId}/staff/${staffId}`, { method: "DELETE" }),
+  inviteSolutionPartnerAe: (solutionId: string, payload: { email: string; name: string; organization_name?: string | null }) =>
+    request<SolutionStaffMember>(`/solutions/${solutionId}/invite-partner-ae`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   solutionCrmSync: (solutionId: string) =>
     request<{ staff: SolutionStaffMember[]; crm: { ae_name: string | null; sa_name: string | null; csm_name: string | null } }>(`/solutions/${solutionId}/crm-sync`, { method: "POST" }),
 
@@ -1808,11 +1828,24 @@ export const api = {
       `/projects/${projectId}/meeting-prep/${meetingType}/test`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
+  meetingPrepSendHtml: (projectId: string, meetingType: MeetingType, sendId: string) =>
+    request<{ subject: string; html: string; sentAt: string }>(
+      `/projects/${projectId}/meeting-prep/${meetingType}/sends/${sendId}/html`
+    ),
   meetingPrepSend: (projectId: string, meetingType: MeetingType, draft: MeetingPrepDraft) =>
     request<{ ok: boolean; sentTo: string[]; sentAt: string }>(
       `/projects/${projectId}/meeting-prep/${meetingType}/send`,
       { method: "POST", body: JSON.stringify(draft) }
     ),
+
+  // ── Settings ─────────────────────────────────────────────────────────────────
+  publicSettings: () => request<{ demoVendor: "zoom" | "ringcentral" | null }>("/settings/public"),
+  adminGetDemoMode: () => request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode"),
+  adminSetDemoMode: (vendor: "zoom" | "ringcentral" | null) =>
+    request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode", {
+      method: "PUT",
+      body: JSON.stringify({ vendor }),
+    }),
 };
 
 // ── Meeting prep types ─────────────────────────────────────────────────────
@@ -1827,6 +1860,9 @@ export type MeetingPrepSendRecord = {
   sentBy: string | null;
   sentAt: string;
   recipientCount: number;
+  /** True if the rendered HTML body was persisted (sends from before the
+   *  body_html column was added will be false). */
+  hasBody?: boolean;
 };
 
 export type MeetingPrepOptions = {

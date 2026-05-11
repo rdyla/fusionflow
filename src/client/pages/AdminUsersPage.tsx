@@ -71,6 +71,22 @@ export default function AdminUsersPage() {
   const [editForm, setEditForm] = useState<Partial<User & { role: Role; manager_id: string | null }>>({});
   const [saving, setSaving] = useState(false);
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [deleteRefs, setDeleteRefs] = useState<{
+    blocked: boolean;
+    buckets: { entity: string; count: number; blocking: boolean; samples: { id: string; label: string }[] }[];
+  } | null>(null);
+  const [deleteRefsLoading, setDeleteRefsLoading] = useState(false);
+
+  const [deleteRefsError, setDeleteRefsError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!deletingUser) { setDeleteRefs(null); setDeleteRefsError(null); return; }
+    setDeleteRefsLoading(true);
+    setDeleteRefsError(null);
+    api.adminUserReferences(deletingUser.id)
+      .then(setDeleteRefs)
+      .catch((e) => { setDeleteRefs(null); setDeleteRefsError(e instanceof Error ? e.message : "Couldn't load references"); })
+      .finally(() => setDeleteRefsLoading(false));
+  }, [deletingUser]);
   const [openMenu, setOpenMenu] = useState<{ id: string; top?: number; bottom?: number; right: number } | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
@@ -239,30 +255,129 @@ export default function AdminUsersPage() {
     }))
     .filter((g) => g.users.length > 0);
 
-  // Partner tabs (Zoom, RingCentral, etc.): group by manager (reports to)
-  const userById = Object.fromEntries(users.map((u) => [u.id, u]));
-  const managerIds = Array.from(new Set(visibleUsers.map((u) => u.manager_id ?? null)));
-  // Sort: managers with names first (alphabetically), then unassigned last
-  const sortedManagerIds = [
-    ...managerIds
-      .filter((id) => id !== null && userById[id!])
-      .sort((a, b) => (userById[a!]?.name ?? "").localeCompare(userById[b!]?.name ?? "")),
-    null,
-  ];
-  const managerGrouped: { label: string; color: string; users: User[] }[] = sortedManagerIds
-    .map((managerId) => ({
-      label: managerId && userById[managerId]
-        ? `Reports to: ${userById[managerId].name ?? userById[managerId].email}`
-        : "Unassigned",
-      color: managerId ? "#107c10" : "#94a3b8",
-      users: visibleUsers
-        .filter((u) => (u.manager_id ?? null) === managerId)
-        .sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email)),
-    }))
-    .filter((g) => g.users.length > 0);
+  // Partner tabs (Zoom, RingCentral, etc.): render as a true reporting tree
+  // (DFS pre-order, depth-indented). Anyone whose manager isn't in this org
+  // becomes a root in this view — the chain stops at the org boundary.
+  const visibleIds = new Set(visibleUsers.map((u) => u.id));
+  const childrenByParent = new Map<string | null, User[]>();
+  for (const u of visibleUsers) {
+    const parent = u.manager_id && visibleIds.has(u.manager_id) ? u.manager_id : null;
+    const arr = childrenByParent.get(parent) ?? [];
+    arr.push(u);
+    childrenByParent.set(parent, arr);
+  }
+  for (const [, kids] of childrenByParent) {
+    kids.sort((a, b) => (a.name ?? a.email).localeCompare(b.name ?? b.email));
+  }
+  const treeRows: { user: User; depth: number }[] = [];
+  const seen = new Set<string>();
+  (function visit(parentId: string | null, depth: number) {
+    for (const child of childrenByParent.get(parentId) ?? []) {
+      if (seen.has(child.id)) continue; // cycle guard
+      seen.add(child.id);
+      treeRows.push({ user: child, depth });
+      visit(child.id, depth + 1);
+    }
+  })(null, 0);
 
   const isPartnerTab = orgTab !== "all" && orgTab !== "Packet Fusion";
-  const groupedUsers = isPartnerTab ? managerGrouped : roleGrouped;
+  const groupedUsers = roleGrouped;
+
+  function renderUserRow(user: User, depth: number) {
+    const perm = (user.cs_permission ?? "none") as CsPerm;
+    const effectivePerm = user.role === "admin" ? "power_user" : perm;
+    return (
+      <tr key={user.id}>
+        <td style={{ fontWeight: 500 }}>
+          {depth > 0 && (
+            <span
+              aria-hidden="true"
+              style={{
+                display: "inline-block",
+                width: depth * 18,
+                marginRight: 6,
+                color: "#cbd5e1",
+                fontFamily: "monospace",
+                fontSize: 12,
+                letterSpacing: 0,
+                userSelect: "none",
+                verticalAlign: "middle",
+              }}
+            >
+              {"│  ".repeat(Math.max(0, depth - 1))}└─
+            </span>
+          )}
+          {user.name ?? "—"}
+        </td>
+        <td>{user.email}</td>
+        {orgTab === "all" && <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>}
+        <td>
+          <span
+            className="ms-badge"
+            style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
+          >
+            {ROLE_LABELS[user.role as Role] ?? user.role}
+          </span>
+        </td>
+        <td>
+          {user.role === "partner_ae" ? (
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+          ) : effectivePerm === "none" ? (
+            <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
+          ) : (
+            <span
+              className="ms-badge"
+              style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
+            >
+              {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
+            </span>
+          )}
+        </td>
+        <td>
+          <span
+            className="ms-badge"
+            style={{ background: user.is_active ? "#dff6dd" : "#fde7e9", color: user.is_active ? "#107c10" : "#d13438", border: `1px solid ${user.is_active ? "#107c10" : "#d13438"}40` }}
+          >
+            {user.is_active ? "Active" : "Inactive"}
+          </span>
+        </td>
+        <td>
+          <button
+            onClick={(e) => toggleMenu(e, user.id)}
+            style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
+          >
+            ⋮
+          </button>
+          {openMenu?.id === user.id && (
+            <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, bottom: openMenu.bottom, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
+              <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
+              <MenuItem
+                onClick={() => { toggleActive(user); setOpenMenu(null); }}
+                color={user.is_active ? "#d13438" : "#107c10"}
+              >
+                {user.is_active ? "Deactivate" : "Activate"}
+              </MenuItem>
+              {user.role !== "admin" && user.is_active && (
+                <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
+                  View As
+                </MenuItem>
+              )}
+              {user.role !== "admin" && (
+                <>
+                  <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
+                  <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
+                    Delete
+                  </MenuItem>
+                </>
+              )}
+            </div>
+          )}
+        </td>
+      </tr>
+    );
+  }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading users...</div>;
 
@@ -317,6 +432,8 @@ export default function AdminUsersPage() {
           <tbody>
             {visibleUsers.length === 0 ? (
               <tr><td colSpan={orgTab === "all" ? 7 : 6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>No users in this org.</td></tr>
+            ) : isPartnerTab ? (
+              treeRows.map(({ user, depth }) => renderUserRow(user, depth))
             ) : (
               groupedUsers.flatMap(({ label, color, users: groupUsers }) => [
                 <tr key={`group-${label}`}>
@@ -333,81 +450,7 @@ export default function AdminUsersPage() {
                     {label} · {groupUsers.length}
                   </td>
                 </tr>,
-                ...groupUsers.map((user) => {
-                  const perm = (user.cs_permission ?? "none") as CsPerm;
-                  const effectivePerm = user.role === "admin" ? "power_user" : perm;
-                  return (
-                  <tr key={user.id}>
-                    <td style={{ fontWeight: 500 }}>{user.name ?? "—"}</td>
-                    <td>{user.email}</td>
-                    {orgTab === "all" && <td style={{ color: "#64748b" }}>{user.organization_name ?? "—"}</td>}
-                    <td>
-                      <span
-                        className="ms-badge"
-                        style={{ background: (ROLE_COLOR[user.role as Role] ?? "#94a3b8") + "1a", color: ROLE_COLOR[user.role as Role] ?? "#94a3b8", border: `1px solid ${(ROLE_COLOR[user.role as Role] ?? "#94a3b8")}40` }}
-                      >
-                        {ROLE_LABELS[user.role as Role] ?? user.role}
-                      </span>
-                    </td>
-                    <td>
-                      {user.role === "partner_ae" ? (
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                      ) : effectivePerm === "none" ? (
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                      ) : (
-                        <span
-                          className="ms-badge"
-                          style={{ background: CS_PERM_COLOR[effectivePerm] + "1a", color: CS_PERM_COLOR[effectivePerm], border: `1px solid ${CS_PERM_COLOR[effectivePerm]}40` }}
-                        >
-                          {user.role === "admin" ? "Admin" : CS_PERM_LABELS[effectivePerm]}
-                        </span>
-                      )}
-                    </td>
-                    <td>
-                      <span
-                        className="ms-badge"
-                        style={{ background: user.is_active ? "#dff6dd" : "#fde7e9", color: user.is_active ? "#107c10" : "#d13438", border: `1px solid ${user.is_active ? "#107c10" : "#d13438"}40` }}
-                      >
-                        {user.is_active ? "Active" : "Inactive"}
-                      </span>
-                    </td>
-                    <td>
-                      <button
-                        onClick={(e) => toggleMenu(e, user.id)}
-                        style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", cursor: "pointer", padding: "4px 8px", fontSize: 16, lineHeight: 1, letterSpacing: "0.05em" }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.14)"; e.currentTarget.style.color = "#1e293b"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#64748b"; }}
-                      >
-                        ⋮
-                      </button>
-                      {openMenu?.id === user.id && (
-                        <div ref={menuRef} style={{ position: "fixed", top: openMenu.top, bottom: openMenu.bottom, right: openMenu.right, zIndex: 1000, background: "#ffffff", border: "1px solid #e2e8f0", borderRadius: 8, padding: "4px 0", minWidth: 160, boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}>
-                          <MenuItem onClick={() => { openEdit(user); setOpenMenu(null); }}>Edit</MenuItem>
-                          <MenuItem
-                            onClick={() => { toggleActive(user); setOpenMenu(null); }}
-                            color={user.is_active ? "#d13438" : "#107c10"}
-                          >
-                            {user.is_active ? "Deactivate" : "Activate"}
-                          </MenuItem>
-                          {user.role !== "admin" && user.is_active && (
-                            <MenuItem onClick={() => { handleViewAs(user); setOpenMenu(null); }} color="#ff8c00">
-                              View As
-                            </MenuItem>
-                          )}
-                          {user.role !== "admin" && (
-                            <>
-                              <div style={{ height: 1, background: "rgba(0,0,0,0.06)", margin: "4px 0" }} />
-                              <MenuItem onClick={() => { setDeletingUser(user); setOpenMenu(null); }} color="#d13438">
-                                Delete
-                              </MenuItem>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                  );
-                })
+                ...groupUsers.map((user) => renderUserRow(user, 0)),
               ])
             )}
           </tbody>
@@ -468,13 +511,75 @@ export default function AdminUsersPage() {
       {/* Delete Confirm */}
       {deletingUser && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setDeletingUser(null); }}>
-          <div className="ms-modal" style={{ maxWidth: 420 }}>
+          <div className="ms-modal" style={{ maxWidth: 540 }}>
             <h2 style={{ color: "#d13438" }}>Delete User</h2>
-            <p style={{ color: "#475569", margin: "12px 0 20px" }}>
-              Permanently delete <strong style={{ color: "#1e293b" }}>{deletingUser.name ?? deletingUser.email}</strong>? This removes them from all project access and cannot be undone.
+            <p style={{ color: "#475569", margin: "12px 0 12px" }}>
+              Permanently delete <strong style={{ color: "#1e293b" }}>{deletingUser.name ?? deletingUser.email}</strong>? This cannot be undone.
             </p>
+
+            {deleteRefsLoading && (
+              <div style={{ color: "#94a3b8", fontSize: 13, padding: "8px 0" }}>Checking what's tied to this user…</div>
+            )}
+
+            {!deleteRefsLoading && deleteRefsError && (
+              <div style={{ color: "#d13438", fontSize: 12, padding: "8px 0" }}>
+                Couldn't load references ({deleteRefsError}). The delete may still fail if the user is referenced elsewhere.
+              </div>
+            )}
+
+            {!deleteRefsLoading && !deleteRefsError && deleteRefs && deleteRefs.buckets.length === 0 && (
+              <div style={{ color: "#107c10", fontSize: 12, padding: "8px 0" }}>
+                ✓ No other records reference this user — safe to delete.
+              </div>
+            )}
+
+            {!deleteRefsLoading && deleteRefs && deleteRefs.buckets.length > 0 && (
+              <div style={{ margin: "8px 0 16px", border: "1px solid #e2e8f0", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{ padding: "8px 12px", background: "#f8fafc", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#475569", borderBottom: "1px solid #e2e8f0" }}>
+                  Tied to this user
+                </div>
+                {deleteRefs.buckets.map((b) => (
+                  <details key={b.entity} style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <summary style={{ padding: "8px 12px", cursor: b.samples.length > 0 ? "pointer" : "default", display: "flex", alignItems: "center", gap: 8, listStyle: b.samples.length > 0 ? undefined : "none" }}>
+                      <span
+                        title={b.blocking ? "Will block delete until reassigned" : "Auto-handled on delete"}
+                        style={{ width: 8, height: 8, borderRadius: "50%", background: b.blocking ? "#d13438" : "#94a3b8", flexShrink: 0 }}
+                      />
+                      <span style={{ fontSize: 13, color: "#1e293b", flex: 1 }}>{b.entity}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: b.blocking ? "#d13438" : "#475569" }}>{b.count}</span>
+                    </summary>
+                    {b.samples.length > 0 && (
+                      <div style={{ padding: "4px 12px 8px 28px" }}>
+                        {b.samples.map((s) => (
+                          <div key={s.id} style={{ fontSize: 12, color: "#64748b", padding: "2px 0" }}>{s.label}</div>
+                        ))}
+                        {b.count > b.samples.length && (
+                          <div style={{ fontSize: 11, color: "#94a3b8", padding: "2px 0", fontStyle: "italic" }}>
+                            …and {b.count - b.samples.length} more
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </details>
+                ))}
+              </div>
+            )}
+
+            {!deleteRefsLoading && deleteRefs?.blocked && (
+              <p style={{ fontSize: 12, color: "#d13438", margin: "0 0 12px" }}>
+                The red items will block the delete. Reassign or remove them first, or just deactivate the user instead.
+              </p>
+            )}
+
             <div style={{ display: "flex", gap: 10 }}>
-              <button className="ms-btn-primary" style={{ background: "#d13438", borderColor: "#d13438" }} onClick={handleDelete}>Delete</button>
+              <button
+                className="ms-btn-primary"
+                style={{ background: "#d13438", borderColor: "#d13438", opacity: deleteRefs?.blocked ? 0.55 : 1 }}
+                disabled={deleteRefsLoading || (deleteRefs?.blocked ?? false)}
+                onClick={handleDelete}
+              >
+                Delete
+              </button>
               <button className="ms-btn-secondary" onClick={() => setDeletingUser(null)}>Cancel</button>
             </div>
           </div>
