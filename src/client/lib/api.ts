@@ -1035,6 +1035,14 @@ export const api = {
       body: JSON.stringify(payload),
     }),
 
+  /** Delete a phase and its dependents:
+   *   - tasks within the phase: DELETED
+   *   - milestones within the phase: DELETED
+   *   - documents tied to the phase: orphaned to project level (phase_id = NULL)
+   *   - zoom_recordings: phase_id set to NULL via FK */
+  deletePhase: (projectId: string, phaseId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
+
   searchDynamicsAccounts: (q: string) =>
     request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
 

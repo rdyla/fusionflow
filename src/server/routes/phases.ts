@@ -141,4 +141,36 @@ app.patch("/:id/phases/:phaseId", async (c) => {
   return c.json(updated);
 });
 
+// DELETE /:id/phases/:phaseId
+// Removes the phase and cleans up its dependents:
+//   - tasks       → DELETE (tasks belong to the phase)
+//   - milestones  → DELETE (milestones belong to the phase)
+//   - documents   → orphan to project level (UPDATE phase_id = NULL) so files
+//                   aren't destroyed when a manual phase is cleaned up
+//   - zoom_recordings → already auto-NULL via FK ON DELETE SET NULL
+app.delete("/:id/phases/:phaseId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const phaseId = c.req.param("phaseId");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const existing = await db
+    .prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+    .bind(phaseId, projectId)
+    .first();
+  if (!existing) throw new HTTPException(404, { message: "Phase not found" });
+
+  // Cascade — order matters: FK constraints would block the final DELETE if
+  // we left task/milestone rows pointing at this phase.
+  await db.prepare("DELETE FROM tasks WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId).run();
+  await db.prepare("DELETE FROM milestones WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId).run();
+  await db.prepare("UPDATE documents SET phase_id = NULL WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId).run();
+  await db.prepare("DELETE FROM phases WHERE id = ?").bind(phaseId).run();
+
+  return c.json({ success: true });
+});
+
 export default app;

@@ -1150,6 +1150,30 @@ export default function ProjectDetailPage() {
                       </select>
                     </label>
                     <Badge label={humanize(phase.status ?? "not_started")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
+                    {canEdit && (
+                      <button
+                        type="button"
+                        title="Delete phase"
+                        onClick={async () => {
+                          if (!project) return;
+                          const taskCount = phaseTasks.length;
+                          const msg = taskCount === 0
+                            ? `Delete phase "${phase.name}"?`
+                            : `Delete phase "${phase.name}" and its ${taskCount} task${taskCount === 1 ? "" : "s"}? Documents tied to this phase will move to the project level; other data stays put.`;
+                          if (!confirm(msg)) return;
+                          try {
+                            await api.deletePhase(project.id, phase.id);
+                            setPhases((prev) => prev.filter((p) => p.id !== phase.id));
+                            setTasks((prev) => prev.filter((t) => t.phase_id !== phase.id));
+                          } catch {
+                            showToast("Failed to delete phase", "error");
+                          }
+                        }}
+                        style={{ marginLeft: "auto", background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "2px 8px", fontSize: 11, cursor: "pointer", lineHeight: 1.4 }}
+                      >
+                        × Delete
+                      </button>
+                    )}
                   </div>
                 </div>
                 {!isCollapsed && <div style={{ display: "grid", gap: 6 }}>
