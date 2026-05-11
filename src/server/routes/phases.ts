@@ -143,11 +143,16 @@ app.patch("/:id/phases/:phaseId", async (c) => {
 
 // DELETE /:id/phases/:phaseId
 // Removes the phase and cleans up its dependents:
-//   - tasks       → DELETE (tasks belong to the phase)
-//   - milestones  → DELETE (milestones belong to the phase)
-//   - documents   → orphan to project level (UPDATE phase_id = NULL) so files
-//                   aren't destroyed when a manual phase is cleaned up
-//   - zoom_recordings → already auto-NULL via FK ON DELETE SET NULL
+//   - risks    pointing at tasks-in-phase → orphan (task_id = NULL) so the
+//                blocker stays visible at project level
+//   - documents pointing at tasks-in-phase → orphan (task_id = NULL) so the
+//                file is preserved
+//   - tasks      → DELETE (otherwise the next DELETE FROM phases blocks)
+//   - milestones → DELETE (phase-scoped, nothing else references them)
+//   - documents tied directly to the phase → orphan (phase_id = NULL)
+//   - zoom_recordings.phase_id → auto-NULL via FK ON DELETE SET NULL
+//   - zoom_recordings.task_id  → auto-NULL via FK ON DELETE SET NULL
+//   - task_comments / task_time_entries → ON DELETE CASCADE already
 app.delete("/:id/phases/:phaseId", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
@@ -163,11 +168,25 @@ app.delete("/:id/phases/:phaseId", async (c) => {
     .first();
   if (!existing) throw new HTTPException(404, { message: "Phase not found" });
 
-  // Cascade — order matters: FK constraints would block the final DELETE if
-  // we left task/milestone rows pointing at this phase.
+  // risks.task_id and documents.task_id reference tasks(id) with NO ON DELETE
+  // clause, so we have to NULL them out before we can DELETE the tasks
+  // themselves. SQLite blocks the cascade otherwise (default NO ACTION).
+  await db.prepare(
+    "UPDATE risks SET task_id = NULL WHERE project_id = ? AND task_id IN (SELECT id FROM tasks WHERE project_id = ? AND phase_id = ?)"
+  ).bind(projectId, projectId, phaseId).run();
+  await db.prepare(
+    "UPDATE documents SET task_id = NULL WHERE project_id = ? AND task_id IN (SELECT id FROM tasks WHERE project_id = ? AND phase_id = ?)"
+  ).bind(projectId, projectId, phaseId).run();
+
+  // Now safe to delete tasks + milestones for this phase.
   await db.prepare("DELETE FROM tasks WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId).run();
   await db.prepare("DELETE FROM milestones WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId).run();
+
+  // Documents tied directly to the phase (not just to tasks within it):
+  // orphan to project level so files aren't lost.
   await db.prepare("UPDATE documents SET phase_id = NULL WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId).run();
+
+  // Final phase delete.
   await db.prepare("DELETE FROM phases WHERE id = ?").bind(phaseId).run();
 
   return c.json({ success: true });
