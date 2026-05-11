@@ -929,6 +929,10 @@ export type TemplateTask = {
   title: string;
   priority: string | null;
   order_index: number;
+  /** Hint about who owns this task by default (e.g. "pm", "ie", "customer",
+   *  "zoom_porting", "pf", "all", "customer/ie"). Surfaced in the admin
+   *  template view; not yet propagated to project tasks at apply time. */
+  default_assignee_role: string | null;
 };
 
 export type TemplatePhase = {
