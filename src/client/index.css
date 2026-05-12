@@ -276,6 +276,19 @@
   }
   .ms-input::placeholder { color: #94a3b8; }
   .ms-input option { background: #ffffff; color: #1e293b; }
+  /* Strip native <select> chrome so a select using .ms-input renders the same
+     height as an adjacent <input class="ms-input">. Inline SVG provides a
+     subtle chevron in the same slate color family as the input border. */
+  select.ms-input {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%2364748b' d='M0 0l5 6 5-6z'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    background-size: 10px 6px;
+    padding-right: 28px;
+  }
 
   /* ── Table ──────────────────────────────────────────────────── */
 

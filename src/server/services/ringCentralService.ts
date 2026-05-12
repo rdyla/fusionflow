@@ -172,6 +172,140 @@ async function getExtensionBreakdown(token: string): Promise<{ total: number; by
   return { total: first.paging.totalElements, byType };
 }
 
+// ── Utilization snapshot for Optimize ─────────────────────────────────
+// Mirrors fetchZoomUtilizationSnapshot's shape so the optimize sync route can
+// store both flavors in the same utilization_snapshots row layout. The
+// per-call diagnostics array (`api_calls`) is captured so the Optimize UI
+// can render the same OK/ERR diagnostics panel it shows for Zoom snapshots.
+
+export type RCUtilizationData = {
+  licenses_purchased: number | null;
+  licenses_assigned: number | null;
+  active_users_30d: number | null;
+  active_users_90d: number | null;
+  total_meetings: number | null;
+  total_call_minutes: number | null;
+  raw_data: Record<string, unknown>;
+};
+
+export async function fetchRCUtilizationSnapshot(kv: KVNamespace, projectId: string): Promise<RCUtilizationData> {
+  const creds = await getCreds(kv, projectId);
+  if (!creds) throw new Error("No RingCentral credentials configured for this project");
+
+  const token = await getToken(kv, creds, projectId);
+
+  // Stage 1: account/~ is required to get the numeric ID for analytics.
+  // We track it as a separate api_calls entry so a failure here surfaces
+  // clearly in the UI diagnostics.
+  const apiCalls: Array<{ name: string; path: string; ok: boolean; error: string | null }> = [];
+
+  let accountData: {
+    id: number;
+    name: string;
+    mainNumber: string;
+    status: string;
+    serviceInfo: {
+      brand: { name: string };
+      servicePlan: { name: string };
+      billingPlan: { name: string; includedPhoneLines: number };
+    };
+    signupInfo: { creationTime: string };
+  };
+  try {
+    accountData = await rcGet(token, "/account/~");
+    apiCalls.push({ name: "account", path: "/account/~", ok: true, error: null });
+  } catch (err) {
+    apiCalls.push({ name: "account", path: "/account/~", ok: false, error: String(err) });
+    throw new Error(`RingCentral account fetch failed: ${err}`);
+  }
+
+  const accountId = String(accountData.id);
+
+  // Stage 2: the four parallel utilization calls — same set as getRCStatus,
+  // tracked individually so the diagnostics panel can show per-endpoint health.
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const analyticsBody = {
+    grouping: { groupBy: "Company" },
+    timeSettings: {
+      timeZone: "UTC",
+      timeRange: { timeFrom: thirtyDaysAgo.toISOString(), timeTo: now.toISOString() },
+    },
+    responseOptions: {
+      counters: {
+        allCalls:            { aggregationType: "Sum" },
+        callsByResponse:     { aggregationType: "Sum" },
+        callsByDirection:    { aggregationType: "Sum" },
+        callsByResult:       { aggregationType: "Sum" },
+        callsByCompanyHours: { aggregationType: "Sum" },
+      },
+      timers: { allCallsDuration: { aggregationType: "Sum" } },
+    },
+  };
+
+  type Tracked<T> = { name: string; path: string; result: PromiseSettledResult<T> };
+  const [extRes, ivrRes, devRes, anaRes] = await Promise.allSettled([
+    getExtensionBreakdown(token),
+    rcGet<{ paging?: { totalElements: number }; navigation?: { totalRecords: number } }>(token, "/account/~/ivr-menus?perPage=1"),
+    rcGet<{ paging: { totalElements: number } }>(token, "/account/~/device?perPage=1"),
+    rcPost<AnalyticsResponse>(token, `/analytics/calls/v1/accounts/${accountId}/aggregation/fetch`, analyticsBody),
+  ]);
+
+  const tracked: Tracked<unknown>[] = [
+    { name: "extensions",  path: "/account/~/extension?perPage=1000", result: extRes },
+    { name: "ivr_menus",   path: "/account/~/ivr-menus?perPage=1",    result: ivrRes },
+    { name: "devices",     path: "/account/~/device?perPage=1",       result: devRes },
+    { name: "analytics30", path: `/analytics/calls/v1/accounts/${accountId}/aggregation/fetch`, result: anaRes },
+  ];
+  for (const t of tracked) {
+    apiCalls.push({
+      name: t.name,
+      path: t.path,
+      ok: t.result.status === "fulfilled",
+      error: t.result.status === "rejected" ? String((t.result as PromiseRejectedResult).reason) : null,
+    });
+  }
+
+  const extData      = settled(extRes);
+  const ivrData      = settled(ivrRes);
+  const devData      = settled(devRes);
+  const analyticsRaw = settled(anaRes);
+  const analytics    = analyticsRaw ? parseAnalytics(analyticsRaw) : null;
+
+  const totalExtensions = extData?.total ?? null;
+  const callQueues      = extData?.byType?.Department ?? null;
+  const ivrMenus        = ivrData?.paging?.totalElements ?? ivrData?.navigation?.totalRecords ?? null;
+  const devices         = devData?.paging?.totalElements ?? null;
+  const callMinutes30d  = analytics ? Math.round(analytics.total_duration_sec / 60) : null;
+
+  return {
+    licenses_purchased: accountData.serviceInfo?.billingPlan?.includedPhoneLines ?? null,
+    licenses_assigned:  totalExtensions,
+    active_users_30d:   null,  // RC's getRCStatus analytics doesn't expose per-user activity
+    active_users_90d:   null,  // RC analytics window is 30d only
+    total_meetings:     null,  // not a meeting-based platform
+    total_call_minutes: callMinutes30d,
+    raw_data: {
+      account: {
+        name:          accountData.name,
+        main_number:   accountData.mainNumber ?? null,
+        brand:         accountData.serviceInfo?.brand?.name ?? null,
+        service_plan:  accountData.serviceInfo?.servicePlan?.name ?? null,
+        billing_plan:  accountData.serviceInfo?.billingPlan?.name ?? null,
+        included_lines:accountData.serviceInfo?.billingPlan?.includedPhoneLines ?? null,
+        account_since: accountData.signupInfo?.creationTime ?? null,
+        status:        accountData.status ?? null,
+      },
+      extension_breakdown: extData?.byType ?? null,
+      call_queues:         callQueues,
+      ivr_menus:           ivrMenus,
+      devices:             devices,
+      analytics_30d:       analytics,
+      api_calls:           apiCalls,
+    },
+  };
+}
+
 export async function getRCStatus(kv: KVNamespace, projectId: string): Promise<RCStatus | null> {
   const creds = await getCreds(kv, projectId);
   if (!creds) return null;

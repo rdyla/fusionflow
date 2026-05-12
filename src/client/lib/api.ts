@@ -784,6 +784,7 @@ export type OptimizeAccount = {
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
   customer_sharepoint_url: string | null;
+  vendor: string | null;
 };
 
 export type OptimizeEligible = {
@@ -1305,6 +1306,8 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, { method: "DELETE" }),
 
   // RingCentral
+  rcConfigured: (projectId: string) =>
+    request<{ configured: boolean }>(`/projects/${projectId}/ringcentral/configured`),
   rcStatus: (projectId: string) =>
     request<RCStatus>(`/projects/${projectId}/ringcentral/status`),
   rcSaveCredentials: (projectId: string, creds: { client_id: string; client_secret: string; jwt_token: string }) =>
