@@ -10,6 +10,7 @@ import {
   parseTaggedTitle,
   type SolutionType,
 } from "../../shared/solutionTypes";
+import { toTitleCase } from "../../shared/titleCase";
 
 // ── Fuzzy title matching ──────────────────────────────────────────────────────
 // Two template tasks count as the same work if their normalized token sets
@@ -421,11 +422,15 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     const mappedPhaseId = task.phase_id ? (phaseIdMap[task.phase_id] ?? null) : null;
     const { userId, contactId } = resolveAssignee(task.default_assignee_role);
 
+    // Normalize the source title to Title Case so every applied task reads
+    // consistently regardless of how the template author cased it.
+    const normalizedTitle = toTitleCase(task.title);
+
     // Try to fuzzy-match against an existing task in the same destination phase.
     let matched: ExistingTask | null = null;
     if (mappedPhaseId && templateSolutionType) {
       const existing = tasksByPhase.get(mappedPhaseId) ?? [];
-      const newTokens = normalizeTitleTokens(task.title);
+      const newTokens = normalizeTitleTokens(normalizedTitle);
       let bestScore = 0;
       for (const e of existing) {
         const score = jaccard(newTokens, e.tokens);
@@ -439,9 +444,10 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
 
     if (matched) {
       // Upgrade the existing task's tag to include this template's solution type.
+      // Re-normalize the raw title too so older untouched tasks pick up TC on merge.
       const { types, rawTitle } = parseTaggedTitle(matched.title);
       const mergedTypes = [...new Set([...types, templateSolutionType!])];
-      const newTitle = buildTaggedTitle(mergedTypes, rawTitle);
+      const newTitle = buildTaggedTitle(mergedTypes, toTitleCase(rawTitle));
       if (newTitle !== matched.title) {
         await db.prepare("UPDATE tasks SET title = ? WHERE id = ?").bind(newTitle, matched.id).run();
         matched.title = newTitle;
@@ -456,8 +462,8 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // fall back to the untagged title.
     const newTaskId = crypto.randomUUID();
     const insertedTitle = templateSolutionType
-      ? buildTaggedTitle([templateSolutionType], task.title)
-      : task.title;
+      ? buildTaggedTitle([templateSolutionType], normalizedTitle)
+      : normalizedTitle;
     await db
       .prepare(
         "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?)"
