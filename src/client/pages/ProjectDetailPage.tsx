@@ -196,7 +196,7 @@ export default function ProjectDetailPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number } | null>(null);
+  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number; tasks_merged: number } | null>(null);
 
   // Manual phase creation
   const [newPhaseName, setNewPhaseName] = useState("");
@@ -368,7 +368,15 @@ export default function ProjectDetailPage() {
       const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
       setPhases(newPhases);
       setTasks(newTasks);
-      showToast(`Template applied: ${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""} created, ${result.tasks_created} tasks added.`, "success");
+      {
+        const parts: string[] = [];
+        parts.push(`${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""}`);
+        parts.push(`${result.tasks_created} task${result.tasks_created !== 1 ? "s" : ""} added`);
+        if (result.tasks_merged > 0) {
+          parts.push(`${result.tasks_merged} merged into existing tasks`);
+        }
+        showToast(`Template applied: ${parts.join(", ")}.`, "success");
+      }
       setSelectedTemplateId("");
     } catch {
       showToast("Failed to apply template", "error");
@@ -931,7 +939,12 @@ export default function ProjectDetailPage() {
                       {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                     <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
-                    {applyResult && <span style={{ fontSize: 12, color: "#059669" }}>{applyResult.phases_created} phases, {applyResult.tasks_created} tasks added</span>}
+                    {applyResult && (
+                      <span style={{ fontSize: 12, color: "#059669" }}>
+                        {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added
+                        {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
+                      </span>
+                    )}
                   </>
                 )}
               </div>
