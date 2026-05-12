@@ -105,7 +105,6 @@ export default function SolutionDetailPage() {
   // Needs Assessments — one per (solution_id, solution_type). "other" is reserved
   // for the Other Discovery flow when a solution has non-canonical journeys only.
   const [needsAssessments, setNeedsAssessments] = useState<Record<string, NeedsAssessment>>({});
-  const [activeAssessmentType, setActiveAssessmentType] = useState<string>("");
   const [naView, setNaView] = useState<"sor" | "wizard">("sor");
   const [odView, setOdView] = useState<"sor" | "wizard">("sor");
 
@@ -338,7 +337,7 @@ export default function SolutionDetailPage() {
   // Per-type NA + labor plumbing. Same sub-tab pattern for both: an active type
   // state picks which type's record we're viewing/editing.
   const canonicalNaTypes = solution.solution_types.filter((t) => ["ucaas", "ccaas", "ci", "va"].includes(t));
-  const effectiveActiveType = activeAssessmentType || canonicalNaTypes[0] || Object.keys(needsAssessments)[0] || "";
+  const effectiveActiveType = canonicalNaTypes[0] || Object.keys(needsAssessments)[0] || "";
   const needsAssessment = needsAssessments[effectiveActiveType] ?? null;
   // "other" (non-canonical journeys) uses its own NA slot.
   const otherNa = needsAssessments["other"] ?? null;
