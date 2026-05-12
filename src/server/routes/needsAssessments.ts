@@ -31,7 +31,7 @@ const CI_READINESS_DIMENSIONS: ReadinessDimension[] = [
     weight: 0.2,
     inputs: [
       "crm_in_use",
-      "crm_integration_required_phase_1",
+      "crm_integration_required",
       "other_integrations_required",
       "sandbox_testing_required",
     ],
@@ -86,8 +86,8 @@ const CCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
     id: "operationalDesignReadiness",
     weight: 0.25,
     inputs: [
-      "phase_1_scope_summary",
-      "channels_required_phase_1",
+      "scope_summary",
+      "channels_required",
       "queue_and_skill_requirements",
       "routing_capabilities_required",
       "agent_desktop_requirements",
@@ -98,7 +98,7 @@ const CCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
     weight: 0.2,
     inputs: [
       "crm_in_use",
-      "crm_integration_required_phase_1",
+      "crm_integration_required",
       "crm_use_cases_required",
       "other_integrations_required",
       "sandbox_testing_required",
@@ -119,7 +119,7 @@ const CCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
     weight: 0.1,
     inputs: [
       "recording_requirements",
-      "compliance_needs",
+      "compliance_requirements",
       "retention_requirements",
       "rbac_required",
       "security_review_required",
@@ -130,7 +130,7 @@ const CCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
     weight: 0.1,
     inputs: [
       "migration_required",
-      "migration_scope",
+      "migration_scope_summary",
       "testing_requirements",
       "customer_prerequisites_before_design",
       "signoff_roles",
@@ -154,8 +154,8 @@ const VIRTUAL_AGENT_READINESS_DIMENSIONS: ReadinessDimension[] = [
     id: "automationScopeReadiness",
     weight: 0.25,
     inputs: [
-      "phase_1_scope_summary",
-      "channels_required_phase_1",
+      "scope_summary",
+      "channels_required",
       "primary_use_cases",
       "top_use_cases_for_phase_1",
       "estimated_intent_count",
@@ -188,7 +188,7 @@ const VIRTUAL_AGENT_READINESS_DIMENSIONS: ReadinessDimension[] = [
     weight: 0.1,
     inputs: [
       "redaction_or_masking_required",
-      "retention_requirements_defined",
+      "retention_requirements",
       "rbac_required",
       "security_review_required",
     ],
@@ -222,7 +222,7 @@ const UCAAS_READINESS_DIMENSIONS: ReadinessDimension[] = [
     id: "scopeAndDesignReadiness",
     weight: 0.25,
     inputs: [
-      "phase_1_scope_summary",
+      "scope_summary",
       "sites_or_business_units_in_scope",
       "user_calling_capabilities_required",
       "call_flow_components_required",

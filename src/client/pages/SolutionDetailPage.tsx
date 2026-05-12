@@ -13,11 +13,13 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { solutionTypeLabel, otherTechnologyLabel, OTHER_TECHNOLOGIES, OTHER_TECHNOLOGY_LABELS } from "../../shared/solutionTypes";
-import ciSurveyJson from "../assets/ci_needs_assessment_unified_v1.json";
-import ccaasSurveyJson from "../assets/ccaas_needs_assessment_unified_v1.json";
-import virtualAgentSurveyJson from "../assets/virtual_agent_needs_assessment_unified_v1.json";
-import ucaasSurveyJson from "../assets/ucaas_needs_assessment_unified_v1.json";
 import otherJourneysSurveyJson from "../assets/other_journeys_needs_assessment_v1.json";
+import {
+  composeAssessment,
+  mergeAnswersAcrossTypes,
+  splitAnswersByType,
+  type SolutionTypeKey,
+} from "../lib/needsAssessmentLibrary";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -1094,76 +1096,73 @@ export default function SolutionDetailPage() {
               );
             }
 
-            // UC/CC → per-type NA. Each canonical type in solution.solution_types
-            // gets its own NA record. When a solution has more than one canonical
-            // type, sub-tabs at the top let the user pick which one they're
-            // working on.
-            const activeType = effectiveActiveType;
-            const surveyJson =
-              activeType === "ccaas" ? ccaasSurveyJson :
-              activeType === "va" ? virtualAgentSurveyJson :
-              activeType === "ucaas" ? ucaasSurveyJson :
-              ciSurveyJson;
-            const solutionTypeDisplayLabel = solutionTypeLabel(activeType);
+            // Unified library-driven NA. One form covers every canonical
+            // solution_type the solution has declared; on save we split the
+            // answers and upsert one per-type record per declared type so
+            // each type retains its own readiness score. No sub-tabs — the
+            // user fills one combined form instead of N back-to-back.
+            const canonicalTypes = canonicalNaTypes as SolutionTypeKey[];
+            const composed = composeAssessment(canonicalTypes);
 
-            const subTabs = canonicalNaTypes.length > 1 ? (
-              <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-                {canonicalNaTypes.map((t) => {
-                  const selected = t === activeType;
-                  const hasNa = needsAssessments[t] !== undefined;
-                  return (
-                    <button
-                      key={t}
-                      type="button"
-                      className="ms-badge"
-                      onClick={() => { setActiveAssessmentType(t); setNaView(hasNa ? "sor" : "wizard"); }}
-                      style={{
-                        cursor: "pointer",
-                        background: selected ? "rgba(99,193,234,0.18)" : "rgba(99,193,234,0.06)",
-                        color: selected ? "#0891b2" : "#64748b",
-                        border: `1px solid ${selected ? "rgba(99,193,234,0.4)" : "rgba(99,193,234,0.15)"}`,
-                        padding: "6px 12px",
-                        fontWeight: selected ? 600 : 500,
-                      }}
-                    >
-                      {solutionTypeLabel(t)}
-                      {hasNa && <span style={{ marginLeft: 6, fontSize: 11, opacity: 0.7 }}>✓</span>}
-                    </button>
-                  );
-                })}
-              </div>
-            ) : null;
+            const perTypeInitialBlobs: Partial<Record<SolutionTypeKey, Record<string, unknown>>> = {};
+            for (const t of canonicalTypes) {
+              const ans = needsAssessments[t]?.answers;
+              if (ans && typeof ans === "object") {
+                perTypeInitialBlobs[t] = ans as Record<string, unknown>;
+              }
+            }
+            const unifiedInitial = {
+              ...mergeAnswersAcrossTypes(perTypeInitialBlobs),
+              doc_sharepoint_ref: solution.customer_sharepoint_url ?? "",
+            };
 
-            const body = (naView === "wizard" || needsAssessment === null) && naView !== "sor" ? (
+            // SOR view shows the first canonical type's saved assessment for
+            // its readiness score; the document body itself is composed from
+            // the union of all declared types' source fields.
+            const primaryType = canonicalTypes[0];
+            const primaryAssessment = primaryType ? (needsAssessments[primaryType] ?? null) : null;
+            const solutionTypeDisplayLabel = canonicalTypes.map((t) => solutionTypeLabel(t)).join(" + ");
+
+            const body = (naView === "wizard" || primaryAssessment === null) && naView !== "sor" ? (
               <NeedsAssessmentWizard
-                key={`${activeType}-${needsAssessment?.id ?? "new"}`}
+                key={`unified-${primaryAssessment?.id ?? "new"}`}
                 solutionId={solution.id}
-                solutionType={activeType}
+                solutionType={primaryType}
                 customerName={solution.customer_name}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                surveyJson={surveyJson as any}
-                initialAnswers={needsAssessment?.answers as Record<string, unknown> | undefined}
-                onComplete={(na) => {
-                  setNeedsAssessments((prev) => ({ ...prev, [na.solution_type]: na }));
-                  setNaView("sor");
-                }}
+                surveyJson={composed as any}
+                initialAnswers={unifiedInitial}
+                onComplete={() => setNaView("sor")}
                 onCancel={() => setNaView("sor")}
+                onSave={async (unifiedAnswers) => {
+                  const perType = splitAnswersByType(unifiedAnswers, canonicalTypes);
+                  const results: Record<string, NeedsAssessment> = {};
+                  for (const t of canonicalTypes) {
+                    results[t] = await api.upsertNeedsAssessment(solution.id, t, {
+                      answers: perType[t] ?? {},
+                    });
+                  }
+                  setNeedsAssessments((prev) => ({ ...prev, ...results }));
+                  return results[primaryType];
+                }}
               />
-            ) : needsAssessment !== null && naView === "sor" ? (
+            ) : primaryAssessment !== null && naView === "sor" ? (
               <NeedsAssessmentSOR
-                assessment={needsAssessment}
+                assessment={primaryAssessment}
                 customerName={solution.customer_name}
                 solutionType={solutionTypeDisplayLabel}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                surveyJson={surveyJson as any}
+                surveyJson={composed as any}
                 onBack={canEditNA ? () => setNaView("wizard") : () => {}}
                 canDelete={!isClient}
                 onDelete={async () => {
                   try {
-                    await api.deleteNeedsAssessment(solution.id, activeType);
+                    await Promise.all(
+                      canonicalTypes.map((t) => api.deleteNeedsAssessment(solution.id, t))
+                    );
                     setNeedsAssessments((prev) => {
                       const next = { ...prev };
-                      delete next[activeType];
+                      for (const t of canonicalTypes) delete next[t];
                       return next;
                     });
                     setNaView("sor");
@@ -1175,9 +1174,7 @@ export default function SolutionDetailPage() {
             ) : (
               <div className="ms-card" style={{ textAlign: "center", padding: 40 }}>
                 <p style={{ fontSize: 15, color: "#475569", marginBottom: 20 }}>
-                  {canonicalNaTypes.length > 1
-                    ? `No needs assessment has been completed for ${solutionTypeDisplayLabel} yet.`
-                    : "No needs assessment has been completed for this solution yet."}
+                  No needs assessment has been completed for this solution yet.
                 </p>
                 {canEditNA && (
                   <button className="ms-btn-primary" onClick={() => setNaView("wizard")}>
@@ -1187,12 +1184,7 @@ export default function SolutionDetailPage() {
               </div>
             );
 
-            return (
-              <>
-                {subTabs}
-                {body}
-              </>
-            );
+            return body;
           })()}
         </div>
       )}

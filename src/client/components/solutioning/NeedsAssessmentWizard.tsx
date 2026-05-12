@@ -65,6 +65,15 @@ type Props = {
   initialAnswers?: Record<string, unknown>;
   onComplete: (assessment: NeedsAssessment) => void;
   onCancel: () => void;
+  /**
+   * Optional save override. When provided, the wizard calls this instead of
+   * api.upsertNeedsAssessment directly — used by the unified-library flow
+   * on SolutionDetailPage to split answers across per-type DB records
+   * (UCaaS+CCaaS combo writes two records from one form submission).
+   * Return the canonical NeedsAssessment the caller wants surfaced to
+   * onComplete (typically the first or primary type's record).
+   */
+  onSave?: (answers: Record<string, unknown>) => Promise<NeedsAssessment>;
 };
 
 // ── Repeater row component ─────────────────────────────────────────────────────
@@ -359,7 +368,7 @@ function FieldInput({ field, answers, onChange, allSections }: FieldProps) {
 
 // ── Main wizard ───────────────────────────────────────────────────────────────
 
-export default function NeedsAssessmentWizard({ solutionId, solutionType, customerName, surveyJson, initialAnswers, onComplete, onCancel }: Props) {
+export default function NeedsAssessmentWizard({ solutionId, solutionType, customerName, surveyJson, initialAnswers, onComplete, onCancel, onSave }: Props) {
   const AUTO_FILLED_FIELDS = new Set(["customer_name", "assessment_date"]);
 
   const SECTIONS = useMemo(
@@ -420,7 +429,9 @@ export default function NeedsAssessmentWizard({ solutionId, solutionType, custom
         customer_name: customerName,
         assessment_date: new Date().toISOString().slice(0, 10),
       };
-      const result = await api.upsertNeedsAssessment(solutionId, solutionType, { answers: merged });
+      const result = onSave
+        ? await onSave(merged)
+        : await api.upsertNeedsAssessment(solutionId, solutionType, { answers: merged });
       onComplete(result);
     } catch {
       setErrors(["Failed to save assessment. Please try again."]);
