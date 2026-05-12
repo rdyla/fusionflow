@@ -12,6 +12,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
 import { solutionTypeLabel } from "../../shared/solutionTypes";
+import { canonicalizeVendor } from "../../shared/vendors";
 
 type Tab = "assessments" | "tech-stack" | "roadmap" | "utilization";
 
@@ -672,8 +673,12 @@ export default function OptimizeAccountPage() {
         // RingCentral metric set, Zoom projects show the Zoom metric set.
         // Both flavors share the top configured/sync card and API diagnostics
         // panel; the body sections differ because the underlying data does.
+        // Use the shared canonicalizer so legacy free-text vendor values
+        // ("Ring Central", "RingCentral, Inc.", etc.) still route to the
+        // RingCentral branch even before the 0074 normalization migration
+        // runs on a given environment.
         const platform: "ringcentral" | "zoom" =
-          (account?.vendor ?? "").toLowerCase() === "ringcentral" ? "ringcentral" : "zoom";
+          canonicalizeVendor(account?.vendor) === "ringcentral" ? "ringcentral" : "zoom";
         const configured = platform === "ringcentral" ? rcConfigured : zoomConfigured;
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const credsTabHint = platform === "ringcentral"
