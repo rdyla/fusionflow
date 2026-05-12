@@ -4,6 +4,43 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject } from "../services/accessService";
+import {
+  buildTaggedTitle,
+  canonicalizeSolutionType,
+  parseTaggedTitle,
+  type SolutionType,
+} from "../../shared/solutionTypes";
+
+// ── Fuzzy title matching ──────────────────────────────────────────────────────
+// Two template tasks count as the same work if their normalized token sets
+// have Jaccard similarity ≥ 0.6 — tolerates wording variation ("Kickoff meeting"
+// vs "Project kickoff meeting") without over-deduping near-misses ("Test" vs
+// "Test plan" lands at 0.5).
+
+const STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "with", "for", "of", "on", "to", "in",
+  "at", "by", "from", "into",
+]);
+
+function normalizeTitleTokens(title: string): Set<string> {
+  const { rawTitle } = parseTaggedTitle(title);
+  const tokens = rawTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 0 && !STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let intersect = 0;
+  for (const t of a) if (b.has(t)) intersect++;
+  const union = a.size + b.size - intersect;
+  return union === 0 ? 0 : intersect / union;
+}
+
+const FUZZY_MATCH_THRESHOLD = 0.6;
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -247,8 +284,15 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const { template_id } = await c.req.json<{ template_id: string }>();
   if (!template_id) throw new HTTPException(400, { message: "template_id is required" });
 
-  const template = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(template_id).first();
+  const template = await db
+    .prepare("SELECT id, solution_type FROM templates WHERE id = ? LIMIT 1")
+    .bind(template_id)
+    .first<{ id: string; solution_type: string | null }>();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
+
+  // Templates without a canonical solution_type fall back to legacy behaviour
+  // (no tagging, no fuzzy dedupe) so we don't pollute task titles with junk tags.
+  const templateSolutionType: SolutionType | null = canonicalizeSolutionType(template.solution_type ?? "");
 
   const phases = await db
     .prepare("SELECT * FROM template_phases WHERE template_id = ? ORDER BY order_index ASC")
@@ -352,21 +396,84 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     };
   };
 
+  // Preload existing tasks per destination phase so we can fuzzy-match new
+  // template tasks and either upgrade an existing tag or insert a fresh task.
+  // Mutated as we insert so multiple template tasks in the same phase compete
+  // against each other too (rare but possible if a template has near-duplicates).
+  const destPhaseIds = [...new Set(Object.values(phaseIdMap))];
+  type ExistingTask = { id: string; title: string; tokens: Set<string> };
+  const tasksByPhase = new Map<string, ExistingTask[]>();
+  for (const phaseId of destPhaseIds) {
+    const rows = await db
+      .prepare("SELECT id, title FROM tasks WHERE project_id = ? AND phase_id = ?")
+      .bind(projectId, phaseId)
+      .all<{ id: string; title: string }>();
+    tasksByPhase.set(
+      phaseId,
+      (rows.results ?? []).map((r) => ({ id: r.id, title: r.title, tokens: normalizeTitleTokens(r.title) }))
+    );
+  }
+
   let tasksCreated = 0;
+  let tasksMerged = 0;
+
   for (const task of tasks.results ?? []) {
-    const newTaskId = crypto.randomUUID();
     const mappedPhaseId = task.phase_id ? (phaseIdMap[task.phase_id] ?? null) : null;
     const { userId, contactId } = resolveAssignee(task.default_assignee_role);
+
+    // Try to fuzzy-match against an existing task in the same destination phase.
+    let matched: ExistingTask | null = null;
+    if (mappedPhaseId && templateSolutionType) {
+      const existing = tasksByPhase.get(mappedPhaseId) ?? [];
+      const newTokens = normalizeTitleTokens(task.title);
+      let bestScore = 0;
+      for (const e of existing) {
+        const score = jaccard(newTokens, e.tokens);
+        if (score > bestScore) {
+          bestScore = score;
+          matched = e;
+        }
+      }
+      if (bestScore < FUZZY_MATCH_THRESHOLD) matched = null;
+    }
+
+    if (matched) {
+      // Upgrade the existing task's tag to include this template's solution type.
+      const { types, rawTitle } = parseTaggedTitle(matched.title);
+      const mergedTypes = [...new Set([...types, templateSolutionType!])];
+      const newTitle = buildTaggedTitle(mergedTypes, rawTitle);
+      if (newTitle !== matched.title) {
+        await db.prepare("UPDATE tasks SET title = ? WHERE id = ?").bind(newTitle, matched.id).run();
+        matched.title = newTitle;
+        matched.tokens = normalizeTitleTokens(newTitle);
+      }
+      tasksMerged++;
+      continue;
+    }
+
+    // No match — insert as a new task, tagged with this template's solution
+    // type when known. If templateSolutionType is null (legacy template) we
+    // fall back to the untagged title.
+    const newTaskId = crypto.randomUUID();
+    const insertedTitle = templateSolutionType
+      ? buildTaggedTitle([templateSolutionType], task.title)
+      : task.title;
     await db
       .prepare(
         "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedPhaseId, task.title, task.priority ?? "medium", userId, contactId)
+      .bind(newTaskId, projectId, mappedPhaseId, insertedTitle, task.priority ?? "medium", userId, contactId)
       .run();
+    if (mappedPhaseId) {
+      const phaseTasks = tasksByPhase.get(mappedPhaseId);
+      if (phaseTasks) {
+        phaseTasks.push({ id: newTaskId, title: insertedTitle, tokens: normalizeTitleTokens(insertedTitle) });
+      }
+    }
     tasksCreated++;
   }
 
-  return c.json({ phases_created: phasesCreated, tasks_created: tasksCreated });
+  return c.json({ phases_created: phasesCreated, tasks_created: tasksCreated, tasks_merged: tasksMerged });
 });
 
 export default app;

@@ -1741,7 +1741,7 @@ export const api = {
   adminDeleteTemplateTask: (templateId: string, taskId: string) =>
     request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
   applyTemplate: (projectId: string, templateId: string) =>
-    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-template`, {
+    request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
     }),
