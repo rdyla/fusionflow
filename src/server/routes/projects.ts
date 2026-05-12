@@ -146,7 +146,7 @@ const createProjectSchema = z.object({
   crm_opportunity_id: z.string().nullable().optional(),
 });
 
-app.post("/", requireRole("admin", "pm"), async (c) => {
+app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const rawBody = await c.req.json();
@@ -229,7 +229,7 @@ const updateProjectSchema = z.object({
   crm_opportunity_id: z.string().nullable().optional(),
 });
 
-app.patch("/:id", requireRole("admin", "pm"), async (c) => {
+app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
