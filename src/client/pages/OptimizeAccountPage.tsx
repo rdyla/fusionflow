@@ -12,6 +12,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
 import { solutionTypeLabel } from "../../shared/solutionTypes";
+import { canonicalizeVendor } from "../../shared/vendors";
 
 type Tab = "assessments" | "tech-stack" | "roadmap" | "utilization";
 
@@ -66,6 +67,7 @@ export default function OptimizeAccountPage() {
   // Utilization
   const [utilization, setUtilization] = useState<UtilizationSnapshot[]>([]);
   const [zoomConfigured, setZoomConfigured] = useState(false);
+  const [rcConfigured, setRcConfigured] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [crmSyncing, setCrmSyncing] = useState(false);
 
@@ -76,13 +78,14 @@ export default function OptimizeAccountPage() {
   async function loadAll(pid: string) {
     try {
       setLoading(true);
-      const [acc, ass, tech, road, util, zoomCfg] = await Promise.all([
+      const [acc, ass, tech, road, util, zoomCfg, rcCfg] = await Promise.all([
         api.optimizeAccount(pid),
         api.optimizeAssessments(pid),
         api.optimizeTechStack(pid),
         api.optimizeRoadmap(pid),
         api.optimizeUtilization(pid),
         api.zoomConfigured(pid).catch(() => ({ configured: false })),
+        api.rcConfigured(pid).catch(() => ({ configured: false })),
       ]);
       setAccount(acc);
       setAssessments(ass as ImpactAssessment[]);
@@ -90,6 +93,7 @@ export default function OptimizeAccountPage() {
       setRoadmap(road);
       setUtilization(util);
       setZoomConfigured(zoomCfg.configured);
+      setRcConfigured(rcCfg.configured);
       // Fetch photos for customer PF team
       const customerEmails = [acc.customer_pf_ae_email, acc.customer_pf_sa_email, acc.customer_pf_csm_email].filter(Boolean) as string[];
       if (customerEmails.length > 0) {
@@ -664,12 +668,29 @@ export default function OptimizeAccountPage() {
       )}
 
       {/* Utilization Tab */}
-      {tab === "utilization" && (
+      {tab === "utilization" && (() => {
+        // Platform is derived from the project's vendor; RC projects show the
+        // RingCentral metric set, Zoom projects show the Zoom metric set.
+        // Both flavors share the top configured/sync card and API diagnostics
+        // panel; the body sections differ because the underlying data does.
+        // Use the shared canonicalizer so legacy free-text vendor values
+        // ("Ring Central", "RingCentral, Inc.", etc.) still route to the
+        // RingCentral branch even before the 0074 normalization migration
+        // runs on a given environment.
+        const platform: "ringcentral" | "zoom" =
+          canonicalizeVendor(account?.vendor) === "ringcentral" ? "ringcentral" : "zoom";
+        const configured = platform === "ringcentral" ? rcConfigured : zoomConfigured;
+        const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
+        const credsTabHint = platform === "ringcentral"
+          ? "Add them on the project's RingCentral tab to enable utilization tracking."
+          : "Add them on the project's Zoom tab to enable utilization tracking.";
+
+        return (
         <div>
-          <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${zoomConfigured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+          <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${configured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>Zoom Utilization</div>
-              {zoomConfigured ? (
+              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>{platformLabel} Utilization</div>
+              {configured ? (
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
                   {utilization.length > 0
                     ? <>Last synced: <strong style={{ color: "#475569" }}>{utilization[0].snapshot_date}</strong></>
@@ -677,11 +698,11 @@ export default function OptimizeAccountPage() {
                 </p>
               ) : (
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-                  No Zoom credentials found for this project. Add them on the project's Zoom tab to enable utilization tracking.
+                  No {platformLabel} credentials found for this project. {credsTabHint}
                 </p>
               )}
             </div>
-            {zoomConfigured && (
+            {configured && (
               <button className="ms-btn-primary" onClick={handleSyncUtilization} disabled={syncing} style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
                 {syncing ? "Syncing…" : "↻ Sync Now"}
               </button>
@@ -690,12 +711,129 @@ export default function OptimizeAccountPage() {
 
           {utilization.length === 0 && (
             <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
-              No utilization data yet.{zoomConfigured ? " Click 'Sync Now' to capture the first snapshot." : ""}
+              No utilization data yet.{configured ? " Click 'Sync Now' to capture the first snapshot." : ""}
             </div>
           )}
 
+          {/* ── RingCentral-specific cards ────────────────────────── */}
+          {platform === "ringcentral" && utilization.length > 0 && (() => {
+            type RCAccount = { name: string; main_number: string | null; brand: string | null; service_plan: string | null; billing_plan: string | null; included_lines: number | null; status: string | null };
+            type RCAnalytics = { total_calls: number; answered: number; missed: number; inbound: number; outbound: number; total_duration_sec: number; abandoned: number; business_hours: number; after_hours: number };
+            type RCRaw = {
+              account?: RCAccount | null;
+              extension_breakdown?: Record<string, number> | null;
+              call_queues?: number | null;
+              ivr_menus?: number | null;
+              devices?: number | null;
+              analytics_30d?: RCAnalytics | null;
+            };
+            const latest = utilization[0];
+            let raw: RCRaw = {};
+            try { raw = JSON.parse(latest.raw_data ?? "{}") as RCRaw; } catch { /* ignore */ }
+            const analytics = raw.analytics_30d ?? null;
+            const answeredRate = analytics && analytics.total_calls > 0
+              ? Math.round((analytics.answered / analytics.total_calls) * 100)
+              : null;
+
+            return (
+              <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
+                {/* Account snapshot */}
+                {raw.account && (
+                  <div className="ms-card" style={{ padding: "16px 20px", borderLeft: "3px solid #ff7a00" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 12 }}>
+                      Account Snapshot
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+                      {[
+                        { label: "Service Plan",   value: raw.account.service_plan ?? raw.account.brand ?? "—" },
+                        { label: "Main Number",    value: raw.account.main_number ?? "—" },
+                        { label: "Billing Plan",   value: raw.account.billing_plan ?? "—" },
+                        { label: "Account Status", value: raw.account.status ?? "—" },
+                      ].map(({ label, value }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>{label}</div>
+                          <div style={{ fontSize: 14, color: "#1e293b", fontWeight: 500 }}>{value}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* RC Phone summary */}
+                <div className="ms-card" style={{ padding: "16px 20px", borderLeft: "3px solid #ff7a00" }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 12 }}>
+                    RingCentral Phone
+                  </div>
+                  <div style={{ display: "flex", gap: 32, flexWrap: "wrap" }}>
+                    {[
+                      { label: "Extensions",         value: latest.licenses_assigned },
+                      { label: "Included Lines",     value: latest.licenses_purchased },
+                      { label: "Total Calls (30d)",  value: analytics?.total_calls?.toLocaleString() ?? null },
+                      { label: "Call Minutes (30d)", value: latest.total_call_minutes != null ? latest.total_call_minutes.toLocaleString() : null },
+                      { label: "Answered Rate",      value: answeredRate != null ? `${answeredRate}%` : null, color: answeredRate != null ? (answeredRate >= 90 ? "#22c55e" : answeredRate >= 75 ? "#f59e0b" : "#d13438") : undefined },
+                    ].map(({ label, value, color }) => (
+                      <div key={label} style={{ textAlign: "center" }}>
+                        <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? (color ?? "#1e293b") : "#cbd5e1" }}>
+                          {value ?? "—"}
+                        </div>
+                        <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Call mix breakdown */}
+                {analytics && (
+                  <div className="ms-card" style={{ padding: "16px 20px", borderLeft: "3px solid #8764b8" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 12 }}>
+                      Call Mix (30d)
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 18 }}>
+                      {[
+                        { label: "Inbound",         value: analytics.inbound.toLocaleString() },
+                        { label: "Outbound",        value: analytics.outbound.toLocaleString() },
+                        { label: "Answered",        value: analytics.answered.toLocaleString(),  color: "#22c55e" },
+                        { label: "Missed",          value: analytics.missed.toLocaleString(),    color: "#d13438" },
+                        { label: "Abandoned",       value: analytics.abandoned.toLocaleString(), color: "#f59e0b" },
+                        { label: "Business Hours",  value: analytics.business_hours.toLocaleString() },
+                        { label: "After Hours",     value: analytics.after_hours.toLocaleString() },
+                      ].map(({ label, value, color }) => (
+                        <div key={label} style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: color ?? "#1e293b" }}>{value}</div>
+                          <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Account composition */}
+                {(raw.extension_breakdown || raw.ivr_menus != null || raw.devices != null) && (
+                  <div className="ms-card" style={{ padding: "16px 20px" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 12 }}>
+                      Account Composition
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 18 }}>
+                      {[
+                        { label: "Call Queues", value: raw.call_queues },
+                        { label: "IVR Menus",   value: raw.ivr_menus },
+                        { label: "Devices",     value: raw.devices },
+                        ...Object.entries(raw.extension_breakdown ?? {}).map(([k, v]) => ({ label: `Type · ${k}`, value: v })),
+                      ].map(({ label, value }) => (
+                        <div key={label} style={{ textAlign: "center" }}>
+                          <div style={{ fontSize: 18, fontWeight: 700, color: value != null ? "#1e293b" : "#cbd5e1" }}>{value ?? "—"}</div>
+                          <div style={{ fontSize: 11, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em", marginTop: 2 }}>{label}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           {/* Zoom Phone panel — shown when latest snapshot has phone data */}
-          {utilization.length > 0 && (() => {
+          {platform === "zoom" && utilization.length > 0 && (() => {
             type PhoneData = { users_total?: number | null; total_calls_30d?: number | null; active_users_30d?: number | null; call_minutes_30d?: number | null };
             const latest = utilization[0];
             let phone: PhoneData | null = null;
@@ -725,8 +863,8 @@ export default function OptimizeAccountPage() {
             );
           })()}
 
-          {/* Adoption dashboard — top users + key rates */}
-          {utilization.length > 0 && (() => {
+          {/* Adoption dashboard — top users + key rates (Zoom-only data) */}
+          {platform === "zoom" && utilization.length > 0 && (() => {
             type MeetingUser = { name: string; email: string | null; meetings: number; meeting_minutes: number };
             type PhoneCaller  = { name: string; calls: number; minutes: number };
             type RawData = {
@@ -858,7 +996,8 @@ export default function OptimizeAccountPage() {
             );
           })()}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

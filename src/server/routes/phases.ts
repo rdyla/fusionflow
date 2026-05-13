@@ -141,4 +141,61 @@ app.patch("/:id/phases/:phaseId", async (c) => {
   return c.json(updated);
 });
 
+// DELETE /:id/phases/:phaseId
+// Removes the phase and cleans up its dependents:
+//   - risks    pointing at tasks-in-phase → orphan (task_id = NULL) so the
+//                blocker stays visible at project level
+//   - documents pointing at tasks-in-phase → orphan (task_id = NULL) so the
+//                file is preserved
+//   - tasks      → DELETE (otherwise the next DELETE FROM phases blocks)
+//   - documents tied directly to the phase → orphan (phase_id = NULL)
+//   - zoom_recordings.phase_id → auto-NULL via FK ON DELETE SET NULL
+//   - zoom_recordings.task_id  → auto-NULL via FK ON DELETE SET NULL
+//   - task_comments / task_time_entries → ON DELETE CASCADE already
+//
+// The `milestones` table was dropped in migration 0041 — even though it
+// still appears in 0001_initial.sql, it does not exist on staging or prod.
+app.delete("/:id/phases/:phaseId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const phaseId = c.req.param("phaseId");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const existing = await db
+    .prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+    .bind(phaseId, projectId)
+    .first();
+  if (!existing) throw new HTTPException(404, { message: "Phase not found" });
+
+  // Cascade run as a single D1 batch — all statements commit atomically or
+  // not at all. Important because risks.task_id and documents.task_id are
+  // accepted by the risks/documents POST/PATCH endpoints without verifying
+  // the task belongs to the same project as the row owning the reference
+  // — so orphan refs can in principle exist across projects. We match by
+  // the FK relationship only (no project_id filter on the UPDATEs) so a
+  // stray cross-project reference doesn't leave a half-cleaned cascade.
+  //
+  // risks.task_id and documents.task_id reference tasks(id) with NO ON
+  // DELETE clause (default NO ACTION blocks the DELETE), so we must NULL
+  // them before deleting tasks. documents.phase_id same reasoning.
+  await db.batch([
+    db.prepare(
+      "UPDATE risks SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ? AND phase_id = ?)"
+    ).bind(projectId, phaseId),
+    db.prepare(
+      "UPDATE documents SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ? AND phase_id = ?)"
+    ).bind(projectId, phaseId),
+    db.prepare("DELETE FROM tasks WHERE project_id = ? AND phase_id = ?").bind(projectId, phaseId),
+    // Documents tied directly to the phase (not just to tasks within it):
+    // orphan to project level so files aren't lost.
+    db.prepare("UPDATE documents SET phase_id = NULL WHERE phase_id = ?").bind(phaseId),
+    db.prepare("DELETE FROM phases WHERE id = ?").bind(phaseId),
+  ]);
+
+  return c.json({ success: true });
+});
+
 export default app;

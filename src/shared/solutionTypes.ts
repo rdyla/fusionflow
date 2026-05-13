@@ -96,6 +96,57 @@ export function normalizeSolutionTypesField<T extends { solution_types?: unknown
   return { ...row, solution_types: parseSolutionTypes(row.solution_types) };
 }
 
+// ── Template-tagged task titles ────────────────────────────────────────────────
+// When applying a project template, every created task is prefixed with the
+// template's solution_type so a later template-apply can fuzzy-merge duplicates
+// and upgrade the tag (e.g. "[UCaaS] Kickoff" → "[UCaaS+CCaaS] Kickoff").
+// Tag labels are intentionally short (acronyms) rather than the descriptive
+// SOLUTION_TYPE_LABELS so list views don't get overwhelmed.
+
+export const SOLUTION_TYPE_TAG_LABELS: Record<SolutionType, string> = {
+  ucaas: "UCaaS",
+  ccaas: "CCaaS",
+  va: "VA",
+  ci: "CI",
+  wfm: "WFM",
+  qm: "QM",
+};
+
+const TAG_LABEL_TO_TYPE: Record<string, SolutionType> = Object.fromEntries(
+  (Object.entries(SOLUTION_TYPE_TAG_LABELS) as [SolutionType, string][]).map(
+    ([type, label]) => [label, type]
+  )
+);
+
+/**
+ * Builds a tagged task title like `[UCaaS+CCaaS] Kickoff meeting`. Types are
+ * deduped and rendered alphabetically by tag label so the same set always
+ * produces the same string. Returns the raw title unchanged when `types` is empty.
+ */
+export function buildTaggedTitle(types: readonly SolutionType[], rawTitle: string): string {
+  if (types.length === 0) return rawTitle;
+  const labels = [...new Set(types)].map((t) => SOLUTION_TYPE_TAG_LABELS[t]).sort();
+  return `[${labels.join("+")}] ${rawTitle}`;
+}
+
+/**
+ * Inverse of `buildTaggedTitle`. If the leading `[...]` isn't a recognized
+ * tag (e.g. user-authored brackets like `[URGENT]`) the input is returned
+ * untouched as the raw title.
+ */
+export function parseTaggedTitle(title: string): { types: SolutionType[]; rawTitle: string } {
+  const m = title.match(/^\[([^\]]+)\]\s+(.*)$/);
+  if (!m) return { types: [], rawTitle: title };
+  const parts = m[1].split("+").map((s) => s.trim());
+  const types: SolutionType[] = [];
+  for (const p of parts) {
+    const t = TAG_LABEL_TO_TYPE[p];
+    if (!t) return { types: [], rawTitle: title }; // unknown segment → not our tag
+    types.push(t);
+  }
+  return { types, rawTitle: m[2] };
+}
+
 // ── Other Technologies (non-canonical solution types) ─────────────────────────
 // Separate from the core SolutionType enum because they don't participate in the
 // needs-assessment / labor / SOW logic — they're descriptive only. Stored on

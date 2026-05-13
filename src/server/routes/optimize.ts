@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
+import { fetchRCUtilizationSnapshot } from "../services/ringCentralService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
 import { scoreAssessment } from "../lib/scoringEngine";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
@@ -651,11 +652,49 @@ app.post("/accounts/:projectId/utilization/sync", async (c) => {
   const projectId = c.req.param("projectId");
   const db = c.env.DB;
 
-  let data;
+  // Dispatch by the project's vendor so RC projects pull from RingCentral
+  // and Zoom projects pull from Zoom. Both write into utilization_snapshots
+  // with the appropriate platform value; the table already supports both
+  // via the platform column + total_call_minutes (RC-specific) field.
+  const project = await db
+    .prepare("SELECT vendor FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ vendor: string | null }>();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+
+  const vendor = (project.vendor ?? "").toLowerCase();
+  const platform: "zoom" | "ringcentral" = vendor === "ringcentral" ? "ringcentral" : "zoom";
+
+  let licenses_purchased: number | null;
+  let licenses_assigned:  number | null;
+  let active_users_30d:   number | null;
+  let active_users_90d:   number | null;
+  let total_meetings:     number | null;
+  let total_call_minutes: number | null;
+  let raw_data:           Record<string, unknown>;
+
   try {
-    data = await fetchZoomUtilizationSnapshot(c.env.KV, projectId);
+    if (platform === "ringcentral") {
+      const d = await fetchRCUtilizationSnapshot(c.env.KV, projectId);
+      licenses_purchased = d.licenses_purchased;
+      licenses_assigned  = d.licenses_assigned;
+      active_users_30d   = d.active_users_30d;
+      active_users_90d   = d.active_users_90d;
+      total_meetings     = d.total_meetings;
+      total_call_minutes = d.total_call_minutes;
+      raw_data           = d.raw_data;
+    } else {
+      const d = await fetchZoomUtilizationSnapshot(c.env.KV, projectId);
+      licenses_purchased = d.licenses_purchased;
+      licenses_assigned  = d.licenses_assigned;
+      active_users_30d   = d.active_users_30d;
+      active_users_90d   = d.active_users_90d;
+      total_meetings     = d.total_meetings;
+      total_call_minutes = null;
+      raw_data           = d.raw_data;
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Zoom sync failed";
+    const message = err instanceof Error ? err.message : `${platform} sync failed`;
     throw new HTTPException(400, { message });
   }
 
@@ -665,14 +704,14 @@ app.post("/accounts/:projectId/utilization/sync", async (c) => {
   await db.prepare(`
     INSERT INTO utilization_snapshots
       (id, project_id, platform, snapshot_date, licenses_purchased, licenses_assigned,
-       active_users_30d, active_users_90d, total_meetings, raw_data)
-    VALUES (?, ?, 'zoom', ?, ?, ?, ?, ?, ?, ?)
+       active_users_30d, active_users_90d, total_meetings, total_call_minutes, raw_data)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    id, projectId, snapshot_date,
-    data.licenses_purchased, data.licenses_assigned,
-    data.active_users_30d, data.active_users_90d,
-    data.total_meetings,
-    JSON.stringify(data.raw_data)
+    id, projectId, platform, snapshot_date,
+    licenses_purchased, licenses_assigned,
+    active_users_30d, active_users_90d,
+    total_meetings, total_call_minutes,
+    JSON.stringify(raw_data)
   ).run();
 
   const created = await db.prepare("SELECT * FROM utilization_snapshots WHERE id = ? LIMIT 1").bind(id).first();

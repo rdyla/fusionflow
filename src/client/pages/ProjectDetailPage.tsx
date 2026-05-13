@@ -21,6 +21,7 @@ import {
   type ZoomRecordingFile,
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
+import ProjectExecutiveDashboard from "../components/project/ProjectExecutiveDashboard";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -32,7 +33,7 @@ import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 
-type DetailTab = "overview" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "timeline" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -47,6 +48,24 @@ const STATUS_COLOR: Record<string, string> = {
   not_started: "#94a3b8",
   blocked: "#d13438",
 };
+
+// Contact role classification — split the otherwise-flat project_contacts
+// rows into Customer-side and Partner/Provider-side sections in the UI.
+// Partner roles are the small list; everything else (including null role
+// and "Other") falls into the Customer section by default.
+const CUSTOMER_CONTACT_ROLES = [
+  "Customer Project Manager",
+  "Technical Contact",
+  "Executive Sponsor",
+  "Billing Contact",
+  "End User Champion",
+  "Other",
+];
+const PARTNER_CONTACT_ROLES = [
+  "Porting Coordinator",
+];
+const isPartnerContactRole = (role: string | null | undefined): boolean =>
+  Boolean(role) && PARTNER_CONTACT_ROLES.includes(role as string);
 const RISK_COLOR: Record<string, string> = {
   open: "#d13438",
   mitigated: "#ff8c00",
@@ -97,6 +116,7 @@ export default function ProjectDetailPage() {
   const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
   const [crmContactsLoading, setCrmContactsLoading] = useState(false);
   const [contactModalTab, setContactModalTab] = useState<"crm" | "manual">("crm");
+  const [contactSide, setContactSide] = useState<"customer" | "partner">("customer");
   const [contactRole, setContactRole] = useState("");
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
   const [savingContact, setSavingContact] = useState(false);
@@ -108,7 +128,6 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
-  const [editHealth, setEditHealth] = useState("");
   const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
   const [editingSolutionTypes, setEditingSolutionTypes] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
@@ -177,7 +196,7 @@ export default function ProjectDetailPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number } | null>(null);
+  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number; tasks_merged: number } | null>(null);
 
   // Manual phase creation
   const [newPhaseName, setNewPhaseName] = useState("");
@@ -211,7 +230,6 @@ export default function ProjectDetailPage() {
         api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
-        setEditHealth(projectData.health ?? "");
         setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
@@ -304,7 +322,6 @@ export default function ProjectDetailPage() {
     try {
       const updated = await api.updateProject(project.id, {
         status: editStatus || undefined,
-        health: editHealth || undefined,
         target_go_live_date: editTargetGoLiveDate || undefined,
       });
       setProject(updated);
@@ -340,24 +357,6 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleClearHealthOverride() {
-    if (!project) return;
-    setSavingProject(true);
-    setSaveMessage(null);
-    try {
-      const updated = await api.updateProject(project.id, { clear_health_override: true });
-      setProject(updated);
-      setEditHealth(updated.health ?? "");
-      setSaveMessage("Health reset to auto.");
-      showToast("Health reset to auto-computed.", "success");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to reset health";
-      showToast(message, "error");
-    } finally {
-      setSavingProject(false);
-    }
-  }
-
   async function handleApplyTemplate() {
     if (!project || !selectedTemplateId) return;
     setApplyingTemplate(true);
@@ -369,7 +368,15 @@ export default function ProjectDetailPage() {
       const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
       setPhases(newPhases);
       setTasks(newTasks);
-      showToast(`Template applied: ${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""} created, ${result.tasks_created} tasks added.`, "success");
+      {
+        const parts: string[] = [];
+        parts.push(`${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""}`);
+        parts.push(`${result.tasks_created} task${result.tasks_created !== 1 ? "s" : ""} added`);
+        if (result.tasks_merged > 0) {
+          parts.push(`${result.tasks_merged} merged into existing tasks`);
+        }
+        showToast(`Template applied: ${parts.join(", ")}.`, "success");
+      }
       setSelectedTemplateId("");
     } catch {
       showToast("Failed to apply template", "error");
@@ -727,7 +734,15 @@ export default function ProjectDetailPage() {
 
       {/* Project header card */}
       <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{project.name}</h1>
+        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+          {project.health && (
+            <span
+              title={`Health: ${humanize(project.health)}`}
+              style={{ width: 12, height: 12, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }}
+            />
+          )}
+          {project.name}
+        </h1>
 
         {/* Vendor + solution type badges (editable for admin/pm) */}
         <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
@@ -760,45 +775,6 @@ export default function ProjectDetailPage() {
           )}
         </div>
 
-        {/* Summary info tiles */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Status</div>
-            <div className="ms-info-value">
-              {project.status ? (
-                <Badge label={humanize(project.status)} color={STATUS_COLOR[project.status] ?? "#94a3b8"} style={{ textTransform: "none" }} />
-              ) : "—"}
-            </div>
-          </div>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Health</div>
-            <div className="ms-info-value">
-              {project.health ? (
-                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8" }} />
-                  {humanize(project.health)}
-                  <span style={{
-                    fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                    padding: "1px 6px", borderRadius: 10,
-                    background: project.health_override ? "rgba(124,58,237,0.12)" : "rgba(8,145,178,0.12)",
-                    color: project.health_override ? "#7c3aed" : "#0891b2",
-                    border: `1px solid ${project.health_override ? "rgba(124,58,237,0.3)" : "rgba(8,145,178,0.3)"}`,
-                  }}>
-                    {project.health_override ? "Manual" : "Auto"}
-                  </span>
-                </span>
-              ) : "—"}
-            </div>
-          </div>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Kickoff Date</div>
-            <div className="ms-info-value">{project.kickoff_date ? formatDate(project.kickoff_date) : "—"}</div>
-          </div>
-          <div className="ms-info-item">
-            <div className="ms-info-label">Target Go-Live</div>
-            <div className="ms-info-value">{project.target_go_live_date ? formatDate(project.target_go_live_date) : "—"}</div>
-          </div>
-        </div>
       </div>
 
       {/* Tab navigation */}
@@ -806,7 +782,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -822,9 +798,8 @@ export default function ProjectDetailPage() {
         );
       })()}
 
-      {/* ── Overview ──────────────────────────────────────────────────────── */}
-      {tab === "overview" && (
-        <>
+      {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
+      {tab === "timeline" && (
         <ProjectTimeline
           phases={phases}
           tasks={tasks}
@@ -845,6 +820,19 @@ export default function ProjectDetailPage() {
             if (task) setEditingTask(task);
             setTab("tasks");
           }}
+        />
+      )}
+
+      {/* ── Overview (exec-friendly dashboard) ────────────────────────────── */}
+      {tab === "overview" && (
+        <>
+        <ProjectExecutiveDashboard
+          project={project}
+          phases={phases}
+          tasks={tasks}
+          risks={risks}
+          onViewBlockers={() => setTab("blockers")}
+          onViewTasks={() => setTab("tasks")}
         />
         <div style={{ display: "grid", gap: 16 }}>
           {/* ── Team & Controls (consolidated) ───────────────────────────── */}
@@ -935,15 +923,6 @@ export default function ProjectDetailPage() {
                   <option value="blocked">Blocked</option>
                   <option value="complete">Complete</option>
                 </select>
-                <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editHealth} onChange={(e) => setEditHealth(e.target.value)}>
-                  <option value="">Health</option>
-                  <option value="on_track">On Track</option>
-                  <option value="at_risk">At Risk</option>
-                  <option value="off_track">Off Track</option>
-                </select>
-                {project.health_override && (
-                  <button type="button" onClick={handleClearHealthOverride} style={{ fontSize: 11, color: "#0891b2", background: "rgba(8,145,178,0.08)", border: "1px solid rgba(8,145,178,0.25)", borderRadius: 4, padding: "3px 8px", cursor: "pointer" }}>Reset Health</button>
-                )}
                 <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
                   Go-Live
                   <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
@@ -960,7 +939,12 @@ export default function ProjectDetailPage() {
                       {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                     <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
-                    {applyResult && <span style={{ fontSize: 12, color: "#059669" }}>{applyResult.phases_created} phases, {applyResult.tasks_created} tasks added</span>}
+                    {applyResult && (
+                      <span style={{ fontSize: 12, color: "#059669" }}>
+                        {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added
+                        {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
+                      </span>
+                    )}
                   </>
                 )}
               </div>
@@ -974,73 +958,106 @@ export default function ProjectDetailPage() {
           <MeetingPrepCard projectId={project.id} meetingType="uat"           canSend={canEdit} />
           <MeetingPrepCard projectId={project.id} meetingType="go_live"       canSend={canEdit} />
 
-          {/* ── Customer Contacts ─────────────────────────────────────────── */}
-          <div className="ms-section-card">
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-              <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Customer Contacts</div>
-              {canEdit && (
-                <button
-                  className="ms-btn-secondary"
-                  onClick={() => {
-                    setShowContactModal(true);
-                    setContactModalTab(project.dynamics_account_id ? "crm" : "manual");
-                    setContactRole("");
-                    setManualContact({ name: "", email: "", phone: "", job_title: "" });
-                    if (project.dynamics_account_id && crmContacts.length === 0) {
-                      setCrmContactsLoading(true);
-                      api.getDynamicsContacts(project.dynamics_account_id)
-                        .then(setCrmContacts)
-                        .catch(() => {})
-                        .finally(() => setCrmContactsLoading(false));
-                    }
-                  }}
-                >
-                  + Add Contact
-                </button>
-              )}
-            </div>
+          {/* ── Customer + Partner Contacts ──────────────────────────────── */}
+          {/* Two stacked sections — customer-side roles vs partner/provider
+              roles (Porting Coordinator etc.). Underlying storage is one
+              project_contacts table; classification is purely UI-side. */}
+          {(() => {
+            const customerContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
+            const partnerContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
 
-            {contacts.length === 0 ? (
-              <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                No customer contacts added yet.
+            function openAddContactModal(side: "customer" | "partner") {
+              setContactSide(side);
+              setShowContactModal(true);
+              // CRM lookup only applies to customer contacts; partners are manual-only.
+              const useCrm = side === "customer" && !!project!.dynamics_account_id;
+              setContactModalTab(useCrm ? "crm" : "manual");
+              setContactRole("");
+              setManualContact({ name: "", email: "", phone: "", job_title: "" });
+              if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
+                setCrmContactsLoading(true);
+                api.getDynamicsContacts(project!.dynamics_account_id)
+                  .then(setCrmContacts)
+                  .catch(() => {})
+                  .finally(() => setCrmContactsLoading(false));
+              }
+            }
+
+            const renderContactRow = (c: typeof contacts[number]) => (
+              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
+                <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
+                  {c.name.charAt(0).toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
+                    {c.contact_role && (
+                      <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
+                        {c.contact_role}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>
+                    {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                {canEdit && (
+                  <button
+                    className="ms-btn-ghost"
+                    style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
+                    onClick={async () => {
+                      await api.removeProjectContact(project!.id, c.id);
+                      setContacts((prev) => prev.filter((x) => x.id !== c.id));
+                    }}
+                  >
+                    Remove
+                  </button>
+                )}
               </div>
-            ) : (
-              <div style={{ display: "grid", gap: 8 }}>
-                {contacts.map((c) => (
-                  <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
-                    <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
-                      {c.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
-                        {c.contact_role && (
-                          <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
-                            {c.contact_role}
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>
-                        {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
-                      </div>
-                    </div>
+            );
+
+            return (
+              <>
+                {/* Customer */}
+                <div className="ms-section-card">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Customer Contacts</div>
                     {canEdit && (
-                      <button
-                        className="ms-btn-ghost"
-                        style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
-                        onClick={async () => {
-                          await api.removeProjectContact(project.id, c.id);
-                          setContacts((prev) => prev.filter((x) => x.id !== c.id));
-                        }}
-                      >
-                        Remove
+                      <button className="ms-btn-secondary" onClick={() => openAddContactModal("customer")}>
+                        + Add Customer Contact
                       </button>
                     )}
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                  {customerContacts.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+                      No customer contacts added yet.
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>{customerContacts.map(renderContactRow)}</div>
+                  )}
+                </div>
+
+                {/* Partner / Provider */}
+                <div className="ms-section-card">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+                    <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Partner / Provider Contacts</div>
+                    {canEdit && (
+                      <button className="ms-btn-secondary" onClick={() => openAddContactModal("partner")}>
+                        + Add Partner Contact
+                      </button>
+                    )}
+                  </div>
+                  {partnerContacts.length === 0 ? (
+                    <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+                      No partner/provider contacts added yet. (e.g. porting coordinator on the partner team.)
+                    </div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 8 }}>{partnerContacts.map(renderContactRow)}</div>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {/* ── Asana Phase Progress ──────────────────────────────────────── */}
           <div className="ms-section-card">
@@ -1137,6 +1154,30 @@ export default function ProjectDetailPage() {
                       </select>
                     </label>
                     <Badge label={humanize(phase.status ?? "not_started")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
+                    {canEdit && (
+                      <button
+                        type="button"
+                        title="Delete phase"
+                        onClick={async () => {
+                          if (!project) return;
+                          const taskCount = phaseTasks.length;
+                          const msg = taskCount === 0
+                            ? `Delete phase "${phase.name}"?`
+                            : `Delete phase "${phase.name}" and its ${taskCount} task${taskCount === 1 ? "" : "s"}? Documents tied to this phase will move to the project level; other data stays put.`;
+                          if (!confirm(msg)) return;
+                          try {
+                            await api.deletePhase(project.id, phase.id);
+                            setPhases((prev) => prev.filter((p) => p.id !== phase.id));
+                            setTasks((prev) => prev.filter((t) => t.phase_id !== phase.id));
+                          } catch {
+                            showToast("Failed to delete phase", "error");
+                          }
+                        }}
+                        style={{ marginLeft: "auto", background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "2px 8px", fontSize: 11, cursor: "pointer", lineHeight: 1.4 }}
+                      >
+                        × Delete
+                      </button>
+                    )}
                   </div>
                 </div>
                 {!isCollapsed && <div style={{ display: "grid", gap: 6 }}>
@@ -1157,6 +1198,12 @@ export default function ProjectDetailPage() {
                             <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 3 }}>{task.title}</div>
                             <div style={{ fontSize: 12, color: "#64748b" }}>
                               Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
+                              {task.assignee_contact_id && (() => {
+                                const contact = contacts.find((c) => c.id === task.assignee_contact_id);
+                                return contact ? (
+                                  <> · <span style={{ fontWeight: 600, color: "#7c3aed" }}>{contact.contact_role ?? "Contact"}: {contact.name}</span></>
+                                ) : null;
+                              })()}
                             </div>
                           </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
@@ -1220,7 +1267,7 @@ export default function ProjectDetailPage() {
                   {canEdit && (
                     <button
                       className="ms-btn-ghost"
-                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, due_date: null, completed_at: null, status: "not_started", priority: null, scheduled_start: null, scheduled_end: null, pay_code_id: null, cost_code_id: null, crm_time_entry_id: null })}
+                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, assignee_contact_id: null, due_date: null, completed_at: null, status: "not_started", priority: null, scheduled_start: null, scheduled_end: null, pay_code_id: null, cost_code_id: null, crm_time_entry_id: null })}
                       style={{ alignSelf: "start", border: "1px dashed rgba(255,255,255,0.2)", color: "#64748b" }}
                     >
                       + Add Task
@@ -2575,28 +2622,27 @@ export default function ProjectDetailPage() {
 
             {/* Header */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Add Customer Contact</h2>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>
+                Add {contactSide === "partner" ? "Partner / Provider" : "Customer"} Contact
+              </h2>
               <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
             </div>
 
-            {/* Role selector — always shown */}
+            {/* Role selector — always shown. Options filtered by side. */}
             <div style={{ padding: "16px 24px 0", flexShrink: 0 }}>
               <label className="ms-label">
                 <span>Role on Project</span>
                 <select className="ms-input" value={contactRole} onChange={(e) => setContactRole(e.target.value)}>
                   <option value="">— Select role —</option>
-                  <option>Customer Project Manager</option>
-                  <option>Technical Contact</option>
-                  <option>Executive Sponsor</option>
-                  <option>Billing Contact</option>
-                  <option>End User Champion</option>
-                  <option>Other</option>
+                  {(contactSide === "partner" ? PARTNER_CONTACT_ROLES : CUSTOMER_CONTACT_ROLES).map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
                 </select>
               </label>
             </div>
 
-            {/* Tab toggle — only if CRM account is linked */}
-            {project.dynamics_account_id && (
+            {/* Tab toggle — only customer + CRM-linked projects offer the CRM lookup tab. */}
+            {contactSide === "customer" && project.dynamics_account_id && (
               <div style={{ display: "flex", gap: 0, padding: "12px 24px 0", flexShrink: 0 }}>
                 {(["crm", "manual"] as const).map((t) => (
                   <button

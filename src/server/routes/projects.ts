@@ -11,6 +11,7 @@ import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { canonicalizeVendor } from "../../shared/vendors";
 import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -146,7 +147,7 @@ const createProjectSchema = z.object({
   crm_opportunity_id: z.string().nullable().optional(),
 });
 
-app.post("/", requireRole("admin", "pm"), async (c) => {
+app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const rawBody = await c.req.json();
@@ -159,8 +160,10 @@ app.post("/", requireRole("admin", "pm"), async (c) => {
   const { name, customer_name, customer_id: customerIdInput, vendor: vendorInput, solution_types, kickoff_date, target_go_live_date, pm_user_id: pmInput, dynamics_account_id, crm_case_id } = parsed.data;
 
   // Demo mode pins the vendor on every newly-created project.
+  // Canonicalize the user-supplied value so legacy free-text inputs ("Ring Central",
+  // "Zoom Phone", etc.) fold to the same enum the rest of the app branches on.
   const demoVendor = await getDemoVendor(db);
-  const vendor = demoVendor ? demoVendor : vendorInput;
+  const vendor = demoVendor ? demoVendor : (canonicalizeVendor(vendorInput) ?? vendorInput ?? null);
 
   const projectId = crypto.randomUUID();
   const pm_user_id = pmInput ?? (auth.role === "pm" ? auth.user.id : null);
@@ -229,7 +232,7 @@ const updateProjectSchema = z.object({
   crm_opportunity_id: z.string().nullable().optional(),
 });
 
-app.patch("/:id", requireRole("admin", "pm"), async (c) => {
+app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");

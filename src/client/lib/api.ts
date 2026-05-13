@@ -527,6 +527,10 @@ export type Task = {
   phase_id: string | null;
   title: string;
   assignee_user_id: string | null;
+  /** Optional non-user assignee (currently the porting coordinator for
+   *  UCaaS projects). Set by apply-template; displayed alongside the
+   *  user assignee on the task row. */
+  assignee_contact_id: string | null;
   due_date: string | null;
   completed_at: string | null;
   status: string | null;
@@ -780,6 +784,7 @@ export type OptimizeAccount = {
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
   customer_sharepoint_url: string | null;
+  vendor: string | null;
 };
 
 export type OptimizeEligible = {
@@ -929,6 +934,10 @@ export type TemplateTask = {
   title: string;
   priority: string | null;
   order_index: number;
+  /** Hint about who owns this task by default (e.g. "pm", "ie", "customer",
+   *  "zoom_porting", "pf", "all", "customer/ie"). Surfaced in the admin
+   *  template view; not yet propagated to project tasks at apply time. */
+  default_assignee_role: string | null;
 };
 
 export type TemplatePhase = {
@@ -1030,6 +1039,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  /** Delete a phase and its dependents:
+   *   - tasks within the phase: DELETED
+   *   - milestones within the phase: DELETED
+   *   - documents tied to the phase: orphaned to project level (phase_id = NULL)
+   *   - zoom_recordings: phase_id set to NULL via FK */
+  deletePhase: (projectId: string, phaseId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
 
   searchDynamicsAccounts: (q: string) =>
     request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
@@ -1175,6 +1192,7 @@ export const api = {
       title?: string;
       phase_id?: string | null;
       assignee_user_id?: string | null;
+      assignee_contact_id?: string | null;
       due_date?: string | null;
       scheduled_start?: string | null;
       scheduled_end?: string | null;
@@ -1288,6 +1306,8 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, { method: "DELETE" }),
 
   // RingCentral
+  rcConfigured: (projectId: string) =>
+    request<{ configured: boolean }>(`/projects/${projectId}/ringcentral/configured`),
   rcStatus: (projectId: string) =>
     request<RCStatus>(`/projects/${projectId}/ringcentral/status`),
   rcSaveCredentials: (projectId: string, creds: { client_id: string; client_secret: string; jwt_token: string }) =>
@@ -1724,7 +1744,7 @@ export const api = {
   adminDeleteTemplateTask: (templateId: string, taskId: string) =>
     request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
   applyTemplate: (projectId: string, templateId: string) =>
-    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-template`, {
+    request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
     }),

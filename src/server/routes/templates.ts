@@ -4,6 +4,44 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject } from "../services/accessService";
+import {
+  buildTaggedTitle,
+  canonicalizeSolutionType,
+  parseTaggedTitle,
+  type SolutionType,
+} from "../../shared/solutionTypes";
+import { toTitleCase } from "../../shared/titleCase";
+
+// ── Fuzzy title matching ──────────────────────────────────────────────────────
+// Two template tasks count as the same work if their normalized token sets
+// have Jaccard similarity ≥ 0.6 — tolerates wording variation ("Kickoff meeting"
+// vs "Project kickoff meeting") without over-deduping near-misses ("Test" vs
+// "Test plan" lands at 0.5).
+
+const STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "with", "for", "of", "on", "to", "in",
+  "at", "by", "from", "into",
+]);
+
+function normalizeTitleTokens(title: string): Set<string> {
+  const { rawTitle } = parseTaggedTitle(title);
+  const tokens = rawTitle
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((t) => t.length > 0 && !STOPWORDS.has(t));
+  return new Set(tokens);
+}
+
+function jaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let intersect = 0;
+  for (const t of a) if (b.has(t)) intersect++;
+  const union = a.size + b.size - intersect;
+  return union === 0 ? 0 : intersect / union;
+}
+
+const FUZZY_MATCH_THRESHOLD = 0.6;
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -247,8 +285,15 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const { template_id } = await c.req.json<{ template_id: string }>();
   if (!template_id) throw new HTTPException(400, { message: "template_id is required" });
 
-  const template = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(template_id).first();
+  const template = await db
+    .prepare("SELECT id, solution_type FROM templates WHERE id = ? LIMIT 1")
+    .bind(template_id)
+    .first<{ id: string; solution_type: string | null }>();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
+
+  // Templates without a canonical solution_type fall back to legacy behaviour
+  // (no tagging, no fuzzy dedupe) so we don't pollute task titles with junk tags.
+  const templateSolutionType: SolutionType | null = canonicalizeSolutionType(template.solution_type ?? "");
 
   const phases = await db
     .prepare("SELECT * FROM template_phases WHERE template_id = ? ORDER BY order_index ASC")
@@ -258,7 +303,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const tasks = await db
     .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
     .bind(template_id)
-    .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number }>();
+    .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
 
   // Load existing phases by name so we can reuse them instead of duplicating
   const existingPhases = await db
@@ -297,20 +342,144 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     }
   }
 
+  // Build role → user_id and role → contact_id lookups so we can auto-assign
+  // template tasks at apply time. Roles come from template_tasks.default_-
+  // assignee_role; the lookups are project-scoped.
+  //
+  // User-side resolution:
+  //   pm  → projects.pm_user_id
+  //   ie  → first project_staff with staff_role='engineer' (by created_at)
+  //   pf  → fallback to PM (Packet Fusion generic, PM owns coordination)
+  //
+  // Contact-side resolution (non-user assignees, project_contacts):
+  //   zoom_porting → project_contacts with contact_role='Porting Coordinator'
+  //
+  // Roles that intentionally stay unassigned:
+  //   customer       — no single customer-side primary user concept
+  //   all            — multi-recipient
+  //   customer/ie    — joint action; awaits multi-assignee on tasks
+  const projectRow = await db
+    .prepare("SELECT pm_user_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ pm_user_id: string | null }>();
+  const pmUserId = projectRow?.pm_user_id ?? null;
+
+  const ieRow = await db
+    .prepare(
+      "SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'engineer' ORDER BY created_at ASC LIMIT 1"
+    )
+    .bind(projectId)
+    .first<{ user_id: string }>();
+  const ieUserId = ieRow?.user_id ?? null;
+
+  const portingContactRow = await db
+    .prepare(
+      "SELECT id FROM project_contacts WHERE project_id = ? AND contact_role = 'Porting Coordinator' ORDER BY added_at ASC LIMIT 1"
+    )
+    .bind(projectId)
+    .first<{ id: string }>();
+  const portingContactId = portingContactRow?.id ?? null;
+
+  const roleToUserId: Record<string, string | null> = {
+    pm: pmUserId,
+    pf: pmUserId,
+    ie: ieUserId,
+  };
+  const roleToContactId: Record<string, string | null> = {
+    zoom_porting: portingContactId,
+  };
+  const resolveAssignee = (role: string | null | undefined): { userId: string | null; contactId: string | null } => {
+    if (!role) return { userId: null, contactId: null };
+    const key = role.toLowerCase();
+    return {
+      userId:    roleToUserId[key]    ?? null,
+      contactId: roleToContactId[key] ?? null,
+    };
+  };
+
+  // Preload existing tasks per destination phase so we can fuzzy-match new
+  // template tasks and either upgrade an existing tag or insert a fresh task.
+  // Mutated as we insert so multiple template tasks in the same phase compete
+  // against each other too (rare but possible if a template has near-duplicates).
+  const destPhaseIds = [...new Set(Object.values(phaseIdMap))];
+  type ExistingTask = { id: string; title: string; tokens: Set<string> };
+  const tasksByPhase = new Map<string, ExistingTask[]>();
+  for (const phaseId of destPhaseIds) {
+    const rows = await db
+      .prepare("SELECT id, title FROM tasks WHERE project_id = ? AND phase_id = ?")
+      .bind(projectId, phaseId)
+      .all<{ id: string; title: string }>();
+    tasksByPhase.set(
+      phaseId,
+      (rows.results ?? []).map((r) => ({ id: r.id, title: r.title, tokens: normalizeTitleTokens(r.title) }))
+    );
+  }
+
   let tasksCreated = 0;
+  let tasksMerged = 0;
+
   for (const task of tasks.results ?? []) {
-    const newTaskId = crypto.randomUUID();
     const mappedPhaseId = task.phase_id ? (phaseIdMap[task.phase_id] ?? null) : null;
+    const { userId, contactId } = resolveAssignee(task.default_assignee_role);
+
+    // Normalize the source title to Title Case so every applied task reads
+    // consistently regardless of how the template author cased it.
+    const normalizedTitle = toTitleCase(task.title);
+
+    // Try to fuzzy-match against an existing task in the same destination phase.
+    let matched: ExistingTask | null = null;
+    if (mappedPhaseId && templateSolutionType) {
+      const existing = tasksByPhase.get(mappedPhaseId) ?? [];
+      const newTokens = normalizeTitleTokens(normalizedTitle);
+      let bestScore = 0;
+      for (const e of existing) {
+        const score = jaccard(newTokens, e.tokens);
+        if (score > bestScore) {
+          bestScore = score;
+          matched = e;
+        }
+      }
+      if (bestScore < FUZZY_MATCH_THRESHOLD) matched = null;
+    }
+
+    if (matched) {
+      // Upgrade the existing task's tag to include this template's solution type.
+      // Re-normalize the raw title too so older untouched tasks pick up TC on merge.
+      const { types, rawTitle } = parseTaggedTitle(matched.title);
+      const mergedTypes = [...new Set([...types, templateSolutionType!])];
+      const newTitle = buildTaggedTitle(mergedTypes, toTitleCase(rawTitle));
+      if (newTitle !== matched.title) {
+        await db.prepare("UPDATE tasks SET title = ? WHERE id = ?").bind(newTitle, matched.id).run();
+        matched.title = newTitle;
+        matched.tokens = normalizeTitleTokens(newTitle);
+      }
+      tasksMerged++;
+      continue;
+    }
+
+    // No match — insert as a new task, tagged with this template's solution
+    // type when known. If templateSolutionType is null (legacy template) we
+    // fall back to the untagged title.
+    const newTaskId = crypto.randomUUID();
+    const insertedTitle = templateSolutionType
+      ? buildTaggedTitle([templateSolutionType], normalizedTitle)
+      : normalizedTitle;
     await db
       .prepare(
-        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status) VALUES (?, ?, ?, ?, ?, 'not_started')"
+        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedPhaseId, task.title, task.priority ?? "medium")
+      .bind(newTaskId, projectId, mappedPhaseId, insertedTitle, task.priority ?? "medium", userId, contactId)
       .run();
+    if (mappedPhaseId) {
+      const phaseTasks = tasksByPhase.get(mappedPhaseId);
+      if (phaseTasks) {
+        phaseTasks.push({ id: newTaskId, title: insertedTitle, tokens: normalizeTitleTokens(insertedTitle) });
+      }
+    }
     tasksCreated++;
   }
 
-  return c.json({ phases_created: phasesCreated, tasks_created: tasksCreated });
+  return c.json({ phases_created: phasesCreated, tasks_created: tasksCreated, tasks_merged: tasksMerged });
 });
 
 export default app;
