@@ -27,16 +27,28 @@ npm run staging:restore -- scripts/snapshots/staging-<timestamp>.sql
 
 ### What gets wiped / kept
 
-| Wiped (every record)                  | Preserved                                      |
+Two different wipes happen depending on the step:
+
+**Demo-seed wipe** (preserves real OAuth users + templates + config so you can still log in and apply templates during the shoot):
+
+| Wiped                                 | Preserved                                      |
 |---------------------------------------|------------------------------------------------|
 | customers, solutions, projects         | users (real OAuth identities)                  |
 | phases, tasks, risks, notes, documents | templates / template_phases / template_tasks   |
 | optimize_accounts, utilization_*       | app_settings, labor_config                     |
-| project_staff / contacts / access      | _d1_migrations (D1 internals)                  |
+| project_staff / contacts / access      | d1_migrations (D1 internals)                   |
 | labor_estimates, needs_assessments     |                                                |
 | meeting_prep_sends, support_digests    |                                                |
 | feature_requests, prospects, etc.      |                                                |
 | **demo-fixture-`*`** users only        |                                                |
+
+**Restore wipe** (heavy — snapshot rebuilds everything):
+
+| Wiped                                  | Preserved                          |
+|----------------------------------------|------------------------------------|
+| Everything above PLUS:                 | d1_migrations / sqlite_* / _cf_*   |
+| **all users**, templates, app_settings | (D1 internals — also filtered out  |
+| labor_config                           |  of the snapshot at replay time)   |
 
 Demo fixture records use ID prefixes (`demo-fixture-`, `demo-cust-`,
 `demo-sol-`, `demo-proj-`, etc.) — easy to spot in the DB if something
