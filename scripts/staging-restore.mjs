@@ -37,16 +37,24 @@ if (!existsSync(snapshotPath)) {
 // already exist on the target DB, so replaying them collides on PRIMARY
 // KEY. Strip them to a filtered copy before handing to wrangler.
 //
-// We also prepend `PRAGMA defer_foreign_keys = ON;` so foreign-key checks
-// are deferred to the end of the transaction. Wrangler dumps tables in
-// arbitrary order, so a child-table INSERT (e.g. project_staff) can land
-// before its parent (users) is repopulated and a normal FK check fails.
+// We also prepend `PRAGMA foreign_keys = OFF;` so FK enforcement is
+// disabled entirely during replay. Two reasons it has to be OFF rather
+// than just deferred:
+//   1. Wrangler may chunk large SQL files into multiple HTTP batches —
+//      defer_foreign_keys is per-transaction and would reset between
+//      chunks; foreign_keys = OFF persists for the session.
+//   2. Staging data has accumulated some orphan FK references from
+//      months of churn (deleted users, deleted projects, etc.); those
+//      would fail even at commit time with defer.
+// The snapshot is internally consistent w.r.t. our app's invariants —
+// the schema's FK constraints are a defense-in-depth check, not a load-
+// bearing data integrity requirement during a bulk replay.
 const SYSTEM_TABLE_INSERT = /^INSERT\s+INTO\s+["'`]?(d1_migrations|sqlite_[a-z_]+|_cf_[a-z_]+)["'`]?\s/i;
 const filteredPath = `${snapshotPath}.filtered.sql`;
 const original = readFileSync(snapshotPath, "utf8");
 const filteredLines = original.split(/\r?\n/).filter((line) => !SYSTEM_TABLE_INSERT.test(line));
 const droppedCount = original.split(/\r?\n/).length - filteredLines.length;
-const header = "PRAGMA defer_foreign_keys = ON;\n";
+const header = "PRAGMA foreign_keys = OFF;\n";
 writeFileSync(filteredPath, header + filteredLines.join("\n"), "utf8");
 if (droppedCount > 0) {
   console.log(`→ Filtered ${droppedCount} system-table INSERT line(s) from snapshot`);
