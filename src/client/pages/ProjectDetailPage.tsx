@@ -130,12 +130,10 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
   const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
-  const [editingSolutionTypes, setEditingSolutionTypes] = useState(false);
+  const [editingTech, setEditingTech] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
-  const [savingSolutionTypes, setSavingSolutionTypes] = useState(false);
-  const [editingVendor, setEditingVendor] = useState(false);
   const [editVendor, setEditVendor] = useState("");
-  const [savingVendor, setSavingVendor] = useState(false);
+  const [savingTech, setSavingTech] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -340,45 +338,28 @@ export default function ProjectDetailPage() {
     }
   }
 
-  function startEditSolutionTypes() {
+  function startEditTech() {
     if (!project) return;
     setEditSolutionTypes(parseSolutionTypes(project.solution_types));
-    setEditingSolutionTypes(true);
-  }
-
-  async function saveEditSolutionTypes() {
-    if (!project) return;
-    setSavingSolutionTypes(true);
-    try {
-      const updated = await api.updateProject(project.id, { solution_types: editSolutionTypes });
-      setProject(updated);
-      setEditingSolutionTypes(false);
-      showToast("Solution types updated.", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update solution types", "error");
-    } finally {
-      setSavingSolutionTypes(false);
-    }
-  }
-
-  function startEditVendor() {
-    if (!project) return;
     setEditVendor(project.vendor ?? "");
-    setEditingVendor(true);
+    setEditingTech(true);
   }
 
-  async function saveEditVendor() {
+  async function saveEditTech() {
     if (!project) return;
-    setSavingVendor(true);
+    setSavingTech(true);
     try {
-      const updated = await api.updateProject(project.id, { vendor: editVendor || null });
+      const updated = await api.updateProject(project.id, {
+        vendor: editVendor || null,
+        solution_types: editSolutionTypes,
+      });
       setProject(updated);
-      setEditingVendor(false);
-      showToast("Vendor updated.", "success");
+      setEditingTech(false);
+      showToast("Project details updated.", "success");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update vendor", "error");
+      showToast(err instanceof Error ? err.message : "Failed to update project details", "error");
     } finally {
-      setSavingVendor(false);
+      setSavingTech(false);
     }
   }
 
@@ -769,68 +750,54 @@ export default function ProjectDetailPage() {
           {project.name}
         </h1>
 
-        {/* Vendor + solution type badges (editable for admin/pm) */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
-          {editingVendor ? (
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {/* Vendor + solution type badges (editable for admin/pm via a single Edit toggle) */}
+        {editingTech ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18, maxWidth: 520 }}>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</span>
               <select
                 className="ms-input"
                 value={editVendor}
                 onChange={(e) => setEditVendor(e.target.value)}
-                disabled={savingVendor}
-                style={{ fontSize: 12, padding: "4px 8px" }}
+                disabled={savingTech}
+                style={{ fontSize: 13, padding: "6px 10px" }}
               >
                 <option value="">— Not set —</option>
                 {VENDOR_OPTIONS.map((o) => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
-              <button className="ms-btn-primary" onClick={saveEditVendor} disabled={savingVendor} style={{ fontSize: 12, padding: "2px 10px" }}>
-                {savingVendor ? "Saving…" : "Save"}
+            </label>
+            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Solution Types</span>
+              <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingTech} />
+            </label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button className="ms-btn-primary" onClick={saveEditTech} disabled={savingTech}>
+                {savingTech ? "Saving…" : "Save"}
               </button>
-              <button className="ms-btn-ghost" onClick={() => setEditingVendor(false)} disabled={savingVendor} style={{ fontSize: 12, padding: "2px 10px" }}>
+              <button className="ms-btn-ghost" onClick={() => setEditingTech(false)} disabled={savingTech}>
                 Cancel
               </button>
             </div>
-          ) : (
-            <>
-              {project.vendor ? (
-                <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
-                  {vendorLabel(project.vendor)}
-                </span>
-              ) : (
-                <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
-              )}
-              {canEdit && !editingSolutionTypes && (
-                <button className="ms-btn-ghost" onClick={startEditVendor} style={{ fontSize: 12, padding: "2px 10px" }}>
-                  Edit
-                </button>
-              )}
-            </>
-          )}
-          {editingSolutionTypes ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0, maxWidth: 520 }}>
-              <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingSolutionTypes} />
-              <div style={{ display: "flex", gap: 8 }}>
-                <button className="ms-btn-primary" onClick={saveEditSolutionTypes} disabled={savingSolutionTypes}>
-                  {savingSolutionTypes ? "Saving…" : "Save"}
-                </button>
-                <button className="ms-btn-ghost" onClick={() => setEditingSolutionTypes(false)} disabled={savingSolutionTypes}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
-              {canEdit && (
-                <button className="ms-btn-ghost" onClick={startEditSolutionTypes} style={{ fontSize: 12, padding: "2px 10px" }}>
-                  Edit
-                </button>
-              )}
-            </>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+            {project.vendor ? (
+              <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
+                {vendorLabel(project.vendor)}
+              </span>
+            ) : (
+              <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
+            )}
+            <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
+            {canEdit && (
+              <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>
+                Edit
+              </button>
+            )}
+          </div>
+        )}
 
       </div>
 
