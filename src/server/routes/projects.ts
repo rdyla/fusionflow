@@ -225,6 +225,7 @@ const updateProjectSchema = z.object({
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
   pm_user_id: z.string().nullable().optional(),
+  vendor: z.string().nullable().optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   asana_project_id: z.string().nullable().optional(),
   managed_in_asana: z.number().int().min(0).max(1).optional(),
@@ -280,6 +281,11 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
     if (key === "solution_types" && Array.isArray(value)) {
       fields.push(`${key} = ?`);
       values.push(serializeSolutionTypes(value as typeof SOLUTION_TYPES[number][]));
+      continue;
+    }
+    if (key === "vendor" && typeof value === "string") {
+      fields.push(`${key} = ?`);
+      values.push(canonicalizeVendor(value) ?? value);
       continue;
     }
     fields.push(`${key} = ?`);
