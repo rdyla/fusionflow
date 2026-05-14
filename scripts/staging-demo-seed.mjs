@@ -14,9 +14,10 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const repoRoot     = resolve(new URL("..", import.meta.url).pathname);
+const repoRoot     = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const snapshotsDir = resolve(repoRoot, "scripts", "snapshots");
 const seedFile     = resolve(repoRoot, "scripts", "staging-demo-seed.sql");
 
