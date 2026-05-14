@@ -50,7 +50,10 @@
 		"preview": "npm run build && vite preview",
 		"dev:client": "vite",
 		"dev:worker": "wrangler dev",
-		"dev": "concurrently \"npm run dev:client\" \"npm run dev:worker\""
+		"dev": "concurrently \"npm run dev:client\" \"npm run dev:worker\"",
+		"staging:snapshot": "node scripts/staging-snapshot.mjs",
+		"staging:demo-seed": "node scripts/staging-demo-seed.mjs",
+		"staging:restore": "node scripts/staging-restore.mjs"
 	},
 	"type": "module"
 }
