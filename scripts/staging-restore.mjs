@@ -14,7 +14,7 @@
  * are kept stable across snapshot/seed cycles.
  */
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -30,6 +30,20 @@ const snapshotPath = resolve(repoRoot, snapshotArg);
 if (!existsSync(snapshotPath)) {
   console.error(`✗ Snapshot file not found: ${snapshotPath}`);
   process.exit(1);
+}
+
+// `wrangler d1 export --no-schema` includes rows for D1's own bookkeeping
+// table d1_migrations (and possibly sqlite_*/_cf_* internals). Those rows
+// already exist on the target DB, so replaying them collides on PRIMARY
+// KEY. Strip them to a filtered copy before handing to wrangler.
+const SYSTEM_TABLE_INSERT = /^INSERT\s+INTO\s+["'`]?(d1_migrations|sqlite_[a-z_]+|_cf_[a-z_]+)["'`]?\s/i;
+const filteredPath = `${snapshotPath}.filtered.sql`;
+const original = readFileSync(snapshotPath, "utf8");
+const filteredLines = original.split(/\r?\n/).filter((line) => !SYSTEM_TABLE_INSERT.test(line));
+const droppedCount = original.split(/\r?\n/).length - filteredLines.length;
+writeFileSync(filteredPath, filteredLines.join("\n"), "utf8");
+if (droppedCount > 0) {
+  console.log(`→ Filtered ${droppedCount} system-table INSERT line(s) from snapshot`);
 }
 
 function executeSql(label, file) {
@@ -54,6 +68,6 @@ function executeSql(label, file) {
 }
 
 executeSql("Wipe data tables", wipeSql);
-executeSql("Replay snapshot",   snapshotPath);
+executeSql("Replay snapshot",   filteredPath);
 
 console.log("✓ Restore complete.");
