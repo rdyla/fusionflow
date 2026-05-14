@@ -36,12 +36,18 @@ if (!existsSync(snapshotPath)) {
 // table d1_migrations (and possibly sqlite_*/_cf_* internals). Those rows
 // already exist on the target DB, so replaying them collides on PRIMARY
 // KEY. Strip them to a filtered copy before handing to wrangler.
+//
+// We also prepend `PRAGMA defer_foreign_keys = ON;` so foreign-key checks
+// are deferred to the end of the transaction. Wrangler dumps tables in
+// arbitrary order, so a child-table INSERT (e.g. project_staff) can land
+// before its parent (users) is repopulated and a normal FK check fails.
 const SYSTEM_TABLE_INSERT = /^INSERT\s+INTO\s+["'`]?(d1_migrations|sqlite_[a-z_]+|_cf_[a-z_]+)["'`]?\s/i;
 const filteredPath = `${snapshotPath}.filtered.sql`;
 const original = readFileSync(snapshotPath, "utf8");
 const filteredLines = original.split(/\r?\n/).filter((line) => !SYSTEM_TABLE_INSERT.test(line));
 const droppedCount = original.split(/\r?\n/).length - filteredLines.length;
-writeFileSync(filteredPath, filteredLines.join("\n"), "utf8");
+const header = "PRAGMA defer_foreign_keys = ON;\n";
+writeFileSync(filteredPath, header + filteredLines.join("\n"), "utf8");
 if (droppedCount > 0) {
   console.log(`→ Filtered ${droppedCount} system-table INSERT line(s) from snapshot`);
 }
