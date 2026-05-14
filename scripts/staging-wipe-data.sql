@@ -1,15 +1,18 @@
 -- ──────────────────────────────────────────────────────────────────────────
--- Wipe all user-data tables on staging.
+-- Heavy wipe — used only by scripts/staging-restore.mjs.
 --
--- Used as the first step of both:
---   * staging-demo-seed.sql        (then inserts clean demo records)
---   * scripts/staging-restore.mjs  (then replays a snapshot file)
+-- A restore replays a snapshot that contains rows for every table we
+-- dumped, including users / templates / app_settings / labor_config. If
+-- we leave any of those in place, the snapshot INSERTs collide on PRIMARY
+-- KEY / UNIQUE constraints. So this wipe is intentionally aggressive:
+-- everything gets cleared and the snapshot rebuilds it.
 --
--- Intentionally LEAVES IN PLACE:
---   * users               — real OAuth identities
---   * templates / template_phases / template_tasks — config
---   * app_settings, labor_config — config
---   * _cf_KV / _d1_migrations    — D1 internals
+-- Tables intentionally LEFT ALONE:
+--   * d1_migrations / sqlite_* / _cf_* — D1 internals (snapshot also
+--     filters these via staging-restore.mjs so they never get replayed).
+--
+-- The demo-seed flow uses a different, lighter wipe inlined at the top
+-- of staging-demo-seed.sql which preserves real OAuth users.
 --
 -- Order respects FK references (children before parents).
 -- ──────────────────────────────────────────────────────────────────────────
@@ -61,5 +64,14 @@ DELETE FROM feature_request_votes;
 DELETE FROM feature_requests;
 DELETE FROM roadmap_items;
 
--- Demo fixture users only — real OAuth identities (UUID ids) are preserved.
-DELETE FROM users WHERE id LIKE 'demo-fixture-%';
+-- Templates (config — repopulated from snapshot)
+DELETE FROM template_tasks;
+DELETE FROM template_phases;
+DELETE FROM templates;
+
+-- App-level config (repopulated from snapshot)
+DELETE FROM app_settings;
+DELETE FROM labor_config;
+
+-- All users (real OAuth identities are repopulated from snapshot)
+DELETE FROM users;
