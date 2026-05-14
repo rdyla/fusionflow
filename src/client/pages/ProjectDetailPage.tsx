@@ -29,6 +29,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
+import { VENDOR_OPTIONS, vendorLabel } from "../../shared/vendors";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
@@ -132,6 +133,9 @@ export default function ProjectDetailPage() {
   const [editingSolutionTypes, setEditingSolutionTypes] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
   const [savingSolutionTypes, setSavingSolutionTypes] = useState(false);
+  const [editingVendor, setEditingVendor] = useState(false);
+  const [editVendor, setEditVendor] = useState("");
+  const [savingVendor, setSavingVendor] = useState(false);
   const [savingProject, setSavingProject] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -354,6 +358,27 @@ export default function ProjectDetailPage() {
       showToast(err instanceof Error ? err.message : "Failed to update solution types", "error");
     } finally {
       setSavingSolutionTypes(false);
+    }
+  }
+
+  function startEditVendor() {
+    if (!project) return;
+    setEditVendor(project.vendor ?? "");
+    setEditingVendor(true);
+  }
+
+  async function saveEditVendor() {
+    if (!project) return;
+    setSavingVendor(true);
+    try {
+      const updated = await api.updateProject(project.id, { vendor: editVendor || null });
+      setProject(updated);
+      setEditingVendor(false);
+      showToast("Vendor updated.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update vendor", "error");
+    } finally {
+      setSavingVendor(false);
     }
   }
 
@@ -746,10 +771,42 @@ export default function ProjectDetailPage() {
 
         {/* Vendor + solution type badges (editable for admin/pm) */}
         <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
-          {project.vendor && (
-            <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
-              {project.vendor}
-            </span>
+          {editingVendor ? (
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <select
+                className="ms-input"
+                value={editVendor}
+                onChange={(e) => setEditVendor(e.target.value)}
+                disabled={savingVendor}
+                style={{ fontSize: 12, padding: "4px 8px" }}
+              >
+                <option value="">— Not set —</option>
+                {VENDOR_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+              <button className="ms-btn-primary" onClick={saveEditVendor} disabled={savingVendor} style={{ fontSize: 12, padding: "2px 10px" }}>
+                {savingVendor ? "Saving…" : "Save"}
+              </button>
+              <button className="ms-btn-ghost" onClick={() => setEditingVendor(false)} disabled={savingVendor} style={{ fontSize: 12, padding: "2px 10px" }}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <>
+              {project.vendor ? (
+                <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
+                  {vendorLabel(project.vendor)}
+                </span>
+              ) : (
+                <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
+              )}
+              {canEdit && !editingSolutionTypes && (
+                <button className="ms-btn-ghost" onClick={startEditVendor} style={{ fontSize: 12, padding: "2px 10px" }}>
+                  Edit
+                </button>
+              )}
+            </>
           )}
           {editingSolutionTypes ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1, minWidth: 0, maxWidth: 520 }}>
