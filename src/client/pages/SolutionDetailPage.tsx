@@ -79,6 +79,7 @@ export default function SolutionDetailPage() {
   const [saving, setSaving] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Contacts
   const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
@@ -185,6 +186,7 @@ export default function SolutionDetailPage() {
     setSolution(s);
     setUsers(u);
     setCurrentRole(me.role);
+    setCurrentUser(me.user);
     // Staff list is non-critical to the page load — tolerate 403/network errors
     // (e.g. for roles whose backend gate hasn't been relaxed yet) so the page
     // still renders. The chip section just shows empty when the fetch fails.
@@ -1274,6 +1276,7 @@ export default function SolutionDetailPage() {
             laborEstimates={Object.values(laborEstimates)}
             scopeText={scope}
             sowData={sowData}
+            currentUser={currentUser}
           />
 
           {/* Scope notes textarea — feeds into the generated document */}

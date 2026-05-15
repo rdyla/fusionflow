@@ -1,4 +1,4 @@
-import type { NeedsAssessment, LaborEstimate, Solution } from "../../lib/api";
+import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE, type AddOn } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
@@ -108,6 +108,7 @@ function buildSowHtml(
   laborEstimates: LaborEstimate[],
   scopeText: string,
   logo: string,
+  preparedByName: string,
   sowData?: SowData | null,
 ): string {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -625,10 +626,10 @@ function buildSowHtml(
       </div>
       <div class="cover-meta-item">
         <div class="cover-meta-label">Prepared By</div>
-        <div class="cover-meta-value">Packet Fusion, Inc.</div>
+        <div class="cover-meta-value">${esc(preparedByName)}</div>
       </div>
       <div class="cover-meta-item">
-        <div class="cover-meta-label">Date</div>
+        <div class="cover-meta-label">Date Issued</div>
         <div class="cover-meta-value">${today}</div>
       </div>
     </div>
@@ -715,11 +716,13 @@ type Props = {
   laborEstimates: LaborEstimate[];
   scopeText: string;
   sowData?: SowData | null;
+  /** Logged-in user — used for the "Prepared By" line on the SOW cover page. */
+  currentUser: User | null;
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimates, scopeText, sowData }: Props) {
+export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimates, scopeText, sowData, currentUser }: Props) {
   const customerName = solution.customer_name || "Customer";
   // Multi-type solutions get a joined label (e.g. "UCaaS / CCaaS") so the SOW document
   // title + header reflect every type the customer is scoped to.
@@ -742,7 +745,8 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
   const previewFlatReady = (isTieredMode && previewTieredTier) || (isBasicMode && previewBasicBreakdown);
 
   function openPrintWindow() {
-    const html = buildSowHtml(solution, needsAssessment, laborEstimates, scopeText, logoUrl, sowData);
+    const preparedByName = currentUser?.name ?? currentUser?.email ?? "Packet Fusion, Inc.";
+    const html = buildSowHtml(solution, needsAssessment, laborEstimates, scopeText, logoUrl, preparedByName, sowData);
     const win = window.open("", "_blank", "width=960,height=750");
     if (!win) return;
     win.document.write(html);
@@ -778,7 +782,7 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
           <div style={{ textAlign: "right", fontSize: 13, color: "#64748b" }}>
             <div><strong>Customer:</strong> {customerName}</div>
             <div><strong>Platform:</strong> {platformLabel}</div>
-            <div><strong>Date:</strong> {today}</div>
+            <div><strong>Date Issued:</strong> {today}</div>
           </div>
         </div>
 
