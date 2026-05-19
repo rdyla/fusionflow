@@ -2,25 +2,32 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type Project, type Template } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import { chainForward, parseISODate, startFromGoLive, workday, workdaysBetween, type PhaseInput } from "../../../shared/workdayMath";
+import { buildTaggedTitle, canonicalizeSolutionType, type SolutionType } from "../../../shared/solutionTypes";
+import { toTitleCase } from "../../../shared/titleCase";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 type Task = {
-  id: string;
+  /** Unique per row in the table (so React keys are stable). For tasks merged
+   *  from multiple templates, this is `${template_id}:${template_task_id}`. */
+  uid: string;
+  /** Display title, already tagged ("[UCaaS] Assign PM") and title-cased. */
   title: string;
+  /** Untagged title, used for fuzzy duplicate detection. */
+  rawTitle: string;
   role: string | null;
+  priority: string | null;
   start: string;
   end: string;
   pinned: boolean;
 };
 
 type Row = {
-  template_phase_id: string;
+  /** Canonical phase name (e.g. "Initiation"). Used as merge key + table key. */
   name: string;
   working_days: number;
   start: string;
   end: string;
-  /** Phase pinned: a date on the phase row was manually edited. */
   pinned: boolean;
   tasks: Task[];
 };
@@ -38,38 +45,71 @@ function formatDateForDisplay(iso: string): string {
   return d.toLocaleDateString("en-US", { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" });
 }
 
-function rowsFromTemplate(template: Template, anchorStart: string): Row[] {
-  const phases = template.phases ?? [];
-  const inputs: PhaseInput[] = phases.map((p) => ({ id: p.id, working_days: p.working_days }));
-  const computed = chainForward(anchorStart, inputs);
-  return phases.map((p, i) => ({
-    template_phase_id: p.id,
-    name: p.name,
-    working_days: p.working_days,
-    start: computed[i].start,
-    end:   computed[i].end,
-    pinned: false,
-    tasks: (p.tasks ?? []).map((t) => ({
-      id: t.id,
-      title: t.title,
-      role: t.default_assignee_role,
-      start: computed[i].start,
-      end: computed[i].end,
-      pinned: false,
-    })),
+/**
+ * Merge phases across one or more templates by canonical name. For each
+ * canonical name:
+ *  - working_days = MAX(working_days) across contributing templates (since
+ *    UCaaS + CCaaS teams work the same phase window in parallel; longest
+ *    governs)
+ *  - tasks = union from every contributing template, each tagged with its
+ *    source solution_type via buildTaggedTitle()
+ *
+ * Phase order preserves the order_index of the first template that introduces
+ * each phase.
+ */
+function mergeTemplates(templates: Template[]): Omit<Row, "start" | "end" | "pinned">[] {
+  const orderedNames: string[] = [];
+  const byName = new Map<string, { working_days: number; tasks: Task[] }>();
+
+  for (const t of templates) {
+    const solutionType: SolutionType | null = canonicalizeSolutionType(t.solution_type ?? "");
+    for (const p of t.phases ?? []) {
+      if (!byName.has(p.name)) {
+        orderedNames.push(p.name);
+        byName.set(p.name, { working_days: 0, tasks: [] });
+      }
+      const slot = byName.get(p.name)!;
+      slot.working_days = Math.max(slot.working_days, p.working_days || 0);
+      for (const tt of p.tasks ?? []) {
+        const rawTitle = toTitleCase(tt.title);
+        const taggedTitle = solutionType ? buildTaggedTitle([solutionType], rawTitle) : rawTitle;
+        slot.tasks.push({
+          uid: `${t.id}:${tt.id}`,
+          title: taggedTitle,
+          rawTitle,
+          role: tt.default_assignee_role,
+          priority: tt.priority ?? null,
+          start: "",     // filled in by rowsFromTemplates() after chaining
+          end:   "",
+          pinned: false,
+        });
+      }
+    }
+  }
+
+  return orderedNames.map((name) => ({
+    name,
+    working_days: byName.get(name)!.working_days,
+    tasks:        byName.get(name)!.tasks,
   }));
 }
 
-/**
- * Chain phases using their working_days + pinned dates, but ALSO extend a
- * phase's effective `end` if any of its (pinned) tasks finishes later than
- * the working-days-derived end. Tasks that share the phase's dates (unpinned)
- * are re-synced to the phase's new effective dates after chaining.
- */
+function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
+  const merged = mergeTemplates(templates);
+  const inputs: PhaseInput[] = merged.map((m) => ({ id: m.name, working_days: m.working_days }));
+  const computed = chainForward(anchorStart, inputs);
+  return merged.map((m, i) => ({
+    name: m.name,
+    working_days: m.working_days,
+    start: computed[i].start,
+    end:   computed[i].end,
+    pinned: false,
+    tasks: m.tasks.map((t) => ({ ...t, start: computed[i].start, end: computed[i].end })),
+  }));
+}
+
 function recomputeChain(rows: Row[], anchorStart: string): Row[] {
   const inputs: PhaseInput[] = rows.map((r) => {
-    // Determine effective pinned_end: the later of (phase manual pin) and
-    // (latest pinned task end). This lets a pinned task push the phase out.
     const latestTaskEnd = r.tasks.reduce((acc, t) => {
       if (!t.pinned) return acc;
       return acc === null || t.end > acc ? t.end : acc;
@@ -82,7 +122,7 @@ function recomputeChain(rows: Row[], anchorStart: string): Row[] {
       effectivePinnedEnd = phasePinnedEnd ?? latestTaskEnd;
     }
     return {
-      id: r.template_phase_id,
+      id: r.name,
       working_days: r.working_days,
       pinned_start: r.pinned ? r.start : null,
       pinned_end: effectivePinnedEnd,
@@ -93,42 +133,19 @@ function recomputeChain(rows: Row[], anchorStart: string): Row[] {
 
   return rows.map((r, i) => {
     const newPhase = { ...r, start: computed[i].start, end: computed[i].end };
-    // Unpinned tasks follow the phase. Pinned tasks keep their explicit dates
-    // but get clamped to the phase window (start can't precede phase start).
     newPhase.tasks = r.tasks.map((t) => {
-      if (!t.pinned) {
-        return { ...t, start: newPhase.start, end: newPhase.end };
-      }
-      // Pinned: keep dates as-is. (If the phase shifted underneath them due to
-      // upstream pinning, the PM will see them where they pinned them; they
-      // can re-pin or hit Reset if they want them to follow.)
+      if (!t.pinned) return { ...t, start: newPhase.start, end: newPhase.end };
       return t;
     });
     return newPhase;
   });
 }
 
-/**
- * When a task date is edited, shift downstream tasks in the same phase by the
- * same workday delta. Tasks before the edited one stay put. The edited task
- * keeps its new (explicit) dates and is marked pinned.
- *
- * Subsequent phases are NOT shifted here — that happens via recomputeChain
- * when one of the phase ends extends to accommodate the latest pinned task.
- * If the shifted tasks fit within the existing phase window, downstream
- * phases don't move (per user spec).
- */
 function applyTaskShift(tasks: Task[], editedIdx: number, deltaWd: number): Task[] {
   if (deltaWd === 0) return tasks;
   return tasks.map((t, i) => {
-    if (i <= editedIdx) return t; // edited row + earlier rows untouched
-    // For unpinned subsequent tasks: shift both dates by delta. They were
-    // inheriting phase dates, so shifting keeps them in lockstep.
-    return {
-      ...t,
-      start: workday(t.start, deltaWd),
-      end:   workday(t.end,   deltaWd),
-    };
+    if (i <= editedIdx) return t;
+    return { ...t, start: workday(t.start, deltaWd), end: workday(t.end, deltaWd) };
   });
 }
 
@@ -137,8 +154,10 @@ function applyTaskShift(tasks: Task[], editedIdx: number, deltaWd: number): Task
 export default function TimelineBuilder({ project, onApplied }: Props) {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [templateId, setTemplateId] = useState<string>("");
-  const [template, setTemplate] = useState<Template | null>(null);
+  /** Selected template ids — multi-select. */
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  /** Fully-loaded templates with phases + tasks, keyed by id. */
+  const [loadedTemplates, setLoadedTemplates] = useState<Record<string, Template>>({});
   const [goLive, setGoLive] = useState<string>(project.target_go_live_date ?? "");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,46 +168,53 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
     api.templatesList().then(setTemplates).catch(() => setTemplates([]));
   }, []);
 
+  // Selected templates resolve to fully-loaded data; we lazy-fetch any not
+  // yet in the cache.
   useEffect(() => {
-    if (!templateId) { setTemplate(null); setRows([]); return; }
+    if (selectedIds.length === 0) { setRows([]); return; }
+    const missing = selectedIds.filter((id) => !loadedTemplates[id]);
+    if (missing.length === 0) {
+      // Already cached — rebuild rows from the latest selection + go-live
+      const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
+      const total = mergeTemplates(selected).reduce((sum, p) => sum + p.working_days, 0);
+      const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
+      setRows(rowsFromTemplates(selected, anchor));
+      return;
+    }
     setLoading(true);
-    api.template(templateId)
-      .then((t) => {
-        setTemplate(t);
-        const totalDays = (t.phases ?? []).reduce((sum, p) => sum + (p.working_days || 0), 0);
-        const anchor = goLive ? startFromGoLive(goLive, totalDays) : new Date().toISOString().slice(0, 10);
-        setRows(rowsFromTemplate(t, anchor));
+    Promise.all(missing.map((id) => api.template(id)))
+      .then((fetched) => {
+        setLoadedTemplates((prev) => {
+          const next = { ...prev };
+          for (const t of fetched) next[t.id] = t;
+          return next;
+        });
       })
       .catch(() => showToast("Failed to load template", "error"))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateId]);
+  }, [selectedIds, loadedTemplates]);
 
+  // Rebuild rows whenever go-live changes (and we have something loaded).
   useEffect(() => {
-    if (!template) return;
-    const totalDays = (template.phases ?? []).reduce((sum, p) => sum + (p.working_days || 0), 0);
-    const anchor = goLive ? startFromGoLive(goLive, totalDays) : new Date().toISOString().slice(0, 10);
-    // Clear all pins on go-live change so PMs get a clean re-seed
-    setRows((prev) => {
-      const cleared = prev.map((r) => ({
-        ...r,
-        pinned: false,
-        tasks: r.tasks.map((t) => ({ ...t, pinned: false })),
-      }));
-      return recomputeChain(cleared, anchor);
-    });
+    const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
+    if (selected.length === 0) return;
+    const total = mergeTemplates(selected).reduce((sum, p) => sum + p.working_days, 0);
+    const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
+    setRows(rowsFromTemplates(selected, anchor));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goLive]);
 
   const computedGoLive = useMemo(() => rows.length ? rows[rows.length - 1].end : "", [rows]);
 
+  function toggleTemplate(id: string) {
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  }
+
   function setPhaseField(idx: number, patch: Partial<Row>) {
     setRows((prev) => {
       const next = [...prev];
       const merged = { ...next[idx], ...patch, pinned: true };
-      // When the PM edits Start or Workdays (but not End in the same patch),
-      // derive End = WORKDAY(Start, Workdays) so the row stays consistent.
-      // Explicit End edits bypass this and override.
       if (("start" in patch || "working_days" in patch) && !("end" in patch)) {
         merged.end = workday(merged.start, Math.max(merged.working_days, 0));
       }
@@ -207,37 +233,36 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
       const deltaWd = workdaysBetween(oldVal, newDate) || -workdaysBetween(newDate, oldVal);
       task[field] = newDate;
       task.pinned = true;
-      // Shift downstream tasks in same phase by the delta
       phase.tasks = applyTaskShift(phase.tasks, taskIdx, deltaWd);
-      // Re-chain so phase end can absorb (or extend for) the latest pinned task end
       const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
       return recomputeChain(next, anchor);
     });
   }
 
   function clearOverrides() {
-    if (!template) return;
-    const totalDays = (template.phases ?? []).reduce((sum, p) => sum + (p.working_days || 0), 0);
-    const anchor = goLive ? startFromGoLive(goLive, totalDays) : new Date().toISOString().slice(0, 10);
-    setRows(rowsFromTemplate(template, anchor));
+    const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
+    if (selected.length === 0) return;
+    const total = mergeTemplates(selected).reduce((sum, p) => sum + p.working_days, 0);
+    const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
+    setRows(rowsFromTemplates(selected, anchor));
   }
 
   async function handleApply() {
-    if (!template || !rows.length) return;
+    if (!rows.length) return;
     setApplying(true);
     try {
       const result = await api.applyTimeline(project.id, {
-        template_id: template.id,
         phases: rows.map((r) => ({
-          template_phase_id: r.template_phase_id,
+          name: r.name,
           start: r.start,
           end: r.end,
-          // Send per-task dates only when at least one task in the phase is
-          // pinned — otherwise the server falls back to phase dates (smaller
-          // payload, identical result).
-          tasks: r.tasks.some((t) => t.pinned)
-            ? r.tasks.map((t) => ({ template_task_id: t.id, start: t.start, end: t.end }))
-            : undefined,
+          tasks: r.tasks.map((t) => ({
+            title: t.title,
+            role: t.role,
+            priority: t.priority,
+            start: t.start,
+            end: t.end,
+          })),
         })),
       });
       showToast(`Timeline applied: ${result.phases_created} phases, ${result.tasks_created} tasks.`, "success");
@@ -253,16 +278,30 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   return (
     <div style={{ display: "grid", gap: 16 }}>
       <div className="ms-card" style={{ padding: "16px 20px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "end" }}>
-          <label className="ms-label">
-            <span>Template</span>
-            <select className="ms-input" value={templateId} onChange={(e) => setTemplateId(e.target.value)} disabled={loading || applying}>
-              <option value="">— Select a template —</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>{t.name}</option>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "start" }}>
+          <div className="ms-label">
+            <span>Templates</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 4, maxHeight: 160, overflowY: "auto" }}>
+              {templates.length === 0 ? (
+                <span style={{ color: "#94a3b8", fontSize: 12 }}>No templates available</span>
+              ) : templates.map((t) => (
+                <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(t.id)}
+                    onChange={() => toggleTemplate(t.id)}
+                    disabled={loading || applying}
+                  />
+                  <span>{t.name}</span>
+                </label>
               ))}
-            </select>
-          </label>
+            </div>
+            {selectedIds.length > 1 && (
+              <div style={{ marginTop: 6, fontSize: 11, color: "#0369a1" }}>
+                {selectedIds.length} templates selected — phases merged by name, longest workdays governs.
+              </div>
+            )}
+          </div>
           <label className="ms-label">
             <span>Target Go-Live</span>
             <input
@@ -270,16 +309,16 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
               type="date"
               value={goLive}
               onChange={(e) => setGoLive(e.target.value)}
-              disabled={!template || applying}
+              disabled={selectedIds.length === 0 || applying}
             />
           </label>
-          {template && (
-            <button className="ms-btn-ghost" onClick={clearOverrides} disabled={applying} title="Reset all dates from the current go-live anchor">
+          {selectedIds.length > 0 && (
+            <button className="ms-btn-ghost" onClick={clearOverrides} disabled={applying} title="Reset all dates from the current go-live anchor" style={{ marginTop: 20 }}>
               Reset dates
             </button>
           )}
         </div>
-        {template && (
+        {rows.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
             Computed go-live (last phase end): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
             {computedGoLive && goLive && computedGoLive !== goLive && (
@@ -306,7 +345,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
             <tbody>
               {rows.map((row, idx) => (
                 <PhaseRows
-                  key={row.template_phase_id}
+                  key={row.name}
                   row={row}
                   idx={idx}
                   onPhaseChange={(patch) => setPhaseField(idx, patch)}
@@ -390,7 +429,7 @@ function PhaseRows({
         </td>
       </tr>
       {row.tasks.map((t, taskIdx) => (
-        <tr key={t.id} style={{ background: t.pinned ? "#fef9c3" : "#fafbfc", borderBottom: "1px solid #f1f5f9" }}>
+        <tr key={t.uid} style={{ background: t.pinned ? "#fef9c3" : "#fafbfc", borderBottom: "1px solid #f1f5f9" }}>
           <td style={{ padding: "5px 14px 5px 36px", color: "#475569", fontSize: 12 }}>{t.title}</td>
           <td style={{ padding: "5px 14px", color: "#64748b", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>{t.role ?? ""}</td>
           <td style={{ padding: "5px 14px", color: "#94a3b8", fontSize: 12 }}>—</td>
