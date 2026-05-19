@@ -498,6 +498,13 @@ const applyTimelineSchema = z.object({
     template_phase_id: z.string().min(1),
     start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    // Optional per-task overrides — sent when PMs have edited individual
+    // task dates in the builder. Missing entries default to the phase dates.
+    tasks: z.array(z.object({
+      template_task_id: z.string().min(1),
+      start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    })).optional(),
   })).min(1),
 });
 
@@ -533,7 +540,14 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
   // Build template-phase-id → supplied { start, end } lookup. Any template
   // phase missing from the body is skipped (PM may have removed it client-side).
   const dateByTemplatePhase = new Map<string, { start: string; end: string }>();
-  for (const p of phaseDates) dateByTemplatePhase.set(p.template_phase_id, { start: p.start, end: p.end });
+  // template_task_id → { start, end } — only set if PM edited individual task dates.
+  const dateByTemplateTask = new Map<string, { start: string; end: string }>();
+  for (const p of phaseDates) {
+    dateByTemplatePhase.set(p.template_phase_id, { start: p.start, end: p.end });
+    for (const t of p.tasks ?? []) {
+      dateByTemplateTask.set(t.template_task_id, { start: t.start, end: t.end });
+    }
+  }
 
   // Generate new project-phase ids up front so we can wire tasks to them.
   // Map: template_phase_id → new project_phase_id.
@@ -581,6 +595,10 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
     const newPhaseId = newPhaseIdByTemplatePhase.get(tt.phase_id);
     if (!newPhaseId) continue;
     const phaseDates = newPhases.find((p) => p.id === newPhaseId)!;
+    // Per-task overrides take precedence over phase dates when present.
+    const taskOverride = dateByTemplateTask.get(tt.id);
+    const taskStart = taskOverride?.start ?? phaseDates.start;
+    const taskEnd   = taskOverride?.end   ?? phaseDates.end;
     const role = tt.default_assignee_role?.toLowerCase() ?? "";
     const userId    = roleToUserId[role]    ?? null;
     const contactId = roleToContactId[role] ?? null;
@@ -594,9 +612,9 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
       priority: tt.priority ?? "medium",
       assignee_user_id: userId,
       assignee_contact_id: contactId,
-      scheduled_start: phaseDates.start,
-      scheduled_end: phaseDates.end,
-      due_date: phaseDates.end,
+      scheduled_start: taskStart,
+      scheduled_end: taskEnd,
+      due_date: taskEnd,
     });
   }
 

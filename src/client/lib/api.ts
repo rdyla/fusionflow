@@ -1753,7 +1753,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
     }),
-  applyTimeline: (projectId: string, payload: { template_id: string; phases: Array<{ template_phase_id: string; start: string; end: string }> }) =>
+  applyTimeline: (projectId: string, payload: { template_id: string; phases: Array<{ template_phase_id: string; start: string; end: string; tasks?: Array<{ template_task_id: string; start: string; end: string }> }> }) =>
     request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
       method: "POST",
       body: JSON.stringify(payload),
