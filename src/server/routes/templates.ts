@@ -487,24 +487,31 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Timeline Builder apply — wipes the project's existing phases + tasks, then
-// rebuilds from a template using PM-supplied start/end dates per phase. Tasks
-// inherit their parent phase's dates (matches the project-plan workbook model
-// where task End = WORKDAY(task Start, phase duration)).
+// rebuilds them from a client-computed structure.
+//
+// The Timeline Builder supports multi-template selection (e.g., UCaaS + CCaaS
+// for combo projects). The client loads each selected template, merges phases
+// by canonical name (Initiation / Planning / Executing / etc.), takes the MAX
+// working_days across templates, and unions tasks (each tagged with its source
+// solution_type via buildTaggedTitle). The fully resolved structure is sent
+// here; the server's job is just to persist it, plus resolve role strings to
+// project-scoped user/contact ids.
 // ──────────────────────────────────────────────────────────────────────────────
 
 const applyTimelineSchema = z.object({
-  template_id: z.string().min(1),
   phases: z.array(z.object({
-    template_phase_id: z.string().min(1),
+    name: z.string().min(1),
     start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    // Optional per-task overrides — sent when PMs have edited individual
-    // task dates in the builder. Missing entries default to the phase dates.
     tasks: z.array(z.object({
-      template_task_id: z.string().min(1),
+      /** Pre-tagged, already title-cased. */
+      title: z.string().min(1),
+      /** default_assignee_role string ('pm' / 'ie' / 'pf' / 'zoom_porting' / etc.). */
+      role: z.string().nullable().optional(),
+      priority: z.string().nullable().optional(),
       start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    })).optional(),
+    })),
   })).min(1),
 });
 
@@ -518,51 +525,17 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
 
   const parsed = applyTimelineSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
-  const { template_id, phases: phaseDates } = parsed.data;
+  const { phases: phasePayload } = parsed.data;
 
-  const template = await db
-    .prepare("SELECT id, solution_type FROM templates WHERE id = ? LIMIT 1")
-    .bind(template_id)
-    .first<{ id: string; solution_type: string | null }>();
-  if (!template) throw new HTTPException(404, { message: "Template not found" });
-  const templateSolutionType: SolutionType | null = canonicalizeSolutionType(template.solution_type ?? "");
-
-  const templatePhases = await db
-    .prepare("SELECT id, name, order_index FROM template_phases WHERE template_id = ? ORDER BY order_index ASC")
-    .bind(template_id)
-    .all<{ id: string; name: string; order_index: number }>();
-
-  const templateTasks = await db
-    .prepare("SELECT id, phase_id, title, priority, order_index, default_assignee_role FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
-    .bind(template_id)
-    .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
-
-  // Build template-phase-id → supplied { start, end } lookup. Any template
-  // phase missing from the body is skipped (PM may have removed it client-side).
-  const dateByTemplatePhase = new Map<string, { start: string; end: string }>();
-  // template_task_id → { start, end } — only set if PM edited individual task dates.
-  const dateByTemplateTask = new Map<string, { start: string; end: string }>();
-  for (const p of phaseDates) {
-    dateByTemplatePhase.set(p.template_phase_id, { start: p.start, end: p.end });
-    for (const t of p.tasks ?? []) {
-      dateByTemplateTask.set(t.template_task_id, { start: t.start, end: t.end });
-    }
-  }
-
-  // Generate new project-phase ids up front so we can wire tasks to them.
-  // Map: template_phase_id → new project_phase_id.
-  const newPhaseIdByTemplatePhase = new Map<string, string>();
+  // Generate project-phase ids up front so tasks can reference them.
   type NewPhase = { id: string; name: string; sort_order: number; start: string; end: string };
-  const newPhases: NewPhase[] = [];
-  let sortOrder = 1;
-  for (const tp of templatePhases.results ?? []) {
-    const dates = dateByTemplatePhase.get(tp.id);
-    if (!dates) continue;
-    const newId = crypto.randomUUID();
-    newPhaseIdByTemplatePhase.set(tp.id, newId);
-    newPhases.push({ id: newId, name: tp.name, sort_order: sortOrder++, start: dates.start, end: dates.end });
-  }
-  if (newPhases.length === 0) throw new HTTPException(400, { message: "No matching template phases for supplied dates" });
+  const newPhases: NewPhase[] = phasePayload.map((p, i) => ({
+    id: crypto.randomUUID(),
+    name: p.name,
+    sort_order: i + 1,
+    start: p.start,
+    end:   p.end,
+  }));
 
   // Assignee resolution (mirrors /apply-template logic — pm / ie / pf for users,
   // zoom_porting for project_contacts).
@@ -590,32 +563,25 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
   // Build all the task inserts so the wipe + rebuild runs in a single atomic batch.
   type NewTask = { id: string; phase_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string };
   const newTasks: NewTask[] = [];
-  for (const tt of templateTasks.results ?? []) {
-    if (!tt.phase_id) continue;
-    const newPhaseId = newPhaseIdByTemplatePhase.get(tt.phase_id);
-    if (!newPhaseId) continue;
-    const phaseDates = newPhases.find((p) => p.id === newPhaseId)!;
-    // Per-task overrides take precedence over phase dates when present.
-    const taskOverride = dateByTemplateTask.get(tt.id);
-    const taskStart = taskOverride?.start ?? phaseDates.start;
-    const taskEnd   = taskOverride?.end   ?? phaseDates.end;
-    const role = tt.default_assignee_role?.toLowerCase() ?? "";
-    const userId    = roleToUserId[role]    ?? null;
-    const contactId = roleToContactId[role] ?? null;
-    const title = templateSolutionType
-      ? buildTaggedTitle([templateSolutionType], toTitleCase(tt.title))
-      : toTitleCase(tt.title);
-    newTasks.push({
-      id: crypto.randomUUID(),
-      phase_id: newPhaseId,
-      title,
-      priority: tt.priority ?? "medium",
-      assignee_user_id: userId,
-      assignee_contact_id: contactId,
-      scheduled_start: taskStart,
-      scheduled_end: taskEnd,
-      due_date: taskEnd,
-    });
+  for (let phaseIdx = 0; phaseIdx < phasePayload.length; phaseIdx++) {
+    const phasePayloadEntry = phasePayload[phaseIdx];
+    const phaseId = newPhases[phaseIdx].id;
+    for (const t of phasePayloadEntry.tasks) {
+      const role = t.role?.toLowerCase() ?? "";
+      const userId    = roleToUserId[role]    ?? null;
+      const contactId = roleToContactId[role] ?? null;
+      newTasks.push({
+        id: crypto.randomUUID(),
+        phase_id: phaseId,
+        title: t.title,
+        priority: t.priority ?? "medium",
+        assignee_user_id: userId,
+        assignee_contact_id: contactId,
+        scheduled_start: t.start,
+        scheduled_end: t.end,
+        due_date: t.end,
+      });
+    }
   }
 
   // Atomic batch: wipe-then-rebuild. Non-CASCADE FK refs (risks.task_id,
