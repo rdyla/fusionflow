@@ -945,6 +945,8 @@ export type TemplatePhase = {
   template_id: string;
   name: string;
   order_index: number;
+  /** Workdays the phase takes; drives the Timeline Builder date math. */
+  working_days: number;
   tasks: TemplateTask[];
 };
 
@@ -1728,6 +1730,8 @@ export const api = {
 
   // ── Templates ────────────────────────────────────────────────────────────────
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
+  /** Fetch one template with its phases + tasks. PM-accessible (for Timeline Builder). */
+  template: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminTemplates: () => request<Template[]>("/admin/templates"),
   adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminCreateTemplate: (payload: { name: string; solution_type?: string; description?: string }) =>
@@ -1748,6 +1752,11 @@ export const api = {
     request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
+    }),
+  applyTimeline: (projectId: string, payload: { template_id: string; phases: Array<{ template_phase_id: string; start: string; end: string }> }) =>
+    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   // ── Inbox ─────────────────────────────────────────────────────────────────

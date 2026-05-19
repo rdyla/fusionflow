@@ -21,6 +21,7 @@ import {
   type ZoomRecordingFile,
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
+import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectExecutiveDashboard from "../components/project/ProjectExecutiveDashboard";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
@@ -34,7 +35,7 @@ import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -806,7 +807,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -815,12 +816,26 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t === "builder" ? "Timeline Builder" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
         );
       })()}
+
+      {/* ── Timeline Builder (PM-only, spreadsheet-style template applier) ── */}
+      {tab === "builder" && canEdit && (
+        <TimelineBuilder
+          project={project}
+          onApplied={async () => {
+            // Reload phases + tasks after a rebuild
+            const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
+            setPhases(newPhases);
+            setTasks(newTasks);
+            setTab("timeline");
+          }}
+        />
+      )}
 
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (
