@@ -185,7 +185,14 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   function setPhaseField(idx: number, patch: Partial<Row>) {
     setRows((prev) => {
       const next = [...prev];
-      next[idx] = { ...next[idx], ...patch, pinned: true };
+      const merged = { ...next[idx], ...patch, pinned: true };
+      // When the PM edits Start or Workdays (but not End in the same patch),
+      // derive End = WORKDAY(Start, Workdays) so the row stays consistent.
+      // Explicit End edits bypass this and override.
+      if (("start" in patch || "working_days" in patch) && !("end" in patch)) {
+        merged.end = workday(merged.start, Math.max(merged.working_days, 0));
+      }
+      next[idx] = merged;
       const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
       return recomputeChain(next, anchor);
     });
