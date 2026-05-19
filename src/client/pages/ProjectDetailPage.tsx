@@ -862,17 +862,8 @@ export default function ProjectDetailPage() {
         />
       )}
 
-      {/* ── Overview (exec-friendly dashboard) ────────────────────────────── */}
+      {/* ── Overview ────────────────────────────────────────────────────── */}
       {tab === "overview" && (
-        <>
-        <ProjectExecutiveDashboard
-          project={project}
-          phases={phases}
-          tasks={tasks}
-          risks={risks}
-          onViewBlockers={() => setTab("blockers")}
-          onViewTasks={() => setTab("tasks")}
-        />
         <div style={{ display: "grid", gap: 16 }}>
           {/* ── Team & Controls (consolidated) ───────────────────────────── */}
           <div className="ms-section-card" style={{ padding: "12px 16px" }}>
@@ -990,13 +981,6 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* ── Meeting Prep Emails (lifecycle-staged) ────────────────────── */}
-          <MeetingPrepCard projectId={project.id} meetingType="kickoff"       canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="discovery"     canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="design_review" canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="uat"           canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="go_live"       canSend={canEdit} />
-
           {/* ── Customer + Partner Contacts ──────────────────────────────── */}
           {/* Two stacked sections — customer-side roles vs partner/provider
               roles (Porting Coordinator etc.). Underlying storage is one
@@ -1098,6 +1082,28 @@ export default function ProjectDetailPage() {
             );
           })()}
 
+          {/* ── Dashboard (KPIs, phase stepper, upcoming tasks, blockers) ── */}
+          <ProjectExecutiveDashboard
+            project={project}
+            phases={phases}
+            tasks={tasks}
+            risks={risks}
+            onViewBlockers={() => setTab("blockers")}
+            onViewTasks={() => setTab("tasks")}
+          />
+
+          {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
+          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+            <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
+                  <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* ── Asana Phase Progress ──────────────────────────────────────── */}
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
@@ -1113,7 +1119,6 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         </div>
-        </>
       )}
 
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
