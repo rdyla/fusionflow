@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { Phase, Task, ZoomRecording } from "../../lib/api";
-import { type SolutionType, parseTaggedTitle, SOLUTION_TYPE_COLORS, SOLUTION_TYPE_LABELS } from "../../../shared/solutionTypes";
+import { type SolutionType, parseTaggedTitle } from "../../../shared/solutionTypes";
 import { SolutionTypeFilterPills } from "../ui/SolutionTypeFilterPills";
 
 const GANTT_COLLAPSED_KEY = "cloudconnect:timeline:gantt:collapsed";
@@ -330,26 +330,13 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                     const doneLeft = doneMs !== null ? pct(doneMs, minMs, totalMs) : null;
                     const connectorLeft = dueLeft !== null && doneLeft !== null ? Math.min(dueLeft, doneLeft) : null;
                     const connectorWidth = dueLeft !== null && doneLeft !== null ? Math.abs(doneLeft - dueLeft) : null;
-                    const taskTypes = parseTaggedTitle(task.title).types;
                     return (
                       <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 3, minHeight: 18 }}>
                         <div
-                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "right", overflow: "hidden", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}
-                          title={task.title}
+                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "left", cursor: onClickTask ? "pointer" : "default", whiteSpace: "normal", wordBreak: "break-word" }}
                           onClick={() => onClickTask?.(task.id, task.phase_id)}
                         >
-                          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{taskDisplayTitle(task)}</span>
-                          {taskTypes.length > 0 && (
-                            <span style={{ display: "inline-flex", gap: 2, flexShrink: 0 }}>
-                              {taskTypes.map((t) => (
-                                <span
-                                  key={t}
-                                  title={SOLUTION_TYPE_LABELS[t]}
-                                  style={{ width: 6, height: 6, borderRadius: "50%", background: SOLUTION_TYPE_COLORS[t], flexShrink: 0 }}
-                                />
-                              ))}
-                            </span>
-                          )}
+                          {taskDisplayTitle(task)}
                         </div>
                         <div style={{ flex: 1, position: "relative", height: 12 }}>
                           {connectorLeft !== null && connectorWidth !== null && connectorWidth > 0 && (
