@@ -141,6 +141,10 @@ export default function ProjectDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
 
+  // When the Tasks-page assignee dropdown opens the contact modal via "+ Add new contact",
+  // remember which task to auto-assign the newly-created contact to.
+  const [assignNewContactToTaskId, setAssignNewContactToTaskId] = useState<string | null>(null);
+
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
   const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
@@ -1238,7 +1242,6 @@ export default function ProjectDetailPage() {
                               const taskRecordings = recordings.filter((r) => r.task_id === task.id);
                               const taskEntries = taskTimeEntries[task.id] ?? [];
                               const isDone = task.status === "completed";
-                              const doneLabel = task.completed_at ? formatDate(task.completed_at) : null;
                               const subRowCount = taskRecordings.length + taskEntries.length;
                               return (
                                 <React.Fragment key={task.id}>
@@ -1295,6 +1298,25 @@ export default function ProjectDetailPage() {
                                             style={cellInputStyle}
                                             onChange={(e) => {
                                               const v = e.target.value;
+                                              if (v === "__add_contact__") {
+                                                // Open the contact modal pre-set to customer side; remember the task so
+                                                // the newly-created contact is auto-assigned on save.
+                                                setAssignNewContactToTaskId(task.id);
+                                                setContactSide("customer");
+                                                setContactRole("");
+                                                setManualContact({ name: "", email: "", phone: "", job_title: "" });
+                                                const useCrm = !!project?.dynamics_account_id;
+                                                setContactModalTab(useCrm ? "crm" : "manual");
+                                                if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
+                                                  setCrmContactsLoading(true);
+                                                  api.getDynamicsContacts(project!.dynamics_account_id)
+                                                    .then(setCrmContacts)
+                                                    .catch(() => {})
+                                                    .finally(() => setCrmContactsLoading(false));
+                                                }
+                                                setShowContactModal(true);
+                                                return;
+                                              }
                                               if (!v) patchTask(task.id, { assignee_user_id: null, assignee_contact_id: null });
                                               else if (v.startsWith("u:")) patchTask(task.id, { assignee_user_id: v.slice(2), assignee_contact_id: null });
                                               else if (v.startsWith("c:")) patchTask(task.id, { assignee_contact_id: v.slice(2), assignee_user_id: null });
@@ -1318,6 +1340,9 @@ export default function ProjectDetailPage() {
                                                   </option>
                                                 ))}
                                               </optgroup>
+                                            )}
+                                            {canEdit && (
+                                              <option value="__add_contact__">+ Add new contact…</option>
                                             )}
                                             {/* Stale: assigned user no longer on project — surface so PM can see + reassign */}
                                             {task.assignee_user_id && !userIsOnProject && (
@@ -1365,16 +1390,26 @@ export default function ProjectDetailPage() {
                                       </select>
                                     </td>
                                     <td style={cellStyle}>
-                                      <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: canEdit ? "pointer" : "default", fontSize: 12, color: "#059669" }} title="Toggle status to/from completed">
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                         <input
                                           type="checkbox"
                                           checked={isDone}
                                           disabled={!canEdit}
                                           onChange={(e) => patchTask(task.id, { status: e.target.checked ? "completed" : "not_started" })}
                                           style={{ cursor: canEdit ? "pointer" : "default" }}
+                                          title="Toggle status to/from completed"
                                         />
-                                        {doneLabel && <span style={{ fontWeight: 500 }}>{doneLabel}</span>}
-                                      </label>
+                                        {isDone && (
+                                          <input
+                                            type="date"
+                                            value={task.completed_at?.slice(0, 10) ?? ""}
+                                            disabled={!canEdit}
+                                            onChange={(e) => patchTask(task.id, { completed_at: e.target.value || null })}
+                                            style={{ ...cellInputStyle, color: "#059669", fontWeight: 500, padding: "3px 4px" }}
+                                            title="Edit completion date"
+                                          />
+                                        )}
+                                      </div>
                                     </td>
                                     <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                                       <button
@@ -2615,7 +2650,7 @@ export default function ProjectDetailPage() {
 
       {/* ── Add Contact Modal ──────────────────────────────────────────────── */}
       {showContactModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowContactModal(false); }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowContactModal(false); setAssignNewContactToTaskId(null); } }}>
           <div className="ms-modal" style={{ maxWidth: 580, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
 
             {/* Header */}
@@ -2623,7 +2658,7 @@ export default function ProjectDetailPage() {
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>
                 Add {contactSide === "partner" ? "Partner / Provider" : "Customer"} Contact
               </h2>
-              <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+              <button onClick={() => { setShowContactModal(false); setAssignNewContactToTaskId(null); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
             </div>
 
             {/* Role selector — always shown. Options filtered by side. */}
@@ -2702,6 +2737,11 @@ export default function ProjectDetailPage() {
                                     });
                                     setContacts((prev) => [...prev, added]);
                                     setContactRole("");
+                                    if (assignNewContactToTaskId) {
+                                      patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
+                                      setAssignNewContactToTaskId(null);
+                                      setShowContactModal(false);
+                                    }
                                   } catch {
                                     showToast("Failed to add contact", "error");
                                   } finally {
@@ -2763,6 +2803,11 @@ export default function ProjectDetailPage() {
                       setContacts((prev) => [...prev, added]);
                       setManualContact({ name: "", email: "", phone: "", job_title: "" });
                       setContactRole("");
+                      if (assignNewContactToTaskId) {
+                        patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
+                        setAssignNewContactToTaskId(null);
+                        setShowContactModal(false);
+                      }
                     } catch {
                       showToast("Failed to add contact", "error");
                     } finally {
@@ -2772,7 +2817,7 @@ export default function ProjectDetailPage() {
                 >
                   {savingContact ? "Adding…" : "Add Contact"}
                 </button>
-                <button className="ms-btn-secondary" onClick={() => setShowContactModal(false)}>Cancel</button>
+                <button className="ms-btn-secondary" onClick={() => { setShowContactModal(false); setAssignNewContactToTaskId(null); }}>Cancel</button>
               </div>
             )}
 

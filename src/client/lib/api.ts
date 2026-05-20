@@ -1199,6 +1199,7 @@ export const api = {
       due_date?: string | null;
       scheduled_start?: string | null;
       scheduled_end?: string | null;
+      completed_at?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
     }
