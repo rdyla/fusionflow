@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import type { Phase, Task, ZoomRecording } from "../../lib/api";
+import { parseTaggedTitle, SOLUTION_TYPE_COLORS, SOLUTION_TYPE_LABELS } from "../../../shared/solutionTypes";
 
 const GANTT_COLLAPSED_KEY = "cloudconnect:timeline:gantt:collapsed";
 
@@ -253,14 +254,30 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
                     const tDue   = parseDate(task.due_date);
                     const hasBar = tStart !== null && tEnd !== null;
                     const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+                    // Strip the [UCaaS+CCaaS] tag prefix from the visible label
+                    // so it doesn't dominate when the label gets ellipsed. Render
+                    // solution-type dots before the title instead. Full tagged
+                    // title is still on the hover tooltip.
+                    const { types: taskTypes, rawTitle: taskRawTitle } = parseTaggedTitle(task.title);
                     return (
                       <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 3, minHeight: 18 }}>
                         <div
-                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default" }}
+                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "right", overflow: "hidden", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}
                           title={task.title}
                           onClick={() => onClickTask?.(task.id, task.phase_id)}
                         >
-                          {task.title}
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{taskRawTitle}</span>
+                          {taskTypes.length > 0 && (
+                            <span style={{ display: "inline-flex", gap: 2, flexShrink: 0 }}>
+                              {taskTypes.map((t) => (
+                                <span
+                                  key={t}
+                                  title={SOLUTION_TYPE_LABELS[t]}
+                                  style={{ width: 6, height: 6, borderRadius: "50%", background: SOLUTION_TYPE_COLORS[t], flexShrink: 0 }}
+                                />
+                              ))}
+                            </span>
+                          )}
                         </div>
                         <div style={{ flex: 1, position: "relative", height: 12 }}>
                           {hasBar && (
