@@ -200,8 +200,13 @@ export default function ProjectDetailPage() {
     return SOLUTION_TYPES.filter((s) => present.has(s));
   }, [tasks]);
 
-  // Untagged tasks always pass; tagged tasks pass if any of their tags is selected
+  // Untagged tasks always pass; tagged tasks pass if any of their tags is selected.
+  // Safety: empty selectedTypes is treated as "no filter active" so tasks aren't
+  // silently invisible when localStorage gets into a stuck-empty state (or the
+  // user toggled all pills off and now can't toggle them back because they're
+  // hidden on a single-type project).
   const taskMatchesTypeFilter = (task: Task): boolean => {
+    if (selectedTypes.size === 0) return true;
     const { types } = parseTaggedTitle(task.title);
     if (types.length === 0) return true;
     return types.some((t) => selectedTypes.has(t));
@@ -215,6 +220,10 @@ export default function ProjectDetailPage() {
       const next = new Set(prev);
       if (next.has(type)) next.delete(type);
       else next.add(type);
+      // Persist inline so we don't race against the hydration useEffect on initial mount
+      if (project) {
+        window.localStorage.setItem(`cloudconnect:project:typeFilter:${project.id}`, JSON.stringify([...next]));
+      }
       return next;
     });
   };
@@ -335,11 +344,6 @@ export default function ProjectDetailPage() {
       /* ignore — fall back to default all-on */
     }
   }, [project?.id]);
-
-  useEffect(() => {
-    if (!project) return;
-    window.localStorage.setItem(`cloudconnect:project:typeFilter:${project.id}`, JSON.stringify([...selectedTypes]));
-  }, [selectedTypes, project?.id]);
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading project...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
@@ -1079,6 +1083,23 @@ export default function ProjectDetailPage() {
             <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Phase</div>
             <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
           </div>
+          {tasks.length > 0 && filteredTasks.length === 0 && (
+            <div style={{ padding: "8px 12px", marginBottom: 12, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6, fontSize: 12, color: "#854d0e", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>Filter is hiding all {tasks.length} task{tasks.length === 1 ? "" : "s"} on this project.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTypes(new Set(availableTypes.length > 0 ? availableTypes : SOLUTION_TYPES));
+                  if (project) {
+                    window.localStorage.setItem(`cloudconnect:project:typeFilter:${project.id}`, JSON.stringify(availableTypes.length > 0 ? availableTypes : [...SOLUTION_TYPES]));
+                  }
+                }}
+                style={{ background: "#fff", border: "1px solid #fde68a", color: "#854d0e", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}
+              >
+                Show all
+              </button>
+            </div>
+          )}
           <div style={{ display: "grid", gap: 24 }}>
             {phases.length === 0 && (
               <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
