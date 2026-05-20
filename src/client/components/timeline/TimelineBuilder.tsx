@@ -20,6 +20,11 @@ type Task = {
   start: string;
   end: string;
   pinned: boolean;
+  /** Canonical go-live event for its source template. Its phase becomes the
+   *  anchor: the project's target go-live date = end of this task's phase,
+   *  with earlier phases chained backward and later phases (Closing,
+   *  Hypercare) chained forward. */
+  isGoLiveEvent: boolean;
 };
 
 type Row = {
@@ -82,6 +87,7 @@ function mergeTemplates(templates: Template[]): Omit<Row, "start" | "end" | "pin
           start: "",     // filled in by rowsFromTemplates() after chaining
           end:   "",
           pinned: false,
+          isGoLiveEvent: tt.is_go_live_event === 1,
         });
       }
     }
@@ -92,6 +98,35 @@ function mergeTemplates(templates: Template[]): Omit<Row, "start" | "end" | "pin
     working_days: byName.get(name)!.working_days,
     tasks:        byName.get(name)!.tasks,
   }));
+}
+
+/**
+ * Index of the merged phase that holds the go-live event anchor (any task with
+ * isGoLiveEvent). Returns the LAST such phase so combo projects whose
+ * templates disagree on go-live phase still treat the later phase as "the"
+ * go-live (everything before chains back, everything after chains forward).
+ * Returns -1 when no template in the selection has a flagged task — caller
+ * falls back to anchoring on the very last phase's end (legacy behaviour).
+ */
+function findGoLivePhaseIdx(merged: { tasks: { isGoLiveEvent: boolean }[] }[]): number {
+  for (let i = merged.length - 1; i >= 0; i--) {
+    if (merged[i].tasks.some((t) => t.isGoLiveEvent)) return i;
+  }
+  return -1;
+}
+
+/**
+ * Total workdays from project start through the end of the go-live phase.
+ * Used to back-compute the anchor start date from the target go-live so the
+ * go-live phase's END lands on the target date — phases after (Closing,
+ * Hypercare) then chain forward past it.
+ */
+function workdaysThroughGoLive(merged: { working_days: number; tasks: { isGoLiveEvent: boolean }[] }[]): number {
+  const goLiveIdx = findGoLivePhaseIdx(merged);
+  const upto = goLiveIdx >= 0 ? goLiveIdx : merged.length - 1;
+  let sum = 0;
+  for (let i = 0; i <= upto; i++) sum += merged[i].working_days;
+  return sum;
 }
 
 function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
@@ -176,7 +211,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
     if (missing.length === 0) {
       // Already cached — rebuild rows from the latest selection + go-live
       const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
-      const total = mergeTemplates(selected).reduce((sum, p) => sum + p.working_days, 0);
+      const total = workdaysThroughGoLive(mergeTemplates(selected));
       const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
       setRows(rowsFromTemplates(selected, anchor));
       return;
@@ -199,13 +234,20 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   useEffect(() => {
     const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
     if (selected.length === 0) return;
-    const total = mergeTemplates(selected).reduce((sum, p) => sum + p.working_days, 0);
+    const total = workdaysThroughGoLive(mergeTemplates(selected));
     const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
     setRows(rowsFromTemplates(selected, anchor));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goLive]);
 
-  const computedGoLive = useMemo(() => rows.length ? rows[rows.length - 1].end : "", [rows]);
+  const goLivePhaseIdx = useMemo(() => findGoLivePhaseIdx(rows), [rows]);
+  const computedGoLive = useMemo(() => {
+    if (!rows.length) return "";
+    // Prefer the flagged go-live phase's end; fall back to last phase end
+    // (legacy behaviour when no template in the selection is flagged).
+    const idx = goLivePhaseIdx >= 0 ? goLivePhaseIdx : rows.length - 1;
+    return rows[idx].end;
+  }, [rows, goLivePhaseIdx]);
 
   function toggleTemplate(id: string) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
@@ -242,7 +284,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   function clearOverrides() {
     const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
     if (selected.length === 0) return;
-    const total = mergeTemplates(selected).reduce((sum, p) => sum + p.working_days, 0);
+    const total = workdaysThroughGoLive(mergeTemplates(selected));
     const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
     setRows(rowsFromTemplates(selected, anchor));
   }
@@ -320,7 +362,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
         </div>
         {rows.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-            Computed go-live (last phase end): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
+            Computed go-live ({goLivePhaseIdx >= 0 ? `${rows[goLivePhaseIdx].name} phase end` : "last phase end"}): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
             {computedGoLive && goLive && computedGoLive !== goLive && (
               <span style={{ marginLeft: 8, color: "#d97706" }}>
                 (differs from target — likely due to manual overrides)
@@ -430,7 +472,14 @@ function PhaseRows({
       </tr>
       {row.tasks.map((t, taskIdx) => (
         <tr key={t.uid} style={{ background: t.pinned ? "#fef9c3" : "#fafbfc", borderBottom: "1px solid #f1f5f9" }}>
-          <td style={{ padding: "5px 14px 5px 36px", color: "#475569", fontSize: 12 }}>{t.title}</td>
+          <td style={{ padding: "5px 14px 5px 36px", color: "#475569", fontSize: 12 }}>
+            {t.title}
+            {t.isGoLiveEvent && (
+              <span title="Go-Live anchor — target go-live date = end of this task" style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, padding: "1px 6px", borderRadius: 10, background: "#fef3c7", color: "#854d0e", border: "1px solid #fde68a", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                Go-Live Anchor
+              </span>
+            )}
+          </td>
           <td style={{ padding: "5px 14px", color: "#64748b", fontSize: 12, textTransform: "uppercase", letterSpacing: "0.04em" }}>{t.role ?? ""}</td>
           <td style={{ padding: "5px 14px", color: "#94a3b8", fontSize: 12 }}>—</td>
           <td style={{ padding: "5px 14px" }}>
