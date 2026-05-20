@@ -1314,6 +1314,7 @@ export default function SolutionDetailPage() {
             needsAssessments={needsAssessments}
             laborEstimates={laborEstimates}
             solutionContacts={solutionContacts}
+            solutionStaff={solutionStaff}
             canEdit={canEdit}
             onSaved={load}
           />
