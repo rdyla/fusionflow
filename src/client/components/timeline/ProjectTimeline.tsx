@@ -211,6 +211,17 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
         ) : (
         <div style={{ overflow: "hidden", marginTop: 12 }}>
           <div>
+            <div style={{ position: "relative" }}>
+              {/* Grid line overlay — vertical separator + month dividers, behind all content */}
+              <div style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none" }}>
+                <div style={{ position: "absolute", top: 0, bottom: 0, left: LABEL_W, width: 1, background: "rgba(148,163,184,0.35)" }} />
+                <div style={{ position: "absolute", top: 0, bottom: 0, left: LABEL_W, right: 0 }}>
+                  {months.map((m) => (
+                    <div key={m.ms} style={{ position: "absolute", top: 0, bottom: 0, left: `${pct(m.ms, minMs, totalMs)}%`, width: 1, background: "rgba(148,163,184,0.18)" }} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ position: "relative", zIndex: 1 }}>
             {/* Month headers */}
             <div style={{ display: "flex", marginBottom: 8, paddingLeft: LABEL_W }}>
               <div style={{ position: "relative", flex: 1, height: 20 }}>
@@ -258,7 +269,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                   {/* Phase bar row */}
                   <div style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 28 }}>
                     <div
-                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: isExpandable || onClickPhase ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4 }}
+                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingLeft: 8, paddingRight: 12, textAlign: "left", cursor: isExpandable || onClickPhase ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 6, whiteSpace: "normal", wordBreak: "break-word" }}
                       onClick={() => { if (isExpandable) togglePhase(phase.id); else onClickPhase?.(phase.id); }}
                       title={isExpandable ? (isExpanded ? "Collapse phase" : `Expand phase (${childCount})`) : phase.name}
                     >
@@ -267,7 +278,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                           {isExpanded ? "▾" : "▸"}
                         </span>
                       )}
-                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{phase.name}</span>
+                      <span>{phase.name}</span>
                       {isExpandable && !isExpanded && (
                         <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400, flexShrink: 0 }}>({childCount})</span>
                       )}
@@ -448,6 +459,8 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
               </>
             )}
 
+              </div>
+            </div>
             {/* Legend */}
             <div style={{ display: "flex", gap: 18, marginTop: 10, paddingLeft: LABEL_W, fontSize: 11, color: "#64748b", flexWrap: "wrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
