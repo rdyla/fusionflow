@@ -124,6 +124,9 @@ const updateTaskSchema = z.object({
   due_date: z.string().nullable().optional(),
   scheduled_start: z.string().nullable().optional(),
   scheduled_end: z.string().nullable().optional(),
+  /** Manually-set completion date. When omitted on a status->completed transition,
+   *  the server stamps CURRENT_TIMESTAMP; when provided, the explicit value wins. */
+  completed_at: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
 });
@@ -183,11 +186,16 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     throw new HTTPException(400, { message: "No valid fields to update" });
   }
 
-  // Auto-set completed_at when marking complete
-  if (updates.status === "completed") {
-    fields.push("completed_at = CURRENT_TIMESTAMP");
-  } else if (updates.status !== undefined) {
-    fields.push("completed_at = NULL");
+  // Auto-stamp completed_at on the status->completed transition only when the
+  // caller didn't supply an explicit completed_at (which lets PMs backdate via
+  // the date picker on the Tasks page). A status->anything-else transition still
+  // clears completed_at unless the caller is explicitly setting it.
+  if (updates.completed_at === undefined) {
+    if (updates.status === "completed") {
+      fields.push("completed_at = CURRENT_TIMESTAMP");
+    } else if (updates.status !== undefined) {
+      fields.push("completed_at = NULL");
+    }
   }
 
   await db
