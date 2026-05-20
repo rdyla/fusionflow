@@ -129,6 +129,13 @@ export type Solution = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** 1 = SOW renders a "BUDGETARY" diagonal watermark + solution shows the
+   *  "Budgetary Only" banner. For pre-contract quotes. */
+  is_budgetary: number;
+  /** 1 = SOW cover-page legal blurb references the Zoom Services Reseller
+   *  Customer Agreement instead of the Packet Fusion MSA. Required for SLED
+   *  and other Zoom-reseller-channel deals. */
+  is_zoom_reseller: number;
   // SOW pricing
   add_ons: AddOn[];
   blended_rate: number;
@@ -1472,6 +1479,8 @@ export const api = {
       pricing_mode: "tiered" | "basic" | "advanced";
       basic_seat_count: number | null;
       basic_inputs: UcaasBasicInputs | null;
+      is_budgetary: number;
+      is_zoom_reseller: number;
       /** If a solution_types update would orphan needs_assessments / labor_estimates rows
        *  for removed types, the server returns 409 unless this flag is set. The client
        *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */
