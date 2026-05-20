@@ -938,6 +938,10 @@ export type TemplateTask = {
    *  "zoom_porting", "pf", "all", "customer/ie"). Surfaced in the admin
    *  template view; not yet propagated to project tasks at apply time. */
   default_assignee_role: string | null;
+  /** True (1 in SQLite) for the canonical go-live event task. Exactly one
+   *  per template. The Timeline Builder anchors the project's target
+   *  go-live date to this task's end. */
+  is_go_live_event?: number;
 };
 
 export type TemplatePhase = {
