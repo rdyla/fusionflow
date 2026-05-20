@@ -13,10 +13,12 @@
 
 ALTER TABLE template_tasks ADD COLUMN is_go_live_event INTEGER NOT NULL DEFAULT 0;
 
--- ── ZCC: add the missing "Go Live Event" task before the existing verification task
+-- ── ZCC: add the missing "Go Live Event" task before the existing verification task.
+-- ID note: ttsk-czcc-165..-172 are already used by 0072 for the Closing + Hypercare
+-- phases, so we jump to the 200 range for the new go-live event row.
 UPDATE template_tasks SET order_index = 2 WHERE id = 'ttsk-czcc-164';
 INSERT INTO template_tasks (id, template_id, phase_id, title, priority, order_index, default_assignee_role, is_go_live_event) VALUES
-  ('ttsk-czcc-165', 'tmpl-ccaas-zcc', 'tph-czcc-gl', 'Go Live Event', 'high', 1, 'all', 1);
+  ('ttsk-czcc-200', 'tmpl-ccaas-zcc', 'tph-czcc-gl', 'Go Live Event', 'high', 1, 'all', 1);
 
 -- ── Flag the canonical go-live event in every other template ────────────────
 -- UCaaS Zoom: existing "Go Live Event" task
