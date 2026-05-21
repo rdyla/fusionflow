@@ -54,9 +54,19 @@ type ProjectRow = {
   pm_user_id: string | null;
 };
 
-/** Shift an ISO date (or null) by N working days. Returns null for null in. */
+/**
+ * Shift an ISO date (or null) by N working days. Returns null for null in.
+ *
+ * Slip 0 returns the original date verbatim — keeps the preview consistent
+ * with the apply path's zero-slip no-op short-circuit. (Calling workday()
+ * directly with days=0 would bump weekend dates to the next weekday, which
+ * is intentional for the Timeline Builder anchor flow but would mislead
+ * PMs here by showing fake shifts on tasks that happen to have weekend
+ * due dates.)
+ */
 function shiftDate(iso: string | null, slipDays: number): string | null {
   if (!iso) return null;
+  if (slipDays === 0) return iso;
   return workday(iso, slipDays);
 }
 
