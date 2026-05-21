@@ -27,18 +27,31 @@
       "database_name": "fusionflow",
       "database_id": "92ff189b-31c3-419c-8504-1c39a369cc0f",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "DB_STAGING",
+      "database_name": "fusionflow-staging",
+      "database_id": "48523231-162d-4bb5-9130-fc8aadeb66ec"
     }
   ],
   "kv_namespaces": [
     {
       "binding": "KV",
       "id": "cc54227971144b93b20e97807053979a"
+    },
+    {
+      "binding": "KV_STAGING",
+      "id": "b440d440223245729ef519290020ab6d"
     }
   ],
   "r2_buckets": [
     {
       "binding": "R2",
       "bucket_name": "fusionflow-docs"
+    },
+    {
+      "binding": "R2_STAGING",
+      "bucket_name": "fusionflow-docs-staging"
     }
   ],
   "env": {

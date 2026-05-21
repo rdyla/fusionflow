@@ -1408,6 +1408,20 @@ export const api = {
   adminRunHealthScoring: () =>
     request<{ scored: number }>("/admin/run-health-scoring", { method: "POST" }),
 
+  // Staging → Prod promotion (prod-only; staging worker returns 503)
+  adminStagingInventory: () =>
+    request<{
+      solutions: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; needs_assessment_count: number; labor_estimate_count: number; contact_count: number; already_on_prod: boolean }>;
+      projects: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; phase_count: number; task_count: number; risk_count: number; document_count: number; already_on_prod: boolean }>;
+      optimize_accounts: Array<{ id: string; project_id: string; project_name: string; customer_name: string | null; graduated_at: string; impact_assessment_count: number; tech_stack_count: number; roadmap_count: number; utilization_count: number; already_on_prod: boolean }>;
+    }>("/admin/staging/inventory"),
+
+  adminStagingPromote: (payload: { solution_ids: string[]; project_ids: string[]; optimize_account_ids: string[] }) =>
+    request<Record<string, number | Array<{ kind: string; id: string; reason: string }>>>("/admin/staging/promote", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   adminUsers: () => request<User[]>("/admin/users"),
 
   adminDeleteUser: (id: string) =>
