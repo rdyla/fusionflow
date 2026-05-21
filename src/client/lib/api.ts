@@ -796,13 +796,19 @@ export type OptimizeAccount = {
   next_review_date: string | null;
   notes: string | null;
   customer_id: string | null;
-  // Team comes from the linked customer
+  // Team comes from the linked customer — joined in via cust.pf_*_user_id
+  // in GET /api/optimize/accounts/:projectId. The customer_pf_* keys further
+  // below are kept on the type for legacy callers but are not returned by
+  // the optimize endpoints; new readers should use ae_name/ae_email etc.
   ae_user_id: string | null;
   ae_name: string | null;
+  ae_email: string | null;
   sa_user_id: string | null;
   sa_name: string | null;
+  sa_email: string | null;
   csm_user_id: string | null;
   csm_name: string | null;
+  csm_email: string | null;
   dynamics_account_id: string | null;
   last_assessment_date: string | null;
   last_assessment_score: number | null;
