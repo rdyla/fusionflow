@@ -11,6 +11,7 @@ import {
 import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
+import OptimizeCredentialsSetup from "../components/optimize/OptimizeCredentialsSetup";
 import {
   ExportAccountSummaryButton,
   ExportImpactAssessmentButton,
@@ -695,28 +696,26 @@ export default function OptimizeAccountPage() {
       )}
 
       {/* Utilization Tab */}
-      {tab === "utilization" && (() => {
-        // Platform is derived from the project's vendor; RC projects show the
-        // RingCentral metric set, Zoom projects show the Zoom metric set.
-        // Both flavors share the top configured/sync card and API diagnostics
-        // panel; the body sections differ because the underlying data does.
-        // Use the shared canonicalizer so legacy free-text vendor values
-        // ("Ring Central", "RingCentral, Inc.", etc.) still route to the
-        // RingCentral branch even before the 0074 normalization migration
-        // runs on a given environment.
-        const platform: "ringcentral" | "zoom" =
-          canonicalizeVendor(account?.vendor) === "ringcentral" ? "ringcentral" : "zoom";
-        const configured = platform === "ringcentral" ? rcConfigured : zoomConfigured;
-        const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
-        const credsTabHint = platform === "ringcentral"
-          ? "Add them on the project's RingCentral tab to enable utilization tracking."
-          : "Add them on the project's Zoom tab to enable utilization tracking.";
+      {tab === "utilization" && account && (() => {
+        // Platform is derived from the project's vendor — RC projects show
+        // the RingCentral metric set, Zoom projects show the Zoom set.
+        // When vendor is unset (typical for direct-enrolled accounts that
+        // skipped the platform field), platform is null and the inline
+        // OptimizeCredentialsSetup component renders a picker + the matching
+        // credential form so the CSM can connect without leaving the page.
+        const canonical = canonicalizeVendor(account.vendor);
+        const platform: "ringcentral" | "zoom" | null =
+          canonical === "ringcentral" ? "ringcentral" :
+          canonical === "zoom"        ? "zoom"        :
+          null;
+        const configured = platform === "ringcentral" ? rcConfigured : platform === "zoom" ? zoomConfigured : false;
+        const platformLabel = platform === "ringcentral" ? "RingCentral" : platform === "zoom" ? "Zoom" : "Utilization";
 
         return (
         <div>
           <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${configured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>{platformLabel} Utilization</div>
+              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>{platformLabel}{platform ? " Utilization" : ""}</div>
               {configured ? (
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
                   {utilization.length > 0
@@ -725,7 +724,9 @@ export default function OptimizeAccountPage() {
                 </p>
               ) : (
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-                  No {platformLabel} credentials found for this project. {credsTabHint}
+                  {platform
+                    ? `Connect ${platformLabel} below to start capturing utilization metrics.`
+                    : "Choose a platform below to start capturing utilization metrics."}
                 </p>
               )}
             </div>
@@ -736,9 +737,20 @@ export default function OptimizeAccountPage() {
             )}
           </div>
 
-          {utilization.length === 0 && (
+          {/* Inline vendor picker + credentials form when not yet configured.
+              Returns null automatically once vendor is set + creds are saved. */}
+          {!configured && projectId && (
+            <OptimizeCredentialsSetup
+              account={account}
+              zoomConfigured={zoomConfigured}
+              rcConfigured={rcConfigured}
+              onUpdated={() => loadAll(projectId)}
+            />
+          )}
+
+          {configured && utilization.length === 0 && (
             <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
-              No utilization data yet.{configured ? " Click 'Sync Now' to capture the first snapshot." : ""}
+              No utilization data yet. Click 'Sync Now' to capture the first snapshot.
             </div>
           )}
 
