@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { api, type Solution, type NeedsAssessment, type LaborEstimate, type SolutionContact } from "../../lib/api";
+import { api, type Solution, type NeedsAssessment, type LaborEstimate, type SolutionContact, type SolutionStaffMember } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -316,7 +316,7 @@ const TH_STYLE: React.CSSProperties = {
 const TD_LABEL: React.CSSProperties = {
   padding: "4px 10px",
   fontSize: 12,
-  color: "#cbd5e1",
+  color: "#475569",
   whiteSpace: "nowrap",
   verticalAlign: "middle",
 };
@@ -343,7 +343,7 @@ function Cell({ value, onChange, canEdit, placeholder, wide }: {
   wide?: boolean;
 }) {
   if (!canEdit) {
-    return <span style={{ fontSize: 12, color: value ? "#e2e8f0" : "#475569" }}>{value || "—"}</span>;
+    return <span style={{ fontSize: 12, color: value ? "#1e293b" : "#94a3b8" }}>{value || "—"}</span>;
   }
   return (
     <input
@@ -393,11 +393,15 @@ interface Props {
   /** Per-type labor estimates keyed by solution_type. The component currently uses the aggregate for display. */
   laborEstimates: Record<string, LaborEstimate>;
   solutionContacts: SolutionContact[];
+  /** Provider/Partner AEs assigned to this solution (via solution_staff). Used to
+   *  drive the Provider AE row(s) in the handoff Account Information section so
+   *  the new multi-AE flow propagates from Overview to Handoff. */
+  solutionStaff?: SolutionStaffMember[];
   canEdit: boolean;
   onSaved?: () => void;
 }
 
-export default function ProjectHandoffDocument({ solution, needsAssessments, laborEstimates, solutionContacts, canEdit, onSaved }: Props) {
+export default function ProjectHandoffDocument({ solution, needsAssessments, laborEstimates, solutionContacts, solutionStaff = [], canEdit, onSaved }: Props) {
   const [phd, setPhd] = useState<PhdData>(DEFAULT_PHD);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -488,23 +492,37 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
             <div style={{ ...SECTION_HEADER, background: "#0a2540", color: "#f0f6ff", fontSize: 13 }}>
               Account Information
             </div>
-            <table style={tableStyle}>
-              <tbody>
-                {[
-                  ["Account Name", solution.customer_name],
-                  ["Primary Contact Name", primaryContact?.name ?? ""],
-                  ["Primary Contact Phone", primaryContact?.phone ?? ""],
-                  ["Primary Contact Email", primaryContact?.email ?? ""],
-                  ["Provider Account Executive", solution.partner_ae_name ?? ""],
-                  ["Provider AE Email", solution.partner_ae_email ?? ""],
-                ].map(([label, value]) => (
-                  <tr key={label}>
-                    <td style={{ ...TD_LABEL, ...tdBorder, width: 220, fontWeight: 600 }}>{label}</td>
-                    <td style={{ ...TD_INPUT, ...tdBorder }}><span style={{ fontSize: 12, color: "#e2e8f0" }}>{value || "—"}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            {(() => {
+              // Prefer the multi-AE solution_staff list (post-2025 flow); fall back to the
+              // legacy single partner_ae_name/email on the solution row for older data.
+              const partnerAes = solutionStaff.filter((s) => s.staff_role === "partner_ae");
+              const aeNames = partnerAes.length > 0
+                ? partnerAes.map((s) => s.name ?? s.email).join(", ")
+                : (solution.partner_ae_name ?? "");
+              const aeEmails = partnerAes.length > 0
+                ? partnerAes.map((s) => s.email).join(", ")
+                : (solution.partner_ae_email ?? "");
+              const rows: [string, string][] = [
+                ["Account Name", solution.customer_name],
+                ["Primary Contact Name", primaryContact?.name ?? ""],
+                ["Primary Contact Phone", primaryContact?.phone ?? ""],
+                ["Primary Contact Email", primaryContact?.email ?? ""],
+                [partnerAes.length > 1 ? "Provider Account Executives" : "Provider Account Executive", aeNames],
+                [partnerAes.length > 1 ? "Provider AE Emails" : "Provider AE Email", aeEmails],
+              ];
+              return (
+                <table style={tableStyle}>
+                  <tbody>
+                    {rows.map(([label, value]) => (
+                      <tr key={label}>
+                        <td style={{ ...TD_LABEL, ...tdBorder, width: 220, fontWeight: 600 }}>{label}</td>
+                        <td style={{ ...TD_INPUT, ...tdBorder }}><span style={{ fontSize: 12, color: value ? "#1e293b" : "#94a3b8" }}>{value || "—"}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
 
           {/* ── UCaaS ── */}
@@ -512,7 +530,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", ...SECTION_HEADER }}>
               <span>UCaaS</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 11, color: "#94a3b8" }}>Include?</span>
+                <span style={{ fontSize: 11, color: "#475569" }}>Include?</span>
                 <YesNoCell value={phd.ucaas_enabled} onChange={v => update("ucaas_enabled", v)} canEdit={canEdit} />
               </div>
             </div>
@@ -631,7 +649,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", ...SECTION_HEADER }}>
               <span>CCaaS</span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span style={{ fontSize: 11, color: "#94a3b8" }}>Include?</span>
+                <span style={{ fontSize: 11, color: "#475569" }}>Include?</span>
                 <YesNoCell value={phd.ccaas_enabled} onChange={v => update("ccaas_enabled", v)} canEdit={canEdit} />
               </div>
             </div>
@@ -720,7 +738,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
                         placeholder="List custom / other integrations…"
                       />
                     ) : (
-                      <span style={{ fontSize: 12, color: phd.ccaas_integrations_notes ? "#e2e8f0" : "#475569" }}>{phd.ccaas_integrations_notes || "—"}</span>
+                      <span style={{ fontSize: 12, color: phd.ccaas_integrations_notes ? "#1e293b" : "#94a3b8" }}>{phd.ccaas_integrations_notes || "—"}</span>
                     )}
                   </td>
                 </tr>
@@ -1047,7 +1065,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
                         placeholder="Insert notes here…"
                       />
                     ) : (
-                      <span style={{ fontSize: 12, color: phd.additional_notes ? "#e2e8f0" : "#475569", whiteSpace: "pre-wrap" }}>
+                      <span style={{ fontSize: 12, color: phd.additional_notes ? "#1e293b" : "#94a3b8", whiteSpace: "pre-wrap" }}>
                         {phd.additional_notes || "—"}
                       </span>
                     )}

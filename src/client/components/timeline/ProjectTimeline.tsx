@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import type { Phase, Task, ZoomRecording } from "../../lib/api";
+import { type SolutionType, parseTaggedTitle } from "../../../shared/solutionTypes";
+import { SolutionTypeFilterPills } from "../ui/SolutionTypeFilterPills";
 
 const GANTT_COLLAPSED_KEY = "cloudconnect:timeline:gantt:collapsed";
+const PHASE_EXPANDED_KEY_PREFIX = "cloudconnect:timeline:gantt:expandedPhases:";
 
 type PhaseUpdate = {
   status?: "not_started" | "in_progress" | "completed";
@@ -15,6 +18,12 @@ type Props = {
   phases: Phase[];
   tasks?: Task[];
   recordings?: ZoomRecording[];
+  /** Used to namespace localStorage for per-phase collapse state. Falls back to phases[0]?.project_id when omitted. */
+  projectId?: string;
+  /** Solution-type filter — owned by the parent so the Tasks tab and Gantt share state. */
+  availableTypes?: readonly SolutionType[];
+  selectedTypes?: ReadonlySet<SolutionType>;
+  onToggleType?: (type: SolutionType) => void;
   onUpdatePhase: (phaseId: string, updates: PhaseUpdate) => Promise<void>;
   ganttOnly?: boolean;
   onClickPhase?: (phaseId: string) => void;
@@ -72,7 +81,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProjectTimeline({ phases, tasks = [], recordings = [], onUpdatePhase, ganttOnly = false, onClickPhase, onClickTask }: Props) {
+export default function ProjectTimeline({ phases, tasks = [], recordings = [], projectId, availableTypes = [], selectedTypes, onToggleType, onUpdatePhase, ganttOnly = false, onClickPhase, onClickTask }: Props) {
   const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
   const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
@@ -86,13 +95,57 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
     window.localStorage.setItem(GANTT_COLLAPSED_KEY, ganttCollapsed ? "1" : "0");
   }, [ganttCollapsed]);
 
+  // Stable namespace key for per-project localStorage entries
+  const storageKey = projectId ?? phases[0]?.project_id ?? null;
+
+  // Per-phase expanded set — empty = all collapsed (PM-requested default)
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(() => {
+    if (typeof window === "undefined" || !storageKey) return new Set();
+    const raw = window.localStorage.getItem(PHASE_EXPANDED_KEY_PREFIX + storageKey);
+    if (!raw) return new Set();
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return new Set(parsed.filter((s): s is string => typeof s === "string"));
+    } catch {
+      /* fall through */
+    }
+    return new Set();
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !storageKey) return;
+    window.localStorage.setItem(PHASE_EXPANDED_KEY_PREFIX + storageKey, JSON.stringify([...expandedPhases]));
+  }, [expandedPhases, storageKey]);
+
+  function togglePhase(phaseId: string) {
+    setExpandedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(phaseId)) next.delete(phaseId);
+      else next.add(phaseId);
+      return next;
+    });
+  }
+
+  // Untagged tasks always pass; tagged tasks pass when any tag is selected.
+  function taskMatchesTypeFilter(task: Task): boolean {
+    if (!selectedTypes) return true;
+    const { types } = parseTaggedTitle(task.title);
+    if (types.length === 0) return true;
+    return types.some((t) => selectedTypes.has(t));
+  }
+
+  function taskDisplayTitle(task: Task): string {
+    return parseTaggedTitle(task.title).rawTitle || task.title;
+  }
+
   // ── Gantt ──────────────────────────────────────────────────────────────────
 
   const datedPhases = phases.filter((p) => p.planned_start && p.planned_end);
   let ganttContent: React.ReactNode = null;
 
-  // tasks that have at least one date for bounding the chart
-  const datedTasks = tasks.filter((t) => t.scheduled_start || t.scheduled_end || t.due_date);
+  // Type-filter first, then keep tasks that have at least one date (due/done/scheduled) for bounding
+  const filteredTasks = tasks.filter(taskMatchesTypeFilter);
+  const datedTasks = filteredTasks.filter((t) => t.scheduled_start || t.scheduled_end || t.due_date || t.completed_at);
 
   if (datedPhases.length > 0 || datedTasks.length > 0) {
     const allMs: number[] = [];
@@ -101,6 +154,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
       const s = parseDate(t.scheduled_start); if (s) allMs.push(s);
       const e = parseDate(t.scheduled_end);   if (e) allMs.push(e);
       const d = parseDate(t.due_date);        if (d) allMs.push(d);
+      const c = parseDate(t.completed_at);    if (c) allMs.push(c);
     });
     recordings.forEach((r) => { const ms = parseDate(r.start_time.slice(0, 10)); if (ms) allMs.push(ms); });
 
@@ -144,11 +198,30 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
             <span>{ganttCollapsed ? "Expand" : "Minimize"}</span>
           </button>
         </div>
+
+        {/* Solution-type filter pills — controlled by parent so Tasks tab shares state */}
+        {!ganttCollapsed && selectedTypes && onToggleType && (
+          <div style={{ marginTop: 10 }}>
+            <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={onToggleType} />
+          </div>
+        )}
+
         {ganttCollapsed ? (
           <div style={{ marginTop: 8, fontSize: 12, color: "#64748b" }}>{summary}</div>
         ) : (
         <div style={{ overflow: "hidden", marginTop: 12 }}>
           <div>
+            <div style={{ position: "relative" }}>
+              {/* Grid line overlay — vertical separator + month dividers, behind all content */}
+              <div style={{ position: "absolute", inset: 0, zIndex: 0, pointerEvents: "none" }}>
+                <div style={{ position: "absolute", top: 0, bottom: 0, left: LABEL_W, width: 1, background: "rgba(148,163,184,0.35)" }} />
+                <div style={{ position: "absolute", top: 0, bottom: 0, left: LABEL_W, right: 0 }}>
+                  {months.map((m) => (
+                    <div key={m.ms} style={{ position: "absolute", top: 0, bottom: 0, left: `${pct(m.ms, minMs, totalMs)}%`, width: 1, background: "rgba(148,163,184,0.18)" }} />
+                  ))}
+                </div>
+              </div>
+              <div style={{ position: "relative", zIndex: 1 }}>
             {/* Month headers */}
             <div style={{ display: "flex", marginBottom: 8, paddingLeft: LABEL_W }}>
               <div style={{ position: "relative", flex: 1, height: 20 }}>
@@ -176,7 +249,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
 
-            {/* Phase rows with tasks interleaved immediately after each phase */}
+            {/* Phase rows — tasks/recordings only render when phase is expanded */}
             {phases.map((phase) => {
               const pStart = parseDate(phase.planned_start);
               const pEnd   = parseDate(phase.planned_end);
@@ -186,16 +259,29 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
               const hasActual = aStart !== null && aEnd !== null;
               const color = STATUS_COLOR[phase.status ?? "not_started"] ?? STATUS_COLOR.not_started;
               const phaseTasks = datedTasks.filter((t) => t.phase_id === phase.id);
+              const phaseRecordings = recordings.filter((r) => r.phase_id === phase.id);
+              const childCount = phaseTasks.length + phaseRecordings.length;
+              const isExpanded = expandedPhases.has(phase.id);
+              const isExpandable = childCount > 0;
 
               return (
                 <React.Fragment key={phase.id}>
                   {/* Phase bar row */}
                   <div style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 28 }}>
                     <div
-                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingRight: 12, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickPhase ? "pointer" : "default" }}
-                      onClick={() => onClickPhase?.(phase.id)}
+                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingLeft: 8, paddingRight: 12, textAlign: "left", cursor: isExpandable || onClickPhase ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 6, whiteSpace: "normal", wordBreak: "break-word" }}
+                      onClick={() => { if (isExpandable) togglePhase(phase.id); else onClickPhase?.(phase.id); }}
+                      title={isExpandable ? (isExpanded ? "Collapse phase" : `Expand phase (${childCount})`) : phase.name}
                     >
-                      {phase.name}
+                      {isExpandable && (
+                        <span style={{ fontSize: 9, color: "#94a3b8", width: 10, textAlign: "center", flexShrink: 0 }}>
+                          {isExpanded ? "▾" : "▸"}
+                        </span>
+                      )}
+                      <span>{phase.name}</span>
+                      {isExpandable && !isExpanded && (
+                        <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400, flexShrink: 0 }}>({childCount})</span>
+                      )}
                     </div>
                     <div style={{ flex: 1, position: "relative", height: hasActual ? 26 : 16 }}>
                       {hasPlan && (
@@ -246,57 +332,80 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
                     </div>
                   </div>
 
-                  {/* Task rows for this phase */}
-                  {phaseTasks.map((task) => {
-                    const tStart = parseDate(task.scheduled_start);
-                    const tEnd   = parseDate(task.scheduled_end);
-                    const tDue   = parseDate(task.due_date);
-                    const hasBar = tStart !== null && tEnd !== null;
+                  {/* Task rows — only when phase expanded. Each task: hollow ring at due, filled dot at done, line between. */}
+                  {isExpanded && phaseTasks.map((task) => {
+                    const dueMs  = parseDate(task.due_date);
+                    const doneMs = parseDate(task.completed_at);
                     const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+                    const dueLeft  = dueMs  !== null ? pct(dueMs,  minMs, totalMs) : null;
+                    const doneLeft = doneMs !== null ? pct(doneMs, minMs, totalMs) : null;
+                    const connectorLeft = dueLeft !== null && doneLeft !== null ? Math.min(dueLeft, doneLeft) : null;
+                    const connectorWidth = dueLeft !== null && doneLeft !== null ? Math.abs(doneLeft - dueLeft) : null;
                     return (
                       <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 3, minHeight: 18 }}>
                         <div
-                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "right", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", cursor: onClickTask ? "pointer" : "default" }}
-                          title={task.title}
+                          style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "left", cursor: onClickTask ? "pointer" : "default", whiteSpace: "normal", wordBreak: "break-word" }}
                           onClick={() => onClickTask?.(task.id, task.phase_id)}
                         >
-                          {task.title}
+                          {taskDisplayTitle(task)}
                         </div>
                         <div style={{ flex: 1, position: "relative", height: 12 }}>
-                          {hasBar && (
+                          {connectorLeft !== null && connectorWidth !== null && connectorWidth > 0 && (
                             <div
                               style={{
                                 position: "absolute",
-                                top: 0,
-                                left: `${pct(tStart!, minMs, totalMs)}%`,
-                                width: `${Math.max(pct(tEnd!, minMs, totalMs) - pct(tStart!, minMs, totalMs), 0.5)}%`,
-                                height: 12,
-                                borderRadius: 2,
+                                top: 5,
+                                left: `${connectorLeft}%`,
+                                width: `${connectorWidth}%`,
+                                height: 2,
                                 background: taskColor,
                                 opacity: 0.55,
-                                minWidth: 4,
+                              }}
+                            />
+                          )}
+                          {dueLeft !== null && (
+                            <div
+                              style={{
+                                position: "absolute",
+                                top: 1,
+                                left: `${dueLeft}%`,
+                                transform: "translateX(-50%)",
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                border: `2px solid ${taskColor}`,
+                                background: "transparent",
+                                boxSizing: "border-box",
                                 cursor: onClickTask ? "pointer" : "default",
                               }}
-                              title={`${task.title}: ${task.scheduled_start} → ${task.scheduled_end}`}
+                              title={`Due: ${task.due_date}`}
                               onClick={() => onClickTask?.(task.id, task.phase_id)}
                             />
                           )}
-                          {!hasBar && tDue && (
+                          {doneLeft !== null && (
                             <div
-                              style={{ position: "absolute", top: 2, left: `${pct(tDue, minMs, totalMs)}%`, transform: "translateX(-50%)", cursor: onClickTask ? "pointer" : "default" }}
-                              title={`${task.title} due: ${task.due_date}`}
+                              style={{
+                                position: "absolute",
+                                top: 1,
+                                left: `${doneLeft}%`,
+                                transform: "translateX(-50%)",
+                                width: 10,
+                                height: 10,
+                                borderRadius: "50%",
+                                background: taskColor,
+                                cursor: onClickTask ? "pointer" : "default",
+                              }}
+                              title={`Done: ${task.completed_at?.slice(0, 10) ?? ""}`}
                               onClick={() => onClickTask?.(task.id, task.phase_id)}
-                            >
-                              <div style={{ width: 7, height: 7, background: taskColor, opacity: 0.7, transform: "rotate(45deg)", borderRadius: 1 }} />
-                            </div>
+                            />
                           )}
                         </div>
                       </div>
                     );
                   })}
 
-                  {/* Recording dots for this phase */}
-                  {recordings.filter((r) => r.phase_id === phase.id).map((r) => {
+                  {/* Recording dots for this phase — only when expanded */}
+                  {isExpanded && phaseRecordings.map((r) => {
                     const rMs = parseDate(r.start_time.slice(0, 10));
                     if (!rMs) return null;
                     return (
@@ -317,8 +426,8 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
                     );
                   })}
 
-                  {/* Small gap after each phase group */}
-                  {(phaseTasks.length > 0 || recordings.some((r) => r.phase_id === phase.id)) && <div style={{ height: 4 }} />}
+                  {/* Small gap after each expanded phase group */}
+                  {isExpanded && childCount > 0 && <div style={{ height: 4 }} />}
                 </React.Fragment>
               );
             })}
@@ -350,8 +459,10 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
               </>
             )}
 
+              </div>
+            </div>
             {/* Legend */}
-            <div style={{ display: "flex", gap: 20, marginTop: 10, paddingLeft: LABEL_W, fontSize: 11, color: "#64748b" }}>
+            <div style={{ display: "flex", gap: 18, marginTop: 10, paddingLeft: LABEL_W, fontSize: 11, color: "#64748b", flexWrap: "wrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 4, background: "#0078d4", borderRadius: 2, display: "inline-block" }} />
                 Phase
@@ -361,12 +472,12 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], o
                 Actual
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 16, height: 4, background: "#94a3b8", borderRadius: 2, display: "inline-block" }} />
-                Task
+                <span style={{ width: 10, height: 10, borderRadius: "50%", border: "2px solid #94a3b8", display: "inline-block", boxSizing: "border-box" }} />
+                Task due
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                <span style={{ width: 8, height: 8, background: "#94a3b8", transform: "rotate(45deg)", display: "inline-block", borderRadius: 1 }} />
-                Due date
+                <span style={{ width: 10, height: 10, borderRadius: "50%", background: "#059669", display: "inline-block" }} />
+                Task done
               </span>
               {recordings.length > 0 && (
                 <span style={{ display: "flex", alignItems: "center", gap: 5 }}>

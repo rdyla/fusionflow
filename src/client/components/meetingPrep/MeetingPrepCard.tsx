@@ -88,6 +88,11 @@ type Props = {
   projectId: string;
   meetingType: MeetingType;
   canSend: boolean;
+  /** Compact row layout for use inside a shared parent section. Strips the
+   *  outer ms-section-card wrapper and renders as a single horizontal row
+   *  (label · status · send button). Send history is omitted (it's still
+   *  visible on the modal's send flow). */
+  compact?: boolean;
 };
 
 const TYPE_LABELS: Record<MeetingType, { ctaLabel: string; resendLabel: string; sectionLabel: string }> = {
@@ -123,7 +128,7 @@ function formatWhen(iso: string): string {
   return d.toLocaleString(undefined, { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-export default function MeetingPrepCard({ projectId, meetingType, canSend }: Props) {
+export default function MeetingPrepCard({ projectId, meetingType, canSend, compact = false }: Props) {
   const [options, setOptions] = useState<MeetingPrepOptions | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +149,45 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend }: Pro
 
   const history = options?.history ?? [];
   const hasSends = history.length > 0;
+
+  if (compact) {
+    return (
+      <>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "6px 0" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#1e293b", minWidth: 130 }}>
+              {labels.sectionLabel}
+            </span>
+            {loading && <span style={{ fontSize: 11, color: "#94a3b8" }}>Loading…</span>}
+            {error && <span style={{ fontSize: 11, color: "#d13438" }}>{error}</span>}
+            {!loading && !error && (
+              hasSends ? (
+                <span style={{ fontSize: 11, color: "#047857" }}>
+                  ✓ {history.length} send{history.length === 1 ? "" : "s"}
+                </span>
+              ) : (
+                <span style={{ fontSize: 11, color: "#94a3b8" }}>Not sent yet</span>
+              )
+            )}
+          </div>
+          {canSend && options && (
+            <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 12px" }} onClick={() => setShowModal(true)}>
+              {hasSends ? "Resend" : "Send"}
+            </button>
+          )}
+        </div>
+        {showModal && options && (
+          <MeetingPrepModal
+            projectId={projectId}
+            meetingType={meetingType}
+            options={options}
+            onClose={() => setShowModal(false)}
+            onSent={() => { setShowModal(false); load(); }}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="ms-section-card" style={{ padding: "12px 16px" }}>

@@ -11,6 +11,13 @@ import {
 import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
+import OptimizeCredentialsSetup from "../components/optimize/OptimizeCredentialsSetup";
+import OptimizeRelinkModal from "../components/optimize/OptimizeRelinkModal";
+import {
+  ExportAccountSummaryButton,
+  ExportImpactAssessmentButton,
+  ExportTechStackButton,
+} from "../components/optimize/OptimizeExports";
 import { solutionTypeLabel } from "../../shared/solutionTypes";
 import { canonicalizeVendor } from "../../shared/vendors";
 
@@ -70,6 +77,7 @@ export default function OptimizeAccountPage() {
   const [rcConfigured, setRcConfigured] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [crmSyncing, setCrmSyncing] = useState(false);
+  const [showRelinkModal, setShowRelinkModal] = useState(false);
 
   useEffect(() => {
     if (projectId) loadAll(projectId);
@@ -95,7 +103,9 @@ export default function OptimizeAccountPage() {
       setZoomConfigured(zoomCfg.configured);
       setRcConfigured(rcCfg.configured);
       // Fetch photos for customer PF team
-      const customerEmails = [acc.customer_pf_ae_email, acc.customer_pf_sa_email, acc.customer_pf_csm_email].filter(Boolean) as string[];
+      // GET /optimize/accounts/:projectId returns the joined account-team names + emails as
+      // `ae_name`/`ae_email` (etc.), not the `customer_pf_*` shape the type also declares.
+      const customerEmails = [acc.ae_email, acc.sa_email, acc.csm_email].filter(Boolean) as string[];
       if (customerEmails.length > 0) {
         api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
       }
@@ -269,12 +279,12 @@ export default function OptimizeAccountPage() {
               </a>
             )}
           </div>
-          {(account.customer_pf_ae_name || account.customer_pf_sa_name || account.customer_pf_csm_name) && (
+          {(account.ae_name || account.sa_name || account.csm_name) && (
             <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
               {[
-                { role: "Account Executive", name: account.customer_pf_ae_name, email: account.customer_pf_ae_email },
-                { role: "Solution Architect", name: account.customer_pf_sa_name, email: account.customer_pf_sa_email },
-                { role: "Client Success Manager", name: account.customer_pf_csm_name, email: account.customer_pf_csm_email },
+                { role: "Account Executive", name: account.ae_name, email: account.ae_email },
+                { role: "Solution Architect", name: account.sa_name, email: account.sa_email },
+                { role: "Client Success Manager", name: account.csm_name, email: account.csm_email },
               ].filter(m => m.name).map((m) => {
                 const photo = m.email ? customerTeamPhotoMap[m.email] : null;
                 const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
@@ -300,7 +310,13 @@ export default function OptimizeAccountPage() {
       <div style={{ marginBottom: 24 }}>
         <div className="ms-page-header" style={{ marginBottom: 0 }}>
           <div>
-            <h1 className="ms-page-title">{account.project_name}</h1>
+            {/* Suppress the page title when it duplicates the customer name (typical
+                for direct-enrolled optimize accounts where the project shell was
+                synthesized from the customer name). The Customer card above already
+                identifies the account. */}
+            {account.project_name?.trim().toLowerCase() !== account.customer_name?.trim().toLowerCase() && (
+              <h1 className="ms-page-title">{account.project_name}</h1>
+            )}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <span className="ms-badge" style={{ background: account.optimize_status === "active" ? "#22c55e1a" : "#f59e0b1a", color: account.optimize_status === "active" ? "#22c55e" : "#f59e0b", border: `1px solid ${account.optimize_status === "active" ? "#22c55e40" : "#f59e0b40"}` }}>
@@ -311,6 +327,20 @@ export default function OptimizeAccountPage() {
                 {crmSyncing ? "Syncing…" : "Sync from CRM"}
               </button>
             )}
+            <button
+              className="ms-btn-secondary"
+              onClick={() => setShowRelinkModal(true)}
+              style={{ fontSize: 12 }}
+              title="Move this Optimize account to point at a different project"
+            >
+              Link to project
+            </button>
+            <ExportAccountSummaryButton
+              account={account}
+              assessment={assessments[0] ?? null}
+              techStack={techStack}
+              roadmap={roadmap}
+            />
           </div>
         </div>
 
@@ -442,12 +472,17 @@ export default function OptimizeAccountPage() {
           )}
 
           {assessmentView === "detail" && selectedAssessment && (
-            <ImpactAssessmentDetail
-              assessment={selectedAssessment}
-              previousAssessment={getPreviousAssessment()}
-              onBack={() => setAssessmentView("list")}
-              onDelete={() => handleDeleteAssessment(selectedAssessment.id)}
-            />
+            <>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                <ExportImpactAssessmentButton assessment={selectedAssessment} account={account} />
+              </div>
+              <ImpactAssessmentDetail
+                assessment={selectedAssessment}
+                previousAssessment={getPreviousAssessment()}
+                onBack={() => setAssessmentView("list")}
+                onDelete={() => handleDeleteAssessment(selectedAssessment.id)}
+              />
+            </>
           )}
         </div>
       )}
@@ -459,7 +494,10 @@ export default function OptimizeAccountPage() {
             <div style={{ fontSize: 13, color: "#94a3b8" }}>
               Gartner TIME framework — rate each technology area for strategic direction.
             </div>
-            <button className="ms-btn-primary" onClick={() => setShowTechForm(true)}>+ Add Area</button>
+            <div style={{ display: "flex", gap: 10 }}>
+              {techStack.length > 0 && <ExportTechStackButton items={techStack} account={account} />}
+              <button className="ms-btn-primary" onClick={() => setShowTechForm(true)}>+ Add Area</button>
+            </div>
           </div>
 
           {techStack.length === 0 ? (
@@ -492,7 +530,7 @@ export default function OptimizeAccountPage() {
                           </span>
                         ) : "—"}
                       </td>
-                      <td style={{ color: "#64748b", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
+                      <td style={{ color: "#475569", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
                       <td>
                         <button className="ms-btn-ghost" onClick={() => handleDeleteTech(t.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}>Delete</button>
                       </td>
@@ -589,7 +627,7 @@ export default function OptimizeAccountPage() {
                         )}
                         <span style={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize" }}>{r.category.replace("_", " ")}</span>
                       </div>
-                      {r.description && <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: 0, lineHeight: 1.5 }}>{r.description}</p>}
+                      {r.description && <p style={{ fontSize: 13, color: "#475569", margin: 0, lineHeight: 1.5 }}>{r.description}</p>}
                       {r.target_date && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>Target: {r.target_date}</div>}
                     </div>
                     <button className="ms-btn-ghost" onClick={() => handleDeleteRoadmap(r.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)", flexShrink: 0 }}>Delete</button>
@@ -668,28 +706,26 @@ export default function OptimizeAccountPage() {
       )}
 
       {/* Utilization Tab */}
-      {tab === "utilization" && (() => {
-        // Platform is derived from the project's vendor; RC projects show the
-        // RingCentral metric set, Zoom projects show the Zoom metric set.
-        // Both flavors share the top configured/sync card and API diagnostics
-        // panel; the body sections differ because the underlying data does.
-        // Use the shared canonicalizer so legacy free-text vendor values
-        // ("Ring Central", "RingCentral, Inc.", etc.) still route to the
-        // RingCentral branch even before the 0074 normalization migration
-        // runs on a given environment.
-        const platform: "ringcentral" | "zoom" =
-          canonicalizeVendor(account?.vendor) === "ringcentral" ? "ringcentral" : "zoom";
-        const configured = platform === "ringcentral" ? rcConfigured : zoomConfigured;
-        const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
-        const credsTabHint = platform === "ringcentral"
-          ? "Add them on the project's RingCentral tab to enable utilization tracking."
-          : "Add them on the project's Zoom tab to enable utilization tracking.";
+      {tab === "utilization" && account && (() => {
+        // Platform is derived from the project's vendor — RC projects show
+        // the RingCentral metric set, Zoom projects show the Zoom set.
+        // When vendor is unset (typical for direct-enrolled accounts that
+        // skipped the platform field), platform is null and the inline
+        // OptimizeCredentialsSetup component renders a picker + the matching
+        // credential form so the CSM can connect without leaving the page.
+        const canonical = canonicalizeVendor(account.vendor);
+        const platform: "ringcentral" | "zoom" | null =
+          canonical === "ringcentral" ? "ringcentral" :
+          canonical === "zoom"        ? "zoom"        :
+          null;
+        const configured = platform === "ringcentral" ? rcConfigured : platform === "zoom" ? zoomConfigured : false;
+        const platformLabel = platform === "ringcentral" ? "RingCentral" : platform === "zoom" ? "Zoom" : "Utilization";
 
         return (
         <div>
           <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${configured ? "#22c55e" : "#0b9aad"}`, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>{platformLabel} Utilization</div>
+              <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>{platformLabel}{platform ? " Utilization" : ""}</div>
               {configured ? (
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
                   {utilization.length > 0
@@ -698,7 +734,9 @@ export default function OptimizeAccountPage() {
                 </p>
               ) : (
                 <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-                  No {platformLabel} credentials found for this project. {credsTabHint}
+                  {platform
+                    ? `Connect ${platformLabel} below to start capturing utilization metrics.`
+                    : "Choose a platform below to start capturing utilization metrics."}
                 </p>
               )}
             </div>
@@ -709,9 +747,20 @@ export default function OptimizeAccountPage() {
             )}
           </div>
 
-          {utilization.length === 0 && (
+          {/* Inline vendor picker + credentials form when not yet configured.
+              Returns null automatically once vendor is set + creds are saved. */}
+          {!configured && projectId && (
+            <OptimizeCredentialsSetup
+              account={account}
+              zoomConfigured={zoomConfigured}
+              rcConfigured={rcConfigured}
+              onUpdated={() => loadAll(projectId)}
+            />
+          )}
+
+          {configured && utilization.length === 0 && (
             <div className="ms-card" style={{ textAlign: "center", padding: "40px 24px", color: "#94a3b8" }}>
-              No utilization data yet.{configured ? " Click 'Sync Now' to capture the first snapshot." : ""}
+              No utilization data yet. Click 'Sync Now' to capture the first snapshot.
             </div>
           )}
 
@@ -998,6 +1047,15 @@ export default function OptimizeAccountPage() {
         </div>
         );
       })()}
+
+      {/* Relink modal — page-level so it's accessible from any tab. */}
+      {showRelinkModal && account && (
+        <OptimizeRelinkModal
+          currentProjectId={account.project_id}
+          customerName={account.customer_name}
+          onClose={() => setShowRelinkModal(false)}
+        />
+      )}
     </div>
   );
 }

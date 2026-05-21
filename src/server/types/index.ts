@@ -25,6 +25,14 @@ export type Bindings = {
   KV: KVNamespace;
   R2: R2Bucket;
   ASSETS: Fetcher;
+  // Cross-environment handles for the staging → prod promotion tool. Only
+  // configured on the prod worker (top-level block of wrangler.json) so an
+  // admin in prod CloudConnect can promote work users completed on staging
+  // during the build period. Absent on the staging worker — admin endpoints
+  // that need them guard with a defined-check + return 503 when missing.
+  DB_STAGING?: D1Database;
+  KV_STAGING?: KVNamespace;
+  R2_STAGING?: R2Bucket;
   // Dynamics 365 integration (set via wrangler secret put)
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;

@@ -718,4 +718,116 @@ app.post("/accounts/:projectId/utilization/sync", async (c) => {
   return c.json(created, 201);
 });
 
+// ── Relink Optimize account to a different project ─────────────────────────────
+//
+// Direct-enrolled Optimize accounts get a shell project row at creation. If a
+// CSM later discovers a real implementation project exists for the same
+// customer, they can retroactively point the Optimize account at it. All
+// optimize-side data (impact assessments, tech stack, roadmap items,
+// utilization snapshots) and any KV credentials (zoom / ringcentral, unless
+// the target already has its own) follow the link. If the abandoned shell
+// project has no real work attached, it's deleted in the same transaction;
+// otherwise it's left intact.
+
+const relinkSchema = z.object({
+  target_project_id: z.string().min(1),
+});
+
+app.post("/accounts/:projectId/relink", async (c) => {
+  assertOptimizeEdit(c.get("auth").role);
+  const db = c.env.DB;
+  const kv = c.env.KV;
+  const oldProjectId = c.req.param("projectId");
+
+  const parsed = relinkSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "target_project_id is required" });
+  const newProjectId = parsed.data.target_project_id;
+
+  if (oldProjectId === newProjectId) {
+    throw new HTTPException(400, { message: "Target project is the same as the current one" });
+  }
+
+  // Verify the Optimize account exists at the old project_id
+  const account = await db
+    .prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1")
+    .bind(oldProjectId)
+    .first<{ id: string }>();
+  if (!account) throw new HTTPException(404, { message: "Optimize account not found" });
+
+  // Verify the target project exists
+  const target = await db
+    .prepare("SELECT id FROM projects WHERE id = ? LIMIT 1")
+    .bind(newProjectId)
+    .first<{ id: string }>();
+  if (!target) throw new HTTPException(404, { message: "Target project not found" });
+
+  // Verify the target doesn't already have an Optimize account (UNIQUE)
+  const targetAlready = await db
+    .prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1")
+    .bind(newProjectId)
+    .first<{ id: string }>();
+  if (targetAlready) {
+    throw new HTTPException(409, { message: "The target project is already linked to another Optimize account" });
+  }
+
+  // Determine whether the old (shell) project is safe to delete after the
+  // relink. "Safe" = no tasks, phases, risks, notes, or documents tied to it.
+  // We check before the batch so the DELETE only fires when the shell is
+  // truly empty.
+  const counts = await db.batch([
+    db.prepare("SELECT COUNT(*) AS n FROM tasks      WHERE project_id = ?").bind(oldProjectId),
+    db.prepare("SELECT COUNT(*) AS n FROM phases     WHERE project_id = ?").bind(oldProjectId),
+    db.prepare("SELECT COUNT(*) AS n FROM risks      WHERE project_id = ?").bind(oldProjectId),
+    db.prepare("SELECT COUNT(*) AS n FROM notes      WHERE project_id = ?").bind(oldProjectId),
+    db.prepare("SELECT COUNT(*) AS n FROM documents  WHERE project_id = ?").bind(oldProjectId),
+  ]);
+  const totalRelatedRows = counts.reduce((sum, r) => {
+    const row = (r.results?.[0] as { n: number } | undefined);
+    return sum + (row?.n ?? 0);
+  }, 0);
+  const willDeleteShell = totalRelatedRows === 0;
+
+  // Single atomic batch: move every optimize-side rows, optionally delete shell.
+  const stmts = [
+    db.prepare("UPDATE optimize_accounts    SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?").bind(newProjectId, oldProjectId),
+    db.prepare("UPDATE impact_assessments   SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?").bind(newProjectId, oldProjectId),
+    db.prepare("UPDATE account_tech_stack   SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?").bind(newProjectId, oldProjectId),
+    db.prepare("UPDATE roadmap_items        SET project_id = ?, updated_at = CURRENT_TIMESTAMP WHERE project_id = ?").bind(newProjectId, oldProjectId),
+    db.prepare("UPDATE utilization_snapshots SET project_id = ? WHERE project_id = ?").bind(newProjectId, oldProjectId),
+  ];
+  if (willDeleteShell) {
+    stmts.push(db.prepare("DELETE FROM projects WHERE id = ?").bind(oldProjectId));
+  }
+  await db.batch(stmts);
+
+  // KV credential migration. The KV store sits outside the D1 transaction,
+  // so we run it after the batch succeeds. Only move when the target doesn't
+  // already have its own credentials for that platform — the target's
+  // creds always win to avoid overwriting an active set with shell data.
+  type Vendor = "zoom" | "ringcentral";
+  const credsKey = (v: Vendor, pid: string) => v === "zoom" ? `zoom:creds:${pid}`   : `rc:creds:${pid}`;
+  const tokenKey = (v: Vendor, pid: string) => v === "zoom" ? `zoom:token:${pid}`   : `rc:token:${pid}`;
+  const moved: Vendor[] = [];
+  for (const vendor of ["zoom", "ringcentral"] as const) {
+    const fromKey = credsKey(vendor, oldProjectId);
+    const toKey   = credsKey(vendor, newProjectId);
+    const [src, dstExists] = await Promise.all([kv.get(fromKey), kv.get(toKey)]);
+    if (!src) continue;
+    if (dstExists === null) {
+      await kv.put(toKey, src);
+      moved.push(vendor);
+    }
+    // Clean up shell's credentials + cached token either way (shell creds are
+    // unreachable post-relink; cached tokens are scoped to old project_id).
+    await Promise.all([kv.delete(fromKey), kv.delete(tokenKey(vendor, oldProjectId))]);
+  }
+
+  return c.json({
+    project_id: newProjectId,
+    previous_project_id: oldProjectId,
+    shell_deleted: willDeleteShell,
+    credentials_moved: moved,
+  });
+});
+
 export default app;

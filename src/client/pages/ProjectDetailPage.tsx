@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
@@ -13,7 +13,6 @@ import {
   type Risk,
   type SupportCase,
   type Task,
-  type TaskComment,
   type TaskTimeEntry,
   type User,
   type ZoomRecording,
@@ -21,6 +20,7 @@ import {
   type ZoomRecordingFile,
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
+import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectExecutiveDashboard from "../components/project/ProjectExecutiveDashboard";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
@@ -28,13 +28,15 @@ import RingCentralTab from "../components/ringcentral/RingCentralTab";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
-import { parseSolutionTypes, type SolutionType } from "../../shared/solutionTypes";
+import { SolutionTypeFilterPills } from "../components/ui/SolutionTypeFilterPills";
+import { parseSolutionTypes, parseTaggedTitle, SOLUTION_TYPES, SOLUTION_TYPE_COLORS, SOLUTION_TYPE_LABELS, type SolutionType } from "../../shared/solutionTypes";
 import { VENDOR_OPTIONS, vendorLabel } from "../../shared/vendors";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
+import CascadeModal from "../components/project/CascadeModal";
 
-type DetailTab = "overview" | "timeline" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -76,22 +78,6 @@ function formatDate(d: string | null) {
   if (!d) return "—";
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T00:00:00" : d;
   return new Date(normalized).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function taskCommentTimeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
-
-function fmtBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function Badge({ label, color, style }: { label: string; color: string; style?: React.CSSProperties }) {
@@ -141,21 +127,26 @@ export default function ProjectDetailPage() {
   const [savingNote, setSavingNote] = useState(false);
   const [noteMessage, setNoteMessage] = useState<string | null>(null);
 
-  const [editingTask, setEditingTask] = useState<Task | null>(null);
-  const [taskBlockerId, setTaskBlockerId] = useState<string>("");
-  const [savingTask, setSavingTask] = useState(false);
   const [timeEntryTask, setTimeEntryTask] = useState<Task | null>(null);
+  // PM-initiated date cascade — which task is the shift anchor (null = closed).
+  const [cascadeFromTask, setCascadeFromTask] = useState<Task | null>(null);
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
   const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
   const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", useCostCode: false });
   const [submittingTimeEntry, setSubmittingTimeEntry] = useState(false);
   const [taskTimeEntries, setTaskTimeEntries] = useState<Record<string, TaskTimeEntry[]>>({});
-  const [taskComments, setTaskComments] = useState<TaskComment[]>([]);
-  const [taskCommentBody, setTaskCommentBody] = useState("");
-  const [addingComment, setAddingComment] = useState(false);
-  const [uploadingAttachment, setUploadingAttachment] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string>("");
-  const attachFileRef = useRef<HTMLInputElement>(null);
+  // Project-scoped solution-type filter — shared between Gantt and the Tasks tab via localStorage.
+  // Stored as an array of canonical types; persisted per project id.
+  const [selectedTypes, setSelectedTypes] = useState<Set<SolutionType>>(() => new Set(SOLUTION_TYPES));
+
+  // Inline-create state for the Tasks table — phaseId currently being added to + the typed title
+  const [newTaskPhaseId, setNewTaskPhaseId] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [creatingTask, setCreatingTask] = useState(false);
+
+  // When the Tasks-page assignee dropdown opens the contact modal via "+ Add new contact",
+  // remember which task to auto-assign the newly-created contact to.
+  const [assignNewContactToTaskId, setAssignNewContactToTaskId] = useState<string | null>(null);
 
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
@@ -207,9 +198,71 @@ export default function ProjectDetailPage() {
 
   const { showToast } = useToast();
 
+  // Solution types actually present in this project's tasks (from [Tag] title prefixes)
+  const availableTypes = useMemo<SolutionType[]>(() => {
+    const present = new Set<SolutionType>();
+    for (const t of tasks) {
+      for (const tag of parseTaggedTitle(t.title).types) present.add(tag);
+    }
+    return SOLUTION_TYPES.filter((s) => present.has(s));
+  }, [tasks]);
+
+  // Untagged tasks always pass; tagged tasks pass if any of their tags is selected.
+  // Safety: empty selectedTypes is treated as "no filter active" so tasks aren't
+  // silently invisible when localStorage gets into a stuck-empty state (or the
+  // user toggled all pills off and now can't toggle them back because they're
+  // hidden on a single-type project).
+  const taskMatchesTypeFilter = (task: Task): boolean => {
+    if (selectedTypes.size === 0) return true;
+    const { types } = parseTaggedTitle(task.title);
+    if (types.length === 0) return true;
+    return types.some((t) => selectedTypes.has(t));
+  };
+
+  // Strip the [Tag] prefix for cleaner display in lists/charts
+  const taskDisplayTitle = (task: Task): string => parseTaggedTitle(task.title).rawTitle || task.title;
+
+  const toggleSolutionType = (type: SolutionType) => {
+    setSelectedTypes((prev) => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      // Persist inline so we don't race against the hydration useEffect on initial mount
+      if (project) {
+        window.localStorage.setItem(`cloudconnect:project:typeFilter:${project.id}`, JSON.stringify([...next]));
+      }
+      return next;
+    });
+  };
+
+  const filteredTasks = useMemo(() => tasks.filter(taskMatchesTypeFilter), [tasks, selectedTypes]);
+
+  // Curated assignee picker — Tasks page dropdowns pull from the project's PF staff
+  // (PM/AE/SA/CSM/IE/partner AE) + project contacts (customer & partner-side, incl. porting).
+  // Drops the global users list so PMs aren't paging through every account.
+  const ASSIGNEE_ROLE_LABEL: Record<string, string> = {
+    pm: "PM", ae: "AE", sa: "SA", csm: "CSM", ie: "IE", engineer: "IE", partner_ae: "Partner AE",
+  };
+  const projectStaffUnique = useMemo(() => {
+    // Same user can appear under multiple staff_roles — keep the first seen.
+    const seen = new Set<string>();
+    return projectStaff.filter((s) => {
+      if (seen.has(s.user_id)) return false;
+      seen.add(s.user_id);
+      return true;
+    });
+  }, [projectStaff]);
+  function assigneeLabelForUser(userId: string): string {
+    const staff = projectStaffUnique.find((s) => s.user_id === userId);
+    if (staff) return `${staff.name ?? staff.email} · ${ASSIGNEE_ROLE_LABEL[staff.staff_role] ?? staff.staff_role}`;
+    // Stale: user once assigned, no longer on project — keep visible so the data isn't silently lost
+    const u = users.find((x) => x.id === userId);
+    return u ? `${u.name ?? u.email} · (off project)` : "(unknown user)";
+  }
+
   const groupedTasks = useMemo(
-    () => phases.map((phase) => ({ phase, tasks: tasks.filter((t) => t.phase_id === phase.id) })),
-    [phases, tasks]
+    () => phases.map((phase) => ({ phase, tasks: filteredTasks.filter((t) => t.phase_id === phase.id) })),
+    [phases, filteredTasks]
   );
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   function userName(id: string | null) {
@@ -256,16 +309,10 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
-        setCurrentUserId(meData.user.id);
 
         const tabParam = searchParams.get("tab") as DetailTab | null;
         if (tabParam) setTab(tabParam);
 
-        const taskIdParam = searchParams.get("taskId");
-        if (taskIdParam && tabParam === "tasks") {
-          const matched = taskData.find((t) => t.id === taskIdParam);
-          if (matched) setEditingTask(matched);
-        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load project");
       } finally {
@@ -290,24 +337,20 @@ export default function ProjectDetailPage() {
       .finally(() => setCaseComplianceLoading(false));
   }, [tab, project?.id]);
 
-  // Must be before early returns — hooks must always run in the same order
+  // Persist solution-type filter per project (shared by Gantt + Tasks table)
   useEffect(() => {
-    if (!editingTask || !project) {
-      setTaskComments([]);
-      setTaskCommentBody("");
-      return;
+    if (!project) return;
+    const raw = window.localStorage.getItem(`cloudconnect:project:typeFilter:${project.id}`);
+    if (!raw) return;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        setSelectedTypes(new Set(parsed.filter((s): s is SolutionType => typeof s === "string" && (SOLUTION_TYPES as readonly string[]).includes(s))));
+      }
+    } catch {
+      /* ignore — fall back to default all-on */
     }
-    api.taskComments(project.id, editingTask.id).then(setTaskComments).catch(() => {});
-  }, [editingTask?.id]);
-
-  useEffect(() => {
-    if (editingTask?.id && editingTask.id !== "") {
-      const linked = risks.find((r) => r.task_id === editingTask.id);
-      setTaskBlockerId(linked?.id ?? "");
-    } else {
-      setTaskBlockerId("");
-    }
-  }, [editingTask?.id]);
+  }, [project?.id]);
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading project...</div>;
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
@@ -471,71 +514,18 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleUpdateTask() {
-    if (!project || !editingTask) return;
-    setSavingTask(true);
-
-    // New task (sentinel id = "")
-    if (editingTask.id === "") {
-      try {
-        const created = await api.createTask(project.id, {
-          title: editingTask.title.trim(),
-          phase_id: editingTask.phase_id,
-          due_date: editingTask.due_date || null,
-          scheduled_start: editingTask.scheduled_start || null,
-          scheduled_end: editingTask.scheduled_end || null,
-          priority: (editingTask.priority as "low" | "medium" | "high") || null,
-          assignee_user_id: editingTask.assignee_user_id || null,
-          status: (editingTask.status as "not_started") ?? "not_started",
-        });
-        setTasks((prev) => [...prev, created]);
-        setEditingTask(null);
-        showToast("Task created.", "success");
-      } catch (err) {
-        showToast(err instanceof Error ? err.message : "Failed to create task", "error");
-      } finally {
-        setSavingTask(false);
-      }
-      return;
-    }
-
+  // Inline-edit save — optimistic update + PATCH, with toast + revert on failure.
+  async function patchTask(taskId: string, patch: Parameters<typeof api.updateTask>[2]) {
+    if (!project) return;
+    const prev = tasks.find((t) => t.id === taskId);
+    if (!prev) return;
+    setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
     try {
-      const updated = await api.updateTask(project.id, editingTask.id, {
-        title: editingTask.title,
-        phase_id: editingTask.phase_id,
-        due_date: editingTask.due_date,
-        scheduled_start: editingTask.scheduled_start,
-        scheduled_end: editingTask.scheduled_end,
-        priority: editingTask.priority as "low" | "medium" | "high" | null,
-        assignee_user_id: editingTask.assignee_user_id,
-        status: editingTask.status as "not_started" | "in_progress" | "completed" | "blocked",
-      });
-      setTasks((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
-
-      // Sync blocker ↔ task link
-      const prevLinked = risks.find((r) => r.task_id === editingTask.id);
-      if (updated.status === "blocked" && taskBlockerId) {
-        if (prevLinked && prevLinked.id !== taskBlockerId) {
-          // Move link off old blocker
-          const cleared = await api.updateRisk(project.id, prevLinked.id, { task_id: null });
-          setRisks((prev) => prev.map((r) => r.id === cleared.id ? cleared : r));
-        }
-        if (!prevLinked || prevLinked.id !== taskBlockerId) {
-          const linked = await api.updateRisk(project.id, taskBlockerId, { task_id: editingTask.id });
-          setRisks((prev) => prev.map((r) => r.id === linked.id ? linked : r));
-        }
-      } else if (updated.status !== "blocked" && prevLinked) {
-        // Task is no longer blocked — clear the link
-        const cleared = await api.updateRisk(project.id, prevLinked.id, { task_id: null });
-        setRisks((prev) => prev.map((r) => r.id === cleared.id ? cleared : r));
-      }
-
-      setEditingTask(null);
-      showToast("Task updated.", "success");
+      const updated = await api.updateTask(project.id, taskId, patch);
+      setTasks((ts) => ts.map((t) => (t.id === taskId ? updated : t)));
     } catch (err) {
+      setTasks((ts) => ts.map((t) => (t.id === taskId ? prev : t)));
       showToast(err instanceof Error ? err.message : "Failed to update task", "error");
-    } finally {
-      setSavingTask(false);
     }
   }
 
@@ -544,61 +534,26 @@ export default function ProjectDetailPage() {
     try {
       await api.deleteTask(project.id, taskId);
       setTasks((prev) => prev.filter((t) => t.id !== taskId));
-      if (editingTask?.id === taskId) setEditingTask(null);
       showToast("Task deleted.", "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to delete task", "error");
     }
   }
 
-  async function handleAddTaskComment() {
-    if (!project || !editingTask || !taskCommentBody.trim()) return;
-    setAddingComment(true);
-    try {
-      const comment = await api.addTaskComment(project.id, editingTask.id, taskCommentBody.trim());
-      setTaskComments((prev) => [...prev, comment]);
-      setTaskCommentBody("");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to add comment", "error");
-    } finally {
-      setAddingComment(false);
-    }
-  }
-
-  async function handleDeleteTaskComment(commentId: string) {
-    if (!project || !editingTask) return;
-    try {
-      await api.deleteTaskComment(project.id, editingTask.id, commentId);
-      setTaskComments((prev) => prev.filter((c) => c.id !== commentId));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to delete comment", "error");
-    }
-  }
-
-  async function handleTaskAttachmentUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    if (!project || !editingTask) return;
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    setUploadingAttachment(true);
-    try {
-      const doc = await api.uploadDocument(project.id, { file, category: "Other", task_id: editingTask.id });
-      setDocuments((prev) => [doc, ...prev]);
-      showToast("File attached.", "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Upload failed", "error");
-    } finally {
-      setUploadingAttachment(false);
-    }
-  }
-
-  async function handleDeleteTaskAttachment(docId: string) {
+  async function commitInlineNewTask(phaseId: string) {
     if (!project) return;
+    const title = newTaskTitle.trim();
+    if (!title) return;
+    setCreatingTask(true);
     try {
-      await api.deleteDocument(project.id, docId);
-      setDocuments((prev) => prev.filter((d) => d.id !== docId));
+      const created = await api.createTask(project.id, { title, phase_id: phaseId, status: "not_started" });
+      setTasks((prev) => [...prev, created]);
+      setNewTaskTitle("");
+      // Leave the row open + focused for rapid entry
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Delete failed", "error");
+      showToast(err instanceof Error ? err.message : "Failed to create task", "error");
+    } finally {
+      setCreatingTask(false);
     }
   }
 
@@ -806,7 +761,7 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        const visibleTabs: DetailTab[] = ["overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -815,12 +770,26 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t === "builder" ? "Timeline Builder" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
         );
       })()}
+
+      {/* ── Timeline Builder (PM-only, spreadsheet-style template applier) ── */}
+      {tab === "builder" && canEdit && (
+        <TimelineBuilder
+          project={project}
+          onApplied={async () => {
+            // Reload phases + tasks after a rebuild
+            const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
+            setPhases(newPhases);
+            setTasks(newTasks);
+            setTab("timeline");
+          }}
+        />
+      )}
 
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (
@@ -828,6 +797,10 @@ export default function ProjectDetailPage() {
           phases={phases}
           tasks={tasks}
           recordings={recordings}
+          projectId={project.id}
+          availableTypes={availableTypes}
+          selectedTypes={selectedTypes}
+          onToggleType={toggleSolutionType}
           ganttOnly
           onUpdatePhase={async (phaseId, updates) => {
             if (!project) return;
@@ -840,24 +813,18 @@ export default function ProjectDetailPage() {
           }}
           onClickTask={(taskId, phaseId) => {
             if (phaseId) setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
-            const task = tasks.find((t) => t.id === taskId);
-            if (task) setEditingTask(task);
             setTab("tasks");
+            // Scroll the row into view after the tab mounts
+            setTimeout(() => {
+              const el = document.querySelector(`[data-task-row=\"${taskId}\"]`);
+              if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+            }, 50);
           }}
         />
       )}
 
-      {/* ── Overview (exec-friendly dashboard) ────────────────────────────── */}
+      {/* ── Overview ────────────────────────────────────────────────────── */}
       {tab === "overview" && (
-        <>
-        <ProjectExecutiveDashboard
-          project={project}
-          phases={phases}
-          tasks={tasks}
-          risks={risks}
-          onViewBlockers={() => setTab("blockers")}
-          onViewTasks={() => setTab("tasks")}
-        />
         <div style={{ display: "grid", gap: 16 }}>
           {/* ── Team & Controls (consolidated) ───────────────────────────── */}
           <div className="ms-section-card" style={{ padding: "12px 16px" }}>
@@ -975,13 +942,6 @@ export default function ProjectDetailPage() {
             )}
           </div>
 
-          {/* ── Meeting Prep Emails (lifecycle-staged) ────────────────────── */}
-          <MeetingPrepCard projectId={project.id} meetingType="kickoff"       canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="discovery"     canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="design_review" canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="uat"           canSend={canEdit} />
-          <MeetingPrepCard projectId={project.id} meetingType="go_live"       canSend={canEdit} />
-
           {/* ── Customer + Partner Contacts ──────────────────────────────── */}
           {/* Two stacked sections — customer-side roles vs partner/provider
               roles (Porting Coordinator etc.). Underlying storage is one
@@ -1083,6 +1043,28 @@ export default function ProjectDetailPage() {
             );
           })()}
 
+          {/* ── Dashboard (KPIs, phase stepper, upcoming tasks, blockers) ── */}
+          <ProjectExecutiveDashboard
+            project={project}
+            phases={phases}
+            tasks={tasks}
+            risks={risks}
+            onViewBlockers={() => setTab("blockers")}
+            onViewTasks={() => setTab("tasks")}
+          />
+
+          {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
+          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+            <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+              {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
+                  <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
+                </div>
+              ))}
+            </div>
+          </div>
+
           {/* ── Asana Phase Progress ──────────────────────────────────────── */}
           <div className="ms-section-card">
             <div className="ms-section-title">Quick Counts</div>
@@ -1098,14 +1080,33 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         </div>
-        </>
       )}
 
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {tab === "tasks" && (
         <>
         <div className="ms-section-card">
-          <div className="ms-section-title">Tasks by Phase</div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Phase</div>
+            <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
+          </div>
+          {tasks.length > 0 && filteredTasks.length === 0 && (
+            <div style={{ padding: "8px 12px", marginBottom: 12, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6, fontSize: 12, color: "#854d0e", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+              <span>Filter is hiding all {tasks.length} task{tasks.length === 1 ? "" : "s"} on this project.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedTypes(new Set(availableTypes.length > 0 ? availableTypes : SOLUTION_TYPES));
+                  if (project) {
+                    window.localStorage.setItem(`cloudconnect:project:typeFilter:${project.id}`, JSON.stringify(availableTypes.length > 0 ? availableTypes : [...SOLUTION_TYPES]));
+                  }
+                }}
+                style={{ background: "#fff", border: "1px solid #fde68a", color: "#854d0e", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer", fontWeight: 600 }}
+              >
+                Show all
+              </button>
+            </div>
+          )}
           <div style={{ display: "grid", gap: 24 }}>
             {phases.length === 0 && (
               <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
@@ -1119,9 +1120,13 @@ export default function ProjectDetailPage() {
                 next.has(phase.id) ? next.delete(phase.id) : next.add(phase.id);
                 return next;
               });
+              const isAddingHere = newTaskPhaseId === phase.id;
+              const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
+              const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
+              const cellInputStyle: React.CSSProperties = canEdit ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
               return (
               <div key={phase.id}>
-                {/* Phase header with inline editing */}
+                {/* Phase header with inline editing — unchanged */}
                 <div style={{ marginBottom: isCollapsed ? 0 : 10, paddingBottom: 8, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
                   <div
                     style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}
@@ -1204,100 +1209,336 @@ export default function ProjectDetailPage() {
                     )}
                   </div>
                 </div>
-                {!isCollapsed && <div style={{ display: "grid", gap: 6 }}>
-                  {phaseTasks.length === 0 && (
-                    <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
-                  )}
 
-                  {phaseTasks.map((task) => {
-                    const taskRecordings = recordings.filter((r) => r.task_id === task.id);
-                    return (
-                      <div key={task.id}>
-                        <div
-                          className="ms-row-item"
-                          onClick={() => setEditingTask(task)}
-                          style={{ cursor: "pointer" }}
-                        >
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 3 }}>{task.title}</div>
-                            <div style={{ fontSize: 12, color: "#64748b" }}>
-                              Due: {task.due_date ? formatDate(task.due_date) : "—"} · Assignee: {userName(task.assignee_user_id)} · Priority: {task.priority ?? "—"}
-                              {task.assignee_contact_id && (() => {
-                                const contact = contacts.find((c) => c.id === task.assignee_contact_id);
-                                return contact ? (
-                                  <> · <span style={{ fontWeight: 600, color: "#7c3aed" }}>{contact.contact_role ?? "Contact"}: {contact.name}</span></>
-                                ) : null;
-                              })()}
-                            </div>
-                          </div>
-                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                            <Badge label={humanize(task.status, "Unknown")} color={STATUS_COLOR[task.status ?? ""] ?? "#94a3b8"} style={{ textTransform: "none" }} />
-                            <button
-                              className="ms-btn-secondary"
-                              style={{ fontSize: 11, padding: "3px 10px" }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const today = new Date().toISOString().slice(0, 10);
-                                setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
-                                setTimeEntrySetup(null);
-                                setTimeEntryTask(task);
-                                setTimeEntryLoadingSetup(true);
-                                api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
-                              }}
-                            >
-                              Log Time
-                            </button>
-                          </div>
-                        </div>
-                        {taskRecordings.length > 0 && (
-                          <div style={{ paddingLeft: 16, paddingBottom: 6, display: "grid", gap: 3 }}>
-                            {taskRecordings.map((rec) => (
-                              <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#7c3aed" }}>
-                                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#7c3aed", flexShrink: 0, display: "inline-block" }} />
-                                <span style={{ fontWeight: 500 }}>{rec.topic}</span>
-                                <span style={{ color: "#94a3b8" }}>
-                                  {new Date(rec.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                                  {" · "}{rec.duration_mins}m
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        {(taskTimeEntries[task.id] ?? []).length > 0 && (
-                          <div style={{ paddingLeft: 16, paddingBottom: 6, display: "grid", gap: 3 }}>
-                            {(taskTimeEntries[task.id] ?? []).map((entry) => {
-                              const startDt = entry.scheduled_start ? new Date(entry.scheduled_start) : null;
-                              const endDt = entry.scheduled_end ? new Date(entry.scheduled_end) : null;
-                              const mins = startDt && endDt ? Math.round((endDt.getTime() - startDt.getTime()) / 60000) : null;
+                {/* Inline CRUD table */}
+                {!isCollapsed && (
+                  <div>
+                    {phaseTasks.length === 0 && !isAddingHere && (
+                      <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
+                    )}
+
+                    {(phaseTasks.length > 0 || isAddingHere) && (
+                      <div style={{ overflowX: "auto" }}>
+                        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                          <colgroup>
+                            <col />
+                            <col style={{ width: 160 }} />
+                            <col style={{ width: 130 }} />
+                            <col style={{ width: 130 }} />
+                            <col style={{ width: 100 }} />
+                            <col style={{ width: 140 }} />
+                            <col style={{ width: 96 }} />
+                          </colgroup>
+                          <thead>
+                            <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
+                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Title</th>
+                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Assignee</th>
+                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Due</th>
+                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Status</th>
+                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Priority</th>
+                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Done</th>
+                              <th style={{ textAlign: "right", padding: "6px 8px" }}></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {phaseTasks.map((task) => {
+                              const taskRecordings = recordings.filter((r) => r.task_id === task.id);
+                              const taskEntries = taskTimeEntries[task.id] ?? [];
+                              const isDone = task.status === "completed";
+                              const todayIso = new Date().toISOString().slice(0, 10);
+                              const isOverdue = !!task.due_date && !isDone && task.due_date < todayIso;
+                              const subRowCount = taskRecordings.length + taskEntries.length;
                               return (
-                                <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#0369a1" }}>
-                                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#0369a1", flexShrink: 0, display: "inline-block" }} />
-                                  <span style={{ fontWeight: 500 }}>{entry.user_name ?? "Unknown"}</span>
-                                  <span style={{ color: "#94a3b8" }}>
-                                    {startDt ? startDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
-                                    {" · "}{startDt ? startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
-                                    {" – "}{endDt ? endDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : ""}
-                                    {mins !== null ? ` · ${mins}m` : ""}
-                                  </span>
-                                </div>
+                                <React.Fragment key={task.id}>
+                                  <tr data-task-row={task.id}>
+                                    <td style={cellStyle}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                        <input
+                                          type="text"
+                                          defaultValue={taskDisplayTitle(task)}
+                                          disabled={!canEdit}
+                                          style={{ ...cellInputStyle, flex: 1, minWidth: 0 }}
+                                          title={task.title}
+                                          onBlur={(e) => {
+                                            const newRaw = e.target.value.trim();
+                                            if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
+                                            if (newRaw === taskDisplayTitle(task)) return;
+                                            // Preserve any [Tag] prefix from the original title
+                                            const { types } = parseTaggedTitle(task.title);
+                                            const newTitle = types.length > 0
+                                              ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
+                                              : newRaw;
+                                            patchTask(task.id, { title: newTitle });
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                            else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
+                                          }}
+                                        />
+                                        {(() => {
+                                          const taskTypes = parseTaggedTitle(task.title).types;
+                                          if (taskTypes.length === 0) return null;
+                                          return (
+                                            <span style={{ display: "inline-flex", gap: 3, flexShrink: 0 }}>
+                                              {taskTypes.map((t) => (
+                                                <span
+                                                  key={t}
+                                                  title={SOLUTION_TYPE_LABELS[t]}
+                                                  style={{ width: 7, height: 7, borderRadius: "50%", background: SOLUTION_TYPE_COLORS[t], flexShrink: 0 }}
+                                                />
+                                              ))}
+                                            </span>
+                                          );
+                                        })()}
+                                      </div>
+                                    </td>
+                                    <td style={cellStyle}>
+                                      {(() => {
+                                        const currentValue = task.assignee_user_id ? `u:${task.assignee_user_id}` : task.assignee_contact_id ? `c:${task.assignee_contact_id}` : "";
+                                        const userIsOnProject = task.assignee_user_id ? projectStaffUnique.some((s) => s.user_id === task.assignee_user_id) : true;
+                                        return (
+                                          <select
+                                            value={currentValue}
+                                            disabled={!canEdit}
+                                            style={cellInputStyle}
+                                            onChange={(e) => {
+                                              const v = e.target.value;
+                                              if (v === "__add_contact__") {
+                                                // Open the contact modal pre-set to customer side; remember the task so
+                                                // the newly-created contact is auto-assigned on save.
+                                                setAssignNewContactToTaskId(task.id);
+                                                setContactSide("customer");
+                                                setContactRole("");
+                                                setManualContact({ name: "", email: "", phone: "", job_title: "" });
+                                                const useCrm = !!project?.dynamics_account_id;
+                                                setContactModalTab(useCrm ? "crm" : "manual");
+                                                if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
+                                                  setCrmContactsLoading(true);
+                                                  api.getDynamicsContacts(project!.dynamics_account_id)
+                                                    .then(setCrmContacts)
+                                                    .catch(() => {})
+                                                    .finally(() => setCrmContactsLoading(false));
+                                                }
+                                                setShowContactModal(true);
+                                                return;
+                                              }
+                                              if (!v) patchTask(task.id, { assignee_user_id: null, assignee_contact_id: null });
+                                              else if (v.startsWith("u:")) patchTask(task.id, { assignee_user_id: v.slice(2), assignee_contact_id: null });
+                                              else if (v.startsWith("c:")) patchTask(task.id, { assignee_contact_id: v.slice(2), assignee_user_id: null });
+                                            }}
+                                          >
+                                            <option value="">— Unassigned</option>
+                                            {projectStaffUnique.length > 0 && (
+                                              <optgroup label="Project Staff">
+                                                {projectStaffUnique.map((s) => (
+                                                  <option key={s.user_id} value={`u:${s.user_id}`}>
+                                                    {s.name ?? s.email} · {ASSIGNEE_ROLE_LABEL[s.staff_role] ?? s.staff_role}
+                                                  </option>
+                                                ))}
+                                              </optgroup>
+                                            )}
+                                            {contacts.length > 0 && (
+                                              <optgroup label="Contacts">
+                                                {contacts.map((c) => (
+                                                  <option key={c.id} value={`c:${c.id}`}>
+                                                    {c.name}{c.contact_role ? ` · ${c.contact_role}` : ""}
+                                                  </option>
+                                                ))}
+                                              </optgroup>
+                                            )}
+                                            {canEdit && (
+                                              <option value="__add_contact__">+ Add new contact…</option>
+                                            )}
+                                            {/* Stale: assigned user no longer on project — surface so PM can see + reassign */}
+                                            {task.assignee_user_id && !userIsOnProject && (
+                                              <option value={`u:${task.assignee_user_id}`}>
+                                                {assigneeLabelForUser(task.assignee_user_id)}
+                                              </option>
+                                            )}
+                                          </select>
+                                        );
+                                      })()}
+                                    </td>
+                                    <td style={cellStyle}>
+                                      <input
+                                        type="date"
+                                        value={task.due_date ?? ""}
+                                        disabled={!canEdit}
+                                        style={cellInputStyle}
+                                        onChange={(e) => patchTask(task.id, { due_date: e.target.value || null })}
+                                      />
+                                    </td>
+                                    <td style={cellStyle}>
+                                      <select
+                                        value={task.status ?? "not_started"}
+                                        disabled={!canEdit}
+                                        style={{ ...cellInputStyle, color: STATUS_COLOR[task.status ?? "not_started"] ?? "#1e293b", fontWeight: 600 }}
+                                        onChange={(e) => patchTask(task.id, { status: e.target.value as "not_started" | "in_progress" | "completed" | "blocked" })}
+                                      >
+                                        <option value="not_started">Not Started</option>
+                                        <option value="in_progress">In Progress</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="blocked">Blocked</option>
+                                      </select>
+                                    </td>
+                                    <td style={cellStyle}>
+                                      <select
+                                        value={task.priority ?? ""}
+                                        disabled={!canEdit}
+                                        style={cellInputStyle}
+                                        onChange={(e) => patchTask(task.id, { priority: (e.target.value || null) as "low" | "medium" | "high" | null })}
+                                      >
+                                        <option value="">—</option>
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                      </select>
+                                    </td>
+                                    <td style={cellStyle}>
+                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={isDone}
+                                          disabled={!canEdit}
+                                          onChange={(e) => patchTask(task.id, { status: e.target.checked ? "completed" : "not_started" })}
+                                          style={{ cursor: canEdit ? "pointer" : "default" }}
+                                          title="Toggle status to/from completed"
+                                        />
+                                        {isDone && (
+                                          <input
+                                            type="date"
+                                            value={task.completed_at?.slice(0, 10) ?? ""}
+                                            disabled={!canEdit}
+                                            onChange={(e) => patchTask(task.id, { completed_at: e.target.value || null })}
+                                            style={{ ...cellInputStyle, color: "#059669", fontWeight: 500, padding: "3px 4px" }}
+                                            title="Edit completion date"
+                                          />
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
+                                      <button
+                                        className="ms-btn-secondary"
+                                        style={{ fontSize: 11, padding: "3px 8px", marginRight: 4 }}
+                                        title="Log time"
+                                        onClick={() => {
+                                          const today = new Date().toISOString().slice(0, 10);
+                                          setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
+                                          setTimeEntrySetup(null);
+                                          setTimeEntryTask(task);
+                                          setTimeEntryLoadingSetup(true);
+                                          api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                                        }}
+                                      >
+                                        ⏱
+                                      </button>
+                                      {canEdit && task.due_date && (
+                                        <button
+                                          title="Cascade dates downstream from this task"
+                                          onClick={() => setCascadeFromTask(task)}
+                                          style={{
+                                            background: isOverdue ? "rgba(253,224,71,0.15)" : "none",
+                                            border: `1px solid ${isOverdue ? "#fde68a" : "#cbd5e1"}`,
+                                            color: isOverdue ? "#b45309" : "#64748b",
+                                            borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                          }}
+                                        >
+                                          ↪
+                                        </button>
+                                      )}
+                                      {canEdit && (
+                                        <button
+                                          title="Delete task"
+                                          onClick={async () => {
+                                            if (!confirm(`Delete task "${taskDisplayTitle(task)}"?`)) return;
+                                            await handleDeleteTask(task.id);
+                                          }}
+                                          style={{ background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer" }}
+                                        >
+                                          ×
+                                        </button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                  {subRowCount > 0 && (
+                                    <tr>
+                                      <td colSpan={7} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                        {taskRecordings.map((rec) => (
+                                          <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#7c3aed" }}>
+                                            <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#7c3aed" }} />
+                                            <span style={{ fontWeight: 500 }}>{rec.topic}</span>
+                                            <span style={{ color: "#94a3b8" }}>
+                                              {new Date(rec.start_time).toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {rec.duration_mins}m
+                                            </span>
+                                          </div>
+                                        ))}
+                                        {taskEntries.map((entry) => {
+                                          const startDt = entry.scheduled_start ? new Date(entry.scheduled_start) : null;
+                                          const endDt = entry.scheduled_end ? new Date(entry.scheduled_end) : null;
+                                          const mins = startDt && endDt ? Math.round((endDt.getTime() - startDt.getTime()) / 60000) : null;
+                                          return (
+                                            <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#0369a1" }}>
+                                              <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#0369a1" }} />
+                                              <span style={{ fontWeight: 500 }}>{entry.user_name ?? "Unknown"}</span>
+                                              <span style={{ color: "#94a3b8" }}>
+                                                {startDt ? startDt.toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                                                {mins !== null ? ` · ${mins}m` : ""}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </td>
+                                    </tr>
+                                  )}
+                                </React.Fragment>
                               );
                             })}
-                          </div>
-                        )}
+                            {isAddingHere && (
+                              <tr>
+                                <td colSpan={7} style={{ padding: "6px 8px" }}>
+                                  <form
+                                    onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(phase.id); }}
+                                    style={{ display: "flex", gap: 8, alignItems: "center" }}
+                                  >
+                                    <input
+                                      type="text"
+                                      autoFocus
+                                      placeholder="Task title — Enter to add, Esc to close"
+                                      value={newTaskTitle}
+                                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Escape") { setNewTaskTitle(""); setNewTaskPhaseId(null); }
+                                      }}
+                                      disabled={creatingTask}
+                                      style={{ flex: 1, padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 4, fontSize: 13, background: "#fff", color: "#1e293b" }}
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => { setNewTaskTitle(""); setNewTaskPhaseId(null); }}
+                                      style={{ fontSize: 11, padding: "4px 10px", background: "none", border: "1px solid #cbd5e1", color: "#64748b", borderRadius: 4, cursor: "pointer" }}
+                                    >
+                                      Done
+                                    </button>
+                                  </form>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
                       </div>
-                    );
-                  })}
+                    )}
 
-                  {canEdit && (
-                    <button
-                      className="ms-btn-ghost"
-                      onClick={() => setEditingTask({ id: "", project_id: project.id, phase_id: phase.id, title: "", assignee_user_id: null, assignee_contact_id: null, due_date: null, completed_at: null, status: "not_started", priority: null, scheduled_start: null, scheduled_end: null, pay_code_id: null, cost_code_id: null, crm_time_entry_id: null })}
-                      style={{ alignSelf: "start", border: "1px dashed rgba(255,255,255,0.2)", color: "#64748b" }}
-                    >
-                      + Add Task
-                    </button>
-                  )}
-                </div>}
+                    {canEdit && !isAddingHere && (
+                      <button
+                        className="ms-btn-ghost"
+                        onClick={() => { setNewTaskTitle(""); setNewTaskPhaseId(phase.id); }}
+                        style={{ marginTop: 8, fontSize: 12, border: "1px dashed #cbd5e1", color: "#64748b" }}
+                      >
+                        + Add Task
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
               );
             })}
@@ -2236,6 +2477,26 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
+      {/* ── Cascade Modal ─────────────────────────────────────────────────── */}
+      {cascadeFromTask && project && (
+        <CascadeModal
+          projectId={project.id}
+          fromTask={cascadeFromTask}
+          onClose={() => setCascadeFromTask(null)}
+          onApplied={async () => {
+            // Refetch tasks + project so the page reflects shifted dates and
+            // the new target go-live in the header. Toast is already fired
+            // by the modal before this callback runs.
+            const [refreshedTasks, refreshedProject] = await Promise.all([
+              api.tasks(project.id),
+              api.project(project.id),
+            ]);
+            setTasks(refreshedTasks);
+            setProject(refreshedProject);
+          }}
+        />
+      )}
+
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}
       {/* ── Time Entry Modal ──────────────────────────────────────────────── */}
       {timeEntryTask && (
@@ -2349,219 +2610,6 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {editingTask && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditingTask(null); }}>
-          <div className="ms-modal" style={{ maxWidth: 660, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
-
-            {/* Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>{editingTask.id === "" ? "New Task" : "Task Details"}</h2>
-              <button onClick={() => setEditingTask(null)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
-            </div>
-
-            {/* Body */}
-            <div style={{ padding: 24, overflowY: "auto", flex: 1, display: "grid", gap: 16 }}>
-
-              {/* Title */}
-              <label className="ms-label">
-                <span>Title</span>
-                <input className="ms-input" value={editingTask.title} onChange={(e) => setEditingTask({ ...editingTask, title: e.target.value })} disabled={!canEdit} />
-              </label>
-
-              {/* Status + Priority */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label className="ms-label">
-                  <span>Status</span>
-                  <select className="ms-input" value={editingTask.status ?? ""} onChange={(e) => setEditingTask({ ...editingTask, status: e.target.value })} disabled={!canEdit}>
-                    <option value="not_started">Not Started</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="completed">Completed</option>
-                    <option value="blocked">Blocked</option>
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Priority</span>
-                  <select className="ms-input" value={editingTask.priority ?? ""} onChange={(e) => setEditingTask({ ...editingTask, priority: e.target.value || null })} disabled={!canEdit}>
-                    <option value="">None</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
-                </label>
-              </div>
-
-              {/* Blocked by — only shown when status is blocked */}
-              {editingTask.status === "blocked" && canEdit && (
-                <label className="ms-label">
-                  <span>Blocked by</span>
-                  <select className="ms-input" value={taskBlockerId} onChange={(e) => setTaskBlockerId(e.target.value)}>
-                    <option value="">— Select blocker —</option>
-                    {risks.filter((r) => r.status === "open" || r.task_id === editingTask.id).map((r) => (
-                      <option key={r.id} value={r.id}>{r.title}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              {/* Due Date + Assignee */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label className="ms-label">
-                  <span>Due Date</span>
-                  <input type="date" className="ms-input" value={editingTask.due_date ?? ""} onChange={(e) => setEditingTask({ ...editingTask, due_date: e.target.value || null })} disabled={!canEdit} />
-                </label>
-                <label className="ms-label">
-                  <span>Assignee</span>
-                  <select className="ms-input" value={editingTask.assignee_user_id ?? ""} onChange={(e) => setEditingTask({ ...editingTask, assignee_user_id: e.target.value || null })} disabled={!canEdit}>
-                    <option value="">Unassigned</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
-              </div>
-
-              {/* Scheduled Start + End */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <label className="ms-label">
-                  <span>Scheduled Start</span>
-                  <input type="date" className="ms-input" value={editingTask.scheduled_start ?? ""} onChange={(e) => setEditingTask({ ...editingTask, scheduled_start: e.target.value || null })} disabled={!canEdit} />
-                </label>
-                <label className="ms-label">
-                  <span>Scheduled End</span>
-                  <input type="date" className="ms-input" value={editingTask.scheduled_end ?? ""} onChange={(e) => setEditingTask({ ...editingTask, scheduled_end: e.target.value || null })} disabled={!canEdit} />
-                </label>
-              </div>
-
-              {/* Phase */}
-              {canEdit && (
-                <label className="ms-label">
-                  <span>Phase</span>
-                  <select className="ms-input" value={editingTask.phase_id ?? ""} onChange={(e) => setEditingTask({ ...editingTask, phase_id: e.target.value || null })}>
-                    <option value="">No phase</option>
-                    {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                  </select>
-                </label>
-              )}
-
-              {/* Comments + Attachments only shown for existing tasks */}
-              {editingTask.id !== "" && <>
-              <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 10 }}>
-                  Comments {taskComments.length > 0 && <span style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>({taskComments.length})</span>}
-                </div>
-
-                {taskComments.length === 0 && (
-                  <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginBottom: 10 }}>No comments yet.</div>
-                )}
-
-                {taskComments.map((c) => {
-                  const canDeleteComment = c.author_user_id === currentUserId || canEdit;
-                  const authorLabel = c.author_name ?? c.author_email ?? "Unknown";
-                  const ago = taskCommentTimeAgo(c.created_at);
-                  return (
-                    <div key={c.id} style={{ marginBottom: 10, padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                        <span style={{ fontSize: 11, fontWeight: 600, color: "#63c1ea" }}>{authorLabel}</span>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 11, color: "#94a3b8" }}>{ago}</span>
-                          {canDeleteComment && (
-                            <button
-                              onClick={() => handleDeleteTaskComment(c.id)}
-                              style={{ background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px" }}
-                              title="Delete comment"
-                            >×</button>
-                          )}
-                        </div>
-                      </div>
-                      <div style={{ fontSize: 13, color: "#334155", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>{c.body}</div>
-                    </div>
-                  );
-                })}
-
-                <textarea
-                  className="ms-input"
-                  rows={2}
-                  placeholder="Add a comment..."
-                  value={taskCommentBody}
-                  onChange={(e) => setTaskCommentBody(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleAddTaskComment(); }}
-                  style={{ resize: "vertical", minHeight: 56 }}
-                />
-                <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-                  <button
-                    className="ms-btn-primary"
-                    onClick={handleAddTaskComment}
-                    disabled={addingComment || !taskCommentBody.trim()}
-                    style={{ fontSize: 12, padding: "5px 14px" }}
-                  >
-                    {addingComment ? "Posting..." : "Add Comment"}
-                  </button>
-                </div>
-              </div>
-
-              {/* Attachments */}
-              <div style={{ borderTop: "1px solid rgba(0,0,0,0.06)", paddingTop: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 10 }}>
-                  Attachments
-                </div>
-
-                {documents.filter((d) => d.task_id === editingTask.id).length === 0 && (
-                  <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginBottom: 10 }}>No attachments yet.</div>
-                )}
-
-                {documents.filter((d) => d.task_id === editingTask.id).map((doc) => (
-                  <div key={doc.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9", marginBottom: 6 }}>
-                    <span style={{ fontSize: 18, flexShrink: 0 }}>📎</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 13, color: "#334155", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{doc.name}</div>
-                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 1 }}>
-                        {doc.uploader_name ?? "—"} · {doc.size_bytes ? fmtBytes(doc.size_bytes) : ""}
-                      </div>
-                    </div>
-                    <a
-                      href={api.downloadDocumentUrl(project!.id, doc.id)}
-                      download
-                      style={{ fontSize: 12, color: "#63c1ea", textDecoration: "none", flexShrink: 0 }}
-                      title="Download"
-                    >↓</a>
-                    {canEdit && (
-                      <button
-                        onClick={() => handleDeleteTaskAttachment(doc.id)}
-                        style={{ background: "none", border: "none", color: "rgba(209,52,56,0.6)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px", flexShrink: 0 }}
-                        title="Remove attachment"
-                      >×</button>
-                    )}
-                  </div>
-                ))}
-
-                <input ref={attachFileRef} type="file" style={{ display: "none" }} onChange={handleTaskAttachmentUpload} />
-                <button
-                  className="ms-btn-secondary"
-                  onClick={() => attachFileRef.current?.click()}
-                  disabled={uploadingAttachment}
-                  style={{ fontSize: 12, padding: "5px 14px" }}
-                >
-                  {uploadingAttachment ? "Uploading..." : "+ Attach File"}
-                </button>
-              </div>
-              </>}
-
-            </div>
-
-            {/* Footer */}
-            {canEdit && (
-              <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-                <button className="ms-btn-primary" onClick={handleUpdateTask} disabled={savingTask || !editingTask.title.trim()}>
-                  {savingTask ? "Saving..." : editingTask.id === "" ? "Create Task" : "Save"}
-                </button>
-                <button className="ms-btn-secondary" onClick={() => setEditingTask(null)}>Cancel</button>
-                {editingTask.id !== "" && (
-                  <button className="ms-btn-danger" onClick={() => handleDeleteTask(editingTask.id)} style={{ marginLeft: "auto" }}>Delete</button>
-                )}
-              </div>
-            )}
-
-          </div>
-        </div>
-      )}
 
       {/* ── Add Staff Modal ──────────────────────────────────────────────── */}
       {showStaffModal && (
@@ -2641,7 +2689,7 @@ export default function ProjectDetailPage() {
 
       {/* ── Add Contact Modal ──────────────────────────────────────────────── */}
       {showContactModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowContactModal(false); }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowContactModal(false); setAssignNewContactToTaskId(null); } }}>
           <div className="ms-modal" style={{ maxWidth: 580, display: "flex", flexDirection: "column", maxHeight: "85vh" }}>
 
             {/* Header */}
@@ -2649,7 +2697,7 @@ export default function ProjectDetailPage() {
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>
                 Add {contactSide === "partner" ? "Partner / Provider" : "Customer"} Contact
               </h2>
-              <button onClick={() => setShowContactModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+              <button onClick={() => { setShowContactModal(false); setAssignNewContactToTaskId(null); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
             </div>
 
             {/* Role selector — always shown. Options filtered by side. */}
@@ -2728,6 +2776,11 @@ export default function ProjectDetailPage() {
                                     });
                                     setContacts((prev) => [...prev, added]);
                                     setContactRole("");
+                                    if (assignNewContactToTaskId) {
+                                      patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
+                                      setAssignNewContactToTaskId(null);
+                                      setShowContactModal(false);
+                                    }
                                   } catch {
                                     showToast("Failed to add contact", "error");
                                   } finally {
@@ -2789,6 +2842,11 @@ export default function ProjectDetailPage() {
                       setContacts((prev) => [...prev, added]);
                       setManualContact({ name: "", email: "", phone: "", job_title: "" });
                       setContactRole("");
+                      if (assignNewContactToTaskId) {
+                        patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
+                        setAssignNewContactToTaskId(null);
+                        setShowContactModal(false);
+                      }
                     } catch {
                       showToast("Failed to add contact", "error");
                     } finally {
@@ -2798,7 +2856,7 @@ export default function ProjectDetailPage() {
                 >
                   {savingContact ? "Adding…" : "Add Contact"}
                 </button>
-                <button className="ms-btn-secondary" onClick={() => setShowContactModal(false)}>Cancel</button>
+                <button className="ms-btn-secondary" onClick={() => { setShowContactModal(false); setAssignNewContactToTaskId(null); }}>Cancel</button>
               </div>
             )}
 

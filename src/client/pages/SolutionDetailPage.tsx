@@ -79,6 +79,7 @@ export default function SolutionDetailPage() {
   const [saving, setSaving] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Contacts
   const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
@@ -185,6 +186,7 @@ export default function SolutionDetailPage() {
     setSolution(s);
     setUsers(u);
     setCurrentRole(me.role);
+    setCurrentUser(me.user);
     // Staff list is non-critical to the page load — tolerate 403/network errors
     // (e.g. for roles whose backend gate hasn't been relaxed yet) so the page
     // still renders. The chip section just shows empty when the fetch fails.
@@ -374,6 +376,17 @@ export default function SolutionDetailPage() {
           ← Solutions
         </Link>
       </div>
+
+      {/* Budgetary banner — prominent so the status is impossible to miss for
+          anyone landing on the solution. Toggled from SOW Switches in the SOW tab. */}
+      {solution.is_budgetary === 1 && (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 16px", marginBottom: 16, background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: 8, color: "#854d0e" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em", padding: "3px 8px", background: "#854d0e", color: "#fef3c7", borderRadius: 4 }}>BUDGETARY ONLY</span>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>This solution is a pre-contract estimate — the generated SOW is watermarked and is not a firm quote.</span>
+          </div>
+        </div>
+      )}
 
       {/* Customer Metadata Section */}
       {solution.customer_id && (
@@ -1267,6 +1280,47 @@ export default function SolutionDetailPage() {
             }}
           />
 
+          {/* SOW switches — affect both the rendered/printed SOW and the
+              solution overview. Both flags are independent: budgetary
+              quotes can also be Zoom Reseller (e.g. SLED). */}
+          <div className="ms-card">
+            <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              SOW Switches
+            </h3>
+            <div style={{ display: "grid", gap: 10 }}>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: canEdit ? "pointer" : "default" }}>
+                <input
+                  type="checkbox"
+                  checked={solution.is_budgetary === 1}
+                  disabled={!canEdit || saving}
+                  onChange={(e) => save({ is_budgetary: e.target.checked ? 1 : 0 })}
+                  style={{ marginTop: 3 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>Budgetary quote</div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    Watermarks every page of the rendered SOW with <strong>BUDGETARY</strong> and shows a banner on the solution detail. Use for pre-contract estimates.
+                  </div>
+                </div>
+              </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: canEdit ? "pointer" : "default" }}>
+                <input
+                  type="checkbox"
+                  checked={solution.is_zoom_reseller === 1}
+                  disabled={!canEdit || saving}
+                  onChange={(e) => save({ is_zoom_reseller: e.target.checked ? 1 : 0 })}
+                  style={{ marginTop: 3 }}
+                />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>Zoom Reseller agreement</div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    Replaces the SOW's Master Services Agreement reference with the <strong>Zoom Services Reseller Customer Agreement</strong> verbiage. Use for SLED + other Zoom reseller deals.
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
           {/* SOW document generator */}
           <ScopeOfWorkDocument
             solution={solution}
@@ -1274,6 +1328,7 @@ export default function SolutionDetailPage() {
             laborEstimates={Object.values(laborEstimates)}
             scopeText={scope}
             sowData={sowData}
+            currentUser={currentUser}
           />
 
           {/* Scope notes textarea — feeds into the generated document */}
@@ -1311,6 +1366,7 @@ export default function SolutionDetailPage() {
             needsAssessments={needsAssessments}
             laborEstimates={laborEstimates}
             solutionContacts={solutionContacts}
+            solutionStaff={solutionStaff}
             canEdit={canEdit}
             onSaved={load}
           />

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { Project, Phase, Task, Risk } from "../../lib/api";
+import { parseTaggedTitle, SOLUTION_TYPE_COLORS, SOLUTION_TYPE_LABELS, type SolutionType } from "../../../shared/solutionTypes";
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const ACCENT_GREEN = "#10b981";
@@ -73,64 +74,75 @@ function KpiCard({ label, value, progressPct, accent = ACCENT_NAVY, onClick }: K
 }
 
 // ── Phase stepper ─────────────────────────────────────────────────────────
-type PhaseStepperProps = {
-  phases: Phase[];
+type TechProgressBarsProps = {
   tasks: Task[];
-  activePhaseId: string | null;
 };
 
-function PhaseStepper({ phases, tasks, activePhaseId }: PhaseStepperProps) {
-  if (phases.length === 0) return null;
-  const activeIdx = activePhaseId ? phases.findIndex(p => p.id === activePhaseId) : -1;
+/**
+ * Per-tech-type completion bars. Each task's [TAG] prefix tells us which
+ * tech types it belongs to; we count completed/total per tech type and
+ * render a horizontal bar.
+ *
+ * Tagged tasks count toward every type in their tag list (a task tagged
+ * [UCaaS + CCaaS] counts toward both bars). Untagged tasks are treated as
+ * cross-cutting and count toward every tech type that appears anywhere
+ * on the project — so a "Customer Kickoff Meeting" created manually still
+ * lifts every bar's progress.
+ *
+ * If no tech types are detected anywhere, falls back to a single Overall
+ * bar.
+ */
+function TechProgressBars({ tasks }: TechProgressBarsProps) {
+  // Discover which tech types appear in any task tag.
+  const presentTypes: SolutionType[] = useMemo(() => {
+    const set = new Set<SolutionType>();
+    for (const t of tasks) {
+      const { types } = parseTaggedTitle(t.title);
+      for (const ty of types) set.add(ty);
+    }
+    return Array.from(set);
+  }, [tasks]);
 
-  // Per-phase task progress for the active phase, shown as a sub-label.
-  const activePhaseProgress = (() => {
-    if (activeIdx < 0) return null;
-    const phaseTasks = tasks.filter(t => t.phase_id === phases[activeIdx].id);
-    if (phaseTasks.length === 0) return null;
-    const done = phaseTasks.filter(t => t.status === "completed").length;
-    return Math.round((done / phaseTasks.length) * 100);
-  })();
+  // For each present type: total = (tasks tagged with it) + (untagged tasks);
+  // done = same filter intersected with status = completed.
+  const bars = useMemo(() => {
+    if (presentTypes.length === 0) {
+      const done = tasks.filter(t => t.status === "completed").length;
+      const pct = tasks.length ? Math.round((done / tasks.length) * 100) : 0;
+      return [{ type: null as SolutionType | null, label: "Overall", color: ACCENT_NAVY, pct, done, total: tasks.length }];
+    }
+    return presentTypes.map((type) => {
+      const relevant = tasks.filter(t => {
+        const { types } = parseTaggedTitle(t.title);
+        return types.length === 0 || types.includes(type);
+      });
+      const done = relevant.filter(t => t.status === "completed").length;
+      const pct  = relevant.length ? Math.round((done / relevant.length) * 100) : 0;
+      return { type, label: SOLUTION_TYPE_LABELS[type], color: SOLUTION_TYPE_COLORS[type], pct, done, total: relevant.length };
+    });
+  }, [tasks, presentTypes]);
+
+  if (tasks.length === 0) return null;
 
   return (
     <div style={{ background: "#fff", border: `1px solid ${BORDER}`, borderRadius: 10, padding: "16px 20px" }}>
       <div style={{ fontSize: 11, fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 14 }}>
-        Phase Progress
+        Progress by Technology
       </div>
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 0 }}>
-        {phases.map((phase, i) => {
-          const isCompleted = phase.status === "completed";
-          const isActive    = i === activeIdx;
-          const color = isCompleted ? ACCENT_GREEN : isActive ? ACCENT_NAVY : MUTED;
-          return (
-            <div key={phase.id} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", position: "relative" }}>
-              {/* Connector line to next phase */}
-              {i < phases.length - 1 && (
-                <div style={{ position: "absolute", top: 12, left: "50%", right: "-50%", height: 2, background: isCompleted ? ACCENT_GREEN : "#e2e8f0", zIndex: 0 }} />
-              )}
-              {/* Dot */}
-              <div style={{
-                width: 24, height: 24, borderRadius: "50%",
-                background: isCompleted ? ACCENT_GREEN : isActive ? "#fff" : "#f1f5f9",
-                border: `2px solid ${color}`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 10, fontWeight: 700, color: isCompleted ? "#fff" : color,
-                position: "relative", zIndex: 1,
-              }}>
-                {isCompleted ? "✓" : i + 1}
-              </div>
-              {/* Label */}
-              <div style={{ marginTop: 6, fontSize: 11, fontWeight: isActive ? 700 : 500, color, textAlign: "center", lineHeight: 1.3, padding: "0 4px" }}>
-                {phase.name}
-              </div>
-              {isActive && activePhaseProgress !== null && (
-                <div style={{ marginTop: 2, fontSize: 10, color: MUTED }}>
-                  {activePhaseProgress}% of phase
-                </div>
-              )}
+      <div style={{ display: "grid", gap: 10 }}>
+        {bars.map((b) => (
+          <div key={b.type ?? "overall"} style={{ display: "grid", gridTemplateColumns: "150px 1fr 80px", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={b.label}>
+              {b.label}
             </div>
-          );
-        })}
+            <div style={{ position: "relative", height: 10, background: "#f1f5f9", borderRadius: 5, overflow: "hidden" }}>
+              <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${b.pct}%`, background: b.color, transition: "width 0.3s" }} />
+            </div>
+            <div style={{ fontSize: 11, color: MUTED, textAlign: "right", whiteSpace: "nowrap" }}>
+              {b.pct}% · {b.done}/{b.total}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -248,8 +260,8 @@ export default function ProjectExecutiveDashboard({ project, phases, tasks, risk
         />
       </div>
 
-      {/* Phase stepper */}
-      <PhaseStepper phases={phases} tasks={tasks} activePhaseId={currentPhase?.id ?? null} />
+      {/* Per-tech progress bars (replaces former phase stepper) */}
+      <TechProgressBars tasks={tasks} />
 
       {/* Two-column: Next up + Blockers */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>

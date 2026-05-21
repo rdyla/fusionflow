@@ -64,7 +64,10 @@ app.get("/templates", requireRole("admin"), async (c) => {
   return c.json(templates.results ?? []);
 });
 
-app.get("/templates/:id", requireRole("admin"), async (c) => {
+// PMs need read access to the full template tree (phases + tasks + working
+// days) to drive the Timeline Builder; the existing admin-only details endpoint
+// is reused by relaxing the gate.
+app.get("/templates/:id", requireRole("admin", "pm"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
 
@@ -480,6 +483,126 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   }
 
   return c.json({ phases_created: phasesCreated, tasks_created: tasksCreated, tasks_merged: tasksMerged });
+});
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Timeline Builder apply — wipes the project's existing phases + tasks, then
+// rebuilds them from a client-computed structure.
+//
+// The Timeline Builder supports multi-template selection (e.g., UCaaS + CCaaS
+// for combo projects). The client loads each selected template, merges phases
+// by canonical name (Initiation / Planning / Executing / etc.), takes the MAX
+// working_days across templates, and unions tasks (each tagged with its source
+// solution_type via buildTaggedTitle). The fully resolved structure is sent
+// here; the server's job is just to persist it, plus resolve role strings to
+// project-scoped user/contact ids.
+// ──────────────────────────────────────────────────────────────────────────────
+
+const applyTimelineSchema = z.object({
+  phases: z.array(z.object({
+    name: z.string().min(1),
+    start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    tasks: z.array(z.object({
+      /** Pre-tagged, already title-cased. */
+      title: z.string().min(1),
+      /** default_assignee_role string ('pm' / 'ie' / 'pf' / 'zoom_porting' / etc.). */
+      role: z.string().nullable().optional(),
+      priority: z.string().nullable().optional(),
+      start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    })),
+  })).min(1),
+});
+
+app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("projectId");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const parsed = applyTimelineSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const { phases: phasePayload } = parsed.data;
+
+  // Generate project-phase ids up front so tasks can reference them.
+  type NewPhase = { id: string; name: string; sort_order: number; start: string; end: string };
+  const newPhases: NewPhase[] = phasePayload.map((p, i) => ({
+    id: crypto.randomUUID(),
+    name: p.name,
+    sort_order: i + 1,
+    start: p.start,
+    end:   p.end,
+  }));
+
+  // Assignee resolution (mirrors /apply-template logic — pm / ie / pf for users,
+  // zoom_porting for project_contacts).
+  const projectRow = await db
+    .prepare("SELECT pm_user_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ pm_user_id: string | null }>();
+  const pmUserId = projectRow?.pm_user_id ?? null;
+
+  const ieRow = await db
+    .prepare("SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'engineer' ORDER BY created_at ASC LIMIT 1")
+    .bind(projectId)
+    .first<{ user_id: string }>();
+  const ieUserId = ieRow?.user_id ?? null;
+
+  const portingContactRow = await db
+    .prepare("SELECT id FROM project_contacts WHERE project_id = ? AND contact_role = 'Porting Coordinator' ORDER BY added_at ASC LIMIT 1")
+    .bind(projectId)
+    .first<{ id: string }>();
+  const portingContactId = portingContactRow?.id ?? null;
+
+  const roleToUserId: Record<string, string | null>    = { pm: pmUserId, pf: pmUserId, ie: ieUserId };
+  const roleToContactId: Record<string, string | null> = { zoom_porting: portingContactId };
+
+  // Build all the task inserts so the wipe + rebuild runs in a single atomic batch.
+  type NewTask = { id: string; phase_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string };
+  const newTasks: NewTask[] = [];
+  for (let phaseIdx = 0; phaseIdx < phasePayload.length; phaseIdx++) {
+    const phasePayloadEntry = phasePayload[phaseIdx];
+    const phaseId = newPhases[phaseIdx].id;
+    for (const t of phasePayloadEntry.tasks) {
+      const role = t.role?.toLowerCase() ?? "";
+      const userId    = roleToUserId[role]    ?? null;
+      const contactId = roleToContactId[role] ?? null;
+      newTasks.push({
+        id: crypto.randomUUID(),
+        phase_id: phaseId,
+        title: t.title,
+        priority: t.priority ?? "medium",
+        assignee_user_id: userId,
+        assignee_contact_id: contactId,
+        scheduled_start: t.start,
+        scheduled_end: t.end,
+        due_date: t.end,
+      });
+    }
+  }
+
+  // Atomic batch: wipe-then-rebuild. Non-CASCADE FK refs (risks.task_id,
+  // documents.task_id, documents.phase_id) get nulled first so the DELETEs
+  // succeed.
+  const stmts = [
+    db.prepare("UPDATE risks SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId),
+    db.prepare("UPDATE documents SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId),
+    db.prepare("UPDATE documents SET phase_id = NULL WHERE phase_id IN (SELECT id FROM phases WHERE project_id = ?)").bind(projectId),
+    db.prepare("DELETE FROM tasks  WHERE project_id = ?").bind(projectId),
+    db.prepare("DELETE FROM phases WHERE project_id = ?").bind(projectId),
+    ...newPhases.map((p) => db
+      .prepare("INSERT INTO phases (id, project_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, 'not_started')")
+      .bind(p.id, projectId, p.name, p.sort_order, p.start, p.end)),
+    ...newTasks.map((t) => db
+      .prepare("INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)")
+      .bind(t.id, projectId, t.phase_id, t.title, t.priority, t.assignee_user_id, t.assignee_contact_id, t.scheduled_start, t.scheduled_end, t.due_date)),
+  ];
+  await db.batch(stmts);
+
+  return c.json({ phases_created: newPhases.length, tasks_created: newTasks.length });
 });
 
 export default app;

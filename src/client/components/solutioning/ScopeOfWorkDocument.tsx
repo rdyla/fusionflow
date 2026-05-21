@@ -1,4 +1,4 @@
-import type { NeedsAssessment, LaborEstimate, Solution } from "../../lib/api";
+import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE, type AddOn } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
@@ -108,6 +108,7 @@ function buildSowHtml(
   laborEstimates: LaborEstimate[],
   scopeText: string,
   logo: string,
+  preparedByName: string,
   sowData?: SowData | null,
 ): string {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -598,9 +599,31 @@ function buildSowHtml(
       .print-tip { display: none !important; }
       @page { margin: 15mm 18mm; }
     }
+
+    /* ── Budgetary watermark ───────────────
+       Diagonal faded grey "BUDGETARY" overlay. position: fixed so it repeats
+       on every printed page (Chrome). pointer-events:none + low opacity keeps
+       the content underneath both legible and clickable in screen preview. */
+    .budgetary-watermark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-30deg);
+      font-size: 130pt;
+      font-weight: 900;
+      color: rgba(100, 116, 139, 0.13);
+      letter-spacing: 0.06em;
+      z-index: 9999;
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   </style>
 </head>
 <body>
+${solution.is_budgetary ? `<div class="budgetary-watermark">BUDGETARY</div>` : ""}
 <div class="page">
 
   <div class="print-tip">
@@ -625,15 +648,17 @@ function buildSowHtml(
       </div>
       <div class="cover-meta-item">
         <div class="cover-meta-label">Prepared By</div>
-        <div class="cover-meta-value">Packet Fusion, Inc.</div>
+        <div class="cover-meta-value">${esc(preparedByName)}</div>
       </div>
       <div class="cover-meta-item">
-        <div class="cover-meta-label">Date</div>
+        <div class="cover-meta-label">Date Issued</div>
         <div class="cover-meta-value">${today}</div>
       </div>
     </div>
     <div class="cover-msa">
-      This Statement of Work (&ldquo;SOW&rdquo;) is executed by Packet Fusion, Inc. (&ldquo;Packet Fusion&rdquo;) and ${esc(customerName)} (&ldquo;Customer&rdquo;) pursuant to, and is subject to, the Packet Fusion Master Services Agreement executed by Customer and Packet Fusion. Capitalized terms used in this SOW but not otherwise defined shall have the respective meanings given to them in the Master Services Agreement.
+      ${solution.is_zoom_reseller
+        ? `This Packet Fusion Statement of Work for Professional Services (&ldquo;SOW&rdquo;) is executed by Packet Fusion, Inc. (&ldquo;Packet Fusion&rdquo;), and ${esc(customerName)} (the &ldquo;Customer&rdquo;) pursuant to, and is subject to, the Packet Fusion ZOOM SERVICES RESELLER CUSTOMER AGREEMENT executed by Customer and Packet Fusion. Capitalized terms used in this SOW but not otherwise defined shall have the respective meanings given to them in the ZOOM SERVICES RESELLER CUSTOMER AGREEMENT.`
+        : `This Statement of Work (&ldquo;SOW&rdquo;) is executed by Packet Fusion, Inc. (&ldquo;Packet Fusion&rdquo;) and ${esc(customerName)} (&ldquo;Customer&rdquo;) pursuant to, and is subject to, the Packet Fusion Master Services Agreement executed by Customer and Packet Fusion. Capitalized terms used in this SOW but not otherwise defined shall have the respective meanings given to them in the Master Services Agreement.`}
     </div>
   </div>
 
@@ -715,11 +740,13 @@ type Props = {
   laborEstimates: LaborEstimate[];
   scopeText: string;
   sowData?: SowData | null;
+  /** Logged-in user — used for the "Prepared By" line on the SOW cover page. */
+  currentUser: User | null;
 };
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimates, scopeText, sowData }: Props) {
+export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEstimates, scopeText, sowData, currentUser }: Props) {
   const customerName = solution.customer_name || "Customer";
   // Multi-type solutions get a joined label (e.g. "UCaaS / CCaaS") so the SOW document
   // title + header reflect every type the customer is scoped to.
@@ -742,7 +769,8 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
   const previewFlatReady = (isTieredMode && previewTieredTier) || (isBasicMode && previewBasicBreakdown);
 
   function openPrintWindow() {
-    const html = buildSowHtml(solution, needsAssessment, laborEstimates, scopeText, logoUrl, sowData);
+    const preparedByName = currentUser?.name ?? currentUser?.email ?? "Packet Fusion, Inc.";
+    const html = buildSowHtml(solution, needsAssessment, laborEstimates, scopeText, logoUrl, preparedByName, sowData);
     const win = window.open("", "_blank", "width=960,height=750");
     if (!win) return;
     win.document.write(html);
@@ -778,7 +806,7 @@ export default function ScopeOfWorkDocument({ solution, needsAssessment, laborEs
           <div style={{ textAlign: "right", fontSize: 13, color: "#64748b" }}>
             <div><strong>Customer:</strong> {customerName}</div>
             <div><strong>Platform:</strong> {platformLabel}</div>
-            <div><strong>Date:</strong> {today}</div>
+            <div><strong>Date Issued:</strong> {today}</div>
           </div>
         </div>
 

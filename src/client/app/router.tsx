@@ -32,6 +32,7 @@ import SupportDashboardPage from "../pages/SupportDashboardPage";
 import SupportDigestsPage from "../pages/SupportDigestsPage";
 import RoadmapPage from "../pages/RoadmapPage";
 import AdminRoadmapPage from "../pages/AdminRoadmapPage";
+import AdminStagingPromotePage from "../pages/AdminStagingPromotePage";
 
 export default function Router() {
   const isStaging = typeof window !== "undefined" && window.location.hostname.includes("staging");
@@ -81,6 +82,7 @@ export default function Router() {
           <Route path="/admin/labor" element={<AdminLaborPage />} />
           <Route path="/admin/templates" element={<AdminTemplatesPage />} />
           <Route path="/admin/roadmap" element={<AdminRoadmapPage />} />
+          <Route path="/admin/promote-staging" element={<AdminStagingPromotePage />} />
           <Route element={<SupportWrapper />}>
             <Route path="/support/dashboard" element={<SupportDashboardPage />} />
             <Route path="/support/digests" element={<SupportDigestsPage />} />

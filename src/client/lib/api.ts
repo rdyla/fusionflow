@@ -129,6 +129,13 @@ export type Solution = {
   created_by: string | null;
   created_at: string;
   updated_at: string;
+  /** 1 = SOW renders a "BUDGETARY" diagonal watermark + solution shows the
+   *  "Budgetary Only" banner. For pre-contract quotes. */
+  is_budgetary: number;
+  /** 1 = SOW cover-page legal blurb references the Zoom Services Reseller
+   *  Customer Agreement instead of the Packet Fusion MSA. Required for SLED
+   *  and other Zoom-reseller-channel deals. */
+  is_zoom_reseller: number;
   // SOW pricing
   add_ons: AddOn[];
   blended_rate: number;
@@ -521,6 +528,28 @@ export type Phase = {
   status: string | null;
 };
 
+/** Preview shape returned by GET /projects/:id/cascade/preview. */
+export type CascadeAffectedTask = {
+  id: string;
+  phase_id: string | null;
+  title: string;
+  due_date: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  assignee_user_id: string | null;
+  new_due_date: string | null;
+  new_scheduled_start: string | null;
+  new_scheduled_end: string | null;
+};
+
+export type CascadePreview = {
+  from_task: { id: string; title: string; due_date: string | null };
+  slip_days: number;
+  affected_tasks: CascadeAffectedTask[];
+  current_target_go_live: string | null;
+  new_target_go_live: string | null;
+};
+
 export type Task = {
   id: string;
   project_id: string;
@@ -767,13 +796,19 @@ export type OptimizeAccount = {
   next_review_date: string | null;
   notes: string | null;
   customer_id: string | null;
-  // Team comes from the linked customer
+  // Team comes from the linked customer — joined in via cust.pf_*_user_id
+  // in GET /api/optimize/accounts/:projectId. The customer_pf_* keys further
+  // below are kept on the type for legacy callers but are not returned by
+  // the optimize endpoints; new readers should use ae_name/ae_email etc.
   ae_user_id: string | null;
   ae_name: string | null;
+  ae_email: string | null;
   sa_user_id: string | null;
   sa_name: string | null;
+  sa_email: string | null;
   csm_user_id: string | null;
   csm_name: string | null;
+  csm_email: string | null;
   dynamics_account_id: string | null;
   last_assessment_date: string | null;
   last_assessment_score: number | null;
@@ -938,6 +973,10 @@ export type TemplateTask = {
    *  "zoom_porting", "pf", "all", "customer/ie"). Surfaced in the admin
    *  template view; not yet propagated to project tasks at apply time. */
   default_assignee_role: string | null;
+  /** True (1 in SQLite) for the canonical go-live event task. Exactly one
+   *  per template. The Timeline Builder anchors the project's target
+   *  go-live date to this task's end. */
+  is_go_live_event?: number;
 };
 
 export type TemplatePhase = {
@@ -945,6 +984,8 @@ export type TemplatePhase = {
   template_id: string;
   name: string;
   order_index: number;
+  /** Workdays the phase takes; drives the Timeline Builder date math. */
+  working_days: number;
   tasks: TemplateTask[];
 };
 
@@ -1197,6 +1238,7 @@ export const api = {
       due_date?: string | null;
       scheduled_start?: string | null;
       scheduled_end?: string | null;
+      completed_at?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
     }
@@ -1210,6 +1252,18 @@ export const api = {
     request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}`, {
       method: "DELETE",
     }),
+
+  // Date cascade — see src/server/routes/cascade.ts
+  cascadePreview: (projectId: string, fromTaskId: string, slipDays: number) =>
+    request<CascadePreview>(
+      `/projects/${projectId}/cascade/preview?from_task_id=${encodeURIComponent(fromTaskId)}&slip_days=${slipDays}`
+    ),
+
+  cascadeApply: (projectId: string, payload: { from_task_id: string; slip_days: number; exclude_task_ids?: string[] }) =>
+    request<{ tasks_shifted: number; phases_shifted: number; new_target_go_live: string | null; recipients_notified: number }>(
+      `/projects/${projectId}/cascade/apply`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
 
   timeEntrySetup: (projectId: string) =>
     request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup`),
@@ -1354,6 +1408,20 @@ export const api = {
   adminRunHealthScoring: () =>
     request<{ scored: number }>("/admin/run-health-scoring", { method: "POST" }),
 
+  // Staging → Prod promotion (prod-only; staging worker returns 503)
+  adminStagingInventory: () =>
+    request<{
+      solutions: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; needs_assessment_count: number; labor_estimate_count: number; contact_count: number; already_on_prod: boolean }>;
+      projects: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; phase_count: number; task_count: number; risk_count: number; document_count: number; already_on_prod: boolean }>;
+      optimize_accounts: Array<{ id: string; project_id: string; project_name: string; customer_name: string | null; graduated_at: string; impact_assessment_count: number; tech_stack_count: number; roadmap_count: number; utilization_count: number; already_on_prod: boolean }>;
+    }>("/admin/staging/inventory"),
+
+  adminStagingPromote: (payload: { solution_ids: string[]; project_ids: string[]; optimize_account_ids: string[] }) =>
+    request<Record<string, number | Array<{ kind: string; id: string; reason: string }>>>("/admin/staging/promote", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   adminUsers: () => request<User[]>("/admin/users"),
 
   adminDeleteUser: (id: string) =>
@@ -1465,6 +1533,8 @@ export const api = {
       pricing_mode: "tiered" | "basic" | "advanced";
       basic_seat_count: number | null;
       basic_inputs: UcaasBasicInputs | null;
+      is_budgetary: number;
+      is_zoom_reseller: number;
       /** If a solution_types update would orphan needs_assessments / labor_estimates rows
        *  for removed types, the server returns 409 unless this flag is set. The client
        *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */
@@ -1580,6 +1650,16 @@ export const api = {
   optimizeCrmSync: (projectId: string) =>
     request<{ account: OptimizeAccount; crm: { ae_name: string | null; sa_name: string | null; csm_name: string | null } }>(
       `/optimize/accounts/${projectId}/crm-sync`, { method: "POST" }
+    ),
+
+  // Move an Optimize account's project_id to point at a different (existing)
+  // project. Moves impact_assessments / tech_stack / roadmap / utilization
+  // snapshots / KV creds with it. Deletes the shell project if it had no
+  // attached work. Returns the new project_id (URL changes after relink).
+  optimizeRelink: (projectId: string, targetProjectId: string) =>
+    request<{ project_id: string; previous_project_id: string; shell_deleted: boolean; credentials_moved: ("zoom" | "ringcentral")[] }>(
+      `/optimize/accounts/${projectId}/relink`,
+      { method: "POST", body: JSON.stringify({ target_project_id: targetProjectId }) }
     ),
 
   optimizeDeleteAccount: (projectId: string) =>
@@ -1728,6 +1808,8 @@ export const api = {
 
   // ── Templates ────────────────────────────────────────────────────────────────
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
+  /** Fetch one template with its phases + tasks. PM-accessible (for Timeline Builder). */
+  template: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminTemplates: () => request<Template[]>("/admin/templates"),
   adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminCreateTemplate: (payload: { name: string; solution_type?: string; description?: string }) =>
@@ -1748,6 +1830,11 @@ export const api = {
     request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({ template_id: templateId }),
+    }),
+  applyTimeline: (projectId: string, payload: { phases: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
+    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
+      method: "POST",
+      body: JSON.stringify(payload),
     }),
 
   // ── Inbox ─────────────────────────────────────────────────────────────────
