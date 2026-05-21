@@ -599,9 +599,31 @@ function buildSowHtml(
       .print-tip { display: none !important; }
       @page { margin: 15mm 18mm; }
     }
+
+    /* ── Budgetary watermark ───────────────
+       Diagonal faded grey "BUDGETARY" overlay. position: fixed so it repeats
+       on every printed page (Chrome). pointer-events:none + low opacity keeps
+       the content underneath both legible and clickable in screen preview. */
+    .budgetary-watermark {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) rotate(-30deg);
+      font-size: 130pt;
+      font-weight: 900;
+      color: rgba(100, 116, 139, 0.13);
+      letter-spacing: 0.06em;
+      z-index: 9999;
+      pointer-events: none;
+      user-select: none;
+      white-space: nowrap;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   </style>
 </head>
 <body>
+${solution.is_budgetary ? `<div class="budgetary-watermark">BUDGETARY</div>` : ""}
 <div class="page">
 
   <div class="print-tip">
@@ -634,7 +656,9 @@ function buildSowHtml(
       </div>
     </div>
     <div class="cover-msa">
-      This Statement of Work (&ldquo;SOW&rdquo;) is executed by Packet Fusion, Inc. (&ldquo;Packet Fusion&rdquo;) and ${esc(customerName)} (&ldquo;Customer&rdquo;) pursuant to, and is subject to, the Packet Fusion Master Services Agreement executed by Customer and Packet Fusion. Capitalized terms used in this SOW but not otherwise defined shall have the respective meanings given to them in the Master Services Agreement.
+      ${solution.is_zoom_reseller
+        ? `This Packet Fusion Statement of Work for Professional Services (&ldquo;SOW&rdquo;) is executed by Packet Fusion, Inc. (&ldquo;Packet Fusion&rdquo;), and ${esc(customerName)} (the &ldquo;Customer&rdquo;) pursuant to, and is subject to, the Packet Fusion ZOOM SERVICES RESELLER CUSTOMER AGREEMENT executed by Customer and Packet Fusion. Capitalized terms used in this SOW but not otherwise defined shall have the respective meanings given to them in the ZOOM SERVICES RESELLER CUSTOMER AGREEMENT.`
+        : `This Statement of Work (&ldquo;SOW&rdquo;) is executed by Packet Fusion, Inc. (&ldquo;Packet Fusion&rdquo;) and ${esc(customerName)} (&ldquo;Customer&rdquo;) pursuant to, and is subject to, the Packet Fusion Master Services Agreement executed by Customer and Packet Fusion. Capitalized terms used in this SOW but not otherwise defined shall have the respective meanings given to them in the Master Services Agreement.`}
     </div>
   </div>
 
