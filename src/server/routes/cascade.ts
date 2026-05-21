@@ -202,12 +202,14 @@ app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa"), async (c) =>
   }));
 
   // Single atomic batch: task shifts + phase shifts + target go-live update.
+  // tasks + phases don't have an updated_at column in this schema (only
+  // projects does — see migration 0001), so we don't touch one here.
   const stmts = [
     ...tasksToShift.map((t) => db
-      .prepare("UPDATE tasks SET due_date = ?, scheduled_start = ?, scheduled_end = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?")
+      .prepare("UPDATE tasks SET due_date = ?, scheduled_start = ?, scheduled_end = ? WHERE id = ? AND project_id = ?")
       .bind(t.new_due_date, t.new_scheduled_start, t.new_scheduled_end, t.id, projectId)),
     ...phaseUpdates.map((p) => db
-      .prepare("UPDATE phases SET planned_start = ?, planned_end = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?")
+      .prepare("UPDATE phases SET planned_start = ?, planned_end = ? WHERE id = ? AND project_id = ?")
       .bind(p.new_planned_start, p.new_planned_end, p.id, projectId)),
   ];
   if (newTargetGoLive && newTargetGoLive !== project.target_go_live_date) {
