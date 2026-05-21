@@ -1638,6 +1638,16 @@ export const api = {
       `/optimize/accounts/${projectId}/crm-sync`, { method: "POST" }
     ),
 
+  // Move an Optimize account's project_id to point at a different (existing)
+  // project. Moves impact_assessments / tech_stack / roadmap / utilization
+  // snapshots / KV creds with it. Deletes the shell project if it had no
+  // attached work. Returns the new project_id (URL changes after relink).
+  optimizeRelink: (projectId: string, targetProjectId: string) =>
+    request<{ project_id: string; previous_project_id: string; shell_deleted: boolean; credentials_moved: ("zoom" | "ringcentral")[] }>(
+      `/optimize/accounts/${projectId}/relink`,
+      { method: "POST", body: JSON.stringify({ target_project_id: targetProjectId }) }
+    ),
+
   optimizeDeleteAccount: (projectId: string) =>
     request<{ success: boolean }>(`/optimize/accounts/${projectId}`, { method: "DELETE" }),
 

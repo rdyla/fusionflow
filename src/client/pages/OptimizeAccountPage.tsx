@@ -12,6 +12,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
 import OptimizeCredentialsSetup from "../components/optimize/OptimizeCredentialsSetup";
+import OptimizeRelinkModal from "../components/optimize/OptimizeRelinkModal";
 import {
   ExportAccountSummaryButton,
   ExportImpactAssessmentButton,
@@ -76,6 +77,7 @@ export default function OptimizeAccountPage() {
   const [rcConfigured, setRcConfigured] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [crmSyncing, setCrmSyncing] = useState(false);
+  const [showRelinkModal, setShowRelinkModal] = useState(false);
 
   useEffect(() => {
     if (projectId) loadAll(projectId);
@@ -325,6 +327,14 @@ export default function OptimizeAccountPage() {
                 {crmSyncing ? "Syncing…" : "Sync from CRM"}
               </button>
             )}
+            <button
+              className="ms-btn-secondary"
+              onClick={() => setShowRelinkModal(true)}
+              style={{ fontSize: 12 }}
+              title="Move this Optimize account to point at a different project"
+            >
+              Link to project
+            </button>
             <ExportAccountSummaryButton
               account={account}
               assessment={assessments[0] ?? null}
@@ -1037,6 +1047,15 @@ export default function OptimizeAccountPage() {
         </div>
         );
       })()}
+
+      {/* Relink modal — page-level so it's accessible from any tab. */}
+      {showRelinkModal && account && (
+        <OptimizeRelinkModal
+          currentProjectId={account.project_id}
+          customerName={account.customer_name}
+          onClose={() => setShowRelinkModal(false)}
+        />
+      )}
     </div>
   );
 }
