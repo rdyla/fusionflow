@@ -100,7 +100,9 @@ export default function OptimizeAccountPage() {
       setZoomConfigured(zoomCfg.configured);
       setRcConfigured(rcCfg.configured);
       // Fetch photos for customer PF team
-      const customerEmails = [acc.customer_pf_ae_email, acc.customer_pf_sa_email, acc.customer_pf_csm_email].filter(Boolean) as string[];
+      // GET /optimize/accounts/:projectId returns the joined account-team names + emails as
+      // `ae_name`/`ae_email` (etc.), not the `customer_pf_*` shape the type also declares.
+      const customerEmails = [acc.ae_email, acc.sa_email, acc.csm_email].filter(Boolean) as string[];
       if (customerEmails.length > 0) {
         api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
       }
@@ -274,12 +276,12 @@ export default function OptimizeAccountPage() {
               </a>
             )}
           </div>
-          {(account.customer_pf_ae_name || account.customer_pf_sa_name || account.customer_pf_csm_name) && (
+          {(account.ae_name || account.sa_name || account.csm_name) && (
             <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
               {[
-                { role: "Account Executive", name: account.customer_pf_ae_name, email: account.customer_pf_ae_email },
-                { role: "Solution Architect", name: account.customer_pf_sa_name, email: account.customer_pf_sa_email },
-                { role: "Client Success Manager", name: account.customer_pf_csm_name, email: account.customer_pf_csm_email },
+                { role: "Account Executive", name: account.ae_name, email: account.ae_email },
+                { role: "Solution Architect", name: account.sa_name, email: account.sa_email },
+                { role: "Client Success Manager", name: account.csm_name, email: account.csm_email },
               ].filter(m => m.name).map((m) => {
                 const photo = m.email ? customerTeamPhotoMap[m.email] : null;
                 const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
@@ -305,7 +307,13 @@ export default function OptimizeAccountPage() {
       <div style={{ marginBottom: 24 }}>
         <div className="ms-page-header" style={{ marginBottom: 0 }}>
           <div>
-            <h1 className="ms-page-title">{account.project_name}</h1>
+            {/* Suppress the page title when it duplicates the customer name (typical
+                for direct-enrolled optimize accounts where the project shell was
+                synthesized from the customer name). The Customer card above already
+                identifies the account. */}
+            {account.project_name?.trim().toLowerCase() !== account.customer_name?.trim().toLowerCase() && (
+              <h1 className="ms-page-title">{account.project_name}</h1>
+            )}
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <span className="ms-badge" style={{ background: account.optimize_status === "active" ? "#22c55e1a" : "#f59e0b1a", color: account.optimize_status === "active" ? "#22c55e" : "#f59e0b", border: `1px solid ${account.optimize_status === "active" ? "#22c55e40" : "#f59e0b40"}` }}>
