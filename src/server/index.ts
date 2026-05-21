@@ -33,6 +33,7 @@ import featureRoutes from "./routes/features";
 import meetingPrepRoutes from "./routes/meetingPrep";
 import settingsRoutes from "./routes/settings";
 import cascadeRoutes from "./routes/cascade";
+import stagingPromoteRoutes from "./routes/stagingPromote";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -89,6 +90,7 @@ app.route("/api/cloudsupport", cloudSupportRoutes);
 app.route("/api/features", featureRoutes);
 app.route("/api/projects", meetingPrepRoutes);
 app.route("/api/settings", settingsRoutes);
+app.route("/api/admin/staging", stagingPromoteRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means

@@ -435,6 +435,7 @@ export default function AppShell() {
                     <AdminMenuLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setAdminMenuOpen(false)}>Templates</AdminMenuLink>
                     <AdminMenuLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setAdminMenuOpen(false)}>Users</AdminMenuLink>
                     <AdminMenuLink to="/admin/roadmap" icon={NAV_ICONS.adminRoadmap} onClick={() => setAdminMenuOpen(false)}>Roadmap</AdminMenuLink>
+                    <AdminMenuLink to="/admin/promote-staging" icon={NAV_ICONS.adminPromote} onClick={() => setAdminMenuOpen(false)}>Promote from staging</AdminMenuLink>
                     <DemoModeRow />
                   </div>
                 )}
@@ -642,6 +643,12 @@ const NAV_ICONS = {
       <rect x="3" y="3" width="5" height="18" rx="1"/>
       <rect x="10" y="3" width="5" height="12" rx="1"/>
       <rect x="17" y="3" width="5" height="7" rx="1"/>
+    </I>
+  ),
+  adminPromote: (
+    <I>
+      <path d="M5 12h14"/>
+      <path d="M13 6l6 6-6 6"/>
     </I>
   ),
 };
