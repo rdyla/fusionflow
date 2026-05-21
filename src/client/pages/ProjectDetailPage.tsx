@@ -34,6 +34,7 @@ import { VENDOR_OPTIONS, vendorLabel } from "../../shared/vendors";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
+import CascadeModal from "../components/project/CascadeModal";
 
 type DetailTab = "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
@@ -127,6 +128,8 @@ export default function ProjectDetailPage() {
   const [noteMessage, setNoteMessage] = useState<string | null>(null);
 
   const [timeEntryTask, setTimeEntryTask] = useState<Task | null>(null);
+  // PM-initiated date cascade — which task is the shift anchor (null = closed).
+  const [cascadeFromTask, setCascadeFromTask] = useState<Task | null>(null);
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
   const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
   const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", useCostCode: false });
@@ -1242,6 +1245,8 @@ export default function ProjectDetailPage() {
                               const taskRecordings = recordings.filter((r) => r.task_id === task.id);
                               const taskEntries = taskTimeEntries[task.id] ?? [];
                               const isDone = task.status === "completed";
+                              const todayIso = new Date().toISOString().slice(0, 10);
+                              const isOverdue = !!task.due_date && !isDone && task.due_date < todayIso;
                               const subRowCount = taskRecordings.length + taskEntries.length;
                               return (
                                 <React.Fragment key={task.id}>
@@ -1427,6 +1432,20 @@ export default function ProjectDetailPage() {
                                       >
                                         ⏱
                                       </button>
+                                      {canEdit && task.due_date && (
+                                        <button
+                                          title="Cascade dates downstream from this task"
+                                          onClick={() => setCascadeFromTask(task)}
+                                          style={{
+                                            background: isOverdue ? "rgba(253,224,71,0.15)" : "none",
+                                            border: `1px solid ${isOverdue ? "#fde68a" : "#cbd5e1"}`,
+                                            color: isOverdue ? "#b45309" : "#64748b",
+                                            borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                          }}
+                                        >
+                                          ↪
+                                        </button>
+                                      )}
                                       {canEdit && (
                                         <button
                                           title="Delete task"
@@ -2456,6 +2475,26 @@ export default function ProjectDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* ── Cascade Modal ─────────────────────────────────────────────────── */}
+      {cascadeFromTask && project && (
+        <CascadeModal
+          projectId={project.id}
+          fromTask={cascadeFromTask}
+          onClose={() => setCascadeFromTask(null)}
+          onApplied={async () => {
+            // Refetch tasks + project so the page reflects shifted dates and
+            // the new target go-live in the header. Toast is already fired
+            // by the modal before this callback runs.
+            const [refreshedTasks, refreshedProject] = await Promise.all([
+              api.tasks(project.id),
+              api.project(project.id),
+            ]);
+            setTasks(refreshedTasks);
+            setProject(refreshedProject);
+          }}
+        />
       )}
 
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}

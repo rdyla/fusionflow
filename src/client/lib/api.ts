@@ -528,6 +528,28 @@ export type Phase = {
   status: string | null;
 };
 
+/** Preview shape returned by GET /projects/:id/cascade/preview. */
+export type CascadeAffectedTask = {
+  id: string;
+  phase_id: string | null;
+  title: string;
+  due_date: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  assignee_user_id: string | null;
+  new_due_date: string | null;
+  new_scheduled_start: string | null;
+  new_scheduled_end: string | null;
+};
+
+export type CascadePreview = {
+  from_task: { id: string; title: string; due_date: string | null };
+  slip_days: number;
+  affected_tasks: CascadeAffectedTask[];
+  current_target_go_live: string | null;
+  new_target_go_live: string | null;
+};
+
 export type Task = {
   id: string;
   project_id: string;
@@ -1224,6 +1246,18 @@ export const api = {
     request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}`, {
       method: "DELETE",
     }),
+
+  // Date cascade — see src/server/routes/cascade.ts
+  cascadePreview: (projectId: string, fromTaskId: string, slipDays: number) =>
+    request<CascadePreview>(
+      `/projects/${projectId}/cascade/preview?from_task_id=${encodeURIComponent(fromTaskId)}&slip_days=${slipDays}`
+    ),
+
+  cascadeApply: (projectId: string, payload: { from_task_id: string; slip_days: number; exclude_task_ids?: string[] }) =>
+    request<{ tasks_shifted: number; phases_shifted: number; new_target_go_live: string | null; recipients_notified: number }>(
+      `/projects/${projectId}/cascade/apply`,
+      { method: "POST", body: JSON.stringify(payload) }
+    ),
 
   timeEntrySetup: (projectId: string) =>
     request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup`),
