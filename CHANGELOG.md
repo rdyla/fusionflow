@@ -4,6 +4,136 @@ All notable changes are documented here, newest first.
 
 ---
 
+## 2026-05-20
+
+### SOW Switches — Budgetary Watermark + Zoom Reseller Agreement
+
+Two independent flags on solutions that change how the SOW renders.
+
+- **Budgetary** (`solutions.is_budgetary`): the rendered SOW gets a faded grey diagonal **BUDGETARY** watermark via `position: fixed` (Chrome repeats it on every printed page). `pointer-events: none` + low opacity keeps the content legible and clickable. The solution detail page surfaces an amber "BUDGETARY ONLY" banner under the back link so the status is impossible to miss.
+- **Zoom Reseller** (`solutions.is_zoom_reseller`): the SOW cover-page legal blurb swaps the Packet Fusion Master Services Agreement reference for the **Packet Fusion ZOOM SERVICES RESELLER CUSTOMER AGREEMENT** verbiage. Required for SLED and other Zoom-reseller-channel deals.
+- Flags are independent — a SLED budgetary quote sets both.
+- New "SOW Switches" card in the SOW tab houses the two checkboxes, above the SOW preview.
+- Migration `0082_solutions_budgetary_and_zoom_reseller.sql` adds both INTEGER NOT NULL DEFAULT 0 columns.
+
+PRs: #196
+
+---
+
+### Solution Handoff Document — Multi Partner AE + Readability
+
+Two PM-reported issues fixed in one pass.
+
+- **Partner AEs didn't propagate from Overview to Handoff.** Overview now adds Partner AEs to `solution_staff` (the post-2025 multi-AE flow), but the Handoff doc was still reading the legacy single `solution.partner_ae_name`/`partner_ae_email` columns. `ProjectHandoffDocument` now accepts `solutionStaff` and renders the Provider AE row(s) from staff filtered by `partner_ae` role (comma-joined when multiple; label pluralizes). Falls back to the legacy fields for older solutions that never migrated.
+- **Light grey text on white cards was unreadable.** The component's read-only display colors (`TD_LABEL #cbd5e1`, value `#e2e8f0`, "Include?" `#94a3b8`) had been designed for a dark theme but `ms-card` is white. Darkened across the whole doc: labels → `#475569`, values → `#1e293b`, "Include?" labels → `#475569`.
+
+PRs: #194
+
+---
+
+### Timeline Builder — Anchor Target Go-Live to a Flagged Task
+
+PMs reported that "go-live" means the cutover event, not the project's last day. The previous builder landed the END of the LAST phase on the target go-live, which placed Hypercare's end on go-live and the actual cutover weeks earlier.
+
+- Migration `0081`: new `template_tasks.is_go_live_event` INTEGER column. Each template flags exactly one task as the canonical cutover anchor (UCaaS Zoom → "Go Live Event"; UCaaS/CCaaS RC variants → "Cutover Execution"; VA/WFM/QM → "Production Cutover"; Zoom RA → "Go-Live Execution"). ZCC's Go-Live phase only had a post-cutover verification task, so the migration also inserts a real "Go Live Event" task there and flags it.
+- New algorithm: `findGoLivePhaseIdx` picks the LAST merged phase containing any flagged task; `workdaysThroughGoLive` totals working_days from start through that phase; `startFromGoLive(target, total)` back-computes the anchor start so the flagged phase's END lands on the target — and Closing/Hypercare chain forward past it.
+- Falls back to the legacy "last phase end = target" behaviour when no template in the selection has a flagged task.
+- Yellow "Go-Live Anchor" pill on flagged task rows in the builder so PMs can see which task drives the math. "Computed go-live" caption names the anchor phase (e.g. "Go Live / Production phase end") rather than the generic "last phase end".
+
+PRs: #193, #195 (hotfix for migration ID collision against 0072's Closing-phase rows — bumped new task to `ttsk-czcc-200`)
+
+---
+
+### Tasks Tab — Editable Done Date + Add-New-Contact in Assignee Picker
+
+- **Editable Done date**: server PATCH `/tasks/:id` now accepts `completed_at`. The auto-stamp on `status -> completed` only fires when the client did NOT supply an explicit `completed_at`, so backdating via the date picker wins. Client: when a task is checked Done, a date input appears next to the checkbox; editing it PATCHes `completed_at` directly without touching status.
+- **Add new contact from assignee dropdown**: new sentinel "+ Add new contact…" option on every assignee select. Selecting it opens the existing contact modal preset to the customer side (CRM tab when the project is CRM-linked, manual otherwise) and remembers which task triggered it. After the new contact is added (CRM or manual tab), it's auto-assigned to that task and the modal closes. Dismissing the modal mid-flow clears the pending-task state.
+
+PRs: #192
+
+---
+
+### Gantt + Tasks Tab — PM-Driven Revamp
+
+Round of PM-team feedback on the project Gantt and Tasks pages, shipped in a sequence of small PRs.
+
+**Gantt** ([`ProjectTimeline.tsx`](src/client/components/timeline/ProjectTimeline.tsx))
+- Multi-select **solution-type filter pills** above the schedule; only render for types this project's tasks actually use; hidden if ≤1 type. Filter state is shared with the Tasks tab via `cloudconnect:project:typeFilter:<projectId>` localStorage.
+- **Per-phase collapse** with chevron — all phases start collapsed; expanded set persisted per project. Replaces the single global "Minimize schedule" toggle for sub-phase rows.
+- Tasks render as **point-in-time markers**: hollow ring at `due_date`, filled dot at `completed_at`, thin connector between when both exist. Dropped the old `scheduled_start → scheduled_end` bars (PMs don't track those reliably).
+- **Phase + task labels left-aligned** with no ellipsis truncation; long names wrap inside the column.
+- Faint vertical **grid lines** — one at the label/chart boundary, one at each month tick across the chart — so a task dot's column lines up visually with its month label.
+- Colored type-dot chips next to task labels removed (filter pills already convey the same info).
+
+**Tasks tab** ([`ProjectDetailPage.tsx`](src/client/pages/ProjectDetailPage.tsx))
+- Per-phase **inline-editable CRUD table** (Title / Assignee / Due / Status / Priority / Done) replaces the click-to-drawer list. Cells save on blur/change with optimistic update + toast revert on failure.
+- `Done` is a checkbox bound to `status = "completed"`. Server auto-stamps `completed_at` (later made editable — see Editable Done date above).
+- Inline "+ Add Task" keeps the row open for rapid entry; Esc closes.
+- **Assignee dropdown is project-scoped**: PF staff (PM/AE/SA/CSM/IE) + partner AE + project contacts. No more global users list. Off-project historical assignees are surfaced as "(off project)" so their assignment isn't silently dropped.
+- Drawer (description / comments / attachments / blocker-link) removed for this round — will return as a focused follow-up once the new layout beds in. Gantt task-click now jumps to the Tasks tab and scrolls the row into view (uses `data-task-row=<id>`).
+- **Safety net**: empty `selectedTypes` is treated as "no filter active" instead of "hide every tagged task" — defensive against any stuck-empty localStorage state (originally surfaced when a PM toggled all pills off on a single-type project where the pills then auto-hide). Yellow recovery banner with a "Show all" button appears when `tasks.length > 0 && filteredTasks.length === 0`. Persistence moved inline into the toggle handler to dodge an initial-mount race where the persistence `useEffect` could fire with the default Set in scope and overwrite a freshly-hydrated saved selection.
+
+**New shared component**: [`SolutionTypeFilterPills.tsx`](src/client/components/ui/SolutionTypeFilterPills.tsx) — small controlled multi-select pills used by both Gantt and Tasks tab.
+
+PRs: #188 (PM revamp), #189 (safety net), #190 (drop type-dots + label changes), #191 (grid lines)
+
+---
+
+### Project Overview — Dashboard + Layout Refinements
+
+- **Per-tech progress bars** on the Project Dashboard replace the phase stepper, showing percentage complete per solution type. PR #187.
+- **Timeline tag color dots** on Gantt task labels — small colored dots after each task label per solution type, since the `[UCaaS+CCaaS]`-style prefix dominated when labels got ellipsed. (Superseded later by the full label-left-align + filter pills above; the dot-rendering helper was reused in the new Gantt before being removed entirely.) PR #186.
+- **Condensed Meeting Prep section** and reordered Team/Contacts above the dashboard. PR #185.
+
+PRs: #185, #186, #187
+
+---
+
+## 2026-05 — Timeline Builder + Template Buildout
+
+A multi-PR build-out giving PMs a spreadsheet-style scaffold for laying out the project timeline from template(s).
+
+### Timeline Builder ([`TimelineBuilder.tsx`](src/client/components/timeline/TimelineBuilder.tsx))
+- New "Builder" tab on Project Detail (PM + Admin only) that loads template phases + tasks, computes phase dates via workday math, and applies the whole layout to the project in a single atomic wipe-and-rebuild via `/projects/:id/apply-timeline`. PR #176.
+- **Multi-template selection** — combo projects (e.g. UCaaS + CCaaS) merge phases by canonical name (Initiation / Planning / Executing / etc.), take MAX(working_days) across templates for each phase, and union tasks tagged with their source solution type via `buildTaggedTitle`. PR #181.
+- **Editable per-task dates with shift-below logic** — editing a task's date pins it and shifts all later tasks in the same phase by the delta. PR #178.
+- **Auto-compute phase End from Start + Workdays** — bidirectional workday math using new helpers in [`shared/workdayMath.ts`](src/shared/workdayMath.ts). PR #179.
+- **ZCC template per-phase working_days seeded** — separate from the unified `0075_template_phases_working_days.sql` migration. PR #180.
+
+### Template Refreshes
+- **VA (Virtual Agent) starter template** with canonical 7-phase layout matching UCaaS + CCaaS. PR #183.
+- **WFM + QM starter templates** in the same shape. PR #184.
+
+### Misc
+- **SOW Prepared By** now reflects the current user dynamically; "Date" relabeled to "Date Issued". PR #175.
+- **Zoom chat widget** disabled in production until launch. PR #177.
+- Staging restore + screen-grab tooling: snapshot / demo-seed / restore scripts with FK deferral fixes. PRs #169–#174.
+
+---
+
+## 2026-04-17 to 2026-04-30 — Post-CI/CD Catch-Up
+
+Captured here as a thematic summary rather than per-PR — see `git log` between 2026-04-16 and 2026-04-30 for the full list (PRs ~#132–#167).
+
+- **Project Header unified edit** — one consistent edit affordance across project metadata. PR #167.
+- **Edit vendor on existing projects + solutions** (with `0074_normalize_projects_vendor.sql` migration). PRs #162, #166.
+- **Dashboard summary parallelized** — multiple DB lookups now run in parallel for snappier load. PR #164.
+- **PF SA can create projects** — previously PM-only; broadened scope. PR #160.
+- **RingCentral utilization mirror** for the engagement utilization view. PR #161.
+- **Needs Assessment unified library** — shared question library across solution types instead of per-type duplicated JSON. PR #159.
+- **Legacy templates canonical refresh** to align UCaaS-RC, CCaaS-RCE, Zoom-RA with the canonical 7-phase layout. PR #158.
+- **ZCC template refresh** with workbook-tab phase structure. PRs #157, #155 (chat widget for ZCC SDK).
+- **Contacts split** into customer + partner sides on the project page (single underlying table). PR #154.
+- **Porting Coordinator contact assignment** — UCaaS templates auto-assign the porting coordinator contact to relevant tasks at apply time. PR #153.
+- **Template apply auto-assign** by role (PM / IE / PF / Zoom porting). PR #152.
+- **Phase delete** support with batch cleanup of orphan task refs across projects. PRs #147–#150.
+- **Executive dashboard overview** redesign. PR #146.
+- **Solutions multi-partner AE** — moved from single `solution.partner_ae_*` columns to `solution_staff` table, mirroring the projects pattern. PR #138.
+- **User hierarchy tree** view for admin user management. PR #133.
+- **Demo mode vendor lens** for screen-grab demos showing curated subset of data. PR #132.
+
+---
+
 ## 2026-04-16
 
 ### CI/CD Infrastructure — GitHub Actions, Staging, Automated Migrations
