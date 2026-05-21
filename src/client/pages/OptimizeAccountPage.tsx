@@ -11,6 +11,11 @@ import {
 import { useToast } from "../components/ui/ToastProvider";
 import ImpactAssessmentWizard from "../components/optimize/ImpactAssessmentWizard";
 import ImpactAssessmentDetail from "../components/optimize/ImpactAssessmentDetail";
+import {
+  ExportAccountSummaryButton,
+  ExportImpactAssessmentButton,
+  ExportTechStackButton,
+} from "../components/optimize/OptimizeExports";
 import { solutionTypeLabel } from "../../shared/solutionTypes";
 import { canonicalizeVendor } from "../../shared/vendors";
 
@@ -311,6 +316,12 @@ export default function OptimizeAccountPage() {
                 {crmSyncing ? "Syncing…" : "Sync from CRM"}
               </button>
             )}
+            <ExportAccountSummaryButton
+              account={account}
+              assessment={assessments[0] ?? null}
+              techStack={techStack}
+              roadmap={roadmap}
+            />
           </div>
         </div>
 
@@ -442,12 +453,17 @@ export default function OptimizeAccountPage() {
           )}
 
           {assessmentView === "detail" && selectedAssessment && (
-            <ImpactAssessmentDetail
-              assessment={selectedAssessment}
-              previousAssessment={getPreviousAssessment()}
-              onBack={() => setAssessmentView("list")}
-              onDelete={() => handleDeleteAssessment(selectedAssessment.id)}
-            />
+            <>
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+                <ExportImpactAssessmentButton assessment={selectedAssessment} account={account} />
+              </div>
+              <ImpactAssessmentDetail
+                assessment={selectedAssessment}
+                previousAssessment={getPreviousAssessment()}
+                onBack={() => setAssessmentView("list")}
+                onDelete={() => handleDeleteAssessment(selectedAssessment.id)}
+              />
+            </>
           )}
         </div>
       )}
@@ -459,7 +475,10 @@ export default function OptimizeAccountPage() {
             <div style={{ fontSize: 13, color: "#94a3b8" }}>
               Gartner TIME framework — rate each technology area for strategic direction.
             </div>
-            <button className="ms-btn-primary" onClick={() => setShowTechForm(true)}>+ Add Area</button>
+            <div style={{ display: "flex", gap: 10 }}>
+              {techStack.length > 0 && <ExportTechStackButton items={techStack} account={account} />}
+              <button className="ms-btn-primary" onClick={() => setShowTechForm(true)}>+ Add Area</button>
+            </div>
           </div>
 
           {techStack.length === 0 ? (
@@ -492,7 +511,7 @@ export default function OptimizeAccountPage() {
                           </span>
                         ) : "—"}
                       </td>
-                      <td style={{ color: "#64748b", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
+                      <td style={{ color: "#475569", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
                       <td>
                         <button className="ms-btn-ghost" onClick={() => handleDeleteTech(t.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}>Delete</button>
                       </td>
@@ -589,7 +608,7 @@ export default function OptimizeAccountPage() {
                         )}
                         <span style={{ fontSize: 11, color: "#94a3b8", textTransform: "capitalize" }}>{r.category.replace("_", " ")}</span>
                       </div>
-                      {r.description && <p style={{ fontSize: 13, color: "rgba(240,246,255,0.55)", margin: 0, lineHeight: 1.5 }}>{r.description}</p>}
+                      {r.description && <p style={{ fontSize: 13, color: "#475569", margin: 0, lineHeight: 1.5 }}>{r.description}</p>}
                       {r.target_date && <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>Target: {r.target_date}</div>}
                     </div>
                     <button className="ms-btn-ghost" onClick={() => handleDeleteRoadmap(r.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)", flexShrink: 0 }}>Delete</button>
