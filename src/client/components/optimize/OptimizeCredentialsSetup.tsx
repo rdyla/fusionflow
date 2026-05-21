@@ -136,19 +136,42 @@ function ZoomCredsForm({
     }
   }
 
+  // Inline `code` chip used inside the instructions block. Kept as a small
+  // helper so the styling stays consistent across the bullet list.
+  const codeChip: React.CSSProperties = {
+    background: "rgba(255,255,255,0.1)",
+    padding: "1px 4px",
+    borderRadius: 3,
+    color: "#1e293b",
+  };
+
   return (
     <form onSubmit={save} className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: "3px solid #2563eb" }}>
       <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>Connect Zoom</div>
-      <p style={{ color: "#475569", fontSize: 13, margin: "0 0 14px" }}>
-        Paste the Server-to-Server OAuth credentials from your Zoom Marketplace app. They live in encrypted KV, scoped to this account only.
+      <p style={{ color: "#475569", fontSize: 13, margin: "0 0 16px" }}>
+        Create a Server-to-Server OAuth app in the customer's Zoom account, then paste the credentials below.
       </p>
+      <div style={{
+        background: "rgba(0,0,0,0.02)", borderRadius: 6, padding: "14px 16px",
+        marginBottom: 16, fontSize: 12, color: "#64748b", lineHeight: 1.7,
+        border: "1px solid rgba(0,0,0,0.07)",
+      }}>
+        <strong style={{ color: "#1e293b" }}>Setup steps (in the customer's Zoom admin portal):</strong>
+        <ol style={{ margin: "8px 0 0 0", paddingLeft: 18 }}>
+          <li>Sign in using the <code style={codeChip}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
+          <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
+          <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
+          <li>Add scopes: <code style={codeChip}>account:read:admin</code>, <code style={codeChip}>user:read:admin</code>, <code style={codeChip}>report:read:admin</code>, <code style={codeChip}>phone:read:admin</code>, <code style={codeChip}>contact_center:read:admin</code></li>
+          <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
+        </ol>
+      </div>
       <div style={{ display: "grid", gap: 10, maxWidth: 480 }}>
         <label className="ms-label">
           <span>Account ID</span>
           <input
             required className="ms-input" value={form.account_id}
             onChange={(e) => setForm({ ...form, account_id: e.target.value.trim() })}
-            autoComplete="off"
+            placeholder="e.g. abc123XYZ" autoComplete="off"
           />
         </label>
         <label className="ms-label">
@@ -156,7 +179,7 @@ function ZoomCredsForm({
           <input
             required className="ms-input" value={form.client_id}
             onChange={(e) => setForm({ ...form, client_id: e.target.value.trim() })}
-            autoComplete="off"
+            placeholder="e.g. aBcDeFgHiJ1234" autoComplete="off"
           />
         </label>
         <label className="ms-label">
@@ -164,7 +187,7 @@ function ZoomCredsForm({
           <input
             required type="password" className="ms-input" value={form.client_secret}
             onChange={(e) => setForm({ ...form, client_secret: e.target.value.trim() })}
-            autoComplete="off"
+            placeholder="••••••••••••••••" autoComplete="new-password"
           />
         </label>
         <div style={{ display: "flex", gap: 10 }}>
@@ -173,7 +196,7 @@ function ZoomCredsForm({
             className="ms-btn-primary"
             disabled={saving || !form.account_id || !form.client_id || !form.client_secret}
           >
-            {saving ? "Saving…" : "Save credentials"}
+            {saving ? "Connecting…" : "Connect Tenant"}
           </button>
         </div>
       </div>
@@ -207,19 +230,40 @@ function RingCentralCredsForm({
     }
   }
 
+  const codeChip: React.CSSProperties = {
+    background: "rgba(255,255,255,0.1)",
+    padding: "1px 4px",
+    borderRadius: 3,
+    color: "#1e293b",
+  };
+
   return (
     <form onSubmit={save} className="ms-card" style={{ padding: "20px 24px", marginBottom: 16, borderLeft: "3px solid #ff7a00" }}>
       <div style={{ fontWeight: 600, color: "#334155", marginBottom: 4 }}>Connect RingCentral</div>
-      <p style={{ color: "#475569", fontSize: 13, margin: "0 0 14px" }}>
-        Paste the JWT-bearer credentials from your RingCentral developer app. They live in encrypted KV, scoped to this account only.
+      <p style={{ color: "#475569", fontSize: 13, margin: "0 0 16px" }}>
+        Create a Private App in the customer's RingCentral developer console to enable live account stats and utilization tracking.
       </p>
+      <div style={{
+        background: "rgba(0,0,0,0.02)", borderRadius: 6, padding: "14px 16px",
+        marginBottom: 16, fontSize: 12, color: "#64748b", lineHeight: 1.7,
+        border: "1px solid rgba(0,0,0,0.07)",
+      }}>
+        <strong style={{ color: "#1e293b" }}>Setup steps (in the customer's RingCentral admin portal):</strong>
+        <ol style={{ margin: "8px 0 0 0", paddingLeft: 18 }}>
+          <li>Sign in to <strong style={{ color: "#334155" }}>developers.ringcentral.com</strong> as the customer's admin</li>
+          <li>Click <strong style={{ color: "#334155" }}>Create App</strong> → <strong style={{ color: "#334155" }}>REST API App</strong> → Auth type: <strong style={{ color: "#334155" }}>JWT auth flow</strong></li>
+          <li>Under <strong style={{ color: "#334155" }}>OAuth Scopes</strong>, add: <code style={codeChip}>Read Account</code>, <code style={codeChip}>Read Call Log</code>, <code style={codeChip}>Analytics</code></li>
+          <li>Go to <strong style={{ color: "#334155" }}>Credentials</strong> → generate a <strong style={{ color: "#334155" }}>JWT token</strong> for a super-admin service user</li>
+          <li>Copy Client ID, Client Secret, and JWT Token and paste below</li>
+        </ol>
+      </div>
       <div style={{ display: "grid", gap: 10, maxWidth: 480 }}>
         <label className="ms-label">
           <span>Client ID</span>
           <input
             required className="ms-input" value={form.client_id}
             onChange={(e) => setForm({ ...form, client_id: e.target.value.trim() })}
-            autoComplete="off"
+            placeholder="e.g. aBcDeFgHiJ1234" autoComplete="off"
           />
         </label>
         <label className="ms-label">
@@ -227,7 +271,7 @@ function RingCentralCredsForm({
           <input
             required type="password" className="ms-input" value={form.client_secret}
             onChange={(e) => setForm({ ...form, client_secret: e.target.value.trim() })}
-            autoComplete="off"
+            placeholder="••••••••••••••••" autoComplete="new-password"
           />
         </label>
         <label className="ms-label">
@@ -235,7 +279,7 @@ function RingCentralCredsForm({
           <input
             required type="password" className="ms-input" value={form.jwt_token}
             onChange={(e) => setForm({ ...form, jwt_token: e.target.value.trim() })}
-            autoComplete="off"
+            placeholder="••••••••••••••••" autoComplete="new-password"
           />
         </label>
         <div style={{ display: "flex", gap: 10 }}>
@@ -244,7 +288,7 @@ function RingCentralCredsForm({
             className="ms-btn-primary"
             disabled={saving || !form.client_id || !form.client_secret || !form.jwt_token}
           >
-            {saving ? "Saving…" : "Save credentials"}
+            {saving ? "Connecting…" : "Connect Tenant"}
           </button>
         </div>
       </div>
