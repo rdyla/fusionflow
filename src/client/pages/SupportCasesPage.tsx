@@ -78,8 +78,11 @@ export default function SupportCasesPage() {
 
     let matchDeepLink = true;
     if (staleDays !== null) {
-      const ageDays = (now - new Date(c.createdOn).getTime()) / (1000 * 60 * 60 * 24);
-      matchDeepLink = c.state === "Active" && ageDays >= staleDays;
+      // Stale = idle (no modification in N days). Matches the dashboard's KPI.
+      const idleDays = c.modifiedOn
+        ? (now - new Date(c.modifiedOn).getTime()) / (1000 * 60 * 60 * 24)
+        : 0;
+      matchDeepLink = c.state === "Active" && idleDays >= staleDays;
     } else if (stuckOnCustomer) {
       const inactiveDays = c.modifiedOn
         ? (now - new Date(c.modifiedOn).getTime()) / (1000 * 60 * 60 * 24)
@@ -214,6 +217,7 @@ export default function SupportCasesPage() {
                 <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Status</th>
                 {isStaff && <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Owner</th>}
                 <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Opened</th>
+                {isStaff && <th style={{ padding: "10px 16px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#64748b", letterSpacing: "0.05em", textTransform: "uppercase" }}>Last Touch</th>}
               </tr>
             </thead>
             <tbody>
@@ -239,6 +243,15 @@ export default function SupportCasesPage() {
                   </td>
                   {isStaff && <td style={{ padding: "10px 16px", fontSize: 13, color: "#64748b" }}>{c.owner ?? "—"}</td>}
                   <td style={{ padding: "10px 16px", fontSize: 12, color: "#94a3b8", whiteSpace: "nowrap" }}>{formatSupportDate(c.createdOn)}</td>
+                  {isStaff && (() => {
+                    const idle = c.modifiedOn ? (now - new Date(c.modifiedOn).getTime()) / (1000 * 60 * 60 * 24) : 0;
+                    const stale = c.state === "Active" && idle >= 14;
+                    return (
+                      <td style={{ padding: "10px 16px", fontSize: 12, color: stale ? "#d13438" : "#94a3b8", fontWeight: stale ? 600 : 400, whiteSpace: "nowrap" }}>
+                        {c.modifiedOn ? formatSupportDate(c.modifiedOn) : "—"}
+                      </td>
+                    );
+                  })()}
                 </tr>
               ))}
             </tbody>

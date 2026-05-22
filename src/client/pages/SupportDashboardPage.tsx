@@ -156,7 +156,7 @@ export default function SupportDashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading…</div>;
   }
 
-  const { kpis, severityDistribution, statusDistribution, ownerDistribution, agingBuckets, staleOpen, trend, windowDays, staleThresholdDays } = data;
+  const { kpis, severityDistribution, statusDistribution, ownerDistribution, agingBuckets, staleOpen, trend, windowDays, staleThresholdDays, stuckThresholdDays } = data;
   const avgResolve = kpis.avgResolveDays === null
     ? "—"
     : kpis.avgResolveDays < 1
@@ -193,12 +193,12 @@ export default function SupportDashboardPage() {
         <MetricCard title="Unassigned" value={kpis.unassigned} accent={kpis.unassigned > 0 ? "#ff8c00" : undefined} />
         <MetricCard
           title={`Stale (${staleThresholdDays}d+)`}
-          value={kpis.stale7d}
-          accent={kpis.stale7d > 0 ? "#d13438" : undefined}
+          value={kpis.staleIdle}
+          accent={kpis.staleIdle > 0 ? "#d13438" : undefined}
           onClick={() => navigate(`/support/cases?stale=${staleThresholdDays}d`)}
         />
         <MetricCard
-          title="Stuck on Customer"
+          title={`Stuck on Customer (${stuckThresholdDays}d+)`}
           value={kpis.stuckOnCustomer}
           accent={kpis.stuckOnCustomer > 0 ? "#ff8c00" : undefined}
           onClick={() => navigate(`/support/cases?stuck=customer`)}
@@ -287,7 +287,7 @@ export default function SupportDashboardPage() {
           <table className="ms-table">
             <thead>
               <tr>
-                {["Ticket", "Title", "Severity", "Status", "Owner", "Age"].map((h) => (
+                {["Ticket", "Title", "Severity", "Status", "Owner", "Opened", "Idle"].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -315,8 +315,11 @@ export default function SupportDashboardPage() {
                   <td style={{ fontSize: 12, color: c.owner ? "#475569" : "#94a3b8", fontStyle: c.owner ? "normal" : "italic" }}>
                     {c.owner ?? "Unassigned"}
                   </td>
-                  <td style={{ fontSize: 12, color: c.ageDays >= 14 ? "#d13438" : "#ff8c00", fontWeight: 600, whiteSpace: "nowrap" }}>
-                    {c.ageDays}d
+                  <td style={{ fontSize: 12, color: "#64748b", whiteSpace: "nowrap" }}>
+                    {new Date(c.createdOn).toLocaleDateString("en-US", { month: "short", day: "numeric" })} ({c.ageDays}d)
+                  </td>
+                  <td style={{ fontSize: 12, color: c.idleDays >= staleThresholdDays ? "#d13438" : "#ff8c00", fontWeight: 600, whiteSpace: "nowrap" }}>
+                    {c.idleDays}d
                   </td>
                 </tr>
               ))}
