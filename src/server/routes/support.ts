@@ -485,6 +485,12 @@ app.get("/cases", async (c) => {
     }
   }
 
+  // amc_serviceboard option-set value 173590005 = "Support" (vs Install,
+  // Onboard, PreSales, etc.) — restrict the case list to Support-board cases
+  // only, matching the dashboard.
+  const SUPPORT_BOARD = 173590005;
+  filter = `(${filter}) and amc_serviceboard eq ${SUPPORT_BOARD}`;
+
   const top = search ? 100 : 500;
   const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value";
   const expand = "owninguser($select=fullname)";
