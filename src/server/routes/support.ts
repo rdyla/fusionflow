@@ -151,21 +151,31 @@ app.get("/dashboard", async (c) => {
     modifiedOn: r.modifiedon,
   }));
 
-  const STALE_THRESHOLD_DAYS = 7;
-  const staleCutoff = now - STALE_THRESHOLD_DAYS * 24 * 60 * 60 * 1000;
+  // "Stale" = idle (no modification in N days) so a long-running but actively-
+  // worked case isn't flagged. modifiedon updates on status changes, owner
+  // changes, notes, and attachments — a reasonable proxy for "someone touched
+  // it." "Stuck on customer" keeps its own shorter threshold because a customer
+  // not replying for a week is already a chase trigger.
+  const STALE_IDLE_DAYS = 14;
+  const STUCK_IDLE_DAYS = 7;
+  const stuckCutoff = now - STUCK_IDLE_DAYS * 24 * 60 * 60 * 1000;
   function ageDays(createdOn: string): number {
     return (now - new Date(createdOn).getTime()) / (1000 * 60 * 60 * 24);
+  }
+  function idleDays(modifiedOn: string | null): number {
+    if (!modifiedOn) return 0;
+    return (now - new Date(modifiedOn).getTime()) / (1000 * 60 * 60 * 24);
   }
 
   // ── KPIs ────────────────────────────────────────────────────────────────────
   const totalOpen   = openCases.length;
   const p1Open      = openCases.filter((c) => c.severity === "P1" || c.severity === "E1").length;
   const unassigned  = openCases.filter((c) => isUnassigned(c.owner)).length;
-  const stale7d     = openCases.filter((c) => ageDays(c.createdOn) >= STALE_THRESHOLD_DAYS).length;
+  const staleIdle   = openCases.filter((c) => idleDays(c.modifiedOn) >= STALE_IDLE_DAYS).length;
   const stuckOnCustomer = openCases.filter((c) =>
     c.status === "Waiting on Customer" &&
     c.modifiedOn &&
-    new Date(c.modifiedOn).getTime() <= staleCutoff
+    new Date(c.modifiedOn).getTime() <= stuckCutoff
   ).length;
 
   const resolved = recentData.value.filter((r) => r.statecode === 1 && r.modifiedon && new Date(r.modifiedon).getTime() >= since.getTime());
@@ -230,10 +240,10 @@ app.get("/dashboard", async (c) => {
     }
   }
 
-  // ── Stale open cases (top 10 oldest, age >= STALE_THRESHOLD_DAYS) ────────
+  // ── Stale open cases (top 10 most-idle, idle >= STALE_IDLE_DAYS) ─────────
   const staleOpen = openCases
-    .filter((c) => ageDays(c.createdOn) >= STALE_THRESHOLD_DAYS)
-    .sort((a, b) => new Date(a.createdOn).getTime() - new Date(b.createdOn).getTime())
+    .filter((c) => idleDays(c.modifiedOn) >= STALE_IDLE_DAYS)
+    .sort((a, b) => idleDays(b.modifiedOn) - idleDays(a.modifiedOn))
     .slice(0, 10)
     .map((c) => ({
       id: c.id,
@@ -242,18 +252,21 @@ app.get("/dashboard", async (c) => {
       severity: c.severity,
       status: c.status,
       owner: isUnassigned(c.owner) ? null : c.owner,
+      idleDays: Math.floor(idleDays(c.modifiedOn)),
       ageDays: Math.floor(ageDays(c.createdOn)),
       createdOn: c.createdOn,
+      modifiedOn: c.modifiedOn,
     }));
 
   return c.json({
     windowDays: WINDOW_DAYS,
-    staleThresholdDays: STALE_THRESHOLD_DAYS,
+    staleThresholdDays: STALE_IDLE_DAYS,
+    stuckThresholdDays: STUCK_IDLE_DAYS,
     kpis: {
       totalOpen,
       p1Open,
       unassigned,
-      stale7d,
+      staleIdle,
       stuckOnCustomer,
       resolvedLast30d,
       avgResolveDays,
@@ -484,6 +497,12 @@ app.get("/cases", async (c) => {
       filter = `_customerid_value eq '${accountId}' or _customerid_value eq '${contactId}'`;
     }
   }
+
+  // amc_serviceboard option-set value 173590005 = "Support" (vs Install,
+  // Onboard, PreSales, etc.) — restrict the case list to Support-board cases
+  // only, matching the dashboard.
+  const SUPPORT_BOARD = 173590005;
+  filter = `(${filter}) and amc_serviceboard eq ${SUPPORT_BOARD}`;
 
   const top = search ? 100 : 500;
   const select = "incidentid,ticketnumber,title,severitycode,statuscode,statecode,createdon,modifiedon,_customerid_value";

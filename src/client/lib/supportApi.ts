@@ -122,18 +122,21 @@ export interface SupportDashboardStaleCase {
   severity: string;
   status: string;
   owner: string | null;
+  idleDays: number;
   ageDays: number;
   createdOn: string;
+  modifiedOn: string | null;
 }
 
 export interface SupportDashboardResponse {
   windowDays: number;
   staleThresholdDays: number;
+  stuckThresholdDays: number;
   kpis: {
     totalOpen: number;
     p1Open: number;
     unassigned: number;
-    stale7d: number;
+    staleIdle: number;
     stuckOnCustomer: number;
     resolvedLast30d: number;
     avgResolveDays: number | null;
