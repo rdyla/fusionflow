@@ -1069,20 +1069,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
 
-          {/* ── Asana Phase Progress ──────────────────────────────────────── */}
-          <div className="ms-section-card">
-            <div className="ms-section-title">Quick Counts</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
-              {[["Phases", phases.length], ["Tasks", tasks.length], ["Blockers", risks.length], ["Notes", notes.length]].map(
-                ([label, value]) => (
-                  <div key={label as string} className="ms-info-item" style={{ textAlign: "center" }}>
-                    <div className="ms-info-label">{label}</div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#63c1ea", lineHeight: 1.2 }}>{value}</div>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
+          {/* Quick Counts removed — Dashboard tab is the canonical metrics surface. */}
         </div>
       )}
 
