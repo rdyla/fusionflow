@@ -15,7 +15,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
   SELECT id, project_id, phase_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority,
+         completed_at, status, priority, meeting_join_url,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
@@ -129,6 +129,10 @@ const updateTaskSchema = z.object({
   completed_at: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
+  /** When set, the task is treated as a meeting (kickoff / design review /
+   *  go-live / etc.). The stakeholder view computes "Next call" by picking
+   *  the next upcoming task with a join URL. */
+  meeting_join_url: z.string().max(2000).nullable().optional(),
 });
 
 app.patch("/:id/tasks/:taskId", async (c) => {

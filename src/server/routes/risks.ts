@@ -34,7 +34,7 @@ app.get("/:id/risks", async (c) => {
 const riskSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(2000).optional(),
-  severity: z.enum(["low", "medium", "high"]).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
   status: z.enum(["open", "mitigated", "closed"]).optional(),
   owner_user_id: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
@@ -122,7 +122,7 @@ app.post("/:id/risks", async (c) => {
 const updateRiskSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   description: z.string().max(2000).optional(),
-  severity: z.enum(["low", "medium", "high"]).optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional(),
   status: z.enum(["open", "mitigated", "closed"]).optional(),
   owner_user_id: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
