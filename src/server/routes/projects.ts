@@ -9,6 +9,7 @@ import { sendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
+import { ensureSharePointChildFolder } from "../services/graphService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { canonicalizeVendor } from "../../shared/vendors";
@@ -105,6 +106,7 @@ app.get("/:id", async (c) => {
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
+             p.sharepoint_folder_url,
              p.created_at, p.updated_at,
              pmu.email AS pm_email,
              c.name AS customer_display_name,
@@ -210,8 +212,31 @@ app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, serializeSolutionTypes(solution_types), kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, dynamics_account_id ?? null, crm_case_id ?? null)
     .run();
 
+  // Best-effort: create the project's SharePoint subfolder under the customer's
+  // SP root. Failures (no SP root configured, Graph permission issue, etc.)
+  // don't block project creation — PM can retry from the SharePoint tab.
+  if (customer_id) {
+    try {
+      const customer = await db
+        .prepare("SELECT sharepoint_url FROM customers WHERE id = ? LIMIT 1")
+        .bind(customer_id)
+        .first<{ sharepoint_url: string | null }>();
+      if (customer?.sharepoint_url) {
+        const folder = await ensureSharePointChildFolder(c.env, customer.sharepoint_url, name);
+        if (folder.webUrl) {
+          await db
+            .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
+            .bind(folder.webUrl, projectId)
+            .run();
+        }
+      }
+    } catch (err) {
+      console.warn(`[projects.create] SharePoint folder creation failed for ${projectId}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
   const created = await db
-    .prepare("SELECT id, name, customer_name, vendor, solution_types, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT id, name, customer_name, vendor, solution_types, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, sharepoint_folder_url, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
     .first();
 
@@ -425,6 +450,62 @@ app.get("/:id/case", async (c) => {
   }
 
   return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities });
+});
+
+// ── SharePoint folder (retrofit for projects created before the auto-create) ─
+//
+// Creates (or adopts an existing) named subfolder for this project under the
+// customer's SP root, persists the URL on the project. Mirrors the best-effort
+// folder-create logic in the POST /projects handler but errors out loudly so
+// the PM sees what went wrong. Idempotent — clicking it twice returns the
+// already-set URL without creating a duplicate.
+
+app.post("/:id/sharepoint-folder", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  if (!(await canEditProject(db, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const project = await db
+    .prepare("SELECT name, customer_id, sharepoint_folder_url FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ name: string; customer_id: string | null; sharepoint_folder_url: string | null }>();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+
+  // Already wired up — just return the existing URL so the client can hot-swap.
+  if (project.sharepoint_folder_url) {
+    return c.json({ sharepoint_folder_url: project.sharepoint_folder_url, reused: true });
+  }
+
+  if (!project.customer_id) {
+    throw new HTTPException(400, {
+      message: "Project has no linked customer. Link a customer record (CRM account) before creating a SharePoint folder.",
+    });
+  }
+  const customer = await db
+    .prepare("SELECT sharepoint_url FROM customers WHERE id = ? LIMIT 1")
+    .bind(project.customer_id)
+    .first<{ sharepoint_url: string | null }>();
+  if (!customer?.sharepoint_url) {
+    throw new HTTPException(400, {
+      message: "Customer has no SharePoint URL set. Add one on the customer record, then retry.",
+    });
+  }
+
+  const folder = await ensureSharePointChildFolder(c.env, customer.sharepoint_url, project.name);
+  if (!folder.webUrl) {
+    throw new HTTPException(500, { message: "Folder created but no webUrl returned from Graph." });
+  }
+
+  await db
+    .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
+    .bind(folder.webUrl, projectId)
+    .run();
+
+  return c.json({ sharepoint_folder_url: folder.webUrl, reused: folder.reused });
 });
 
 // ── Project Contacts ──────────────────────────────────────────────────────────

@@ -5,6 +5,21 @@ import { useToast } from "../ui/ToastProvider";
 type Props = {
   recordId: string;
   sharepointUrl?: string | null;
+  /** When set, this URL is used as the root of the file browser, bypassing
+   *  the CRM-document-location lookup entirely. Set by ProjectDetailPage
+   *  to scope the SharePoint tab to the project's own subfolder under the
+   *  customer's SP root. */
+  projectFolderUrl?: string | null;
+  /** When provided alongside a null projectFolderUrl, the component shows
+   *  a "Create project folder" button that calls the retrofit endpoint to
+   *  create the folder under the customer's SP root. */
+  projectId?: string;
+  /** Gates the "Create project folder" button to editors. */
+  canEdit?: boolean;
+  /** Called when the retrofit endpoint successfully creates/adopts a folder
+   *  — parent should refresh the project so the URL is persisted on subsequent
+   *  renders without another retrofit call. */
+  onProjectFolderCreated?: (url: string) => void;
 };
 
 const MIME_ICONS: Record<string, string> = {
@@ -41,7 +56,7 @@ function formatDate(iso: string | null) {
   return iso.slice(0, 10);
 }
 
-export default function SharePointDocs({ recordId, sharepointUrl }: Props) {
+export default function SharePointDocs({ recordId, sharepointUrl, projectFolderUrl, projectId, canEdit, onProjectFolderCreated }: Props) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -54,13 +69,27 @@ export default function SharePointDocs({ recordId, sharepointUrl }: Props) {
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [creatingFolder, setCreatingFolder] = useState(false);
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
 
-  // ── Load locations ──────────────────────────────────────────────────────────
+  // ── Load ──────────────────────────────────────────────────────────────────
+  // Two modes:
+  //   1. Project mode: a per-project folder URL is set → root the file browser
+  //      there and skip the CRM-locations lookup entirely.
+  //   2. Legacy/customer mode: pull document locations from CRM by recordId.
 
   useEffect(() => {
+    if (projectFolderUrl) {
+      // Project-folder mode — synthesize a single location entry so the rest
+      // of the component (breadcrumbs, file ops) works unchanged.
+      const loc: SPLocation = { id: "__project__", name: "Project folder", absoluteUrl: projectFolderUrl };
+      setLocations([loc]);
+      selectLocation(loc);
+      setLoadingLocations(false);
+      return;
+    }
     setLoadingLocations(true);
     setLocError(null);
     api.spLocations(recordId)
@@ -71,7 +100,21 @@ export default function SharePointDocs({ recordId, sharepointUrl }: Props) {
       .catch((err) => setLocError(err instanceof Error ? err.message : "Failed to load SharePoint locations"))
       .finally(() => setLoadingLocations(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordId]);
+  }, [recordId, projectFolderUrl]);
+
+  async function handleCreateProjectFolder() {
+    if (!projectId) return;
+    setCreatingFolder(true);
+    try {
+      const res = await api.ensureProjectSharePointFolder(projectId);
+      onProjectFolderCreated?.(res.sharepoint_folder_url);
+      showToast(res.reused ? "Adopted existing folder for this project." : "Project folder created.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create folder", "error");
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
 
   // ── Load files for current folder ──────────────────────────────────────────
 
@@ -154,10 +197,29 @@ export default function SharePointDocs({ recordId, sharepointUrl }: Props) {
     return (
       <div className="ms-section-card">
         <div className="ms-section-title">SharePoint Documents</div>
+
+        {/* Retrofit path: this project doesn't have its own folder yet. Show a
+            one-click button to create + adopt one. Only relevant in project
+            context (projectId set + editor). */}
+        {projectId && canEdit && !projectFolderUrl && (
+          <div style={{ marginBottom: sharepointUrl ? 16 : 0 }}>
+            <div style={{ color: "#64748b", fontSize: 13, marginBottom: 8 }}>
+              This project doesn't have a SharePoint folder yet. Create one under the customer's SharePoint root — it becomes the upload location for discovery workbooks, customer phone bills, CSRs, and any other project documents.
+            </div>
+            <button
+              className="ms-btn-primary"
+              onClick={handleCreateProjectFolder}
+              disabled={creatingFolder}
+            >
+              {creatingFolder ? "Creating…" : "Create project folder"}
+            </button>
+          </div>
+        )}
+
         {sharepointUrl ? (
           <div>
             <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
-              No document library linked in Dynamics CRM for this record. Use the SharePoint link directly:
+              {projectId && canEdit ? "Or open the customer's SharePoint root directly:" : "No document library linked in Dynamics CRM for this record. Use the SharePoint link directly:"}
             </div>
             <a
               href={sharepointUrl}
@@ -168,11 +230,11 @@ export default function SharePointDocs({ recordId, sharepointUrl }: Props) {
               Open SharePoint ↗
             </a>
           </div>
-        ) : (
+        ) : !(projectId && canEdit) ? (
           <div style={{ color: "#a19f9d", fontSize: 14 }}>
             No SharePoint document locations linked to this record in Dynamics CRM.
           </div>
-        )}
+        ) : null}
       </div>
     );
   }
