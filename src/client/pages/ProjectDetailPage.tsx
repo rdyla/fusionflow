@@ -800,7 +800,7 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Dashboard (stakeholder view) ─────────────────────────────────── */}
-      {tab === "dashboard" && <ProjectDashboardTab projectId={project.id} />}
+      {tab === "dashboard" && <ProjectDashboardTab projectId={project.id} onChangeTab={(t) => setTab(t as DetailTab)} />}
 
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (

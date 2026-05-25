@@ -5,12 +5,11 @@
  * behavior lives INSIDE the project via the `sites` table: City of Thousand
  * Oaks is one project containing Libraries / Treatment / HQ sites, each with
  * its own per-site PMI phase chain and go-live. The Sites row only renders
- * when the project has 2+ sites; single-site projects get a clean two-row
+ * when the project has 1+ sites; single-site projects get a clean two-row
  * layout (stat tiles + three detail panels).
  *
- * The project's own page-header (customer card, name, status, tech tags,
- * Edit) already lives above the tab strip — this component intentionally
- * adds no second title bar.
+ * Styled to match the rest of the app (light theme on a white surface with
+ * PF blue accents) — no dark-mode panels.
  *
  * Internal staff, customer contacts authenticated as `client` users
  * matched to the project's account, and partner AEs explicitly attached
@@ -21,22 +20,36 @@
 import { useEffect, useState } from "react";
 import { api, type StakeholderSummary } from "../../lib/api";
 
+// PF brand palette (mirrored from index.css). Avoiding ad-hoc dark slate
+// tokens — site is light-themed throughout.
+const PF_BLUE = "#03395f";
 const PF_GREEN = "#17C662";
+const PF_BORDER = "#dde4ef";
+const TEXT_PRIMARY = "#0f172a";
+const TEXT_MUTED = "#64748b";
+const TEXT_FAINT = "#94a3b8";
 
-const TONE = {
-  on_track:  { label: "On track",  fg: "#166534", bg: "#dcfce7" },
-  at_risk:   { label: "Monitor",   fg: "#92400e", bg: "#fef3c7" },
-  off_track: { label: "At risk",   fg: "#991b1b", bg: "#fee2e2" },
+const HEALTH_TONE = {
+  on_track:  { label: "On track",  fg: "#166534", bg: "#dcfce7", border: "#bbf7d0" },
+  at_risk:   { label: "Monitor",   fg: "#92400e", bg: "#fef3c7", border: "#fde68a" },
+  off_track: { label: "At risk",   fg: "#991b1b", bg: "#fee2e2", border: "#fecaca" },
 };
 
 const SEVERITY_TONE: Record<string, { fg: string; bg: string; border: string }> = {
-  critical: { fg: "#7f1d1d", bg: "#fee2e2", border: "#fca5a5" },
-  high:     { fg: "#92400e", bg: "#fef3c7", border: "#fcd34d" },
-  medium:   { fg: "#1e40af", bg: "#dbeafe", border: "#93c5fd" },
-  low:      { fg: "#374151", bg: "#f3f4f6", border: "#d1d5db" },
+  critical: { fg: "#7f1d1d", bg: "#fef2f2", border: "#fecaca" },
+  high:     { fg: "#92400e", bg: "#fffbeb", border: "#fde68a" },
+  medium:   { fg: "#1e40af", bg: "#eff6ff", border: "#bfdbfe" },
+  low:      { fg: "#374151", bg: "#f8fafc", border: "#e2e8f0" },
 };
 
-export default function ProjectDashboardTab({ projectId }: { projectId: string }) {
+// Constructed Dynamics CRM URL pattern — matches the link format already in
+// use by support notifications. The short form (no appid) lets Dynamics pick
+// the user's default app.
+function dynamicsCaseUrl(caseId: string): string {
+  return `https://packetfusioncrm.crm.dynamics.com/main.aspx?etn=incident&id=${caseId}&pagetype=entityrecord`;
+}
+
+export default function ProjectDashboardTab({ projectId, onChangeTab }: { projectId: string; onChangeTab?: (tab: string) => void }) {
   const [data, setData] = useState<StakeholderSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,11 +75,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
       {/* Stat tiles */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 18 }}>
-        <Tile
-          label="Overall complete"
-          value={`${stats.overall_complete_pct}%`}
-          sublabel={rollupLabel}
-        />
+        <Tile label="Overall complete" value={`${stats.overall_complete_pct}%`} sublabel={rollupLabel} />
         <Tile
           label="Total tasks"
           value={`${stats.tasks.total}`}
@@ -99,9 +108,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
             gridTemplateColumns: sites.length <= 3 ? `repeat(${sites.length}, 1fr)` : "repeat(3, 1fr)",
             gap: 12, marginBottom: 18,
           }}>
-            {sites.map((s) => (
-              <SiteCard key={s.id} site={s} />
-            ))}
+            {sites.map((s) => <SiteCard key={s.id} site={s} />)}
           </div>
         </>
       )}
@@ -116,12 +123,12 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {open_tasks.slice(0, 5).map((t) => (
-                <li key={t.id} style={{ display: "flex", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
+                <li key={t.id} style={{ display: "flex", alignItems: "center", padding: "6px 0", borderBottom: `1px solid ${PF_BORDER}`, fontSize: 13 }}>
                   <PriorityDot priority={t.priority} />
-                  <span style={{ flex: 1, marginLeft: 8 }}>
+                  <span style={{ flex: 1, marginLeft: 8, color: TEXT_PRIMARY }}>
                     {t.title}
                     {multiSite && t.site_name && (
-                      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 400, marginLeft: 6 }}>· {t.site_name}</span>
+                      <span style={{ color: TEXT_FAINT, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>· {t.site_name}</span>
                     )}
                   </span>
                   <span style={{ color: dueTone(t.due_date), fontSize: 12, fontWeight: 500 }}>
@@ -134,22 +141,22 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
 
           {assignee_breakdown.length > 0 && multiSite && (
             <>
-              <div style={{ marginTop: 16, marginBottom: 8, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                By assignee
-              </div>
+              <Subheading>By assignee</Subheading>
               <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                 <tbody>
                   {assignee_breakdown.slice(0, 6).map((a) => (
                     <tr key={a.user_id}>
-                      <td style={{ padding: "4px 0", color: "#475569" }}>{a.name}</td>
+                      <td style={{ padding: "4px 0", color: TEXT_MUTED }}>{a.name}</td>
                       {sites.map((s, i) => (
-                        <td key={s.id} style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
-                          <span style={{ color: "#94a3b8", fontSize: 10 }}>S{i + 1}</span> <strong style={{ color: "#334155" }}>{a.counts[s.id] ?? 0}</strong>
+                        <td key={s.id} style={{ padding: "4px 0", textAlign: "right", color: TEXT_MUTED, paddingLeft: 8 }}>
+                          <span style={{ color: TEXT_FAINT, fontSize: 10 }}>S{i + 1}</span>{" "}
+                          <strong style={{ color: TEXT_PRIMARY }}>{a.counts[s.id] ?? 0}</strong>
                         </td>
                       ))}
                       {a.shared > 0 && (
-                        <td style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
-                          <span style={{ color: "#94a3b8", fontSize: 10 }}>Init</span> <strong style={{ color: "#334155" }}>{a.shared}</strong>
+                        <td style={{ padding: "4px 0", textAlign: "right", color: TEXT_MUTED, paddingLeft: 8 }}>
+                          <span style={{ color: TEXT_FAINT, fontSize: 10 }}>Init</span>{" "}
+                          <strong style={{ color: TEXT_PRIMARY }}>{a.shared}</strong>
                         </td>
                       )}
                     </tr>
@@ -183,24 +190,23 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
             </div>
           )}
 
-          <div style={{ marginTop: 14, marginBottom: 8, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            Key updates
-          </div>
+          <Subheading>Key updates</Subheading>
           {key_updates.length === 0 ? (
             <Empty>No recent updates</Empty>
           ) : (
             <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
               {key_updates.map((u) => (
-                <li key={u.id} style={{ display: "flex", alignItems: "flex-start", padding: "5px 0", borderBottom: "1px solid #f1f5f9", fontSize: 12 }}>
+                <li key={u.id} style={{ display: "flex", alignItems: "flex-start", padding: "5px 0", borderBottom: `1px solid ${PF_BORDER}`, fontSize: 12 }}>
                   <span style={{
-                    width: 6, height: 6, borderRadius: 6, background: u.kind === "document" ? PF_GREEN : "#3b82f6",
+                    width: 6, height: 6, borderRadius: 6,
+                    background: u.kind === "document" ? PF_GREEN : PF_BLUE,
                     marginTop: 6, marginRight: 8, flexShrink: 0,
                   }} />
-                  <span style={{ flex: 1, color: "#334155" }}>
+                  <span style={{ flex: 1, color: TEXT_PRIMARY }}>
                     {u.body}
-                    {u.author_name && <span style={{ color: "#94a3b8" }}> — {u.author_name}</span>}
+                    {u.author_name && <span style={{ color: TEXT_FAINT }}> — {u.author_name}</span>}
                   </span>
-                  <span style={{ color: "#94a3b8", fontSize: 11, marginLeft: 8, whiteSpace: "nowrap" }}>{relative(u.created_at)}</span>
+                  <span style={{ color: TEXT_FAINT, fontSize: 11, marginLeft: 8, whiteSpace: "nowrap" }}>{relative(u.created_at)}</span>
                 </li>
               ))}
             </ul>
@@ -228,9 +234,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
               <LinkButton href={links.sharepoint_url}>SharePoint documents</LinkButton>
             )}
             {links.crm_case_id && (
-              <div style={{ ...linkButtonStyle(false), cursor: "default" }}>
-                CRM case #{links.crm_case_id}
-              </div>
+              <CrmCaseLink caseId={links.crm_case_id} onOpenTab={onChangeTab ? () => onChangeTab("case") : undefined} />
             )}
           </div>
         </Panel>
@@ -244,35 +248,41 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
 function Tile({ label, value, sublabel, danger }: { label: string; value: string; sublabel?: string; danger?: boolean }) {
   return (
     <div style={{
-      background: "#1e293b", color: "#fff", borderRadius: 8, padding: "12px 14px", minHeight: 92,
-      border: danger ? "1px solid #ef4444" : "1px solid #334155",
+      background: "#fff",
+      border: `1px solid ${danger ? "#fecaca" : PF_BORDER}`,
+      borderRadius: 12, padding: "14px 16px", minHeight: 92,
     }}>
-      <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4, color: danger ? "#fca5a5" : "#fff" }}>{value}</div>
-      {sublabel && <div style={{ fontSize: 11, color: danger ? "#fca5a5" : "#94a3b8", marginTop: 2 }}>{sublabel}</div>}
+      <div style={{ fontSize: 10, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 30, fontWeight: 700, marginTop: 6, lineHeight: 1, color: danger ? "#991b1b" : PF_BLUE }}>
+        {value}
+      </div>
+      {sublabel && (
+        <div style={{ fontSize: 11, color: danger ? "#991b1b" : TEXT_MUTED, marginTop: 6 }}>{sublabel}</div>
+      )}
     </div>
   );
 }
 
 function SiteCard({ site }: { site: StakeholderSummary["sites"][number] }) {
-  const tone = TONE[site.health];
+  const tone = HEALTH_TONE[site.health];
   return (
-    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "14px 16px" }}>
+    <div style={{ background: "#fff", border: `1px solid ${PF_BORDER}`, borderRadius: 12, padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>
-          {site.name}
-        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1.3 }}>{site.name}</div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
-          background: tone.bg, color: tone.fg, whiteSpace: "nowrap",
+          background: tone.bg, color: tone.fg, border: `1px solid ${tone.border}`,
+          whiteSpace: "nowrap",
         }}>
           {tone.label}
         </span>
       </div>
-      <div style={{ background: "#0f172a", borderRadius: 4, height: 6, overflow: "hidden" }}>
+      <div style={{ background: "#f1f5f9", borderRadius: 4, height: 6, overflow: "hidden" }}>
         <div style={{ background: PF_GREEN, height: "100%", width: `${site.completion_pct}%` }} />
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 11, color: TEXT_MUTED }}>
         <span>{site.target_go_live_date ? `Go-live: ${fmtDate(site.target_go_live_date)}` : "No date set"}</span>
         <span>{site.days_left !== null ? `${site.days_left} days left` : "—"}</span>
       </div>
@@ -282,18 +292,37 @@ function SiteCard({ site }: { site: StakeholderSummary["sites"][number] }) {
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "#1e293b", borderRadius: 8, padding: "14px 16px", border: "1px solid #334155", color: "#e2e8f0" }}>
-      <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#fff" }}>{title}</div>
-      <div style={{ background: "#fff", borderRadius: 6, padding: "10px 12px", color: "#0f172a" }}>
-        {children}
+    <div style={{ background: "#fff", border: `1px solid ${PF_BORDER}`, borderRadius: 12, padding: "16px 18px" }}>
+      <div style={{
+        fontSize: 11, fontWeight: 700, color: PF_BLUE,
+        textTransform: "uppercase", letterSpacing: "0.1em",
+        marginBottom: 12, paddingBottom: 10, borderBottom: `1px solid ${PF_BORDER}`,
+      }}>
+        {title}
       </div>
+      {children}
     </div>
   );
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 8, marginTop: 4 }}>
+    <div style={{
+      fontSize: 10, fontWeight: 700, color: TEXT_MUTED,
+      textTransform: "uppercase", letterSpacing: "0.1em",
+      marginBottom: 8, marginTop: 4,
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function Subheading({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{
+      marginTop: 16, marginBottom: 8, fontSize: 10, fontWeight: 700,
+      color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em",
+    }}>
       {children}
     </div>
   );
@@ -302,41 +331,73 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function TeamRow({ label, name }: { label: string; name: string | null }) {
   return (
     <tr>
-      <td style={{ padding: "4px 0", color: "#94a3b8", fontSize: 12, width: 90 }}>{label}</td>
-      <td style={{ padding: "4px 0", color: "#0f172a", fontWeight: 600, textAlign: "right" }}>{name ?? "—"}</td>
+      <td style={{ padding: "4px 0", color: TEXT_MUTED, fontSize: 12, width: 90 }}>{label}</td>
+      <td style={{ padding: "4px 0", color: TEXT_PRIMARY, fontWeight: 600, textAlign: "right" }}>{name ?? "—"}</td>
     </tr>
   );
 }
 
 function PriorityDot({ priority }: { priority: string | null }) {
-  const c = priority === "high" || priority === "critical" ? "#ef4444"
-          : priority === "medium" ? "#f59e0b"
-          : priority === "low" ? "#3b82f6"
-          : "#94a3b8";
-  return <span style={{ width: 7, height: 7, borderRadius: 7, background: c, display: "inline-block" }} />;
+  const c = priority === "critical" ? "#dc2626"
+          : priority === "high"     ? "#ef4444"
+          : priority === "medium"   ? "#f59e0b"
+          : priority === "low"      ? PF_BLUE
+          : TEXT_FAINT;
+  return <span style={{ width: 7, height: 7, borderRadius: 7, background: c, display: "inline-block", flexShrink: 0 }} />;
 }
 
 function LinkButton({ href, children, primary }: { href: string; children: React.ReactNode; primary?: boolean }) {
   return <a href={href} target="_blank" rel="noopener noreferrer" style={linkButtonStyle(!!primary)}>{children}</a>;
 }
 
+/**
+ * CRM case row. Primary action opens the in-portal CRM Case tab (where the
+ * rich case + time entries + SOW-hours adherence view lives). Secondary
+ * action opens the case directly in Dynamics CRM in a new tab.
+ */
+function CrmCaseLink({ caseId, onOpenTab }: { caseId: string; onOpenTab?: () => void }) {
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      {onOpenTab ? (
+        <button type="button" onClick={onOpenTab} style={{ ...linkButtonStyle(false), flex: 1, border: "none", cursor: "pointer" }}>
+          CRM case
+        </button>
+      ) : (
+        <div style={{ ...linkButtonStyle(false), flex: 1, cursor: "default" }}>CRM case</div>
+      )}
+      <a
+        href={dynamicsCaseUrl(caseId)}
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Open in Dynamics CRM"
+        style={{
+          ...linkButtonStyle(false),
+          width: 36, textAlign: "center", padding: "8px 0",
+        }}
+      >
+        ↗
+      </a>
+    </div>
+  );
+}
+
 function linkButtonStyle(primary: boolean): React.CSSProperties {
   return {
     display: "block", padding: "8px 12px",
-    background: primary ? "#3b82f6" : "#f1f5f9",
-    color: primary ? "#fff" : "#0f172a",
+    background: primary ? PF_BLUE : "#f1f5f9",
+    color: primary ? "#fff" : TEXT_PRIMARY,
     borderRadius: 6, fontSize: 12, fontWeight: 600,
     textDecoration: "none", textAlign: "left",
   };
 }
 
 function Empty({ children }: { children: React.ReactNode }) {
-  return <div style={{ textAlign: "center", color: "#94a3b8", padding: "12px 0", fontSize: 12 }}>{children}</div>;
+  return <div style={{ textAlign: "center", color: TEXT_FAINT, padding: "12px 0", fontSize: 12 }}>{children}</div>;
 }
 
 function Center({ children, error }: { children: React.ReactNode; error?: boolean }) {
   return (
-    <div style={{ padding: 32, textAlign: "center", color: error ? "#991b1b" : "#64748b" }}>
+    <div style={{ padding: 32, textAlign: "center", color: error ? "#991b1b" : TEXT_MUTED }}>
       {children}
     </div>
   );
@@ -381,15 +442,15 @@ function fmtDueDate(iso: string | null): string {
 }
 
 function dueTone(iso: string | null): string {
-  if (!iso) return "#94a3b8";
+  if (!iso) return TEXT_FAINT;
   const d = new Date(iso);
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const dueMidnight = new Date(d); dueMidnight.setHours(0, 0, 0, 0);
   const diffDays = Math.round((dueMidnight.getTime() - today.getTime()) / 86_400_000);
-  if (diffDays < 0)  return "#ef4444";
-  if (diffDays === 0) return "#ef4444";
+  if (diffDays < 0)  return "#dc2626";
+  if (diffDays === 0) return "#dc2626";
   if (diffDays <= 3) return "#f59e0b";
-  return "#94a3b8";
+  return TEXT_MUTED;
 }
 
 function relative(iso: string): string {
