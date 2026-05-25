@@ -21,7 +21,7 @@ import {
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
-import ProjectExecutiveDashboard from "../components/project/ProjectExecutiveDashboard";
+import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -36,7 +36,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
 
-type DetailTab = "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -110,7 +110,7 @@ export default function ProjectDetailPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [tab, setTab] = useState<DetailTab>("overview");
+  const [tab, setTab] = useState<DetailTab>("dashboard");
   const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -582,7 +582,7 @@ export default function ProjectDetailPage() {
       const payload = {
         title: riskForm.title.trim(),
         description: riskForm.description.trim() || undefined,
-        severity: riskForm.severity as "low" | "medium" | "high",
+        severity: riskForm.severity as "low" | "medium" | "high" | "critical",
         status: riskForm.status as "open" | "mitigated" | "closed",
         owner_user_id: riskForm.owner_user_id || null,
         task_id: riskForm.task_id || null,
@@ -761,7 +761,14 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        // External viewers (customers logged in as `client`, Zoom/RC AEs as
+        // `partner_ae`) see only the Dashboard tab — internal tabs would be
+        // confusing or partially gated for them. Internal staff see everything,
+        // with Dashboard first as the new default landing.
+        const externalOnly = currentUserRole === "client" || currentUserRole === "partner_ae";
+        const visibleTabs: DetailTab[] = externalOnly
+          ? ["dashboard"]
+          : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -790,6 +797,9 @@ export default function ProjectDetailPage() {
           }}
         />
       )}
+
+      {/* ── Dashboard (stakeholder view) ─────────────────────────────────── */}
+      {tab === "dashboard" && <ProjectDashboardTab projectId={project.id} />}
 
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (
@@ -1043,15 +1053,9 @@ export default function ProjectDetailPage() {
             );
           })()}
 
-          {/* ── Dashboard (KPIs, phase stepper, upcoming tasks, blockers) ── */}
-          <ProjectExecutiveDashboard
-            project={project}
-            phases={phases}
-            tasks={tasks}
-            risks={risks}
-            onViewBlockers={() => setTab("blockers")}
-            onViewTasks={() => setTab("tasks")}
-          />
+          {/* KPIs / phase stepper / upcoming tasks / blockers now live on the
+              Dashboard tab — see ProjectDashboardTab. Overview keeps the
+              team + contacts surface for PM-facing context only. */}
 
           {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
           <div className="ms-section-card" style={{ padding: "12px 16px" }}>
@@ -2448,6 +2452,7 @@ export default function ProjectDetailPage() {
                     <option value="low">Low</option>
                     <option value="medium">Medium</option>
                     <option value="high">High</option>
+                    <option value="critical">Critical</option>
                   </select>
                 </label>
                 <label className="ms-label">

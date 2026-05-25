@@ -569,6 +569,10 @@ export type Task = {
   pay_code_id: string | null;
   cost_code_id: string | null;
   crm_time_entry_id: string | null;
+  /** When set, the task is treated as a meeting (kickoff / design review /
+   *  go-live / etc.); the stakeholder view's "Next call" picks the earliest
+   *  upcoming task with a join URL. */
+  meeting_join_url: string | null;
 };
 
 export type TimeEntrySetup = {
@@ -1022,6 +1026,85 @@ export type FeatureRequest = {
   updated_at: string;
 };
 
+// ── Stakeholder view ─────────────────────────────────────────────────────────
+export type StakeholderHealth = "on_track" | "at_risk" | "off_track";
+
+export type StakeholderSummary = {
+  project: {
+    id: string;
+    name: string;
+    customer_name: string | null;
+    crm_case_id: string | null;
+    updated_at: string | null;
+    health: StakeholderHealth;
+  };
+  stats: {
+    overall_complete_pct: number;
+    tasks: { total: number; done: number; in_progress: number; not_started: number };
+    blockers: { total: number; critical: number };
+    days_to_final_go_live: number | null;
+    target_go_live_date: string | null;
+    next_call: {
+      scheduled_at: string;
+      title: string;
+      join_url: string | null;
+      source: "milestone" | "status";
+    } | null;
+  };
+  phases: Array<{
+    id: string;
+    name: string;
+    planned_start: string | null;
+    planned_end: string | null;
+    task_count: number;
+    done_count: number;
+    completion_pct: number;
+    days_left: number | null;
+    health: StakeholderHealth;
+  }>;
+  open_tasks: Array<{
+    id: string;
+    title: string;
+    due_date: string | null;
+    priority: string | null;
+    phase_id: string | null;
+    assignee_name: string | null;
+    is_meeting: boolean;
+  }>;
+  assignee_breakdown: Array<{
+    user_id: string;
+    name: string;
+    counts: Record<string, number>; // phase_id → count
+  }>;
+  blockers: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    severity: string | null;
+    status: string | null;
+    owner_name: string | null;
+  }>;
+  key_updates: Array<{
+    id: string;
+    kind: "note" | "document";
+    body: string;
+    author_name: string | null;
+    created_at: string;
+  }>;
+  team: {
+    pm: { id: string; name: string | null; email: string } | null;
+    engineer: { id: string; name: string | null; email: string } | null;
+    primary_contact: { name: string; email: string | null; job_title: string | null } | null;
+    partner_ae: { id: string; name: string | null; email: string } | null;
+  };
+  links: {
+    sharepoint_url: string | null;
+    crm_case_id: string | null;
+    timeline_url: string;
+    next_call_join_url: string | null;
+  };
+};
+
 export const api = {
   me: () => request<MeResponse>("/me"),
   systemStatus: () => request<SystemStatusResponse>("/status"),
@@ -1149,7 +1232,7 @@ export const api = {
     payload: {
       title: string;
       description?: string;
-      severity?: "low" | "medium" | "high";
+      severity?: "low" | "medium" | "high" | "critical";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
       task_id?: string | null;
@@ -1166,7 +1249,7 @@ export const api = {
     payload: {
       title?: string;
       description?: string;
-      severity?: "low" | "medium" | "high";
+      severity?: "low" | "medium" | "high" | "critical";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
       task_id?: string | null;
@@ -1241,6 +1324,7 @@ export const api = {
       completed_at?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
+      meeting_join_url?: string | null;
     }
   ) =>
     request<Task>(`/projects/${projectId}/tasks/${taskId}`, {
@@ -1407,6 +1491,10 @@ export const api = {
 
   adminRunHealthScoring: () =>
     request<{ scored: number }>("/admin/run-health-scoring", { method: "POST" }),
+
+  // Stakeholder view aggregation (one round-trip for the whole page)
+  stakeholderSummary: (projectId: string) =>
+    request<StakeholderSummary>(`/projects/${projectId}/stakeholder-summary`),
 
   // Staging → Prod promotion (prod-only; staging worker returns 503)
   adminStagingInventory: () =>

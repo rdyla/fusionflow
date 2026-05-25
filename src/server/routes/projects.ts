@@ -231,6 +231,14 @@ const updateProjectSchema = z.object({
   managed_in_asana: z.number().int().min(0).max(1).optional(),
   crm_case_id: z.string().nullable().optional(),
   crm_opportunity_id: z.string().nullable().optional(),
+  // Recurring status-meeting cadence (drives "Next call" on the stakeholder view).
+  // dow uses 0=Sun … 6=Sat; time_local is "HH:MM" in status_meeting_timezone.
+  status_meeting_title: z.string().max(255).nullable().optional(),
+  status_meeting_dow: z.number().int().min(0).max(6).nullable().optional(),
+  status_meeting_time_local: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  status_meeting_timezone: z.string().max(64).nullable().optional(),
+  status_meeting_duration_min: z.number().int().min(5).max(480).nullable().optional(),
+  status_meeting_join_url: z.string().max(2000).nullable().optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
