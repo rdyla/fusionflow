@@ -2103,6 +2103,10 @@ export type MeetingPrepSendRecord = {
   /** True if the rendered HTML body was persisted (sends from before the
    *  body_html column was added will be false). */
   hasBody?: boolean;
+  /** For per-site sends (UAT / go_live on multi-site projects). NULL on
+   *  project-wide sends and on single-site projects. */
+  siteId?: string | null;
+  siteName?: string | null;
 };
 
 export type MeetingPrepOptions = {
@@ -2129,6 +2133,10 @@ export type MeetingPrepOptions = {
   };
   /** Past sends of this meeting type for this project, newest first. */
   history: MeetingPrepSendRecord[];
+  /** Deployment sites for this project. Empty on single-site projects.
+   *  Only meaningful for UAT / go-live meeting types — the UI shows a
+   *  required site picker for those types when this array has entries. */
+  sites: Array<{ id: string; name: string }>;
 };
 
 export type MeetingPrepDraft = {
@@ -2136,6 +2144,9 @@ export type MeetingPrepDraft = {
   /** Optional per-send label distinguishing multiple sends of the same type
    *  (e.g. "Network Architecture" / "Call Flows" for split discoveries). */
   label?: string | null;
+  /** For UAT / go-live on multi-site projects: scope this send to a site.
+   *  Server folds the site name into the subject's label suffix. */
+  siteId?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */
   kickoffMeetingUrl?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */

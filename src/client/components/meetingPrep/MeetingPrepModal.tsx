@@ -62,6 +62,11 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
   const { showToast } = useToast();
   const [pmCustomNote, setPmCustomNote] = useState("");
   const [label, setLabel] = useState("");
+  // Per-site picker for UAT / go-live on multi-site projects. Default to the
+  // first site so the modal isn't immediately invalid when it opens.
+  const isPerSiteType = meetingType === "uat" || meetingType === "go_live";
+  const requiresSite = isPerSiteType && options.sites.length > 0;
+  const [siteId, setSiteId] = useState<string>(requiresSite ? options.sites[0]!.id : "");
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
   const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
   const [distributionListEmail, setDistributionListEmail] = useState(options.project.suggestedDistributionListEmail ?? "");
@@ -120,6 +125,7 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
   const buildDraft = (): MeetingPrepDraft => ({
     pmCustomNote,
     label: label.trim() || null,
+    siteId: requiresSite ? (siteId || null) : null,
     kickoffMeetingUrl: kickoffMeetingUrl.trim() || null,
     kickoffWhen: kickoffWhen.trim() || null,
     distributionListEmail: distributionListEmail.trim() || null,
@@ -262,6 +268,29 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Additional Emails</div>
               <input className="ms-input" placeholder="comma or space separated" value={extraEmailsText} onChange={(e) => setExtraEmailsText(e.target.value)} />
             </div>
+
+            {/* Per-site picker — only for UAT / go-live on multi-site projects.
+                Required: server returns 400 if a multi-site project sends UAT
+                or go-live without a site_id. */}
+            {requiresSite && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>
+                  Site
+                </div>
+                <select
+                  className="ms-input"
+                  value={siteId}
+                  onChange={(e) => setSiteId(e.target.value)}
+                >
+                  {options.sites.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
+                  This {meetingType === "uat" ? "UAT" : "Go-Live"} prep is scoped to one deployment site. The site name folds into the subject + history label.
+                </div>
+              </div>
+            )}
 
             {/* Optional per-send label — distinguishes multiple sends of the same type. */}
             <div style={{ marginBottom: 18 }}>
