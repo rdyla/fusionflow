@@ -11,6 +11,7 @@ import {
   type SolutionType,
 } from "../../shared/solutionTypes";
 import { toTitleCase } from "../../shared/titleCase";
+import { chainForward, startFromGoLive } from "../../shared/workdayMath";
 
 // ── Fuzzy title matching ──────────────────────────────────────────────────────
 // Two template tasks count as the same work if their normalized token sets
@@ -285,8 +286,20 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const allowed = await canEditProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { template_id, site_id } = await c.req.json<{ template_id: string; site_id?: string | null }>();
+  const { template_id, site_id, target_go_live_date } = await c.req.json<{
+    template_id: string;
+    site_id?: string | null;
+    /** When set, drives phase + task date scheduling via the same workday
+     *  math the Timeline Builder uses (anchor = startFromGoLive(date, total
+     *  working days); each phase chained forward with chainForward; every
+     *  new task gets scheduled_start / scheduled_end / due_date = phase's
+     *  computed window). Omit to keep legacy dateless behavior. */
+    target_go_live_date?: string | null;
+  }>();
   if (!template_id) throw new HTTPException(400, { message: "template_id is required" });
+  if (target_go_live_date && !/^\d{4}-\d{2}-\d{2}$/.test(target_go_live_date)) {
+    throw new HTTPException(400, { message: "target_go_live_date must be YYYY-MM-DD" });
+  }
 
   const template = await db
     .prepare("SELECT id, solution_type FROM templates WHERE id = ? LIMIT 1")
@@ -314,7 +327,23 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const phases = await db
     .prepare("SELECT * FROM template_phases WHERE template_id = ? ORDER BY order_index ASC")
     .bind(template_id)
-    .all<{ id: string; name: string; order_index: number }>();
+    .all<{ id: string; name: string; order_index: number; working_days: number | null }>();
+
+  // When the caller supplied a go-live, chain phase dates backward from it.
+  // Same algorithm Timeline Builder uses (see shared/workdayMath.ts).
+  const phaseDateMap = new Map<string, { start: string; end: string }>(); // template_phase_id -> dates
+  if (target_go_live_date) {
+    const phaseList = phases.results ?? [];
+    const totalWorkdays = phaseList.reduce((sum, p) => sum + (p.working_days ?? 0), 0);
+    if (totalWorkdays > 0) {
+      const anchor = startFromGoLive(target_go_live_date, totalWorkdays);
+      const chain = chainForward(
+        anchor,
+        phaseList.map((p) => ({ id: p.id, working_days: p.working_days ?? 0 }))
+      );
+      for (const r of chain) phaseDateMap.set(r.id, { start: r.start, end: r.end });
+    }
+  }
 
   const tasks = await db
     .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
@@ -327,15 +356,17 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const existingPhases = await (
     scopedSiteId
       ? db
-          .prepare("SELECT id, name, sort_order FROM phases WHERE project_id = ? AND site_id = ?")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM phases WHERE project_id = ? AND site_id = ?")
           .bind(projectId, scopedSiteId)
       : db
-          .prepare("SELECT id, name, sort_order FROM phases WHERE project_id = ? AND site_id IS NULL")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM phases WHERE project_id = ? AND site_id IS NULL")
           .bind(projectId)
-  ).all<{ id: string; name: string; sort_order: number }>();
+  ).all<{ id: string; name: string; sort_order: number; planned_start: string | null; planned_end: string | null }>();
   const existingByName: Record<string, string> = {};
+  const existingDatesById = new Map<string, { planned_start: string | null; planned_end: string | null }>();
   for (const ep of existingPhases.results ?? []) {
     existingByName[ep.name.trim().toLowerCase()] = ep.id;
+    existingDatesById.set(ep.id, { planned_start: ep.planned_start, planned_end: ep.planned_end });
   }
 
   const maxSort = existingPhases.results.reduce((m, p) => Math.max(m, p.sort_order ?? 0), 0);
@@ -345,21 +376,48 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const phaseIdMap: Record<string, string> = {};
   let phasesCreated = 0;
 
+  // Track resolved planned_start/planned_end per destination phase so the task
+  // insert loop can use them as the task's scheduled window.
+  const phaseDatesByDestId = new Map<string, { planned_start: string | null; planned_end: string | null }>();
+
   for (const phase of phases.results ?? []) {
     const key = phase.name.trim().toLowerCase();
+    const computed = phaseDateMap.get(phase.id) ?? null;
+
     if (existingByName[key]) {
       // Reuse existing phase — no new phase created
-      phaseIdMap[phase.id] = existingByName[key];
+      const reusedId = existingByName[key];
+      phaseIdMap[phase.id] = reusedId;
+      const cur = existingDatesById.get(reusedId) ?? { planned_start: null, planned_end: null };
+
+      // Fill in missing dates only when we have computed ones AND the existing
+      // phase has none. Don't trample PM-set dates.
+      let updatedStart = cur.planned_start;
+      let updatedEnd   = cur.planned_end;
+      if (computed) {
+        const fields: string[] = [];
+        const values: unknown[] = [];
+        if (!cur.planned_start) { fields.push("planned_start = ?"); values.push(computed.start); updatedStart = computed.start; }
+        if (!cur.planned_end)   { fields.push("planned_end = ?");   values.push(computed.end);   updatedEnd   = computed.end; }
+        if (fields.length > 0) {
+          await db
+            .prepare(`UPDATE phases SET ${fields.join(", ")} WHERE id = ?`)
+            .bind(...values, reusedId)
+            .run();
+        }
+      }
+      phaseDatesByDestId.set(reusedId, { planned_start: updatedStart, planned_end: updatedEnd });
     } else {
       const newPhaseId = crypto.randomUUID();
       phaseIdMap[phase.id] = newPhaseId;
       await db
         .prepare(
-          "INSERT INTO phases (id, project_id, site_id, name, sort_order, status) VALUES (?, ?, ?, ?, ?, 'not_started')"
+          "INSERT INTO phases (id, project_id, site_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started')"
         )
-        .bind(newPhaseId, projectId, scopedSiteId, phase.name, sortOffset)
+        .bind(newPhaseId, projectId, scopedSiteId, phase.name, sortOffset, computed?.start ?? null, computed?.end ?? null)
         .run();
       existingByName[key] = newPhaseId;
+      phaseDatesByDestId.set(newPhaseId, { planned_start: computed?.start ?? null, planned_end: computed?.end ?? null });
       sortOffset++;
       phasesCreated++;
     }
@@ -483,15 +541,24 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // No match — insert as a new task, tagged with this template's solution
     // type when known. If templateSolutionType is null (legacy template) we
     // fall back to the untagged title.
+    //
+    // When the phase has computed dates (target_go_live_date was supplied),
+    // every task in that phase gets scheduled_start = phase.start and
+    // scheduled_end/due_date = phase.end. Matches Timeline Builder's
+    // "every task spans its phase window" convention — PMs stagger
+    // individual tasks afterward via the Tasks tab.
     const newTaskId = crypto.randomUUID();
     const insertedTitle = templateSolutionType
       ? buildTaggedTitle([templateSolutionType], normalizedTitle)
       : normalizedTitle;
+    const phaseDates = mappedPhaseId ? phaseDatesByDestId.get(mappedPhaseId) : undefined;
+    const taskStart = phaseDates?.planned_start ?? null;
+    const taskEnd   = phaseDates?.planned_end ?? null;
     await db
       .prepare(
-        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?)"
+        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedPhaseId, insertedTitle, task.priority ?? "medium", userId, contactId)
+      .bind(newTaskId, projectId, mappedPhaseId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd)
       .run();
     if (mappedPhaseId) {
       const phaseTasks = tasksByPhase.get(mappedPhaseId);

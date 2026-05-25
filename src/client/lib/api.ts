@@ -1948,11 +1948,20 @@ export const api = {
    * Apply a template to a project, optionally scoped to a specific site
    * (so e.g. the ZCC template can land under the "Zoom Contact Center" site
    * without colliding with the "Zoom Phone" site's same-named phases).
+   *
+   * When `targetGoLiveDate` (YYYY-MM-DD) is provided, the server uses the
+   * same workday math the Timeline Builder uses to chain phase dates
+   * backward from the go-live and stamp each new task with its phase's
+   * window for scheduled_start / scheduled_end / due_date.
    */
-  applyTemplate: (projectId: string, templateId: string, siteId?: string | null) =>
+  applyTemplate: (projectId: string, templateId: string, siteId?: string | null, targetGoLiveDate?: string | null) =>
     request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
-      body: JSON.stringify({ template_id: templateId, site_id: siteId ?? null }),
+      body: JSON.stringify({
+        template_id: templateId,
+        site_id: siteId ?? null,
+        target_go_live_date: targetGoLiveDate ?? null,
+      }),
     }),
   applyTimeline: (projectId: string, payload: { phases: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
     request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {

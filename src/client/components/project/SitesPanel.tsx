@@ -295,6 +295,9 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState("");
   const [applying, setApplying] = useState(false);
+  // Default the go-live to the site's target — that's the natural anchor.
+  // PM can clear it to skip date scheduling and get the old dateless behavior.
+  const [goLive, setGoLive] = useState<string>(site.target_go_live_date ?? "");
 
   useEffect(() => {
     void (async () => {
@@ -313,12 +316,13 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
     if (!selectedId) return;
     setApplying(true);
     try {
-      const res = await api.applyTemplate(projectId, selectedId, site.id);
+      const res = await api.applyTemplate(projectId, selectedId, site.id, goLive || null);
       const parts: string[] = [];
       parts.push(`${res.phases_created} phase${res.phases_created !== 1 ? "s" : ""}`);
       parts.push(`${res.tasks_created} task${res.tasks_created !== 1 ? "s" : ""}`);
       if (res.tasks_merged > 0) parts.push(`${res.tasks_merged} merged`);
-      showToast(`Applied to ${site.name}: ${parts.join(" · ")}.`, "success");
+      const tail = goLive ? ` (dated from ${fmtDate(goLive)} go-live)` : "";
+      showToast(`Applied to ${site.name}: ${parts.join(" · ")}${tail}.`, "success");
       onApplied();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to apply template", "error");
@@ -368,6 +372,23 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
               </option>
             ))}
           </select>
+        </label>
+
+        <label style={{ display: "block", marginTop: 12, fontSize: 12, fontWeight: 600, color: "#334155" }}>
+          Go-live date
+          <input
+            className="ms-input"
+            type="date"
+            value={goLive}
+            onChange={(e) => setGoLive(e.target.value)}
+            disabled={applying}
+            style={{ marginTop: 4, width: "100%" }}
+          />
+          <span style={{ fontSize: 11, fontWeight: 400, color: "#64748b", marginTop: 4, display: "block" }}>
+            {goLive
+              ? "Phase dates chain backward from this date using each phase's working_days. Tasks inherit their phase's window. Existing same-named phases keep their dates if already set."
+              : "Leave blank to skip date scheduling (phases + tasks land without dates)."}
+          </span>
         </label>
 
         <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 8 }}>
