@@ -1026,7 +1026,7 @@ export type FeatureRequest = {
   updated_at: string;
 };
 
-// ── Stakeholder view ─────────────────────────────────────────────────────────
+// ── Stakeholder Dashboard ────────────────────────────────────────────────────
 export type StakeholderHealth = "on_track" | "at_risk" | "off_track";
 
 export type StakeholderSummary = {
@@ -1034,9 +1034,9 @@ export type StakeholderSummary = {
     id: string;
     name: string;
     customer_name: string | null;
+    customer_id: string | null;
     crm_case_id: string | null;
     updated_at: string | null;
-    health: StakeholderHealth;
   };
   stats: {
     overall_complete_pct: number;
@@ -1050,31 +1050,36 @@ export type StakeholderSummary = {
       join_url: string | null;
       source: "milestone" | "status";
     } | null;
+    site_count: number;
   };
-  phases: Array<{
+  /** Sibling projects under the same customer (in-flight only). Includes the
+   *  current project (is_current=true). For single-project customers this
+   *  array has length 1 and the UI hides the Sites row. */
+  related_projects: Array<{
     id: string;
     name: string;
-    planned_start: string | null;
-    planned_end: string | null;
+    target_go_live_date: string | null;
+    completion_pct: number;
     task_count: number;
     done_count: number;
-    completion_pct: number;
     days_left: number | null;
     health: StakeholderHealth;
+    is_current: boolean;
   }>;
   open_tasks: Array<{
     id: string;
     title: string;
     due_date: string | null;
     priority: string | null;
-    phase_id: string | null;
+    project_id: string;
+    project_name: string | null;
     assignee_name: string | null;
     is_meeting: boolean;
   }>;
   assignee_breakdown: Array<{
     user_id: string;
     name: string;
-    counts: Record<string, number>; // phase_id → count
+    counts: Record<string, number>; // project_id → open-task count
   }>;
   blockers: Array<{
     id: string;
@@ -1083,6 +1088,8 @@ export type StakeholderSummary = {
     severity: string | null;
     status: string | null;
     owner_name: string | null;
+    project_id: string;
+    project_name: string | null;
   }>;
   key_updates: Array<{
     id: string;
@@ -1090,6 +1097,7 @@ export type StakeholderSummary = {
     body: string;
     author_name: string | null;
     created_at: string;
+    project_id: string;
   }>;
   team: {
     pm: { id: string; name: string | null; email: string } | null;

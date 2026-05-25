@@ -1,12 +1,12 @@
 /**
- * Automated project + phase health scoring.
+ * Automated project health scoring.
  *
- * Returns "on_track" | "at_risk" | "off_track". The stakeholder view
- * relabels at_risk → "Monitor" but the underlying enum stays 3-level so
- * existing consumers (PM dashboard, executive view, email digests) keep
+ * Returns "on_track" | "at_risk" | "off_track". The stakeholder Dashboard
+ * relabels at_risk → "Monitor" at the UI layer; the underlying enum stays
+ * 3-level so existing consumers (email digests, executive view) keep
  * working unchanged.
  *
- * Project score = baseline 50 ± four weighted factors:
+ * Score = baseline 50 ± four weighted factors:
  *
  *   Factor                          Weight  Max ± pts
  *   ─────────────────────────────  ──────  ─────────
@@ -20,11 +20,6 @@
  * Critical risks weigh 2× as much as high (one critical alone is enough
  * to push the risk factor to its worst tier — matches PM intuition that
  * a critical blocker is a different beast from a high-severity concern).
- *
- * Phase score uses the same shape against just the phase's slice of
- * tasks + planned_end. Risks stay project-level (no phase_id today), so
- * they're excluded from per-phase health — the project banner still
- * surfaces them.
  */
 
 export type HealthValue = "on_track" | "at_risk" | "off_track";
@@ -108,32 +103,3 @@ export async function computeProjectHealth(
   return label(score);
 }
 
-/**
- * Per-phase health. Phase has its own `planned_end` (treated like the
- * phase's go-live) and its own slice of tasks. Risks are project-level
- * and intentionally excluded.
- */
-export async function computePhaseHealth(
-  db: D1Database,
-  phase: { id: string; planned_end: string | null }
-): Promise<HealthValue> {
-  const today = new Date();
-  let score = 50;
-
-  // Schedule: phase end date as the implicit "phase go-live" (±25)
-  score += scheduleDelta(phase.planned_end, today);
-
-  // Task completion within this phase (±15, scaled up since fewer factors)
-  const row = await db
-    .prepare(
-      `SELECT
-         COUNT(*) AS total,
-         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
-       FROM tasks WHERE phase_id = ?`
-    )
-    .bind(phase.id)
-    .first<{ total: number; done: number }>();
-  score += completionDelta(row?.total ?? 0, row?.done ?? 0);
-
-  return label(score);
-}
