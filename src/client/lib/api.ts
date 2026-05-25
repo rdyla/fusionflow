@@ -1944,10 +1944,15 @@ export const api = {
     request<TemplateTask>(`/admin/templates/${templateId}/tasks`, { method: "POST", body: JSON.stringify(payload) }),
   adminDeleteTemplateTask: (templateId: string, taskId: string) =>
     request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
-  applyTemplate: (projectId: string, templateId: string) =>
+  /**
+   * Apply a template to a project, optionally scoped to a specific site
+   * (so e.g. the ZCC template can land under the "Zoom Contact Center" site
+   * without colliding with the "Zoom Phone" site's same-named phases).
+   */
+  applyTemplate: (projectId: string, templateId: string, siteId?: string | null) =>
     request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
-      body: JSON.stringify({ template_id: templateId }),
+      body: JSON.stringify({ template_id: templateId, site_id: siteId ?? null }),
     }),
   applyTimeline: (projectId: string, payload: { phases: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
     request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {

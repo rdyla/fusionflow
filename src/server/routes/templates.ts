@@ -285,7 +285,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const allowed = await canEditProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { template_id } = await c.req.json<{ template_id: string }>();
+  const { template_id, site_id } = await c.req.json<{ template_id: string; site_id?: string | null }>();
   if (!template_id) throw new HTTPException(400, { message: "template_id is required" });
 
   const template = await db
@@ -293,6 +293,19 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .bind(template_id)
     .first<{ id: string; solution_type: string | null }>();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
+
+  // Optional site scoping: when site_id is set, phase reuse and new-phase
+  // inserts are scoped to that site. Lets PMs apply (say) the ZCC template
+  // under a "Zoom Contact Center" site without colliding with the Zoom Phone
+  // site's phases of the same name (Plan / Execute / Monitor / Go-Live).
+  const scopedSiteId = site_id ?? null;
+  if (scopedSiteId) {
+    const siteCheck = await db
+      .prepare("SELECT id FROM sites WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(scopedSiteId, projectId)
+      .first();
+    if (!siteCheck) throw new HTTPException(400, { message: "site_id does not belong to this project" });
+  }
 
   // Templates without a canonical solution_type fall back to legacy behaviour
   // (no tagging, no fuzzy dedupe) so we don't pollute task titles with junk tags.
@@ -308,11 +321,18 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .bind(template_id)
     .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
 
-  // Load existing phases by name so we can reuse them instead of duplicating
-  const existingPhases = await db
-    .prepare("SELECT id, name, sort_order FROM phases WHERE project_id = ?")
-    .bind(projectId)
-    .all<{ id: string; name: string; sort_order: number }>();
+  // Load existing phases by name so we can reuse them instead of duplicating.
+  // When site-scoped, only consider phases under that same site — a "Plan"
+  // phase on the Zoom Phone site should NOT be reused for the Zoom CC site.
+  const existingPhases = await (
+    scopedSiteId
+      ? db
+          .prepare("SELECT id, name, sort_order FROM phases WHERE project_id = ? AND site_id = ?")
+          .bind(projectId, scopedSiteId)
+      : db
+          .prepare("SELECT id, name, sort_order FROM phases WHERE project_id = ? AND site_id IS NULL")
+          .bind(projectId)
+  ).all<{ id: string; name: string; sort_order: number }>();
   const existingByName: Record<string, string> = {};
   for (const ep of existingPhases.results ?? []) {
     existingByName[ep.name.trim().toLowerCase()] = ep.id;
@@ -335,9 +355,9 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
       phaseIdMap[phase.id] = newPhaseId;
       await db
         .prepare(
-          "INSERT INTO phases (id, project_id, name, sort_order, status) VALUES (?, ?, ?, ?, 'not_started')"
+          "INSERT INTO phases (id, project_id, site_id, name, sort_order, status) VALUES (?, ?, ?, ?, ?, 'not_started')"
         )
-        .bind(newPhaseId, projectId, phase.name, sortOffset)
+        .bind(newPhaseId, projectId, scopedSiteId, phase.name, sortOffset)
         .run();
       existingByName[key] = newPhaseId;
       sortOffset++;
