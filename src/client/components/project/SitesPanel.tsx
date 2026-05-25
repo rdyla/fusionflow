@@ -68,7 +68,7 @@ export default function SitesPanel({ projectId, canEdit, onChange }: { projectId
       </div>
 
       <div style={{ fontSize: 12, color: "#64748b", marginBottom: sites.length > 0 ? 10 : 0 }}>
-        Use sites for projects that roll out to multiple locations on staggered timelines (e.g. Libraries → Treatment → HQ). Single-site projects can ignore this section.
+        Use sites for any project that ships in staggered cutovers — multi-location rollouts (HQ → Remote site 1 → Remote site 2) or multi-product deployments where one tech goes live before the other (Zoom Phone first, then Zoom Contact Center a few months later). Single-site projects can ignore this section.
       </div>
 
       {loading ? (
@@ -254,7 +254,7 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Libraries"
+            placeholder="e.g. HQ office, or Zoom Phone"
             style={{ marginTop: 4, width: "100%" }}
           />
         </label>
