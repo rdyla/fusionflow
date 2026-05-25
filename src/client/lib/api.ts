@@ -1026,6 +1026,17 @@ export type FeatureRequest = {
   updated_at: string;
 };
 
+// ── Multi-site model ─────────────────────────────────────────────────────────
+export type Site = {
+  id: string;
+  project_id: string;
+  name: string;
+  target_go_live_date: string | null;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
 // ── Stakeholder Dashboard ────────────────────────────────────────────────────
 export type StakeholderHealth = "on_track" | "at_risk" | "off_track";
 
@@ -1504,6 +1515,16 @@ export const api = {
   // Stakeholder view aggregation (one round-trip for the whole page)
   stakeholderSummary: (projectId: string) =>
     request<StakeholderSummary>(`/projects/${projectId}/stakeholder-summary`),
+
+  // Multi-site CRUD (Libraries / Treatment / HQ-style deployment targets)
+  sites: (projectId: string) =>
+    request<Site[]>(`/projects/${projectId}/sites`),
+  createSite: (projectId: string, payload: { name: string; target_go_live_date?: string | null }) =>
+    request<Site>(`/projects/${projectId}/sites`, { method: "POST", body: JSON.stringify(payload) }),
+  updateSite: (projectId: string, siteId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number }) =>
+    request<Site>(`/projects/${projectId}/sites/${siteId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteSite: (projectId: string, siteId: string) =>
+    request<{ success: boolean; deleted_phase_count: number }>(`/projects/${projectId}/sites/${siteId}`, { method: "DELETE" }),
 
   // Staging → Prod promotion (prod-only; staging worker returns 503)
   adminStagingInventory: () =>

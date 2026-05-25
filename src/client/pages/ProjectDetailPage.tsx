@@ -22,6 +22,7 @@ import {
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
+import SitesPanel from "../components/project/SitesPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -1056,6 +1057,17 @@ export default function ProjectDetailPage() {
           {/* KPIs / phase stepper / upcoming tasks / blockers now live on the
               Dashboard tab — see ProjectDashboardTab. Overview keeps the
               team + contacts surface for PM-facing context only. */}
+
+          {/* ── Deployment sites (multi-site projects) ────────────────────── */}
+          <SitesPanel
+            projectId={project.id}
+            canEdit={canEdit}
+            onChange={async () => {
+              const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
+              setPhases(newPhases);
+              setTasks(newTasks);
+            }}
+          />
 
           {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
           <div className="ms-section-card" style={{ padding: "12px 16px" }}>
