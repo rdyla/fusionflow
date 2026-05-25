@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { api, type Site } from "../../lib/api";
+import { api, type Site, type Template } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 export default function SitesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
@@ -105,6 +105,7 @@ function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site
   const [name, setName] = useState(site.name);
   const [target, setTarget] = useState(site.target_go_live_date ?? "");
   const [saving, setSaving] = useState(false);
+  const [applyOpen, setApplyOpen] = useState(false);
 
   async function save() {
     if (!name.trim()) {
@@ -163,11 +164,26 @@ function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site
           </span>
           {canEdit && (
             <>
+              <button onClick={() => setApplyOpen(true)} style={{ ...iconBtn, padding: "2px 10px" }} title="Apply template to this site">
+                + Template
+              </button>
               <button onClick={() => setEditing(true)} style={iconBtn} title="Edit">✎</button>
               <button onClick={onDelete} style={{ ...iconBtn, color: "#dc2626" }} title="Delete">✕</button>
             </>
           )}
         </>
+      )}
+
+      {applyOpen && (
+        <ApplyTemplateModal
+          projectId={projectId}
+          site={site}
+          onClose={() => setApplyOpen(false)}
+          onApplied={() => {
+            setApplyOpen(false);
+            onChanged();
+          }}
+        />
       )}
     </div>
   );
@@ -258,6 +274,127 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
           <button type="button" className="ms-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="button" className="ms-btn-primary" onClick={save} disabled={saving || !name.trim()}>
             {saving ? "Adding…" : "Add site"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Apply a template scoped to a specific site. The same machinery as the
+ * project-level apply-template (phase reuse by name, fuzzy task dedupe,
+ * solution-type tagging) but new phases are inserted with site_id = this
+ * site, and the reuse lookup only sees phases under this site. Lets a
+ * Zoom Phone + Zoom CC combo project carry two distinct sets of phases
+ * with the same names (Plan, Execute, ...) on each side.
+ */
+function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId: string; site: Site; onClose: () => void; onApplied: () => void }) {
+  const { showToast } = useToast();
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedId, setSelectedId] = useState("");
+  const [applying, setApplying] = useState(false);
+  // Default the go-live to the site's target — that's the natural anchor.
+  // PM can clear it to skip date scheduling and get the old dateless behavior.
+  const [goLive, setGoLive] = useState<string>(site.target_go_live_date ?? "");
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setLoading(true);
+        setTemplates(await api.templatesList());
+      } catch (err) {
+        showToast(err instanceof Error ? err.message : "Failed to load templates", "error");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  async function apply() {
+    if (!selectedId) return;
+    setApplying(true);
+    try {
+      const res = await api.applyTemplate(projectId, selectedId, site.id, goLive || null);
+      const parts: string[] = [];
+      parts.push(`${res.phases_created} phase${res.phases_created !== 1 ? "s" : ""}`);
+      parts.push(`${res.tasks_created} task${res.tasks_created !== 1 ? "s" : ""}`);
+      if (res.tasks_merged > 0) parts.push(`${res.tasks_merged} merged`);
+      const tail = goLive ? ` (dated from ${fmtDate(goLive)} go-live)` : "";
+      showToast(`Applied to ${site.name}: ${parts.join(" · ")}${tail}.`, "success");
+      onApplied();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to apply template", "error");
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 1000,
+        display: "flex", alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 10, padding: 24, width: 480, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+      >
+        <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0f172a" }}>
+          Apply template to {site.name}
+        </h3>
+        <div style={{
+          marginTop: 10, padding: "10px 12px",
+          background: "#eff6ff", border: "1px solid #bfdbfe",
+          borderRadius: 6, fontSize: 12, color: "#1e40af",
+        }}>
+          New phases land under <strong>{site.name}</strong>. Existing same-named phases under this site are reused; phases on other sites are not touched.
+        </div>
+
+        <label style={{ display: "block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#334155" }}>
+          Template
+          <select
+            className="ms-input"
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            disabled={loading || applying}
+            style={{ marginTop: 4, width: "100%" }}
+          >
+            <option value="">{loading ? "Loading…" : "Pick a template"}</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+                {t.solution_type ? ` (${t.solution_type})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label style={{ display: "block", marginTop: 12, fontSize: 12, fontWeight: 600, color: "#334155" }}>
+          Go-live date
+          <input
+            className="ms-input"
+            type="date"
+            value={goLive}
+            onChange={(e) => setGoLive(e.target.value)}
+            disabled={applying}
+            style={{ marginTop: 4, width: "100%" }}
+          />
+          <span style={{ fontSize: 11, fontWeight: 400, color: "#64748b", marginTop: 4, display: "block" }}>
+            {goLive
+              ? "Phase dates chain backward from this date using each phase's working_days. Tasks inherit their phase's window. Existing same-named phases keep their dates if already set."
+              : "Leave blank to skip date scheduling (phases + tasks land without dates)."}
+          </span>
+        </label>
+
+        <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button type="button" className="ms-btn-secondary" onClick={onClose} disabled={applying}>Cancel</button>
+          <button type="button" className="ms-btn-primary" onClick={apply} disabled={applying || !selectedId}>
+            {applying ? "Applying…" : "Apply"}
           </button>
         </div>
       </div>
