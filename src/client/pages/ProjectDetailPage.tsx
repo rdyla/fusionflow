@@ -1723,7 +1723,14 @@ export default function ProjectDetailPage() {
 
       {/* ── SharePoint ────────────────────────────────────────────────────── */}
       {tab === "sharepoint" && project.dynamics_account_id && (
-        <SharePointDocs recordId={project.dynamics_account_id} />
+        <SharePointDocs
+          recordId={project.dynamics_account_id}
+          sharepointUrl={project.customer_sharepoint_url}
+          projectFolderUrl={project.sharepoint_folder_url}
+          projectId={project.id}
+          canEdit={canEdit}
+          onProjectFolderCreated={(url) => setProject({ ...project, sharepoint_folder_url: url })}
+        />
       )}
 
       {/* ── Activity ──────────────────────────────────────────────────────── */}

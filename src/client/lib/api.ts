@@ -224,6 +224,11 @@ export type Project = {
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
   customer_sharepoint_url: string | null;
+  /** Project's own SharePoint folder URL — a subfolder under the customer's
+   *  sharepoint_url created on project insert (best-effort). NULL on projects
+   *  created before this feature, or when folder creation failed. The
+   *  SharePoint tab uses this URL as its root when present. */
+  sharepoint_folder_url: string | null;
   // Recurring status-meeting cadence (drives "Next call" on the Dashboard when
   // no closer milestone meeting is on the calendar). Persisted across all six
   // status_meeting_* columns on the projects table; null on either side means
@@ -1512,6 +1517,15 @@ export const api = {
   },
   spDelete: (webUrl: string) =>
     request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+
+  /** Create (or adopt an existing) per-project SharePoint folder under the
+   *  customer's SP root. Idempotent — server returns the existing URL if the
+   *  folder is already wired up. Used by the "Create project folder" button
+   *  on the SharePoint tab for projects created before the auto-create. */
+  ensureProjectSharePointFolder: (projectId: string) =>
+    request<{ sharepoint_folder_url: string; reused: boolean }>(`/projects/${projectId}/sharepoint-folder`, {
+      method: "POST",
+    }),
 
   // Admin
   adminProjects: () => request<Project[]>("/admin/projects"),
