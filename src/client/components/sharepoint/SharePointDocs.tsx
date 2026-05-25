@@ -240,9 +240,31 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
   }
 
   const currentUrl = folderStack.length > 0 ? folderStack[folderStack.length - 1].url : null;
+  const showCreateProjectFolderPrompt = !!projectId && !!canEdit && !projectFolderUrl;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+
+      {/* Project-folder upgrade prompt — visible whenever the project doesn't
+          have its own folder yet, regardless of whether CRM has document
+          locations linked. Most projects DO have CRM locations, so the
+          fallback render below never fires and this is the only place the
+          PM gets a chance to opt in. */}
+      {showCreateProjectFolderPrompt && (
+        <div className="ms-section-card" style={{ background: "#fefce8", borderColor: "#fde68a" }}>
+          <div style={{ fontSize: 13, color: "#854d0e", marginBottom: 8 }}>
+            <strong>This project doesn't have its own SharePoint folder.</strong> Files below are coming from the customer's shared CRM-linked location. Create a dedicated project folder under the customer's SharePoint root — that's where discovery workbooks, customer phone bills, CSRs, and project documents should land.
+          </div>
+          <button
+            className="ms-btn-primary"
+            onClick={handleCreateProjectFolder}
+            disabled={creatingFolder}
+            style={{ fontSize: 13 }}
+          >
+            {creatingFolder ? "Creating…" : "Create project folder"}
+          </button>
+        </div>
+      )}
 
       {/* Location selector — only shown when there are multiple */}
       {locations.length > 1 && (
