@@ -512,36 +512,50 @@ app.post("/:id/sharepoint-folder", async (c) => {
     .prepare("SELECT name, customer_id, sharepoint_folder_url FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
     .first<{ name: string; customer_id: string | null; sharepoint_folder_url: string | null }>();
-  if (!project) throw new HTTPException(404, { message: "Project not found" });
+  if (!project) return c.json({ error: "Project not found" }, 404);
 
   // Already wired up — just return the existing URL so the client can hot-swap.
   if (project.sharepoint_folder_url) {
     return c.json({ sharepoint_folder_url: project.sharepoint_folder_url, reused: true });
   }
 
+  // Error responses use c.json (not HTTPException) so the client toast can read
+  // the message — HTTPException defaults to text/plain and the request helper
+  // falls back to "API error: 400" which hides the real reason.
   if (!project.customer_id) {
-    throw new HTTPException(400, {
-      message: "Project has no linked customer. Link a customer record (CRM account) before creating a SharePoint folder.",
-    });
+    return c.json({
+      error: "Project has no linked customer. Link a customer record (CRM account) before creating a SharePoint folder.",
+    }, 400);
   }
   const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, project.customer_id);
   if (!customerSpUrl) {
-    throw new HTTPException(400, {
-      message: "Customer has no SharePoint URL and Dynamics returned no document locations. Add one on the customer record (or in CRM), then retry.",
-    });
+    // Pull a bit of extra context so the PM can see whether it's a CRM-side
+    // gap (no doc locations on the account) vs. a missing CRM link entirely.
+    const cust = await db
+      .prepare("SELECT name, crm_account_id FROM customers WHERE id = ? LIMIT 1")
+      .bind(project.customer_id)
+      .first<{ name: string; crm_account_id: string | null }>();
+    const detail = cust?.crm_account_id
+      ? `Customer "${cust?.name}" is linked to CRM account ${cust.crm_account_id} but Dynamics returned no SharePoint document locations for it. Check that the account has a SharePoint folder set up in CRM, then retry.`
+      : `Customer "${cust?.name ?? "(unknown)"}" has no SharePoint URL set and no CRM account linked, so we can't auto-resolve one. Set sharepoint_url on the customer record, or link the customer to a CRM account, then retry.`;
+    return c.json({ error: detail }, 400);
   }
 
-  const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, project.name);
-  if (!folder.webUrl) {
-    throw new HTTPException(500, { message: "Folder created but no webUrl returned from Graph." });
+  try {
+    const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, project.name);
+    if (!folder.webUrl) {
+      return c.json({ error: "Folder created but no webUrl returned from Graph." }, 500);
+    }
+    await db
+      .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
+      .bind(folder.webUrl, projectId)
+      .run();
+    return c.json({ sharepoint_folder_url: folder.webUrl, reused: folder.reused });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "SharePoint folder create failed";
+    console.error(`[projects.${projectId}.sharepoint-folder]`, message);
+    return c.json({ error: `SharePoint folder create failed: ${message}` }, 500);
   }
-
-  await db
-    .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
-    .bind(folder.webUrl, projectId)
-    .run();
-
-  return c.json({ sharepoint_folder_url: folder.webUrl, reused: folder.reused });
 });
 
 // ── Project Contacts ──────────────────────────────────────────────────────────
