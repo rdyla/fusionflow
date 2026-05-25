@@ -383,10 +383,12 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
   // or "UAT prep (Libraries · Phase 1 readiness) — …" if PM also typed a label).
   let resolvedLabel = draft.label?.trim() || null;
   if ((meetingType === "uat" || meetingType === "go_live") && draft.siteId) {
-    const siteRow = await c.env.DB
+    // `c` is typed `any` here (legacy), so the .first() generic isn't valid —
+    // cast the result instead.
+    const siteRow = (await c.env.DB
       .prepare("SELECT name FROM sites WHERE id = ? AND project_id = ? LIMIT 1")
       .bind(draft.siteId, project.id)
-      .first<{ name: string }>();
+      .first()) as { name: string } | null;
     if (siteRow?.name) {
       resolvedLabel = resolvedLabel
         ? `${siteRow.name} · ${resolvedLabel}`
