@@ -103,3 +103,36 @@ export async function computeProjectHealth(
   return label(score);
 }
 
+/**
+ * Per-site health for multi-site projects (Libraries/Treatment/HQ-style).
+ * Scores against the site's own slice of tasks (via the phases joined to
+ * this site) and the site's go-live date. Risks stay project-level and
+ * are intentionally excluded — the project banner still surfaces them.
+ */
+export async function computeSiteHealth(
+  db: D1Database,
+  site: { id: string; target_go_live_date: string | null }
+): Promise<HealthValue> {
+  const today = new Date();
+  let score = 50;
+
+  // Schedule against the site's own go-live (±25)
+  score += scheduleDelta(site.target_go_live_date, today);
+
+  // Task completion within the site's phases (±15)
+  const row = await db
+    .prepare(
+      `SELECT
+         COUNT(*) AS total,
+         SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done
+       FROM tasks t
+       JOIN phases p ON p.id = t.phase_id
+       WHERE p.site_id = ?`
+    )
+    .bind(site.id)
+    .first<{ total: number; done: number }>();
+  score += completionDelta(row?.total ?? 0, row?.done ?? 0);
+
+  return label(score);
+}
+

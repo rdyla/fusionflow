@@ -1,18 +1,16 @@
 /**
  * Project Dashboard tab — stakeholder-facing read view.
  *
- * Anchored on a single project but rolls up across all in-flight projects
- * for the same customer. The "Sites" row (was "Phase progress" in the
- * original mockup) shows sibling projects — e.g. City of Thousand Oaks
- * has separate Libraries / Treatment-Waste / HQ projects with their own
- * go-live dates. Single-project customers hide the Sites row entirely.
+ * Anchored on a single project. Stats are scoped to that project. Multi-site
+ * behavior lives INSIDE the project via the `sites` table: City of Thousand
+ * Oaks is one project containing Libraries / Treatment / HQ sites, each with
+ * its own per-site PMI phase chain and go-live. The Sites row only renders
+ * when the project has 2+ sites; single-site projects get a clean two-row
+ * layout (stat tiles + three detail panels).
  *
- * Renders one round-trip's worth of data (api.stakeholderSummary):
- * five rollup stat tiles, the adaptive Sites row, and three detail
- * columns (open tasks + assignee breakdown / blockers + key updates /
- * team & links). The project's own page-header (customer card, name,
- * status, tech tags, Edit) already lives above the tab strip — this
- * component intentionally adds no second title bar.
+ * The project's own page-header (customer card, name, status, tech tags,
+ * Edit) already lives above the tab strip — this component intentionally
+ * adds no second title bar.
  *
  * Internal staff, customer contacts authenticated as `client` users
  * matched to the project's account, and partner AEs explicitly attached
@@ -56,9 +54,9 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
   if (error) return <Center error>{error}</Center>;
   if (!data) return <Center>No data.</Center>;
 
-  const { stats, related_projects, open_tasks, assignee_breakdown, blockers, key_updates, team, links } = data;
-  const multiSite = related_projects.length > 1;
-  const rollupLabel = multiSite ? `Across ${related_projects.length} sites` : "Across this project";
+  const { stats, sites, open_tasks, assignee_breakdown, blockers, key_updates, team, links } = data;
+  const multiSite = sites.length > 0;
+  const rollupLabel = multiSite ? `Across ${sites.length} site${sites.length === 1 ? "" : "s"}` : "Across this project";
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
@@ -92,17 +90,17 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
         />
       </div>
 
-      {/* Sites row — hidden when there's only one project under the customer */}
+      {/* Sites row — hidden for single-site projects */}
       {multiSite && (
         <>
           <SectionLabel>Sites</SectionLabel>
           <div style={{
             display: "grid",
-            gridTemplateColumns: related_projects.length <= 3 ? `repeat(${related_projects.length}, 1fr)` : "repeat(3, 1fr)",
+            gridTemplateColumns: sites.length <= 3 ? `repeat(${sites.length}, 1fr)` : "repeat(3, 1fr)",
             gap: 12, marginBottom: 18,
           }}>
-            {related_projects.map((rp) => (
-              <SiteCard key={rp.id} site={rp} />
+            {sites.map((s) => (
+              <SiteCard key={s.id} site={s} />
             ))}
           </div>
         </>
@@ -122,8 +120,8 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
                   <PriorityDot priority={t.priority} />
                   <span style={{ flex: 1, marginLeft: 8 }}>
                     {t.title}
-                    {multiSite && t.project_name && (
-                      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 400, marginLeft: 6 }}>· {t.project_name}</span>
+                    {multiSite && t.site_name && (
+                      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 400, marginLeft: 6 }}>· {t.site_name}</span>
                     )}
                   </span>
                   <span style={{ color: dueTone(t.due_date), fontSize: 12, fontWeight: 500 }}>
@@ -144,11 +142,16 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
                   {assignee_breakdown.slice(0, 6).map((a) => (
                     <tr key={a.user_id}>
                       <td style={{ padding: "4px 0", color: "#475569" }}>{a.name}</td>
-                      {related_projects.map((rp, i) => (
-                        <td key={rp.id} style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
-                          <span style={{ color: "#94a3b8", fontSize: 10 }}>S{i + 1}</span> <strong style={{ color: "#334155" }}>{a.counts[rp.id] ?? 0}</strong>
+                      {sites.map((s, i) => (
+                        <td key={s.id} style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
+                          <span style={{ color: "#94a3b8", fontSize: 10 }}>S{i + 1}</span> <strong style={{ color: "#334155" }}>{a.counts[s.id] ?? 0}</strong>
                         </td>
                       ))}
+                      {a.shared > 0 && (
+                        <td style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
+                          <span style={{ color: "#94a3b8", fontSize: 10 }}>Init</span> <strong style={{ color: "#334155" }}>{a.shared}</strong>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -173,9 +176,6 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
                     <div style={{ fontSize: 13, fontWeight: 600, color: tone.fg }}>{b.title}</div>
                     {b.description && (
                       <div style={{ fontSize: 11, color: tone.fg, opacity: 0.85, marginTop: 2 }}>{b.description}</div>
-                    )}
-                    {multiSite && b.project_name && (
-                      <div style={{ fontSize: 10, color: tone.fg, opacity: 0.7, marginTop: 4, fontWeight: 600 }}>{b.project_name}</div>
                     )}
                   </div>
                 );
@@ -254,15 +254,13 @@ function Tile({ label, value, sublabel, danger }: { label: string; value: string
   );
 }
 
-function SiteCard({ site }: { site: StakeholderSummary["related_projects"][number] }) {
+function SiteCard({ site }: { site: StakeholderSummary["sites"][number] }) {
   const tone = TONE[site.health];
-  const border = site.is_current ? "2px solid #3b82f6" : "1px solid #334155";
   return (
-    <div style={{ background: "#1e293b", border, borderRadius: 8, padding: "14px 16px" }}>
+    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>
           {site.name}
-          {site.is_current && <span style={{ fontSize: 10, color: "#60a5fa", fontWeight: 600, marginLeft: 6 }}>· this site</span>}
         </div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999,

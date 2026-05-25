@@ -1052,10 +1052,10 @@ export type StakeholderSummary = {
     } | null;
     site_count: number;
   };
-  /** Sibling projects under the same customer (in-flight only). Includes the
-   *  current project (is_current=true). For single-project customers this
-   *  array has length 1 and the UI hides the Sites row. */
-  related_projects: Array<{
+  /** Deployment sites inside the project (Libraries / Treatment / HQ-style).
+   *  Empty array means this project is single-site and the UI hides the
+   *  Sites row entirely. */
+  sites: Array<{
     id: string;
     name: string;
     target_go_live_date: string | null;
@@ -1064,22 +1064,26 @@ export type StakeholderSummary = {
     done_count: number;
     days_left: number | null;
     health: StakeholderHealth;
-    is_current: boolean;
   }>;
   open_tasks: Array<{
     id: string;
     title: string;
     due_date: string | null;
     priority: string | null;
-    project_id: string;
-    project_name: string | null;
+    site_id: string | null;
+    site_name: string | null;
     assignee_name: string | null;
     is_meeting: boolean;
   }>;
   assignee_breakdown: Array<{
     user_id: string;
     name: string;
-    counts: Record<string, number>; // project_id → open-task count
+    /** Open-task counts keyed by site_id. Shared-phase tasks (Initiate)
+     *  surface separately under `shared`. Single-site projects use only
+     *  `total`. */
+    counts: Record<string, number>;
+    shared: number;
+    total: number;
   }>;
   blockers: Array<{
     id: string;
@@ -1088,8 +1092,6 @@ export type StakeholderSummary = {
     severity: string | null;
     status: string | null;
     owner_name: string | null;
-    project_id: string;
-    project_name: string | null;
   }>;
   key_updates: Array<{
     id: string;
@@ -1097,7 +1099,6 @@ export type StakeholderSummary = {
     body: string;
     author_name: string | null;
     created_at: string;
-    project_id: string;
   }>;
   team: {
     pm: { id: string; name: string | null; email: string } | null;
