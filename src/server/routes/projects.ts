@@ -9,7 +9,46 @@ import { sendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
-import { ensureSharePointChildFolder } from "../services/graphService";
+import { ensureSharePointChildFolder, getSharePointLocations } from "../services/graphService";
+
+/**
+ * Resolve a customer's SharePoint root URL, looking it up from Dynamics doc
+ * locations on the fly and caching to customers.sharepoint_url when it's
+ * not already set. Customers auto-created via CRM linking (project POST
+ * with dynamics_account_id) don't get sharepoint_url populated at insert
+ * time, so this fills the gap so per-project folder creation works
+ * end-to-end without manual customer-record edits.
+ *
+ * Returns null when both: customer.sharepoint_url is empty AND no Dynamics
+ * doc location is linked to the customer's CRM account.
+ */
+async function resolveCustomerSharePointUrl(
+  env: Bindings,
+  db: D1Database,
+  customerId: string
+): Promise<string | null> {
+  const customer = await db
+    .prepare("SELECT sharepoint_url, crm_account_id FROM customers WHERE id = ? LIMIT 1")
+    .bind(customerId)
+    .first<{ sharepoint_url: string | null; crm_account_id: string | null }>();
+  if (!customer) return null;
+  if (customer.sharepoint_url) return customer.sharepoint_url;
+  if (!customer.crm_account_id) return null;
+
+  try {
+    const locations = await getSharePointLocations(env, customer.crm_account_id);
+    const first = locations[0]?.absoluteUrl;
+    if (!first) return null;
+    await db
+      .prepare("UPDATE customers SET sharepoint_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(first, customerId)
+      .run();
+    return first;
+  } catch (err) {
+    console.warn(`[resolveCustomerSharePointUrl] Dynamics lookup failed for customer ${customerId}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { canonicalizeVendor } from "../../shared/vendors";
@@ -213,16 +252,16 @@ app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .run();
 
   // Best-effort: create the project's SharePoint subfolder under the customer's
-  // SP root. Failures (no SP root configured, Graph permission issue, etc.)
-  // don't block project creation — PM can retry from the SharePoint tab.
+  // SP root. resolveCustomerSharePointUrl lazily backfills the customer's
+  // sharepoint_url from Dynamics doc locations if it isn't set yet — most
+  // customers get a default SP location on CRM provisioning, so this should
+  // succeed on the first try without manual customer-record edits. Failures
+  // log and continue; PM can retry from the SharePoint tab.
   if (customer_id) {
     try {
-      const customer = await db
-        .prepare("SELECT sharepoint_url FROM customers WHERE id = ? LIMIT 1")
-        .bind(customer_id)
-        .first<{ sharepoint_url: string | null }>();
-      if (customer?.sharepoint_url) {
-        const folder = await ensureSharePointChildFolder(c.env, customer.sharepoint_url, name);
+      const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, customer_id);
+      if (customerSpUrl) {
+        const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, name);
         if (folder.webUrl) {
           await db
             .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
@@ -485,17 +524,14 @@ app.post("/:id/sharepoint-folder", async (c) => {
       message: "Project has no linked customer. Link a customer record (CRM account) before creating a SharePoint folder.",
     });
   }
-  const customer = await db
-    .prepare("SELECT sharepoint_url FROM customers WHERE id = ? LIMIT 1")
-    .bind(project.customer_id)
-    .first<{ sharepoint_url: string | null }>();
-  if (!customer?.sharepoint_url) {
+  const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, project.customer_id);
+  if (!customerSpUrl) {
     throw new HTTPException(400, {
-      message: "Customer has no SharePoint URL set. Add one on the customer record, then retry.",
+      message: "Customer has no SharePoint URL and Dynamics returned no document locations. Add one on the customer record (or in CRM), then retry.",
     });
   }
 
-  const folder = await ensureSharePointChildFolder(c.env, customer.sharepoint_url, project.name);
+  const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, project.name);
   if (!folder.webUrl) {
     throw new HTTPException(500, { message: "Folder created but no webUrl returned from Graph." });
   }
