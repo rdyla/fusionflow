@@ -1,10 +1,18 @@
 /**
  * Project Dashboard tab — stakeholder-facing read view.
  *
+ * Anchored on a single project but rolls up across all in-flight projects
+ * for the same customer. The "Sites" row (was "Phase progress" in the
+ * original mockup) shows sibling projects — e.g. City of Thousand Oaks
+ * has separate Libraries / Treatment-Waste / HQ projects with their own
+ * go-live dates. Single-project customers hide the Sites row entirely.
+ *
  * Renders one round-trip's worth of data (api.stakeholderSummary):
- * project header line, five stat tiles, adaptive phase row (hidden for
- * single-phase projects), and three detail columns (open tasks +
- * assignee breakdown / blockers + key updates / team + links).
+ * five rollup stat tiles, the adaptive Sites row, and three detail
+ * columns (open tasks + assignee breakdown / blockers + key updates /
+ * team & links). The project's own page-header (customer card, name,
+ * status, tech tags, Edit) already lives above the tab strip — this
+ * component intentionally adds no second title bar.
  *
  * Internal staff, customer contacts authenticated as `client` users
  * matched to the project's account, and partner AEs explicitly attached
@@ -13,12 +21,9 @@
  */
 
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { api, type StakeholderSummary } from "../../lib/api";
 
-const PF_NAVY = "#003B5C";
 const PF_GREEN = "#17C662";
-const HEADER_BG = "#1f3a55";
 
 const TONE = {
   on_track:  { label: "On track",  fg: "#166534", bg: "#dcfce7" },
@@ -51,72 +56,53 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
   if (error) return <Center error>{error}</Center>;
   if (!data) return <Center>No data.</Center>;
 
-  const { project, stats, phases, open_tasks, assignee_breakdown, blockers, key_updates, team, links } = data;
-  const showPhaseRow = phases.length > 1;
+  const { stats, related_projects, open_tasks, assignee_breakdown, blockers, key_updates, team, links } = data;
+  const multiSite = related_projects.length > 1;
+  const rollupLabel = multiSite ? `Across ${related_projects.length} sites` : "Across this project";
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 8px" }}>
-      {/* Header */}
-      <div style={{
-        background: HEADER_BG, color: "#fff", borderRadius: 10, padding: "20px 24px", marginBottom: 16,
-      }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.01em" }}>
-          {project.customer_name ? `${project.customer_name} — ${project.name}` : project.name}
-        </h1>
-        <div style={{ marginTop: 6, fontSize: 13, color: "#cbd5e1", display: "flex", flexWrap: "wrap", gap: "0 14px" }}>
-          <span>Stakeholder view</span>
-          {team.pm?.name && <span>· PM: {team.pm.name}</span>}
-          {project.crm_case_id && <span>· CRM #{project.crm_case_id}</span>}
-          {project.updated_at && <span>· Last updated: {fmtDateTime(project.updated_at)}</span>}
-        </div>
-      </div>
-
+    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
       {/* Stat tiles */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12, marginBottom: 18 }}>
         <Tile
-          icon="◔"
           label="Overall complete"
           value={`${stats.overall_complete_pct}%`}
-          sublabel="Across all phases"
+          sublabel={rollupLabel}
         />
         <Tile
-          icon="◧"
           label="Total tasks"
           value={`${stats.tasks.total}`}
           sublabel={`${stats.tasks.done} done · ${stats.tasks.in_progress} in progress`}
         />
         <Tile
-          icon="⚠"
           label="Blockers"
           value={`${stats.blockers.total}`}
           sublabel={stats.blockers.critical > 0 ? `${stats.blockers.critical} critical` : "—"}
           danger={stats.blockers.critical > 0}
         />
         <Tile
-          icon="📅"
-          label="Days to final go-live"
+          label={multiSite ? "Days to final go-live" : "Days to go-live"}
           value={stats.days_to_final_go_live !== null ? `${stats.days_to_final_go_live}` : "—"}
           sublabel={stats.target_go_live_date ? `${fmtDate(stats.target_go_live_date)} target` : "Not set"}
         />
         <Tile
-          icon="🎥"
           label="Next call"
           value={stats.next_call ? fmtCallDate(stats.next_call.scheduled_at) : "—"}
           sublabel={stats.next_call ? fmtCallSubLabel(stats.next_call) : "Not scheduled"}
         />
       </div>
 
-      {/* Phase row — hidden when there's only one phase */}
-      {showPhaseRow && (
+      {/* Sites row — hidden when there's only one project under the customer */}
+      {multiSite && (
         <>
-          <SectionLabel>Phase progress</SectionLabel>
+          <SectionLabel>Sites</SectionLabel>
           <div style={{
             display: "grid",
-            gridTemplateColumns: phases.length <= 3 ? `repeat(${phases.length}, 1fr)` : "repeat(3, 1fr)",
+            gridTemplateColumns: related_projects.length <= 3 ? `repeat(${related_projects.length}, 1fr)` : "repeat(3, 1fr)",
             gap: 12, marginBottom: 18,
           }}>
-            {phases.map((ph) => (
-              <PhaseCard key={ph.id} phase={ph} />
+            {related_projects.map((rp) => (
+              <SiteCard key={rp.id} site={rp} />
             ))}
           </div>
         </>
@@ -126,7 +112,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
         {/* Open tasks + assignee breakdown */}
-        <Panel title="Open tasks" icon="≣">
+        <Panel title="Open tasks">
           {open_tasks.length === 0 ? (
             <Empty>No open tasks</Empty>
           ) : (
@@ -134,7 +120,12 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
               {open_tasks.slice(0, 5).map((t) => (
                 <li key={t.id} style={{ display: "flex", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #f1f5f9", fontSize: 13 }}>
                   <PriorityDot priority={t.priority} />
-                  <span style={{ flex: 1, marginLeft: 8 }}>{t.title}</span>
+                  <span style={{ flex: 1, marginLeft: 8 }}>
+                    {t.title}
+                    {multiSite && t.project_name && (
+                      <span style={{ color: "#94a3b8", fontSize: 11, fontWeight: 400, marginLeft: 6 }}>· {t.project_name}</span>
+                    )}
+                  </span>
                   <span style={{ color: dueTone(t.due_date), fontSize: 12, fontWeight: 500 }}>
                     {fmtDueDate(t.due_date)}
                   </span>
@@ -143,7 +134,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
             </ul>
           )}
 
-          {assignee_breakdown.length > 0 && phases.length > 0 && (
+          {assignee_breakdown.length > 0 && multiSite && (
             <>
               <div style={{ marginTop: 16, marginBottom: 8, fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>
                 By assignee
@@ -153,9 +144,9 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
                   {assignee_breakdown.slice(0, 6).map((a) => (
                     <tr key={a.user_id}>
                       <td style={{ padding: "4px 0", color: "#475569" }}>{a.name}</td>
-                      {phases.map((ph, i) => (
-                        <td key={ph.id} style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
-                          <span style={{ color: "#94a3b8", fontSize: 10 }}>P{i + 1}</span> <strong style={{ color: "#334155" }}>{a.counts[ph.id] ?? 0}</strong>
+                      {related_projects.map((rp, i) => (
+                        <td key={rp.id} style={{ padding: "4px 0", textAlign: "right", color: "#64748b", paddingLeft: 8 }}>
+                          <span style={{ color: "#94a3b8", fontSize: 10 }}>S{i + 1}</span> <strong style={{ color: "#334155" }}>{a.counts[rp.id] ?? 0}</strong>
                         </td>
                       ))}
                     </tr>
@@ -167,7 +158,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
         </Panel>
 
         {/* Blockers + key updates */}
-        <Panel title="Blockers" icon="⚠">
+        <Panel title="Blockers">
           {blockers.length === 0 ? (
             <Empty>No active blockers</Empty>
           ) : (
@@ -182,6 +173,9 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
                     <div style={{ fontSize: 13, fontWeight: 600, color: tone.fg }}>{b.title}</div>
                     {b.description && (
                       <div style={{ fontSize: 11, color: tone.fg, opacity: 0.85, marginTop: 2 }}>{b.description}</div>
+                    )}
+                    {multiSite && b.project_name && (
+                      <div style={{ fontSize: 10, color: tone.fg, opacity: 0.7, marginTop: 4, fontWeight: 600 }}>{b.project_name}</div>
                     )}
                   </div>
                 );
@@ -214,7 +208,7 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
         </Panel>
 
         {/* Team & links */}
-        <Panel title="Team & links" icon="👥">
+        <Panel title="Team & links">
           <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
             <tbody>
               {team.pm && <TeamRow label="PM" name={team.pm.name ?? team.pm.email} />}
@@ -227,21 +221,15 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
           <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
             {stats.next_call?.join_url && (
               <LinkButton href={stats.next_call.join_url} primary>
-                🎥 Join {fmtCallDate(stats.next_call.scheduled_at)} call
+                Join {fmtCallDate(stats.next_call.scheduled_at)} call
               </LinkButton>
             )}
             {links.sharepoint_url && (
-              <LinkButton href={links.sharepoint_url}>📁 SharePoint documents</LinkButton>
+              <LinkButton href={links.sharepoint_url}>SharePoint documents</LinkButton>
             )}
-            <Link
-              to={`/projects/${project.id}`}
-              style={linkButtonStyle(false)}
-            >
-              📋 View full timeline
-            </Link>
             {links.crm_case_id && (
               <div style={{ ...linkButtonStyle(false), cursor: "default" }}>
-                🎫 CRM case #{links.crm_case_id}
+                CRM case #{links.crm_case_id}
               </div>
             )}
           </div>
@@ -253,28 +241,29 @@ export default function ProjectDashboardTab({ projectId }: { projectId: string }
 
 // ── Subcomponents ────────────────────────────────────────────────────────────
 
-function Tile({ icon, label, value, sublabel, danger }: { icon: string; label: string; value: string; sublabel?: string; danger?: boolean }) {
+function Tile({ label, value, sublabel, danger }: { label: string; value: string; sublabel?: string; danger?: boolean }) {
   return (
     <div style={{
       background: "#1e293b", color: "#fff", borderRadius: 8, padding: "12px 14px", minHeight: 92,
       border: danger ? "1px solid #ef4444" : "1px solid #334155",
     }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>
-        <span style={{ fontSize: 13 }}>{icon}</span>
-        <span>{label}</span>
-      </div>
+      <div style={{ fontSize: 11, color: "#94a3b8", fontWeight: 500 }}>{label}</div>
       <div style={{ fontSize: 28, fontWeight: 700, marginTop: 4, color: danger ? "#fca5a5" : "#fff" }}>{value}</div>
       {sublabel && <div style={{ fontSize: 11, color: danger ? "#fca5a5" : "#94a3b8", marginTop: 2 }}>{sublabel}</div>}
     </div>
   );
 }
 
-function PhaseCard({ phase }: { phase: StakeholderSummary["phases"][number] }) {
-  const tone = TONE[phase.health];
+function SiteCard({ site }: { site: StakeholderSummary["related_projects"][number] }) {
+  const tone = TONE[site.health];
+  const border = site.is_current ? "2px solid #3b82f6" : "1px solid #334155";
   return (
-    <div style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "14px 16px" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>{phase.name}</div>
+    <div style={{ background: "#1e293b", border, borderRadius: 8, padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>
+          {site.name}
+          {site.is_current && <span style={{ fontSize: 10, color: "#60a5fa", fontWeight: 600, marginLeft: 6 }}>· this site</span>}
+        </div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
           background: tone.bg, color: tone.fg, whiteSpace: "nowrap",
@@ -283,23 +272,20 @@ function PhaseCard({ phase }: { phase: StakeholderSummary["phases"][number] }) {
         </span>
       </div>
       <div style={{ background: "#0f172a", borderRadius: 4, height: 6, overflow: "hidden" }}>
-        <div style={{ background: PF_GREEN, height: "100%", width: `${phase.completion_pct}%` }} />
+        <div style={{ background: PF_GREEN, height: "100%", width: `${site.completion_pct}%` }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 11, color: "#94a3b8" }}>
-        <span>{phase.planned_end ? `Go-live: ${fmtDate(phase.planned_end)}` : "No date set"}</span>
-        <span>{phase.days_left !== null ? `${phase.days_left} days left` : "—"}</span>
+        <span>{site.target_go_live_date ? `Go-live: ${fmtDate(site.target_go_live_date)}` : "No date set"}</span>
+        <span>{site.days_left !== null ? `${site.days_left} days left` : "—"}</span>
       </div>
     </div>
   );
 }
 
-function Panel({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ background: "#1e293b", borderRadius: 8, padding: "14px 16px", border: "1px solid #334155", color: "#e2e8f0" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#fff" }}>
-        <span style={{ color: "#94a3b8" }}>{icon}</span>
-        <span>{title}</span>
-      </div>
+      <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#fff" }}>{title}</div>
       <div style={{ background: "#fff", borderRadius: 6, padding: "10px 12px", color: "#0f172a" }}>
         {children}
       </div>
@@ -367,12 +353,6 @@ function fmtDate(iso: string | null): string {
   } catch { return iso; }
 }
 
-function fmtDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
-  } catch { return iso; }
-}
-
 function fmtCallDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
@@ -427,6 +407,3 @@ function relative(iso: string): string {
     return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   } catch { return ""; }
 }
-
-// reference PF_NAVY to avoid unused-import warning if styling tweaks later need it
-void PF_NAVY;
