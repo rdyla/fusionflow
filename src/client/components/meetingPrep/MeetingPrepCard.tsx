@@ -45,9 +45,16 @@ function SendRow({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {record.label || sectionLabel}
+            {/* Per-site sends carry siteName even when label is blank — show
+                the site name as the primary line so the history reads as
+                "UAT · Libraries", "UAT · Treatment", etc. */}
+            {record.label
+              ? record.label
+              : record.siteName
+                ? `${sectionLabel} · ${record.siteName}`
+                : sectionLabel}
           </div>
-          {record.label && (
+          {(record.label || record.siteName) && (
             <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {record.subject}
             </div>
