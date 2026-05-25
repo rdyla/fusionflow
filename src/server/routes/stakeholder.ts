@@ -1,30 +1,29 @@
 /**
  * Stakeholder Dashboard aggregation endpoint.
  *
- * Anchored on a single project but rolls up across all in-flight projects
- * under the same customer — modeling the way customers actually look at a
- * multi-site rollout (e.g. City of Thousand Oaks running Libraries,
- * Treatment/Waste, and HQ as three sibling projects with their own
- * go-live dates). Single-project customers degrade gracefully: the
- * related-projects section just contains the current project.
+ * Anchored on a single project. Stats are scoped to that project — there is
+ * no longer a customer-rollup across sibling projects (that was the wrong
+ * abstraction; see PR following #211). Multi-site behavior lives INSIDE the
+ * project via the `sites` table: e.g. City of Thousand Oaks is one project
+ * containing Libraries / Treatment / HQ sites, each with its own per-site
+ * PMI phase chain and go-live date. The Initiate phase is shared across all
+ * sites (its phase row has site_id = NULL).
+ *
+ * Single-site projects (sites table empty) get a clean two-row layout: stat
+ * tiles + three detail columns. Multi-site projects render an adaptive
+ * Sites row showing each site's progress / go-live / health.
  *
  * Access is gated by the existing `canViewProject()` — internal staff,
  * customer contacts authenticated as `client` matched by
  * `dynamics_account_id`, and partner AEs explicitly attached via
  * `project_staff` all see the same payload.
- *
- * Note on access scoping: the rollup intentionally aggregates EVERY
- * non-archived project under the customer, not just ones the viewer is
- * explicitly attached to. The current viewer's access has already been
- * verified against the anchor project; the rollup numbers are derived
- * from the customer they're already authorized to see.
  */
 
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
 import { canViewProject } from "../services/accessService";
-import { computeProjectHealth, type HealthValue } from "../lib/healthScore";
+import { computeProjectHealth, computeSiteHealth, type HealthValue } from "../lib/healthScore";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -45,13 +44,11 @@ type ProjectRow = {
   status_meeting_join_url: string | null;
 };
 
-type RelatedProjectRow = {
+type SiteRow = {
   id: string;
   name: string;
   target_go_live_date: string | null;
-  updated_at: string | null;
-  archived: number | null;
-  status: string | null;
+  display_order: number;
 };
 
 app.get("/:id/stakeholder-summary", async (c) => {
@@ -78,37 +75,11 @@ app.get("/:id/stakeholder-summary", async (c) => {
   const today = new Date();
   const todayIso = today.toISOString().slice(0, 10);
 
-  // ── Resolve sibling projects (in-flight, same customer) ─────────────────────
-  // Without customer_id we degrade to single-project rollup. With a customer,
-  // we include every non-archived project the customer owns. "Complete" status
-  // projects are still surfaced — the rollup is about implementation state, and
-  // a completed sibling site is meaningful context. Archived ones are excluded.
-  const relatedRows = project.customer_id
-    ? await db
-        .prepare(
-          `SELECT id, name, target_go_live_date, updated_at, archived, status
-           FROM projects
-           WHERE customer_id = ? AND (archived = 0 OR archived IS NULL)
-           ORDER BY COALESCE(target_go_live_date, '9999-12-31') ASC, name ASC`
-        )
-        .bind(project.customer_id)
-        .all<RelatedProjectRow>()
-    : { results: [{ id: project.id, name: project.name, target_go_live_date: project.target_go_live_date, updated_at: project.updated_at, archived: 0, status: null }] as RelatedProjectRow[] };
-
-  const related = relatedRows.results ?? [];
-  // If the anchor project is archived/orphaned and the customer query skipped
-  // it, drop it back in so the user is never staring at a Dashboard that
-  // doesn't include the project they clicked into.
-  if (!related.find((p) => p.id === project.id)) {
-    related.unshift({ id: project.id, name: project.name, target_go_live_date: project.target_go_live_date, updated_at: project.updated_at, archived: 0, status: null });
-  }
-  const relatedIds = related.map((p) => p.id);
-  const ph = qs(relatedIds);
-
-  // ── Parallel: all the cross-customer aggregations + per-project team/links ─
+  // ── Parallel: everything scoped to this one project ────────────────────────
   const [
+    sitesRows,
     taskStats,
-    perProjectTaskCounts,
+    perSiteTaskCounts,
     openTasks,
     assigneeAgg,
     blockers,
@@ -120,7 +91,16 @@ app.get("/:id/stakeholder-summary", async (c) => {
     customerRow,
     nextMeetingTaskRow,
     docRow,
+    projectHealth,
   ] = await Promise.all([
+    db
+      .prepare(
+        `SELECT id, name, target_go_live_date, display_order
+         FROM sites WHERE project_id = ?
+         ORDER BY display_order ASC, COALESCE(target_go_live_date, '9999-12-31') ASC, name ASC`
+      )
+      .bind(projectId)
+      .all<SiteRow>(),
     db
       .prepare(
         `SELECT
@@ -128,70 +108,78 @@ app.get("/:id/stakeholder-summary", async (c) => {
            SUM(CASE WHEN status = 'completed'   THEN 1 ELSE 0 END) AS done,
            SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
            SUM(CASE WHEN status IS NULL OR status NOT IN ('completed','in_progress') THEN 1 ELSE 0 END) AS not_started
-         FROM tasks WHERE project_id IN (${ph})`
+         FROM tasks WHERE project_id = ?`
       )
-      .bind(...relatedIds)
+      .bind(projectId)
       .first<{ total: number; done: number; in_progress: number; not_started: number }>(),
+    // Per-site task counts joined through phases.site_id. Tasks on shared
+    // phases (site_id IS NULL) land under a NULL key and aren't rolled into
+    // any site card — they belong to the shared Initiate phase.
     db
       .prepare(
-        `SELECT project_id,
+        `SELECT p.site_id AS site_id,
                 COUNT(*) AS total,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
-         FROM tasks WHERE project_id IN (${ph})
-         GROUP BY project_id`
+                SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done
+         FROM tasks t
+         JOIN phases p ON p.id = t.phase_id
+         WHERE t.project_id = ?
+         GROUP BY p.site_id`
       )
-      .bind(...relatedIds)
-      .all<{ project_id: string; total: number; done: number }>(),
+      .bind(projectId)
+      .all<{ site_id: string | null; total: number; done: number }>(),
     db
       .prepare(
-        `SELECT t.id, t.project_id, t.title, t.due_date, t.priority, t.phase_id, t.status,
-                t.meeting_join_url, t.assignee_user_id, u.name AS assignee_name
+        `SELECT t.id, t.title, t.due_date, t.priority, t.phase_id, t.status,
+                t.meeting_join_url, t.assignee_user_id, u.name AS assignee_name,
+                p.site_id AS site_id
          FROM tasks t
-         LEFT JOIN users u ON u.id = t.assignee_user_id
-         WHERE t.project_id IN (${ph}) AND (t.status IS NULL OR t.status != 'completed')
+         LEFT JOIN users u  ON u.id = t.assignee_user_id
+         LEFT JOIN phases p ON p.id = t.phase_id
+         WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
          ORDER BY COALESCE(t.due_date, '9999-12-31') ASC
          LIMIT 8`
       )
-      .bind(...relatedIds)
-      .all<{ id: string; project_id: string; title: string; due_date: string | null; priority: string | null; phase_id: string | null; status: string | null; meeting_join_url: string | null; assignee_user_id: string | null; assignee_name: string | null }>(),
+      .bind(projectId)
+      .all<{ id: string; title: string; due_date: string | null; priority: string | null; phase_id: string | null; status: string | null; meeting_join_url: string | null; assignee_user_id: string | null; assignee_name: string | null; site_id: string | null }>(),
+    // Per-assignee × per-site pivot. Tasks on shared phases land under a
+    // NULL site_id key and surface in a separate "shared" total.
     db
       .prepare(
-        `SELECT t.assignee_user_id, u.name AS assignee_name, t.project_id, COUNT(*) AS cnt
+        `SELECT t.assignee_user_id, u.name AS assignee_name,
+                p.site_id AS site_id, COUNT(*) AS cnt
          FROM tasks t
-         LEFT JOIN users u ON u.id = t.assignee_user_id
-         WHERE t.project_id IN (${ph}) AND (t.status IS NULL OR t.status != 'completed')
+         LEFT JOIN users u  ON u.id = t.assignee_user_id
+         LEFT JOIN phases p ON p.id = t.phase_id
+         WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
            AND t.assignee_user_id IS NOT NULL
-         GROUP BY t.assignee_user_id, t.project_id`
+         GROUP BY t.assignee_user_id, p.site_id`
       )
-      .bind(...relatedIds)
-      .all<{ assignee_user_id: string; assignee_name: string | null; project_id: string; cnt: number }>(),
+      .bind(projectId)
+      .all<{ assignee_user_id: string; assignee_name: string | null; site_id: string | null; cnt: number }>(),
     db
       .prepare(
-        `SELECT r.id, r.project_id, r.title, r.description, r.severity, r.status,
+        `SELECT r.id, r.title, r.description, r.severity, r.status,
                 r.owner_user_id, u.name AS owner_name
          FROM risks r
          LEFT JOIN users u ON u.id = r.owner_user_id
-         WHERE r.project_id IN (${ph}) AND (r.status IS NULL OR r.status != 'resolved')
+         WHERE r.project_id = ? AND (r.status IS NULL OR r.status != 'resolved')
          ORDER BY
            CASE r.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
            r.title`
       )
-      .bind(...relatedIds)
-      .all<{ id: string; project_id: string; title: string; description: string | null; severity: string | null; status: string | null; owner_user_id: string | null; owner_name: string | null }>(),
+      .bind(projectId)
+      .all<{ id: string; title: string; description: string | null; severity: string | null; status: string | null; owner_user_id: string | null; owner_name: string | null }>(),
     db
       .prepare(
-        `SELECT n.id, n.project_id, n.body, n.created_at, n.visibility, u.name AS author_name
+        `SELECT n.id, n.body, n.created_at, n.visibility, u.name AS author_name
          FROM notes n
          LEFT JOIN users u ON u.id = n.author_user_id
-         WHERE n.project_id IN (${ph})
+         WHERE n.project_id = ?
          ORDER BY n.created_at DESC
          LIMIT 8`
       )
-      .bind(...relatedIds)
-      .all<{ id: string; project_id: string; body: string; created_at: string; visibility: string | null; author_name: string | null }>(),
-    // Team + links scope to the CURRENT (anchor) project only — the customer
-    // might have different PMs per site, but the user is viewing one site at a
-    // time and the team panel should reflect "who runs this site."
+      .bind(projectId)
+      .all<{ id: string; body: string; created_at: string; visibility: string | null; author_name: string | null }>(),
     project.pm_user_id
       ? db.prepare("SELECT id, name, email FROM users WHERE id = ?").bind(project.pm_user_id).first<{ id: string; name: string | null; email: string }>()
       : Promise.resolve(null),
@@ -223,62 +211,59 @@ app.get("/:id/stakeholder-summary", async (c) => {
     project.customer_id
       ? db.prepare("SELECT sharepoint_url FROM customers WHERE id = ?").bind(project.customer_id).first<{ sharepoint_url: string | null }>()
       : Promise.resolve(null),
-    // Next milestone meeting across all sibling projects (a kickoff on Site 1
-    // is the customer's next call even if you're viewing Site 2).
     db
       .prepare(
-        `SELECT id, project_id, title, due_date, meeting_join_url FROM tasks
-         WHERE project_id IN (${ph})
+        `SELECT id, title, due_date, meeting_join_url FROM tasks
+         WHERE project_id = ?
            AND meeting_join_url IS NOT NULL AND meeting_join_url != ''
            AND (status IS NULL OR status != 'completed')
            AND due_date IS NOT NULL AND due_date >= ?
          ORDER BY due_date ASC LIMIT 1`
       )
-      .bind(...relatedIds, todayIso)
-      .first<{ id: string; project_id: string; title: string; due_date: string; meeting_join_url: string }>(),
+      .bind(projectId, todayIso)
+      .first<{ id: string; title: string; due_date: string; meeting_join_url: string }>(),
     db
       .prepare(
-        `SELECT id, project_id, name, created_at, uploaded_by FROM documents
-         WHERE project_id IN (${ph}) ORDER BY created_at DESC LIMIT 6`
+        `SELECT id, name, created_at, uploaded_by FROM documents
+         WHERE project_id = ? ORDER BY created_at DESC LIMIT 4`
       )
-      .bind(...relatedIds)
-      .all<{ id: string; project_id: string; name: string; created_at: string; uploaded_by: string | null }>(),
+      .bind(projectId)
+      .all<{ id: string; name: string; created_at: string; uploaded_by: string | null }>(),
+    computeProjectHealth(db, projectId, { target_go_live_date: project.target_go_live_date, updated_at: project.updated_at }),
   ]);
 
-  // ── Per-related-project health (sequential, tiny) ───────────────────────────
-  const perProjectStatsMap = new Map<string, { total: number; done: number }>();
-  for (const r of perProjectTaskCounts.results ?? []) {
-    perProjectStatsMap.set(r.project_id, { total: r.total, done: r.done });
+  const sites = sitesRows.results ?? [];
+
+  // ── Build site rollups (only meaningful when sites exist) ──────────────────
+  const siteCountsMap = new Map<string, { total: number; done: number }>();
+  for (const row of perSiteTaskCounts.results ?? []) {
+    if (row.site_id) siteCountsMap.set(row.site_id, { total: row.total, done: row.done });
   }
-  const relatedProjects: Array<{
+  const siteRollups: Array<{
     id: string; name: string; target_go_live_date: string | null;
     completion_pct: number; task_count: number; done_count: number;
-    days_left: number | null; health: HealthValue; is_current: boolean;
+    days_left: number | null; health: HealthValue;
   }> = [];
-  for (const rp of related) {
-    const counts = perProjectStatsMap.get(rp.id) ?? { total: 0, done: 0 };
+  for (const s of sites) {
+    const counts = siteCountsMap.get(s.id) ?? { total: 0, done: 0 };
     const pct = counts.total > 0 ? Math.round((counts.done / counts.total) * 100) : 0;
-    const daysLeft = rp.target_go_live_date
-      ? Math.round((new Date(rp.target_go_live_date).getTime() - today.getTime()) / 86_400_000)
+    const daysLeft = s.target_go_live_date
+      ? Math.round((new Date(s.target_go_live_date).getTime() - today.getTime()) / 86_400_000)
       : null;
-    const health = await computeProjectHealth(db, rp.id, {
-      target_go_live_date: rp.target_go_live_date,
-      updated_at: rp.updated_at,
-    });
-    relatedProjects.push({
-      id: rp.id,
-      name: rp.name,
-      target_go_live_date: rp.target_go_live_date,
+    const health = await computeSiteHealth(db, { id: s.id, target_go_live_date: s.target_go_live_date });
+    siteRollups.push({
+      id: s.id,
+      name: s.name,
+      target_go_live_date: s.target_go_live_date,
       completion_pct: pct,
       task_count: counts.total,
       done_count: counts.done,
       days_left: daysLeft,
       health,
-      is_current: rp.id === project.id,
     });
   }
 
-  // ── Next call — earlier of next milestone (any sibling) vs status cadence ──
+  // ── Next call ──────────────────────────────────────────────────────────────
   const milestoneNext = nextMeetingTaskRow
     ? { scheduled_at: nextMeetingTaskRow.due_date, title: nextMeetingTaskRow.title, join_url: nextMeetingTaskRow.meeting_join_url, source: "milestone" as const }
     : null;
@@ -289,61 +274,59 @@ app.get("/:id/stakeholder-summary", async (c) => {
     title: project.status_meeting_title,
     join_url: project.status_meeting_join_url,
   }, today);
-
   const nextCall =
     milestoneNext && statusNext
       ? (new Date(milestoneNext.scheduled_at) <= new Date(statusNext.scheduled_at) ? milestoneNext : statusNext)
       : (milestoneNext ?? statusNext);
 
-  // ── Rollup stats ────────────────────────────────────────────────────────────
+  // ── Stat tiles ─────────────────────────────────────────────────────────────
   const totalTasks = taskStats?.total ?? 0;
   const doneTasks = taskStats?.done ?? 0;
   const overallPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const blockerRows = blockers.results ?? [];
   const criticalCount = blockerRows.filter((b) => b.severity === "critical").length;
 
-  // "Days to final go-live" = latest target across siblings (the customer is
-  // "done" when the last site cuts over). NULL targets are ignored.
-  const finalGoLive = relatedProjects
-    .map((r) => r.target_go_live_date)
-    .filter((d): d is string => !!d)
-    .sort()
-    .at(-1) ?? null;
-  const daysToFinalGoLive = finalGoLive
-    ? Math.round((new Date(finalGoLive).getTime() - today.getTime()) / 86_400_000)
+  // Days to final go-live: max(site target dates) for multi-site, otherwise
+  // the project's own target_go_live_date.
+  const finalGoLiveDate = sites.length > 0
+    ? (siteRollups.map((s) => s.target_go_live_date).filter((d): d is string => !!d).sort().at(-1) ?? null)
+    : project.target_go_live_date;
+  const daysToFinalGoLive = finalGoLiveDate
+    ? Math.round((new Date(finalGoLiveDate).getTime() - today.getTime()) / 86_400_000)
     : null;
 
-  // ── Per-assignee × per-PROJECT pivot (was per-phase) ────────────────────────
-  const assigneeMap = new Map<string, { user_id: string; name: string; counts: Record<string, number> }>();
+  // ── Per-assignee pivot ─────────────────────────────────────────────────────
+  // Multi-site: counts keyed by site_id + a separate `shared` total for
+  // tasks on the project's shared phases (Initiate). Single-site: all task
+  // counts collapse into `total`.
+  const assigneeMap = new Map<string, { user_id: string; name: string; counts: Record<string, number>; shared: number; total: number }>();
   for (const row of assigneeAgg.results ?? []) {
     if (!row.assignee_user_id) continue;
     let entry = assigneeMap.get(row.assignee_user_id);
     if (!entry) {
-      entry = { user_id: row.assignee_user_id, name: row.assignee_name ?? "Unknown", counts: {} };
+      entry = { user_id: row.assignee_user_id, name: row.assignee_name ?? "Unknown", counts: {}, shared: 0, total: 0 };
       assigneeMap.set(row.assignee_user_id, entry);
     }
-    entry.counts[row.project_id] = (entry.counts[row.project_id] ?? 0) + row.cnt;
+    if (row.site_id === null) entry.shared += row.cnt;
+    else entry.counts[row.site_id] = (entry.counts[row.site_id] ?? 0) + row.cnt;
+    entry.total += row.cnt;
   }
-  const assigneeBreakdown = [...assigneeMap.values()].sort((a, b) => {
-    const aSum = Object.values(a.counts).reduce((s, n) => s + n, 0);
-    const bSum = Object.values(b.counts).reduce((s, n) => s + n, 0);
-    return bSum - aSum;
-  });
+  const assigneeBreakdown = [...assigneeMap.values()].sort((a, b) => b.total - a.total);
 
-  // ── Key updates feed (notes + docs across siblings) ─────────────────────────
+  // ── Site name map for labeling open tasks ──────────────────────────────────
+  const siteNameMap = new Map(sites.map((s) => [s.id, s.name]));
+
+  // ── Key updates ────────────────────────────────────────────────────────────
   const keyUpdatesFeed = [
     ...(notes.results ?? []).map((n) => ({
-      id: n.id, kind: "note" as const, body: n.body, author_name: n.author_name, created_at: n.created_at, project_id: n.project_id,
+      id: n.id, kind: "note" as const, body: n.body, author_name: n.author_name, created_at: n.created_at,
     })),
     ...((docRow.results ?? []).map((d) => ({
-      id: d.id, kind: "document" as const, body: `${d.name} uploaded`, author_name: null, created_at: d.created_at, project_id: d.project_id,
+      id: d.id, kind: "document" as const, body: `${d.name} uploaded`, author_name: null, created_at: d.created_at,
     }))),
   ]
     .sort((a, b) => (a.created_at > b.created_at ? -1 : 1))
     .slice(0, 6);
-
-  // Project name lookup so the client can label tasks/blockers with their site.
-  const projectNameMap = new Map(relatedProjects.map((r) => [r.id, r.name]));
 
   return c.json({
     project: {
@@ -353,6 +336,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
       customer_id: project.customer_id,
       crm_case_id: project.crm_case_id,
       updated_at: project.updated_at,
+      health: projectHealth,
     },
     stats: {
       overall_complete_pct: overallPct,
@@ -367,18 +351,18 @@ app.get("/:id/stakeholder-summary", async (c) => {
         critical: criticalCount,
       },
       days_to_final_go_live: daysToFinalGoLive,
-      target_go_live_date: finalGoLive,
+      target_go_live_date: finalGoLiveDate,
       next_call: nextCall,
-      site_count: relatedProjects.length,
+      site_count: sites.length,
     },
-    related_projects: relatedProjects,
+    sites: siteRollups,
     open_tasks: (openTasks.results ?? []).map((t) => ({
       id: t.id,
       title: t.title,
       due_date: t.due_date,
       priority: t.priority,
-      project_id: t.project_id,
-      project_name: projectNameMap.get(t.project_id) ?? null,
+      site_id: t.site_id,
+      site_name: t.site_id ? (siteNameMap.get(t.site_id) ?? null) : null,
       assignee_name: t.assignee_name,
       is_meeting: !!t.meeting_join_url,
     })),
@@ -390,8 +374,6 @@ app.get("/:id/stakeholder-summary", async (c) => {
       severity: b.severity,
       status: b.status,
       owner_name: b.owner_name,
-      project_id: b.project_id,
-      project_name: projectNameMap.get(b.project_id) ?? null,
     })),
     key_updates: keyUpdatesFeed,
     team: {
@@ -408,12 +390,6 @@ app.get("/:id/stakeholder-summary", async (c) => {
     },
   });
 });
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function qs(arr: unknown[]): string {
-  return arr.map(() => "?").join(",");
-}
 
 /**
  * Given a project's status-meeting cadence, return the next occurrence in
