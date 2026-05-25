@@ -224,6 +224,16 @@ export type Project = {
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
   customer_sharepoint_url: string | null;
+  // Recurring status-meeting cadence (drives "Next call" on the Dashboard when
+  // no closer milestone meeting is on the calendar). Persisted across all six
+  // status_meeting_* columns on the projects table; null on either side means
+  // no recurring cadence is configured.
+  status_meeting_title: string | null;
+  status_meeting_dow: number | null;          // 0 = Sun … 6 = Sat
+  status_meeting_time_local: string | null;   // "HH:MM"
+  status_meeting_timezone: string | null;     // IANA tz (e.g. "America/Los_Angeles")
+  status_meeting_duration_min: number | null;
+  status_meeting_join_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1240,6 +1250,12 @@ export const api = {
       solution_types?: SolutionType[];
       crm_case_id?: string | null;
       crm_opportunity_id?: string | null;
+      status_meeting_title?: string | null;
+      status_meeting_dow?: number | null;
+      status_meeting_time_local?: string | null;
+      status_meeting_timezone?: string | null;
+      status_meeting_duration_min?: number | null;
+      status_meeting_join_url?: string | null;
     }
   ) =>
     request<Project>(`/projects/${id}`, {

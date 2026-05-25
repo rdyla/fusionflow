@@ -23,6 +23,7 @@ import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import SitesPanel from "../components/project/SitesPanel";
+import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -1069,6 +1070,13 @@ export default function ProjectDetailPage() {
             }}
           />
 
+          {/* ── Recurring status meeting cadence (drives Dashboard's Next call tile) ─ */}
+          <StatusMeetingPanel
+            project={project}
+            canEdit={canEdit}
+            onSaved={(updated) => setProject(updated)}
+          />
+
           {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
           <div className="ms-section-card" style={{ padding: "12px 16px" }}>
             <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
@@ -1449,6 +1457,53 @@ export default function ProjectDetailPage() {
                                           ↪
                                         </button>
                                       )}
+                                      {/* Meeting URL — clicking the button lets editors add/edit/clear a
+                                          Zoom or Teams link on this task. The Dashboard's "Next call" tile
+                                          picks the earliest upcoming task with a URL.
+
+                                          canEdit  → always show, prompt-based edit (highlighted when set)
+                                          !canEdit → only show if URL set, just opens it */}
+                                      {canEdit ? (
+                                        <button
+                                          title={task.meeting_join_url ? `Meeting URL set — click to edit (${task.meeting_join_url})` : "Add a meeting URL"}
+                                          onClick={() => {
+                                            const current = task.meeting_join_url ?? "";
+                                            const next = window.prompt(
+                                              "Meeting join URL (Zoom or Teams). Leave blank to clear.",
+                                              current
+                                            );
+                                            if (next === null) return;
+                                            const trimmed = next.trim();
+                                            if (trimmed === current) return;
+                                            patchTask(task.id, { meeting_join_url: trimmed || null });
+                                          }}
+                                          style={{
+                                            background: task.meeting_join_url ? "rgba(34,197,94,0.12)" : "none",
+                                            border: `1px solid ${task.meeting_join_url ? "#86efac" : "#cbd5e1"}`,
+                                            color: task.meeting_join_url ? "#166534" : "#64748b",
+                                            borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                          }}
+                                        >
+                                          🎥
+                                        </button>
+                                      ) : task.meeting_join_url ? (
+                                        <a
+                                          title="Join meeting"
+                                          href={task.meeting_join_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          style={{
+                                            display: "inline-block",
+                                            background: "rgba(34,197,94,0.12)",
+                                            border: "1px solid #86efac",
+                                            color: "#166534",
+                                            borderRadius: 4, padding: "3px 8px", fontSize: 11, marginRight: 4,
+                                            textDecoration: "none",
+                                          }}
+                                        >
+                                          🎥
+                                        </a>
+                                      ) : null}
                                       {canEdit && (
                                         <button
                                           title="Delete task"
