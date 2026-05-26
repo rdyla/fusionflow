@@ -253,7 +253,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
             {links.sharepoint_url && (
               <LinkButton href={links.sharepoint_url}>SharePoint documents</LinkButton>
             )}
-            {links.crm_case_id && (
+            {links.crm_case_id && currentUserRole && currentUserRole !== "client" && currentUserRole !== "partner_ae" && (
               <CrmCaseLink caseId={links.crm_case_id} onOpenTab={onChangeTab ? () => onChangeTab("case") : undefined} />
             )}
           </div>
