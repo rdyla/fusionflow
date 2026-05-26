@@ -70,6 +70,9 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
+  /** Optional description typed by the user before clicking Upload. Captured
+   *  alongside the file so it lands on the SP driveItem as metadata. */
+  const [uploadDescription, setUploadDescription] = useState("");
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -153,12 +156,13 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
     const currentUrl = folderStack[folderStack.length - 1].url;
     setUploading(true);
     try {
-      const { file: uploaded } = await api.spUpload(currentUrl, file);
+      const { file: uploaded } = await api.spUpload(currentUrl, file, uploadDescription || null);
       setFiles((prev) => {
         const without = prev.filter((f) => f.name !== uploaded.name);
         return [uploaded, ...without];
       });
       showToast(`"${uploaded.name}" uploaded to SharePoint.`, "success");
+      setUploadDescription(""); // Clear after successful upload so next upload starts fresh
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Upload failed", "error");
     } finally {
@@ -308,12 +312,23 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
           </div>
 
           {/* Upload */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
             <input
               ref={fileInputRef}
               type="file"
               style={{ display: "none" }}
               onChange={handleUpload}
+            />
+            {/* Description input — optional but encouraged. Travels with the
+                file as SP driveItem.description so it's visible from the SP
+                web UI too, not just here. */}
+            <input
+              type="text"
+              value={uploadDescription}
+              onChange={(e) => setUploadDescription(e.target.value)}
+              placeholder="Description (optional) — e.g. 'phone bill March 2026'"
+              disabled={uploading}
+              style={{ flex: 1, minWidth: 240, fontSize: 13, padding: "6px 10px", border: "1px solid #cbd5e1", borderRadius: 6 }}
             />
             <button
               className="ms-btn-primary"
@@ -345,64 +360,172 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
           {files.length > 0 && (
             <div style={{ display: "grid", gap: 6 }}>
               {files.map((file) => (
-                <div key={file.id} className="ms-row-item">
-                  <div style={{ fontSize: 22, flexShrink: 0 }}>{fileIcon(file.mimeType, file.isFolder)}</div>
-
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    {file.isFolder ? (
-                      <button
-                        style={{
-                          background: "none", border: "none", padding: 0, cursor: "pointer",
-                          color: "#63c1ea", fontWeight: 600, fontSize: 14, textAlign: "left",
-                        }}
-                        onClick={() => navigateInto(file)}
-                      >
-                        {file.name}
-                      </button>
-                    ) : (
-                      <a
-                        href={file.webUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{ color: "#1e293b", fontWeight: 600, fontSize: 14, textDecoration: "none" }}
-                      >
-                        {file.name}
-                      </a>
-                    )}
-                    <div style={{ color: "#64748b", fontSize: 12, marginTop: 2, display: "flex", gap: 10 }}>
-                      {!file.isFolder && <span>{formatBytes(file.size)}</span>}
-                      <span>Modified {formatDate(file.lastModified)}</span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    {!file.isFolder && file.downloadUrl && (
-                      <a
-                        href={file.downloadUrl}
-                        download={file.name}
-                        className="ms-btn-ghost"
-                        style={{ textDecoration: "none" }}
-                      >
-                        ↓ Download
-                      </a>
-                    )}
-                    {!file.isFolder && (
-                      <button
-                        className="ms-btn-ghost"
-                        onClick={() => handleDelete(file)}
-                        disabled={deletingId === file.id}
-                        style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
-                      >
-                        {deletingId === file.id ? "Deleting…" : "Delete"}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                <FileRow
+                  key={file.id}
+                  file={file}
+                  isDeleting={deletingId === file.id}
+                  onNavigateInto={() => navigateInto(file)}
+                  onDelete={() => handleDelete(file)}
+                  onDescriptionSaved={(updated) =>
+                    setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
+                  }
+                />
               ))}
             </div>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── File row with inline description edit ────────────────────────────────────
+
+function FileRow({
+  file,
+  isDeleting,
+  onNavigateInto,
+  onDelete,
+  onDescriptionSaved,
+}: {
+  file: SPFile;
+  isDeleting: boolean;
+  onNavigateInto: () => void;
+  onDelete: () => void;
+  onDescriptionSaved: (updated: SPFile) => void;
+}) {
+  const { showToast } = useToast();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(file.description ?? "");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const { file: updated } = await api.spUpdateDescription(file.webUrl, draft || null);
+      onDescriptionSaved(updated);
+      setEditing(false);
+      showToast(draft.trim() ? "Description saved." : "Description cleared.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save description", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="ms-row-item" style={{ alignItems: "flex-start" }}>
+      <div style={{ fontSize: 22, flexShrink: 0, paddingTop: 2 }}>{fileIcon(file.mimeType, file.isFolder)}</div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        {file.isFolder ? (
+          <button
+            style={{
+              background: "none", border: "none", padding: 0, cursor: "pointer",
+              color: "#63c1ea", fontWeight: 600, fontSize: 14, textAlign: "left",
+            }}
+            onClick={onNavigateInto}
+          >
+            {file.name}
+          </button>
+        ) : (
+          <a
+            href={file.webUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#1e293b", fontWeight: 600, fontSize: 14, textDecoration: "none" }}
+          >
+            {file.name}
+          </a>
+        )}
+
+        {/* Description — clickable to edit (files only). Shows "Add description"
+            placeholder when empty so PMs/customers know they can fill it in. */}
+        {!file.isFolder && (
+          editing ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+              <input
+                autoFocus
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") save();
+                  else if (e.key === "Escape") { setEditing(false); setDraft(file.description ?? ""); }
+                }}
+                disabled={saving}
+                placeholder="What is this file?"
+                style={{ flex: 1, fontSize: 12, padding: "3px 8px", border: "1px solid #cbd5e1", borderRadius: 4 }}
+              />
+              <button
+                onClick={save}
+                disabled={saving}
+                style={{ background: "#03395f", color: "#fff", border: "none", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer" }}
+              >
+                {saving ? "…" : "Save"}
+              </button>
+              <button
+                onClick={() => { setEditing(false); setDraft(file.description ?? ""); }}
+                disabled={saving}
+                style={{ background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer", color: "#64748b" }}
+              >
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setDraft(file.description ?? ""); setEditing(true); }}
+              style={{
+                background: "none", border: "none", padding: 0, marginTop: 2,
+                fontSize: 12, color: file.description ? "#475569" : "#94a3b8",
+                cursor: "pointer", textAlign: "left", fontStyle: file.description ? "normal" : "italic",
+                lineHeight: 1.4,
+              }}
+              title="Click to edit description"
+            >
+              {file.description || "+ Add description"}
+            </button>
+          )
+        )}
+
+        <div style={{ color: "#64748b", fontSize: 11, marginTop: 4, display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {!file.isFolder && file.size != null && <span>{formatBytes(file.size)}</span>}
+          {file.createdAt && (
+            <span>
+              Uploaded {formatDate(file.createdAt)}
+              {file.createdByName && ` by ${file.createdByName}`}
+            </span>
+          )}
+          {file.lastModified && file.lastModified !== file.createdAt && (
+            <span>
+              Modified {formatDate(file.lastModified)}
+              {file.modifiedByName && file.modifiedByName !== file.createdByName && ` by ${file.modifiedByName}`}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+        {!file.isFolder && file.downloadUrl && (
+          <a
+            href={file.downloadUrl}
+            download={file.name}
+            className="ms-btn-ghost"
+            style={{ textDecoration: "none" }}
+          >
+            ↓ Download
+          </a>
+        )}
+        {!file.isFolder && (
+          <button
+            className="ms-btn-ghost"
+            onClick={onDelete}
+            disabled={isDeleting}
+            style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
+          >
+            {isDeleting ? "Deleting…" : "Delete"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

@@ -27,6 +27,17 @@ export type SPFile = {
   downloadUrl: string | null;
   isFolder: boolean;
   mimeType: string | null;
+  /** SP driveItem `description` — used to capture PM-supplied context like
+   *  "phone bill — March 2026" or "discovery workbook v2". Stored on SP
+   *  itself (not in our DB), so it's also visible from the SharePoint web UI. */
+  description: string | null;
+  /** Author / uploader identity from Graph. SP populates these from the
+   *  app's authenticating principal — since we use app-only auth, the
+   *  display name is typically the app's name. Better than nothing as a
+   *  "last touched by" hint; PMs can correlate to the upload timestamp. */
+  createdAt: string | null;
+  createdByName: string | null;
+  modifiedByName: string | null;
 };
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
@@ -258,16 +269,30 @@ export async function getSharePointLocations(env: GraphEnv, recordId: string): P
 
 // ── File operations via Microsoft Graph ────────────────────────────────────────
 
+type GraphIdentitySet = {
+  user?: { displayName?: string; email?: string };
+  application?: { displayName?: string };
+};
+
 type GraphDriveItem = {
   id: string;
   name: string;
   size?: number;
+  description?: string;
+  createdDateTime?: string;
   lastModifiedDateTime?: string;
   webUrl?: string;
   "@microsoft.graph.downloadUrl"?: string;
   folder?: object;
   file?: { mimeType?: string };
+  createdBy?: GraphIdentitySet;
+  lastModifiedBy?: GraphIdentitySet;
 };
+
+function identityName(set: GraphIdentitySet | undefined): string | null {
+  if (!set) return null;
+  return set.user?.displayName ?? set.user?.email ?? set.application?.displayName ?? null;
+}
 
 function mapDriveItem(item: GraphDriveItem): SPFile {
   return {
@@ -279,6 +304,10 @@ function mapDriveItem(item: GraphDriveItem): SPFile {
     downloadUrl: item["@microsoft.graph.downloadUrl"] ?? null,
     isFolder: !!item.folder,
     mimeType: item.file?.mimeType ?? null,
+    description: item.description ?? null,
+    createdAt: item.createdDateTime ?? null,
+    createdByName: identityName(item.createdBy),
+    modifiedByName: identityName(item.lastModifiedBy),
   };
 }
 
@@ -295,12 +324,26 @@ export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: stri
   return res.value.map(mapDriveItem);
 }
 
+async function graphPatchJson<T>(token: string, path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${GRAPH_API_BASE}${path}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Graph PATCH ${res.status} ${path}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function uploadToSharePoint(
   env: GraphEnv,
   folderAbsoluteUrl: string,
   filename: string,
   content: ArrayBuffer,
-  mimeType: string
+  mimeType: string,
+  description?: string | null
 ): Promise<SPFile> {
   const token = await getGraphToken(env);
   const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);
@@ -310,7 +353,44 @@ export async function uploadToSharePoint(
     ? `/drives/${driveId}/root:/${encodedPath}/${encodeURIComponent(filename)}:/content`
     : `/drives/${driveId}/root:/${encodeURIComponent(filename)}:/content`;
 
-  const item = await graphPut<GraphDriveItem>(token, uploadPath, content, mimeType);
+  let item = await graphPut<GraphDriveItem>(token, uploadPath, content, mimeType);
+
+  // Description is set in a second PATCH because PUT-content endpoint doesn't
+  // accept metadata. Best-effort: if PATCH fails, the file is still uploaded.
+  const trimmed = description?.trim();
+  if (trimmed) {
+    try {
+      item = await graphPatchJson<GraphDriveItem>(token, `/drives/${driveId}/items/${item.id}`, {
+        description: trimmed,
+      });
+    } catch (err) {
+      console.warn(`[uploadToSharePoint] description PATCH failed for ${item.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return mapDriveItem(item);
+}
+
+/**
+ * Update the description on an existing SharePoint file. Used by the
+ * PATCH /api/sharepoint/file/description endpoint so PMs can backfill
+ * context on files uploaded via the SharePoint web UI directly (no
+ * description) or correct mistakes.
+ *
+ * Pass an empty string (or null) to clear the description.
+ */
+export async function updateSharePointFileDescription(
+  env: GraphEnv,
+  fileWebUrl: string,
+  description: string | null
+): Promise<SPFile> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, fileWebUrl);
+  const encodedPath = graphPath(segments);
+  const lookup = await graphGet<{ id: string }>(token, `/drives/${driveId}/root:/${encodedPath}`);
+  const trimmed = description?.trim() ?? "";
+  const item = await graphPatchJson<GraphDriveItem>(token, `/drives/${driveId}/items/${lookup.id}`, {
+    description: trimmed, // Graph treats empty string as "clear"
+  });
   return mapDriveItem(item);
 }
 

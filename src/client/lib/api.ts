@@ -175,6 +175,14 @@ export type SPFile = {
   downloadUrl: string | null;
   isFolder: boolean;
   mimeType: string | null;
+  description: string | null;
+  /** SharePoint createdDateTime — when the file first landed in SP. */
+  createdAt: string | null;
+  /** Display name of the SP identity that created the item. With app-only
+   *  auth that's typically the app's name (e.g. "FusionFlow"); we surface
+   *  it anyway so users have at least a "by what process" hint. */
+  createdByName: string | null;
+  modifiedByName: string | null;
 };
 
 export type DashboardSummaryResponse = {
@@ -1500,10 +1508,12 @@ export const api = {
     request<{ locations: SPLocation[] }>(`/sharepoint/locations?recordId=${encodeURIComponent(recordId)}`),
   spFiles: (folderUrl: string) =>
     request<{ files: SPFile[] }>(`/sharepoint/files?url=${encodeURIComponent(folderUrl)}`),
-  spUpload: async (folderUrl: string, file: File): Promise<{ file: SPFile }> => {
+  spUpload: async (folderUrl: string, file: File, description?: string | null): Promise<{ file: SPFile }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_BASE}/sharepoint/upload?url=${encodeURIComponent(folderUrl)}`, {
+    const params = new URLSearchParams({ url: folderUrl });
+    if (description?.trim()) params.set("description", description.trim());
+    const res = await fetch(`${API_BASE}/sharepoint/upload?${params.toString()}`, {
       method: "POST",
       headers: { ...getImpersonationHeaders() },
       body: form,
@@ -1517,6 +1527,14 @@ export const api = {
   },
   spDelete: (webUrl: string) =>
     request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+  /** PATCH the description on an existing SharePoint file. Used by the inline
+   *  "Edit description" UI on the SharePoint tab so PMs can backfill context
+   *  on files uploaded via SP web directly. */
+  spUpdateDescription: (webUrl: string, description: string | null) =>
+    request<{ file: SPFile }>(`/sharepoint/file/description?webUrl=${encodeURIComponent(webUrl)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ description }),
+    }),
 
   /** Create (or adopt an existing) per-project SharePoint folder under the
    *  customer's SP root. Idempotent — server returns the existing URL if the
