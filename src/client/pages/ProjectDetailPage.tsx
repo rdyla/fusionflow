@@ -764,12 +764,15 @@ export default function ProjectDetailPage() {
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
         // External viewers (customers logged in as `client`, Zoom/RC AEs as
-        // `partner_ae`) see only the Dashboard tab — internal tabs would be
-        // confusing or partially gated for them. Internal staff see everything,
-        // with Dashboard first as the new default landing.
+        // `partner_ae`) see Dashboard + SharePoint — the SP tab is where they
+        // upload discovery workbooks, phone bills, CSRs, etc. into the
+        // project's SharePoint folder. Other internal tabs would be confusing
+        // for them. Internal staff see everything, with Dashboard first as
+        // the default landing.
         const externalOnly = currentUserRole === "client" || currentUserRole === "partner_ae";
+        const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
         const visibleTabs: DetailTab[] = externalOnly
-          ? ["dashboard"]
+          ? ["dashboard", ...externalSPTab]
           : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">

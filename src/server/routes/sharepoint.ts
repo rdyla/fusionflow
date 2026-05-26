@@ -5,6 +5,7 @@ import {
   listSharePointFiles,
   uploadToSharePoint,
   deleteSharePointFile,
+  updateSharePointFileDescription,
 } from "../services/graphService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -41,11 +42,13 @@ app.get("/files", async (c) => {
   }
 });
 
-// POST /api/sharepoint/upload?url=xxx
+// POST /api/sharepoint/upload?url=xxx&description=...
 // Uploads a file to a SharePoint folder. Expects multipart/form-data with a "file" field.
+// Description (optional) is set on the SP driveItem as a second PATCH after the content PUT.
 app.post("/upload", async (c) => {
   const folderUrl = c.req.query("url");
   if (!folderUrl) return c.json({ error: "url required" }, 400);
+  const description = c.req.query("description") ?? null;
 
   try {
     const formData = await c.req.formData();
@@ -58,13 +61,37 @@ app.post("/upload", async (c) => {
       folderUrl,
       file.name,
       content,
-      file.type || "application/octet-stream"
+      file.type || "application/octet-stream",
+      description
     );
 
     return c.json({ file: uploaded });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to upload to SharePoint";
     console.error("SharePoint upload error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// PATCH /api/sharepoint/file/description?webUrl=xxx
+// Body: { description: string | null }
+// Updates the description on an existing SharePoint file. Used to backfill
+// context on files uploaded via the SP web UI directly.
+app.patch("/file/description", async (c) => {
+  const webUrl = c.req.query("webUrl");
+  if (!webUrl) return c.json({ error: "webUrl required" }, 400);
+  let body: { description?: string | null };
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "JSON body required" }, 400);
+  }
+  try {
+    const file = await updateSharePointFileDescription(c.env, webUrl, body.description ?? null);
+    return c.json({ file });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update description";
+    console.error("SharePoint description update error:", message);
     return c.json({ error: message }, 500);
   }
 });
