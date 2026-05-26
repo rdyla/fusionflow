@@ -2,10 +2,15 @@
  * Shared SOW sections — content that doesn't vary across variants.
  *
  * Section 4 (Out of Scope), 5 (Assumptions), 6 (Customer Responsibilities),
- * 7 (Project Approach & Governance — RACI / cadence / escalation), 10
- * (Change Management), 11 (Acceptance Process), 12 (Terms & References),
+ * 10 (Change Management), 11 (Acceptance Process), 12 (Terms & References),
  * and 13 (Signature) are uniform across the SOW. Variants can override
  * via outOfScopeOverride etc. when needed.
+ *
+ * Section 7 (Governance / RACI / Cadence / Escalation / Status Reporting)
+ * and the dated milestone table that previously lived in Section 8 were
+ * removed in the May-2026 content review — they were too detailed for the
+ * customer-facing SOW. The content is parked in `archivedForCharter.ts`
+ * pending a future Project Charter / RFP-response renderer.
  *
  * Verbatim from the authoritative SOW template (docx, May 2026).
  */
@@ -84,54 +89,6 @@ export const CUSTOMER_RESPONSIBILITIES_GROUPS = [
       "Decommission and dispose of legacy equipment after project closure.",
     ],
   },
-];
-
-// ── Section 7 — RACI ────────────────────────────────────────────────────────
-// R = Responsible, A = Accountable, C = Consulted, I = Informed
-export const RACI_ROWS: Array<{ activity: string; pm: string; ie: string; sa: string; cust_pm: string; cust_tech: string; cust_signer: string }> = [
-  { activity: "Project plan & schedule",            pm: "A/R", ie: "I",   sa: "C",   cust_pm: "C",   cust_tech: "I", cust_signer: "I" },
-  { activity: "Discovery / Assessment & Design",    pm: "A",   ie: "R",   sa: "C",   cust_pm: "C",   cust_tech: "R", cust_signer: "I" },
-  { activity: "Customer validation rounds",          pm: "A",   ie: "C",   sa: "I",   cust_pm: "R",   cust_tech: "R", cust_signer: "—" },
-  { activity: "E911 / Emergency Services config",    pm: "C",   ie: "A/R", sa: "I",   cust_pm: "C",   cust_tech: "R", cust_signer: "—" },
-  { activity: "10 DLC SMS registration",             pm: "A",   ie: "R",   sa: "I",   cust_pm: "C",   cust_tech: "C", cust_signer: "—" },
-  { activity: "LOA / port order submission",         pm: "A/R", ie: "C",   sa: "I",   cust_pm: "C",   cust_tech: "I", cust_signer: "R (sign)" },
-  { activity: "Tenant build & provisioning",         pm: "A",   ie: "R",   sa: "C",   cust_pm: "I",   cust_tech: "I", cust_signer: "—" },
-  { activity: "UAT execution",                       pm: "A",   ie: "R",   sa: "I",   cust_pm: "C",   cust_tech: "R", cust_signer: "—" },
-  { activity: "UAT sign-off",                        pm: "C",   ie: "I",   sa: "I",   cust_pm: "C",   cust_tech: "I", cust_signer: "A/R" },
-  { activity: "Training delivery",                   pm: "C",   ie: "R",   sa: "I",   cust_pm: "C",   cust_tech: "I", cust_signer: "—" },
-  { activity: "Go-Live event & Day 1 Support",       pm: "A/R", ie: "R",   sa: "C",   cust_pm: "C",   cust_tech: "C", cust_signer: "I" },
-  { activity: "Go-Live acceptance",                  pm: "C",   ie: "I",   sa: "I",   cust_pm: "C",   cust_tech: "I", cust_signer: "A/R" },
-  { activity: "Project closure & CSM transition",    pm: "A/R", ie: "I",   sa: "C",   cust_pm: "C",   cust_tech: "I", cust_signer: "R (sign)" },
-];
-
-export const CADENCE_ROWS: Array<{ forum: string; frequency: string; participants: string; output: string }> = [
-  { forum: "Project Kickoff",            frequency: "Once",                  participants: "All stakeholders",       output: "Kickoff deck, signed-off plan" },
-  { forum: "PM Status Call",             frequency: "Weekly",                participants: "PF PM, Cust PM",         output: "Written status report" },
-  { forum: "Technical Working Session",  frequency: "Bi-weekly",             participants: "PF IE, Cust Tech",       output: "Updated workbook / design" },
-  { forum: "Executive Steering Review",  frequency: "Monthly",               participants: "Sponsors + PMs",         output: "Risk & milestone summary" },
-  { forum: "Go-Live Bridge",             frequency: "Per Go-Live",           participants: "Cutover team",           output: "Go-Live log + sign-off" },
-  { forum: "Day 1 Support Stand-up",     frequency: "Daily (Go-Live week)",  participants: "PF + Cust support",      output: "Issue log update" },
-  { forum: "CSM Transition Meeting",     frequency: "Project close",         participants: "PF PM, CSM, Cust PM",    output: "Handoff package & contacts" },
-];
-
-export const ESCALATION_ROWS: Array<{ level: string; pf: string; cust: string }> = [
-  { level: "L1 Tactical",   pf: "Project Manager",                       cust: "Project Manager" },
-  { level: "L2 Technical",  pf: "Solution Architect / Engineering Lead", cust: "Technical Lead" },
-  { level: "L3 Commercial", pf: "Director, Professional Services",       cust: "IT Director / Sponsor" },
-  { level: "L4 Executive",  pf: "VP, Professional Services",             cust: "Executive Sponsor" },
-];
-
-export const TIMELINE_MILESTONES: Array<{ id: string; name: string; target: string; predecessor: string }> = [
-  { id: "M1",  name: "SOW Executed & Project Initiated",          target: "T + 0 days",         predecessor: "—" },
-  { id: "M2",  name: "Internal & Customer Kickoff Complete",      target: "T + 5 business days", predecessor: "M1" },
-  { id: "M3",  name: "Planning: Assessment & Design Validated",   target: "T + 4 weeks",        predecessor: "M2" },
-  { id: "M4",  name: "Tenant Build & Provisioning Complete",      target: "T + 7 weeks",        predecessor: "M3" },
-  { id: "M5",  name: "Port Orders Submitted",                     target: "T + 5 weeks",        predecessor: "M3" },
-  { id: "M6",  name: "FOC Received from Carrier",                 target: "T + 7 weeks",        predecessor: "M5" },
-  { id: "M7",  name: "UAT Complete & Customer Sign-off",          target: "T + 9 weeks",        predecessor: "M4" },
-  { id: "M8",  name: "Go/No-Go Readiness Confirmed",              target: "T + 10 weeks",       predecessor: "M6, M7" },
-  { id: "M9",  name: "Go-Live & Day 1 Support",                   target: "T + 10 weeks",       predecessor: "M8" },
-  { id: "M10", name: "Project Closure & Transition to CSM",       target: "T + 11 weeks",       predecessor: "M9" },
 ];
 
 export const CHANGE_MANAGEMENT_STEPS = [

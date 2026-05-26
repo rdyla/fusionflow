@@ -12,10 +12,6 @@ import {
   SHARED_OUT_OF_SCOPE,
   SHARED_ASSUMPTIONS,
   CUSTOMER_RESPONSIBILITIES_GROUPS,
-  RACI_ROWS,
-  CADENCE_ROWS,
-  ESCALATION_ROWS,
-  TIMELINE_MILESTONES,
   CHANGE_MANAGEMENT_STEPS,
   ACCEPTANCE_DELIVERABLE_STEPS,
   E911_FOOTNOTE,
@@ -453,58 +449,71 @@ function section6(): string {
   `;
 }
 
-function section7(): string {
+/**
+ * Total project weeks derived from the duration band. Used by Section 7
+ * (Timeline & Milestones) to render week-based phase ranges. The bands map
+ * to the upper end of the range so the customer sees a conservative
+ * estimate; "custom" uses the explicit week count when supplied.
+ */
+function totalProjectWeeks(ctx: SowBuildContext): number {
+  if (ctx.durationBand === "4_6_weeks") return 6;
+  if (ctx.durationBand === "6_8_weeks") return 8;
+  if (ctx.durationBand === "8_12_weeks") return 12;
+  if (ctx.durationBand === "custom" && ctx.customWeeks && ctx.customWeeks > 0) return ctx.customWeeks;
+  return 10; // default when no band is set
+}
+
+/**
+ * Section 7 — Timeline & Milestones. Replaces the previously-rendered
+ * Section 7 (Governance/RACI/Cadence/Escalation, now archived) and the old
+ * dated-milestone table (T+N weeks). Per the May-2026 content review the
+ * SOW commits only to a target go-live; phase week-ranges are illustrative
+ * and tied to the proposed project duration so we don't promise specific
+ * dated milestones contractually.
+ */
+function section7Timeline(ctx: SowBuildContext): string {
+  const weeks = totalProjectWeeks(ctx);
+  // Phase distribution: Initiation = wk 1, Planning ~40%, Executing overlaps
+  // through ~70%, Monitoring/Controlling through ~85%, Go-Live + Closure at
+  // the tail. Ranges are inclusive and rounded to whole weeks.
+  const planEnd  = Math.max(2, Math.round(weeks * 0.4));
+  const execEnd  = Math.max(planEnd + 1, Math.round(weeks * 0.7));
+  const monEnd   = Math.max(execEnd + 1, Math.round(weeks * 0.85));
+  const goLive   = Math.max(monEnd + 1, weeks - 1);
+  const closing  = Math.max(goLive + 1, weeks);
+
+  const rows: Array<{ phase: string; weeks: string }> = [
+    { phase: "Initiation & Kickoff",                        weeks: "Week 1" },
+    { phase: "Planning — Assessment, Design, Porting Prep", weeks: `Weeks 1–${planEnd}` },
+    { phase: "Executing — Tenant Build & Porting Submission", weeks: `Weeks ${planEnd}–${execEnd}` },
+    { phase: "Monitoring / Controlling — UAT & Hardware",   weeks: `Weeks ${execEnd}–${monEnd}` },
+    { phase: "Go-Live & Day 1 Support",                     weeks: `Week ${goLive}` },
+    { phase: "Closure & CSM Transition",                    weeks: `Week ${closing}` },
+  ];
+
+  const goLiveLine = ctx.targetGoLiveDate
+    ? `<p>Anticipated go-live: <strong>${esc(fmtDate(ctx.targetGoLiveDate))}</strong>. This is the only date Packet Fusion commits to under this SOW; week-range estimates below are illustrative.</p>`
+    : `<p>An anticipated go-live date will be confirmed during Planning. Week-range estimates below are illustrative and not contractual milestones.</p>`;
+
   return `
     <section class="page-section">
-      <h1>7.  Project Approach &amp; Governance</h1>
-      <h3>7.1  Roles &amp; Responsibilities</h3>
-      <p>The following roles are committed for the duration of the engagement. R = Responsible, A = Accountable, C = Consulted, I = Informed.</p>
+      <h1>7.  Timeline &amp; Milestones</h1>
+      ${goLiveLine}
+      <p>This engagement is sized for approximately <strong>${weeks} weeks</strong> from project initiation to closure. The week ranges below are typical phase distribution; specific dates are finalized in the project plan produced during Planning, based on porting Firm Order Commitments (FOCs) and Customer site readiness.</p>
       <table class="data-table">
-        <thead><tr><th>Activity</th><th>PF PM</th><th>PF IE</th><th>PF SA</th><th>Cust PM</th><th>Cust Tech</th><th>Cust Signer</th></tr></thead>
-        <tbody>
-          ${RACI_ROWS.map((r) => `<tr><td>${esc(r.activity)}</td><td>${esc(r.pm)}</td><td>${esc(r.ie)}</td><td>${esc(r.sa)}</td><td>${esc(r.cust_pm)}</td><td>${esc(r.cust_tech)}</td><td>${esc(r.cust_signer)}</td></tr>`).join("")}
-        </tbody>
+        <thead><tr><th>Phase</th><th>Relative Weeks</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr><td>${esc(r.phase)}</td><td>${esc(r.weeks)}</td></tr>`).join("")}</tbody>
       </table>
-      <p class="muted"><strong>Key:</strong> PF = Packet Fusion; PM = Project Manager; IE = Implementation Engineer; SA = Solution Architect; Cust = Customer; CSM = Customer Success Manager.</p>
-
-      <h3>7.2  Communication Cadence</h3>
-      <table class="data-table">
-        <thead><tr><th>Forum</th><th>Frequency</th><th>Participants</th><th>Output</th></tr></thead>
-        <tbody>${CADENCE_ROWS.map((r) => `<tr><td>${esc(r.forum)}</td><td>${esc(r.frequency)}</td><td>${esc(r.participants)}</td><td>${esc(r.output)}</td></tr>`).join("")}</tbody>
-      </table>
-
-      <h3>7.3  Escalation Path</h3>
-      <p>Issues that cannot be resolved at the working level escalate as follows. Escalation is by mutual agreement and does not waive any party's rights under the MSA.</p>
-      <table class="data-table">
-        <thead><tr><th>Level</th><th>Packet Fusion</th><th>Customer</th></tr></thead>
-        <tbody>${ESCALATION_ROWS.map((r) => `<tr><td>${esc(r.level)}</td><td>${esc(r.pf)}</td><td>${esc(r.cust)}</td></tr>`).join("")}</tbody>
-      </table>
-
-      <h3>7.4  Status Reporting</h3>
-      <p>The Packet Fusion PM will distribute a written status report each week containing: progress against milestones, completed work, planned work, open risks and issues, decisions required, and updated forecast for upcoming milestones. The report serves as the project record of record.</p>
+      <p class="muted">Week 1 begins at SOW execution. Durations are working weeks and exclude federal holidays and Customer-declared blackout windows.</p>
     </section>
   `;
 }
 
-function section8(): string {
+function section8Pricing(variant: SowVariant, ctx: SowBuildContext, optServices: OptionalService[]): string {
   return `
     <section class="page-section">
-      <h1>8.  Timeline &amp; Milestones</h1>
-      <p>The following high-level schedule is illustrative and will be finalized in the project plan produced during Phase 1. Site-specific cutover dates are scheduled based on porting Firm Order Commitments (FOCs) and Customer site readiness.</p>
-      <table class="data-table">
-        <thead><tr><th>Milestone</th><th>Target</th><th>Predecessor</th></tr></thead>
-        <tbody>${TIMELINE_MILESTONES.map((m) => `<tr><td>${esc(m.id)}  — ${esc(m.name)}</td><td>${esc(m.target)}</td><td>${esc(m.predecessor)}</td></tr>`).join("")}</tbody>
-      </table>
-      <p class="muted">"T" = SOW execution date. Durations are working weeks and exclude federal holidays and Customer-declared blackout windows.</p>
-    </section>
-  `;
-}
-
-function section9(variant: SowVariant, ctx: SowBuildContext, optServices: OptionalService[]): string {
-  return `
-    <section class="page-section">
-      <h1>9.  Pricing &amp; Payment Schedule</h1>
-      <h3>9.1  Fee Summary</h3>
+      <h1>8.  Pricing &amp; Payment Schedule</h1>
+      <h3>8.1  Fee Summary</h3>
       <table class="data-table">
         <thead><tr><th>Service</th><th>Type</th><th>Fee</th></tr></thead>
         <tbody>
@@ -516,37 +525,37 @@ function section9(variant: SowVariant, ctx: SowBuildContext, optServices: Option
         </tbody>
       </table>
 
-      <h3>9.2  Optional Services</h3>
+      <h3>8.2  Optional Services</h3>
       <table class="data-table">
         <thead><tr><th>Optional Service</th><th>Unit</th><th>Fee</th></tr></thead>
         <tbody>${optServices.map((o) => `<tr><td>${esc(o.name)}</td><td>${esc(o.unit)}</td><td class="num">${esc(o.fee)}</td></tr>`).join("")}</tbody>
       </table>
       <p class="muted">Optional services are added by mutual written agreement (email accepted) and invoiced upon completion of the optional engagement, unless otherwise stated.</p>
 
-      <h3>9.3  Invoicing Milestones</h3>
+      <h3>8.3  Invoicing Milestones</h3>
       <p>Where fees are billable, Packet Fusion will invoice against the following milestones. Invoices are net 30 from issue date unless the MSA states otherwise.</p>
       <table class="data-table">
         <thead><tr><th>Trigger</th><th>Percent</th><th>Amount</th></tr></thead>
         <tbody>
-          <tr><td>SOW Execution</td><td>50%</td><td>Per Section 9.1</td></tr>
-          <tr><td>Go-Live (M9) and Customer acceptance</td><td>50%</td><td>Per Section 9.1</td></tr>
+          <tr><td>SOW Execution</td><td>50%</td><td>Per Section 8.1</td></tr>
+          <tr><td>Go-Live and Customer acceptance</td><td>50%</td><td>Per Section 8.1</td></tr>
         </tbody>
       </table>
       ${ctx.projectTotal === 0 ? `<p class="muted">Where the Preferred Client Discount results in a Project Total of $0.00, no invoices are issued for the base scope. Optional services and change orders are invoiced separately.</p>` : ""}
 
-      <h3>9.4  Expenses</h3>
+      <h3>8.4  Expenses</h3>
       <p>All services are delivered remotely unless otherwise stated. Any pre-approved travel will be invoiced at cost per the MSA travel &amp; expense policy.</p>
 
-      <h3>9.5  Taxes</h3>
+      <h3>8.5  Taxes</h3>
       <p>All fees are exclusive of applicable sales, use, and similar transaction taxes. The Customer is responsible for any such taxes other than taxes based on Packet Fusion's net income.</p>
     </section>
   `;
 }
 
-function section10(): string {
+function section9ChangeMgmt(): string {
   return `
     <section class="page-section">
-      <h1>10.  Change Management</h1>
+      <h1>9.  Change Management</h1>
       <p>Changes to scope, schedule, fees, deliverables, or assumptions require a written Change Order signed by both parties before work on the change commences. The process is intentionally lightweight but explicit:</p>
       ${CHANGE_MANAGEMENT_STEPS.map((s) => `<p><strong>${esc(s.name)}.</strong> ${esc(s.text)}</p>`).join("")}
       <p><strong>Customer-caused delay.</strong> Delays in performance or delivery caused by the Customer — including without limitation delays in completing the implementation workbook, approving the call-flow design, supplying LOAs/CSRs, or remediating network findings — may result in schedule adjustment and/or additional fees, processed through this same change-order procedure.</p>
@@ -554,46 +563,48 @@ function section10(): string {
   `;
 }
 
-function section11(): string {
+function section10Acceptance(): string {
   return `
     <section class="page-section">
-      <h1>11.  Acceptance Process</h1>
-      <h3>11.1  Deliverable Acceptance</h3>
+      <h1>10.  Acceptance Process</h1>
+      <h3>10.1  Deliverable Acceptance</h3>
       <p>For each deliverable listed in Section 3, the following process applies:</p>
       ${bullets(ACCEPTANCE_DELIVERABLE_STEPS)}
 
-      <h3>11.2  Site Go-Live Acceptance</h3>
+      <h3>10.2  Site Go-Live Acceptance</h3>
       <p>Each site is deemed accepted at Go-Live when: (a) ported numbers complete; (b) test calls succeed in both directions; (c) E911 returns correct location data; and (d) the Customer site lead signs off on the cutover form. Outstanding cosmetic items are captured for Day 1 Support follow-up.</p>
 
-      <h3>11.3  Project Closure</h3>
-      <p>The project is closed when: (a) all deliverables in Section 3 have been accepted; (b) all sites have completed Day 1 Support; and (c) the Project Closure Memo (D10) is signed by both PMs. Any open items at closure are deferred to a future change order or to the Customer's ongoing support relationship.</p>
+      <h3>10.3  Project Closure</h3>
+      <p>The project is closed when: (a) all deliverables in Section 3 have been accepted; (b) all sites have completed Day 1 Support; and (c) the Project Closure Memo is signed by both PMs. Any open items at closure are deferred to a future change order or to the Customer's ongoing support relationship.</p>
     </section>
   `;
 }
 
-function section12(): string {
+function section11Terms(): string {
   return `
     <section class="page-section">
-      <h1>12.  Terms &amp; References</h1>
-      <h3>12.1  Master Services Agreement</h3>
+      <h1>11.  Terms &amp; References</h1>
+      <h3>11.1  Master Services Agreement</h3>
       <p>This SOW is governed by the Packet Fusion Master Services Agreement (the "MSA") executed between the parties and incorporated here by reference. The MSA controls all terms not expressly modified by this SOW, including confidentiality, intellectual property, warranty, indemnification, limitation of liability, term and termination, and governing law.</p>
-      <h3>12.2  Confidentiality</h3>
+      <h3>11.2  Confidentiality</h3>
       <p>Each party will protect the Confidential Information of the other party as required by the MSA. Project deliverables produced under this SOW are considered Confidential Information of the Customer except for Packet Fusion's pre-existing methodologies, templates, and know-how, which remain the property of Packet Fusion.</p>
-      <h3>12.3  Data Handling</h3>
+      <h3>11.3  Data Handling</h3>
       <p>Packet Fusion will access only the Customer data and systems necessary to deliver the services in this SOW. Any Customer data received will be handled per the MSA and applicable privacy laws. The Customer is responsible for ensuring its vendor tenant and downstream integrations comply with its own regulatory requirements (e.g., HIPAA for covered entities).</p>
-      <h3>12.4  Order of Precedence</h3>
+      <h3>11.4  Order of Precedence</h3>
       <p>In the event of a conflict between documents, the order of precedence is: (1) the MSA; (2) any signed Change Order to this SOW; (3) this SOW; (4) any attached appendices.</p>
-      <h3>12.5  Entire Agreement</h3>
+      <h3>11.5  Entire Agreement</h3>
       <p>This SOW, together with the MSA and any signed Change Orders, constitutes the entire agreement of the parties with respect to its subject matter and supersedes all prior or contemporaneous communications, representations, or agreements, whether oral or written, relating to that subject matter.</p>
     </section>
   `;
 }
 
-function section13(ctx: SowBuildContext): string {
+function section12Signature(ctx: SowBuildContext): string {
   // Per Ryan: sig block names parties only — no individual names.
+  // .signature-page class enforces page-break-before so the signature always
+  // starts on a fresh sheet — no orphaned half-page sig blocks.
   return `
-    <section class="page-section">
-      <h1>13.  Authorization &amp; Signature</h1>
+    <section class="page-section signature-page">
+      <h1>12.  Authorization &amp; Signature</h1>
       <p>By signing below, each party agrees to the terms of this Statement of Work and authorizes Packet Fusion to proceed with the services described herein.</p>
       <table class="sig-table">
         <tbody>
@@ -705,7 +716,9 @@ function styles(): string {
     .snap-tile { background: rgba(0,59,92,0.04); border: 1px solid ${GREY}; border-radius: 6px; padding: 12px 14px; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .snap-value { font-size: 22pt; font-weight: 800; color: ${NAVY}; }
     .snap-label { font-size: 9pt; color: #555; margin-top: 4px; text-transform: uppercase; letter-spacing: 0.06em; }
-    /* Signature block */
+    /* Signature block — always starts on its own page so the sig lines + label
+       cluster never gets orphaned at the bottom of a prior section. */
+    .signature-page { page-break-before: always; break-before: page; }
     .sig-table { width: 100%; margin-top: 16px; }
     .sig-cell { width: 48%; padding: 0 12px; vertical-align: top; }
     .sig-party { font-size: 11pt; font-weight: 800; color: ${NAVY}; margin-bottom: 18px; }
@@ -755,13 +768,16 @@ export function buildSowHtml(args: {
     section4(variant),
     section5(),
     section6(),
-    section7(),
-    section8(),
-    section9(variant, ctx, variant.optionalServicesTable),
-    section10(),
-    section11(),
-    section12(),
-    section13(ctx),
+    // Section 7 was Project Approach & Governance (RACI / cadence / escalation
+    // / status reporting). Removed per May-2026 content review — too detailed
+    // for the customer-facing SOW; content lives in archivedForCharter.ts for
+    // a future Project Charter / RFP renderer.
+    section7Timeline(ctx),
+    section8Pricing(variant, ctx, variant.optionalServicesTable),
+    section9ChangeMgmt(),
+    section10Acceptance(),
+    section11Terms(),
+    section12Signature(ctx),
   ].join("\n");
 
   return `<!doctype html><html><head><meta charset="utf-8"><title>SOW — ${esc(ctx.customerName)}</title><style>${styles()}</style></head><body>${watermark}${body}</body></html>`;
