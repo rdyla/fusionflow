@@ -12,6 +12,14 @@ export interface AppUser {
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions
   cs_permission?: "none" | "user" | "power_user"; // cloud support calculator access
+  // Self-editable profile fields (per migration 0090). avatar_url is the
+  // resolved URL — either /api/users/:id/avatar when the user has uploaded
+  // a custom one, or the cached Zoom CDN URL for internal staff with no
+  // upload. title / phone / scheduler_url are free-form.
+  avatar_url?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  scheduler_url?: string | null;
 }
 
 export interface AuthContext {

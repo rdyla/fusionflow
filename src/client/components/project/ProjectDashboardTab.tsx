@@ -49,7 +49,7 @@ function dynamicsCaseUrl(caseId: string): string {
   return `https://packetfusioncrm.crm.dynamics.com/main.aspx?etn=incident&id=${caseId}&pagetype=entityrecord`;
 }
 
-export default function ProjectDashboardTab({ projectId, onChangeTab }: { projectId: string; onChangeTab?: (tab: string) => void }) {
+export default function ProjectDashboardTab({ projectId, currentUserRole, onChangeTab }: { projectId: string; currentUserRole?: string; onChangeTab?: (tab: string) => void }) {
   const [data, setData] = useState<StakeholderSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -228,6 +228,11 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
             {stats.next_call?.join_url && (
               <LinkButton href={stats.next_call.join_url} primary>
                 Join {fmtCallDate(stats.next_call.scheduled_at)} call
+              </LinkButton>
+            )}
+            {(currentUserRole === "client" || currentUserRole === "partner_ae") && team.pm?.scheduler_url && (
+              <LinkButton href={team.pm.scheduler_url}>
+                Schedule with {team.pm.name ?? "PM"}
               </LinkButton>
             )}
             {links.sharepoint_url && (

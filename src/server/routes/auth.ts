@@ -25,4 +25,30 @@ app.get("/users", async (c) => {
   return c.json(rows.results ?? []);
 });
 
+// GET /api/users/:userId/avatar?v=stamp
+// Streams the user's uploaded R2 avatar. Cache buster `v` doesn't affect
+// the lookup (we always serve the latest avatar_r2_key); it just changes
+// the URL when the user re-uploads so browser caches invalidate.
+//
+// 404 when the user has no uploaded avatar — the client should fall back
+// to whatever avatar_url it already has cached (typically the Zoom CDN URL).
+app.get("/users/:userId/avatar", async (c) => {
+  const userId = c.req.param("userId");
+  const row = await c.env.DB
+    .prepare("SELECT avatar_r2_key FROM users WHERE id = ? LIMIT 1")
+    .bind(userId)
+    .first<{ avatar_r2_key: string | null }>();
+  if (!row?.avatar_r2_key) return c.json({ error: "No uploaded avatar" }, 404);
+
+  const obj = await c.env.R2.get(row.avatar_r2_key);
+  if (!obj) return c.json({ error: "Avatar object missing on R2" }, 404);
+
+  const headers = new Headers();
+  headers.set("Content-Type", obj.httpMetadata?.contentType ?? "application/octet-stream");
+  // Cache for an hour — the URL changes on re-upload (cache buster) so this
+  // is safe. Short enough that user-driven changes propagate quickly anyway.
+  headers.set("Cache-Control", "private, max-age=3600");
+  return new Response(obj.body, { headers });
+});
+
 export default app;
