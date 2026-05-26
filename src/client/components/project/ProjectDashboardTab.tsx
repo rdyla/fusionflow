@@ -176,40 +176,37 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
 
           {assignee_phase_breakdown.rows.length > 0 && assignee_phase_breakdown.phase_columns.length > 0 && (
             <>
-              <Subheading>By assignee</Subheading>
-              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", tableLayout: "fixed" }}>
-                <thead>
-                  <tr>
-                    <th style={{ padding: "4px 0", textAlign: "left", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}></th>
-                    {assignee_phase_breakdown.phase_columns.map((name) => (
-                      <th key={name} title={name} style={{ padding: "4px 2px", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
-                        {abbreviatePhase(name)}
-                      </th>
-                    ))}
-                    <th style={{ padding: "4px 2px", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, letterSpacing: "0.04em" }}>
-                      TOT
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {assignee_phase_breakdown.rows.slice(0, 8).map((a) => (
-                    <tr key={a.user_id}>
-                      <td style={{ padding: "4px 0", color: TEXT_MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</td>
-                      {assignee_phase_breakdown.phase_columns.map((name) => {
-                        const v = a.counts[name] ?? 0;
-                        return (
-                          <td key={name} style={{ padding: "4px 2px", textAlign: "right" }}>
-                            <strong style={{ color: v > 0 ? TEXT_PRIMARY : TEXT_FAINT }}>{v}</strong>
-                          </td>
-                        );
-                      })}
-                      <td style={{ padding: "4px 2px", textAlign: "right" }}>
-                        <strong style={{ color: PF_BLUE }}>{a.total}</strong>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Subheading>Open tasks remaining by assignee</Subheading>
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                {assignee_phase_breakdown.rows.slice(0, 8).map((a) => (
+                  <div key={a.user_id}>
+                    <div style={{
+                      display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                      paddingBottom: 4, marginBottom: 4, borderBottom: `1px solid ${PF_BORDER}`,
+                    }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY }}>{a.name}</span>
+                      <span style={{ fontSize: 11, color: TEXT_MUTED }}>
+                        <strong style={{ color: PF_BLUE }}>{a.total}</strong> remaining
+                      </span>
+                    </div>
+                    <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                      <tbody>
+                        {assignee_phase_breakdown.phase_columns.map((name) => {
+                          const v = a.counts[name] ?? 0;
+                          return (
+                            <tr key={name}>
+                              <td style={{ padding: "2px 0", color: v > 0 ? TEXT_MUTED : TEXT_FAINT }}>{name}</td>
+                              <td style={{ padding: "2px 0", textAlign: "right" }}>
+                                <strong style={{ color: v > 0 ? TEXT_PRIMARY : TEXT_FAINT }}>{v}</strong>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ))}
+              </div>
             </>
           )}
         </Panel>
@@ -551,21 +548,6 @@ function Center({ children, error }: { children: React.ReactNode; error?: boolea
 }
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
-
-/**
- * Compact column header for phase-name tables. Single-word phases use the
- * first 4 chars uppercased (Initiation → INIT, Planning → PLAN). Multi-
- * word phases use the initial of each word (Monitoring/Controlling → MC,
- * Go Live / Production → GLP). The full name is supplied via `title` so
- * hovering surfaces it.
- */
-function abbreviatePhase(name: string): string {
-  const cleaned = name.replace(/[^A-Za-z\s/]/g, "").trim();
-  const words = cleaned.split(/[\s/]+/).filter(Boolean);
-  if (words.length === 0) return "—";
-  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
-  return words.slice(0, 3).map((w) => w[0]?.toUpperCase() ?? "").join("");
-}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
