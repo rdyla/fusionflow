@@ -95,6 +95,25 @@ type Props = {
 
 // ── Helpers — pluck counts from sow_data + needs_assessment ──────────────────
 
+/**
+ * Fetch an image URL and return it as a base64 data URL. Used by the Word
+ * exporter to inline the logo + hero so the resulting .doc is self-
+ * contained when the user emails it. Relative / dev-server URLs (e.g.
+ * http://localhost:5173/…) wouldn't resolve once the file leaves the
+ * browser.
+ */
+async function fetchAsDataUrl(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function num(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = Number(v);
@@ -142,6 +161,7 @@ export default function ScopeOfWorkDocument({
 }: Props) {
   const { showToast } = useToast();
   const [generating, setGenerating] = useState(false);
+  const [downloadingDoc, setDownloadingDoc] = useState(false);
   const [savingMsa, setSavingMsa] = useState(false);
   const [msaDateDraft, setMsaDateDraft] = useState(sowMetadata?.msa_date ?? "");
   // Drafts for the timeline-derivation inputs. When blank, the renderer
@@ -250,45 +270,73 @@ export default function ScopeOfWorkDocument({
    *
    * Uses the Microsoft "Word HTML" format — an officially-supported Word
    * format since Word 2003 that wraps HTML in the Office XML namespaces.
-   * Word opens it natively, Track Changes works, and the customer can
-   * Save As .docx in one click if they need OOXML on their end.
+   * Word opens it natively, Track Changes works, and the user can Save
+   * As .docx in one click if they need OOXML.
    *
-   * Chose this over a real OOXML library (html-to-docx etc.) because:
-   *   - Zero deps (no Buffer polyfill, no bundle bloat)
-   *   - Lossless content fidelity — Word renders our HTML/CSS faithfully
-   *   - Real .docx libraries downgrade complex tables and lose styling
+   * Two adaptations for Word fidelity:
+   *   1. Logo + hero illustration are fetched and inlined as base64 data
+   *      URLs so the .doc is self-contained when emailed (relative URLs
+   *      won't resolve once the file leaves the browser).
+   *   2. The renderer is invoked with `forWordExport: true`, which
+   *      restructures the cover to put the hero in an <img> tag instead
+   *      of a CSS background — Word handles inline images cleanly but
+   *      not CSS background-image on sections.
    *
-   * Trade-off: print-only CSS (`@page` margins, hero background images,
-   * the BUDGETARY watermark) won't survive — those are layout polish for
-   * the print/PDF path. The text and table content render fully.
+   * Trade-off: print-only CSS (@page margins, BUDGETARY watermark
+   * transform) still won't survive. Text + tables + cover image all
+   * render in Word.
    */
-  function downloadAsWord() {
-    const html = buildSowDocHtml();
-    // Inject Office namespaces + MSO instructions onto the existing
-    // doctype/html shell. The doctype gets dropped (Word doesn't expect
-    // a doctype in Word HTML); namespaces signal "treat me as a Word doc".
-    const wordHtml = html
-      .replace(/^<!doctype html>/i, "")
-      .replace(
-        /^<html>/,
-        `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">`,
-      )
-      .replace(
-        /<head>/,
-        `<head>\n<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/><w:DoNotShowInsertionsAndDeletions/></w:WordDocument></xml><![endif]-->`,
-      );
+  async function downloadAsWord() {
+    setDownloadingDoc(true);
+    try {
+      const resolve = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
+      const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
 
-    // UTF-8 BOM so Word picks up the encoding without prompting.
-    const blob = new Blob(["﻿", wordHtml], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${safeName} - SOW ${ctx.sowNumber}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+      // Inline images so the resulting .doc is portable.
+      const [logoDataUrl, heroDataUrl] = await Promise.all([
+        fetchAsDataUrl(resolve(logoUrl)),
+        heroAsset ? fetchAsDataUrl(resolve(heroAsset)) : Promise.resolve(null),
+      ]);
+
+      const html = buildSowHtml({
+        variant, ctx,
+        logoUrl: logoDataUrl,
+        heroImageUrl: heroDataUrl,
+        kickoffDate: null,
+        goLiveDate: null,
+        forWordExport: true,
+      });
+
+      // Inject Office namespaces + MSO instructions onto the existing
+      // doctype/html shell. Drop the doctype (Word doesn't expect one);
+      // the namespaces tell Word "treat me as a Word doc."
+      const wordHtml = html
+        .replace(/^<!doctype html>/i, "")
+        .replace(
+          /^<html>/,
+          `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">`,
+        )
+        .replace(
+          /<head>/,
+          `<head>\n<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/><w:DoNotShowInsertionsAndDeletions/></w:WordDocument></xml><![endif]-->`,
+        );
+
+      // UTF-8 BOM so Word picks up the encoding without prompting.
+      const blob = new Blob(["﻿", wordHtml], { type: "application/msword" });
+      const url = URL.createObjectURL(blob);
+      const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${safeName} - SOW ${ctx.sowNumber}.doc`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to build Word export", "error");
+    } finally {
+      setDownloadingDoc(false);
+    }
   }
 
   async function saveMsaDate() {
@@ -346,9 +394,10 @@ export default function ScopeOfWorkDocument({
         <button
           className="ms-btn-secondary"
           onClick={downloadAsWord}
+          disabled={downloadingDoc}
           title="Download a Word-compatible file the customer can red-line with Track Changes. Opens directly in Word; save-as .docx if customer needs OOXML."
         >
-          Download for Word (.doc)
+          {downloadingDoc ? "Building…" : "Download for Word (.doc)"}
         </button>
         {variant.isStub && (
           <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
