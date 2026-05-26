@@ -23,6 +23,13 @@ import type { SowBuildContext } from "../../../shared/sowTemplate/types";
 import { api } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import logoUrl from "../../assets/packetfusion-fullcolor.png";
+import zoomUcaasHero from "../../assets/sow-hero-zoom-ucaas.jpg";
+
+// Per-variant hero illustration map. Stubs and variants without artwork
+// resolve to undefined; the renderer falls back to a text-only cover.
+const HERO_URLS: Record<string, string> = {
+  zoom_ucaas: zoomUcaasHero,
+};
 
 // ── Sow metadata blob shape (mirrors server) ─────────────────────────────────
 
@@ -159,9 +166,12 @@ export default function ScopeOfWorkDocument({
   };
 
   function openPrintWindow() {
+    const resolve = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
+    const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
     const html = buildSowHtml({
       variant, ctx,
-      logoUrl: logoUrl.startsWith("http") ? logoUrl : `${window.location.origin}${logoUrl}`,
+      logoUrl: resolve(logoUrl),
+      heroImageUrl: heroAsset ? resolve(heroAsset) : null,
       kickoffDate: null,
       goLiveDate: null,
     });

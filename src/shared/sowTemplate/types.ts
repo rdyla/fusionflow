@@ -150,4 +150,9 @@ export type SowVariant = {
   showE911Footnote: boolean;
   /** Whether this variant is FULLY built (false = stub with placeholder content). */
   isStub: boolean;
+  /** Logical key for the cover-page hero illustration (e.g. "zoom_ucaas").
+   *  Resolved to an actual asset URL by the client and passed into
+   *  buildSowHtml as `heroImageUrl`. Stubs leave this undefined; the
+   *  renderer skips the full-bleed hero page when not set. */
+  heroImageKey?: string;
 };

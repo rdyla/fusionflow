@@ -19,6 +19,7 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
   projectReferenceTemplate: "Zoom UCaaS Migration – {customer}",
   isStub: false,
   showE911Footnote: true,
+  heroImageKey: "zoom_ucaas",
 
   snapshotTiles: [
     { label: "Locations",        value: (ctx) => String(ctx.locationCount || 0) },

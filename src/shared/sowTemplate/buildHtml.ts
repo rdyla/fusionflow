@@ -62,23 +62,60 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string): string {
-  // Faithful port of the docx title page:
-  //   - Logo at top-left, "Confidential" stamp at top-right
-  //   - "STATEMENT OF WORK" large title
-  //   - Subtitle = variant.productLine ("Zoom UCaaS Professional Services")
-  //   - "Document Control" header
-  //   - 2-column PREPARED FOR / PREPARED BY block
-  //   - SOW Details two-column table (Number, Issue Date, MSA, Project Ref, Status)
-  //   - Revision History table
-  //   - Confidentiality notice at the bottom
+function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null): string {
+  // The docx title page is a full-bleed hero illustration (navy/teal cloud +
+  // UCaaS ecosystem) with the title text overlaid. Document Control + the
+  // metadata/revision tables sit on page 2.
   //
-  // All of that lives on one cover page; the executive summary and the rest
-  // of the doc come on subsequent pages.
+  // If the variant declares a heroImageKey AND the client resolved a URL for
+  // it, we render the hero variant of the cover. Stubs and variants without
+  // hero artwork fall back to a text-only cover (still has the logo header,
+  // title, subtitle — just no illustration).
 
   const stubBanner = variant.isStub
     ? `<div class="stub-banner">STUB — content for ${esc(variant.productLine)} is placeholder. Do not issue without review.</div>`
     : "";
+
+  if (heroImageUrl) {
+    return `
+      <section class="cover cover--hero" style="background-image: linear-gradient(rgba(0,30,50,0.05), rgba(0,30,50,0.25)), url('${heroImageUrl}');">
+        ${stubBanner}
+        <div class="cover-head">
+          <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo cover-logo--on-hero" />
+          <div class="cover-confidential cover-confidential--on-hero">CONFIDENTIAL</div>
+        </div>
+        <div class="cover-hero-text">
+          <div class="cover-title cover-title--on-hero">STATEMENT OF WORK</div>
+          <div class="cover-subtitle cover-subtitle--on-hero">${esc(variant.productLine)}</div>
+          <div class="cover-customer-line">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
+          <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+        </div>
+      </section>
+    `;
+  }
+
+  // Fallback (no hero): text-only cover with the logo header + title block.
+  return `
+    <section class="cover">
+      ${stubBanner}
+      <div class="cover-head">
+        <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
+        <div class="cover-confidential">CONFIDENTIAL</div>
+      </div>
+      <div class="cover-title-block cover-title-block--center">
+        <div class="cover-title">STATEMENT OF WORK</div>
+        <div class="cover-subtitle">${esc(variant.productLine)}</div>
+        <div class="cover-customer-line" style="margin-top:24px;">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
+        <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+      </div>
+    </section>
+  `;
+}
+
+function documentControlPage(_variant: SowVariant, ctx: SowBuildContext): string {
+  // Document Control sits on its own page after the hero cover. Carries the
+  // 2-col Prepared For/By, the SOW details table, revision history, and the
+  // confidentiality notice.
 
   const preparedForLines: string[] = [esc(ctx.customerName)];
   if (ctx.customerPrimaryContact?.name)  preparedForLines.push(esc(ctx.customerPrimaryContact.name));
@@ -109,27 +146,11 @@ function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string): 
     : `<tr><td colspan="4" class="muted" style="text-align:center;">No revisions recorded yet.</td></tr>`;
 
   return `
-    <section class="cover">
-      ${stubBanner}
-
-      <div class="cover-head">
-        <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
-        <div class="cover-confidential">CONFIDENTIAL</div>
-      </div>
-
-      <div class="cover-title-block">
-        <div class="cover-title">STATEMENT OF WORK</div>
-        <div class="cover-subtitle">${esc(variant.productLine)}</div>
-      </div>
-
+    <section class="page-section doc-control">
       <div class="cover-section-header">Document Control</div>
-
       <table class="cover-prepared">
         <thead>
-          <tr>
-            <th>PREPARED FOR</th>
-            <th>PREPARED BY</th>
-          </tr>
+          <tr><th>PREPARED FOR</th><th>PREPARED BY</th></tr>
         </thead>
         <tbody>
           <tr>
@@ -138,26 +159,23 @@ function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string): 
           </tr>
         </tbody>
       </table>
-
       <table class="cover-details">
         <tbody>
           ${detailsRows.map((r) => `<tr><th>${esc(r.label)}</th><td>${r.value}</td></tr>`).join("")}
         </tbody>
       </table>
-
       <div class="cover-section-header" style="margin-top:18px;">Revision History</div>
       <table class="data-table cover-revisions">
         <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Description of Change</th></tr></thead>
         <tbody>${revisionRows}</tbody>
       </table>
-
       <p class="confidentiality"><strong>Confidentiality Notice.</strong> This document contains confidential and proprietary information of Packet Fusion, Inc. and the Customer named above. It is provided solely for the purpose of evaluating and executing the services described herein and may not be reproduced, distributed, or disclosed to any third party without the prior written consent of Packet Fusion.</p>
     </section>
   `;
 }
 
-// Title-page now embeds the revision history; the separate revisionHistory()
-// section that used to follow the cover is no longer needed.
+// Title-page now embeds the revision history (or it's on the Document Control
+// page); the separate revisionHistory() block is no longer needed.
 function revisionHistory(_ctx: SowBuildContext): string { return ""; }
 
 function executiveSummary(variant: SowVariant, ctx: SowBuildContext): string {
@@ -550,14 +568,36 @@ function styles(): string {
     .pricing-summary .total-row td { border-top: 2px solid ${NAVY}; background: rgba(0,59,92,0.04); }
     .page-section { page-break-inside: auto; margin-bottom: 14px; }
     /* Cover */
-    .cover { padding: 0; min-height: 9in; position: relative; page-break-after: always; }
+    .cover { padding: 0; min-height: 9.6in; position: relative; page-break-after: always; }
     .cover-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 3px solid ${GREEN}; margin-bottom: 38px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .cover-logo { height: 42px; }
     .cover-confidential { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.22em; color: ${GREEN}; text-transform: uppercase; }
     .cover-title-block { margin-bottom: 32px; }
+    .cover-title-block--center { text-align: center; padding-top: 1.5in; }
     .cover-title { font-size: 38pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.025em; line-height: 1.02; }
     .cover-subtitle { font-size: 16pt; font-weight: 700; color: ${GREEN}; margin-top: 8px; letter-spacing: 0.01em; }
+    .cover-customer-line { font-size: 13pt; color: ${NAVY}; margin-top: 18px; font-weight: 600; }
+    .cover-issue-line { font-size: 10.5pt; color: #475569; margin-top: 6px; letter-spacing: 0.04em; }
+    /* Hero-cover variant — illustration as the page background, title overlaid */
+    .cover--hero {
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      color: #ffffff;
+      padding: 0.5in 0.5in 0.5in;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .cover--hero .cover-head { border-bottom-color: rgba(255,255,255,0.4); }
+    .cover-logo--on-hero { filter: brightness(0) invert(1); /* makes the logo white over the dark image */ }
+    .cover-confidential--on-hero { color: #ffffff; }
+    .cover-hero-text { margin-top: 0.4in; max-width: 6.5in; }
+    .cover-title--on-hero { color: #ffffff; font-size: 48pt; letter-spacing: -0.03em; line-height: 1; }
+    .cover-subtitle--on-hero { color: ${GREEN}; font-size: 18pt; }
+    .cover--hero .cover-customer-line { color: #ffffff; font-size: 16pt; margin-top: 0.6in; }
+    .cover--hero .cover-issue-line { color: rgba(255,255,255,0.85); font-size: 11pt; }
+    /* Document Control page header style */
     .cover-section-header { font-size: 11pt; font-weight: 800; color: ${NAVY}; text-transform: uppercase; letter-spacing: 0.14em; padding-bottom: 4px; border-bottom: 1px solid ${GREEN}; margin: 10px 0 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .doc-control { page-break-after: always; }
     /* PREPARED FOR / PREPARED BY two-column table */
     .cover-prepared { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
     .cover-prepared th { background: ${GREY}; color: ${NAVY}; text-align: left; padding: 6px 10px; border: 1px solid #b8c5cf; font-weight: 800; font-size: 9.5pt; letter-spacing: 0.12em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -597,16 +637,22 @@ export function buildSowHtml(args: {
   variant: SowVariant;
   ctx: SowBuildContext;
   logoUrl: string;
+  /** Optional hero illustration URL for the cover. Resolved by the client
+   *  from variant.heroImageKey. When set, the cover renders as a full-bleed
+   *  hero with the title overlaid; Document Control moves to page 2. */
+  heroImageUrl?: string | null;
   /** Optional: project's kickoff + go-live dates for the Key Dates table. */
   kickoffDate?: string | null;
   goLiveDate?: string | null;
 }): string {
   const { variant, ctx, logoUrl } = args;
+  const heroImageUrl = args.heroImageUrl ?? null;
   const watermark = ctx.isBudgetary
     ? `<div class="budgetary-watermark">BUDGETARY</div>`
     : "";
   const body = [
-    coverPage(variant, ctx, logoUrl),
+    coverPage(variant, ctx, logoUrl, heroImageUrl),
+    documentControlPage(variant, ctx),
     revisionHistory(ctx),
     executiveSummary(variant, ctx),
     snapshotAndPricing(variant, ctx),
