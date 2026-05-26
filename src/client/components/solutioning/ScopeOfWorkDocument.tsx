@@ -101,20 +101,37 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
-function pickCounts(sd: SowData | null | undefined, na: NeedsAssessment | null): {
-  locations: number; users: number; dids: number; meetings: number; goLives: number;
-} {
-  const locations = num(sd?.shared?.sites_count);
-  const phases = num(sd?.shared?.phases_count);
-  const users = num(sd?.ucaas?.basic_users) + num(sd?.ucaas?.advanced_users)
-              + num(sd?.ucaas?.common_area) + num(sd?.ucaas?.conference_rooms);
-  const dids = num(sd?.shared?.porting_did_count);
-  // No dedicated Meetings count today — fall back to user count or 0.
+function pickCounts(
+  sd: SowData | null | undefined,
+  na: NeedsAssessment | null,
+  solution: Solution,
+): { locations: number; users: number; dids: number; meetings: number; goLives: number } {
+  // Advanced-mode source: the SOW Sizing Form blob (sow_data).
+  const sdLocations = num(sd?.shared?.sites_count);
+  const sdPhases    = num(sd?.shared?.phases_count);
+  const sdUsers     = num(sd?.ucaas?.basic_users) + num(sd?.ucaas?.advanced_users)
+                    + num(sd?.ucaas?.common_area) + num(sd?.ucaas?.conference_rooms);
+  const sdDids      = num(sd?.shared?.porting_did_count);
+
+  // Basic-mode fallback: PMs entering inputs through the simplified calculator
+  // never populate sow_data, so the snapshot tiles + Scope at a Glance would
+  // render as zeros. Pull counts from solution.basic_inputs (basic mode) or
+  // solution.basic_seat_count (tiered mode) when sow_data is missing them.
+  const basic = solution.basic_inputs ?? null;
+  const tieredSeats = num(solution.basic_seat_count);
+
+  const locations = sdLocations > 0 ? sdLocations : num(basic?.sites);
+  const users     = sdUsers > 0
+    ? sdUsers
+    : (basic ? num(basic.users) : tieredSeats);
+  const dids      = sdDids; // not collected in basic/tiered modes
   const a = na?.answers ?? {};
   const meetingsCount = num((a as Record<string, unknown>)["zoom_meetings_count"]);
   const meetings = meetingsCount > 0 ? meetingsCount : 0;
-  // Go-live count defaults to phases or sites, whichever's set.
-  const goLives = phases > 0 ? phases : locations;
+  // Go-live count: phases (advanced) → basic.go_lives → locations.
+  const goLives = sdPhases > 0
+    ? sdPhases
+    : (basic && num(basic.go_lives) > 0 ? num(basic.go_lives) : locations);
   return { locations, users, dids, meetings, goLives };
 }
 
@@ -145,7 +162,7 @@ export default function ScopeOfWorkDocument({
 
   const variant = resolveSowVariant(solution.vendor, solution.solution_types ?? []);
   const naAnswers = (needsAssessment?.answers ?? {}) as Record<string, unknown>;
-  const counts = pickCounts(sowData ?? null, needsAssessment);
+  const counts = pickCounts(sowData ?? null, needsAssessment, solution);
 
   // Fee math: prefer flat (tiered / basic) when configured; otherwise compute
   // from labor totals + add-ons. Matches the old renderer's logic.
