@@ -216,16 +216,11 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
         {/* Team & links */}
         <Panel title="Team & links">
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            {team.pm && <ContactCard label="Project Manager" member={team.pm} showScheduler={currentUserRole === "client" || currentUserRole === "partner_ae"} />}
+            {team.pm && <ContactCard label="Project Manager" member={team.pm} />}
             {team.engineers.map((eng) => (
-              <ContactCard
-                key={eng.id}
-                label="Implementation Engineer"
-                member={eng}
-                showScheduler={currentUserRole === "client" || currentUserRole === "partner_ae"}
-              />
+              <ContactCard key={eng.id} label="Implementation Engineer" member={eng} />
             ))}
-            {team.partner_ae && <ContactCard label="Partner AE" member={team.partner_ae} showScheduler={false} />}
+            {team.partner_ae && <ContactCard label="Partner AE" member={team.partner_ae} />}
             {team.primary_contact && (
               <div style={{ border: `1px solid ${PF_BORDER}`, borderRadius: 10, padding: "10px 12px", background: "#f8fafc" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
@@ -360,11 +355,9 @@ function initials(name: string | null, email: string): string {
 function ContactCard({
   label,
   member,
-  showScheduler,
 }: {
   label: string;
   member: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null; avatar_url: string | null };
-  showScheduler: boolean;
 }) {
   const display = member.name ?? member.email;
   const abbr = initials(member.name, member.email);
@@ -407,7 +400,7 @@ function ContactCard({
             {member.phone}
           </a>
         )}
-        {showScheduler && member.scheduler_url && (
+        {member.scheduler_url && (
           <a href={member.scheduler_url} target="_blank" rel="noopener noreferrer" style={{ color: PF_GREEN, textDecoration: "none", fontWeight: 600 }}>
             Schedule a meeting →
           </a>
