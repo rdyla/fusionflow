@@ -29,12 +29,16 @@ app.get("/templates-list", requireRole("admin", "pm"), async (c) => {
   return c.json(templates.results ?? []);
 });
 
-// All other admin routes require admin role
-app.use("*", requireRole("admin"));
+// Admin routes are gated per-endpoint below. We do NOT use `app.use("*",
+// requireRole("admin"))` here because adminRoutes is co-mounted with
+// templateRoutes at `/api/admin` (see server/index.ts) and a wildcard
+// gate on this sub-app leaks across to templateRoutes' paths, blocking
+// PM access to `/api/admin/templates/:id`. Per-route gates keep scope
+// limited to this file.
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
-app.get("/users", async (c) => {
+app.get("/users", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const rows = await db
     .prepare(
@@ -54,7 +58,7 @@ const createUserSchema = z.object({
   dynamics_account_id: z.string().optional(),
 });
 
-app.post("/users", async (c) => {
+app.post("/users", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const rawBody = await c.req.json();
   const parsed = createUserSchema.safeParse(rawBody);
@@ -113,7 +117,7 @@ const updateUserSchema = z.object({
   cs_permission: z.enum(["none", "user", "power_user"]).optional(),
 });
 
-app.patch("/users/:id", async (c) => {
+app.patch("/users/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const userId = c.req.param("id");
   const rawBody = await c.req.json();
@@ -167,7 +171,7 @@ app.patch("/users/:id", async (c) => {
 // user in each. `blocking` is true when the FK has neither ON DELETE SET NULL
 // nor CASCADE — those are the rows that'll fail the delete with a SQLITE FK
 // constraint error until reassigned.
-app.get("/users/:id/references", async (c) => {
+app.get("/users/:id/references", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const userId = c.req.param("id");
   const exists = await db.prepare("SELECT id FROM users WHERE id = ? LIMIT 1").bind(userId).first();
@@ -306,7 +310,7 @@ app.get("/users/:id/references", async (c) => {
   return c.json({ blocked, buckets: visible });
 });
 
-app.delete("/users/:id", async (c) => {
+app.delete("/users/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const userId = c.req.param("id");
 
@@ -331,7 +335,7 @@ app.delete("/users/:id", async (c) => {
 
 // ── Project Management ─────────────────────────────────────────────────────────
 
-app.get("/projects", async (c) => {
+app.get("/projects", requireRole("admin"), async (c) => {
   const rows = await c.env.DB
     .prepare(
       `SELECT p.id, p.name, p.customer_name, p.vendor, p.solution_types, p.status, p.health,
@@ -345,7 +349,7 @@ app.get("/projects", async (c) => {
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
-app.patch("/projects/:id", async (c) => {
+app.patch("/projects/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
   const { archived } = await c.req.json() as { archived?: number };
@@ -366,7 +370,7 @@ app.patch("/projects/:id", async (c) => {
   return c.json(updated);
 });
 
-app.delete("/projects/:id", async (c) => {
+app.delete("/projects/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
 
@@ -403,7 +407,7 @@ app.delete("/projects/:id", async (c) => {
 
 // ── Project Access ─────────────────────────────────────────────────────────────
 
-app.get("/projects/:projectId/access", async (c) => {
+app.get("/projects/:projectId/access", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("projectId");
 
@@ -436,7 +440,7 @@ const grantAccessSchema = z.object({
   access_level: z.string().optional(),
 });
 
-app.post("/projects/:projectId/access", async (c) => {
+app.post("/projects/:projectId/access", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("projectId");
   const rawBody = await c.req.json();
@@ -495,7 +499,7 @@ app.post("/projects/:projectId/access", async (c) => {
   return c.json(created, 201);
 });
 
-app.delete("/projects/:projectId/access/:userId", async (c) => {
+app.delete("/projects/:projectId/access/:userId", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("projectId");
   const userId = c.req.param("userId");
@@ -545,7 +549,7 @@ const LABOR_CONFIG_DEFAULT_HOURS: Record<LaborConfigCategory, Record<string, num
   },
 };
 
-app.get("/labor-config", async (c) => {
+app.get("/labor-config", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const rows = await db.prepare("SELECT category, base_hours FROM labor_config").all<{ category: string; base_hours: string }>();
   const dbMap: Record<string, Record<string, number>> = {};
@@ -564,7 +568,7 @@ const laborConfigSchema = z.object({
   base_hours: z.record(z.string(), z.number().min(0).max(9999)),
 });
 
-app.put("/labor-config", async (c) => {
+app.put("/labor-config", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const rawBody = await c.req.json();
   const parsed = laborConfigSchema.safeParse(rawBody);
@@ -580,7 +584,7 @@ app.put("/labor-config", async (c) => {
   return c.json({ ok: true });
 });
 
-app.delete("/labor-config/:category", async (c) => {
+app.delete("/labor-config/:category", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const category = c.req.param("category");
   if (!LABOR_CONFIG_CATEGORIES.includes(category as LaborConfigCategory)) {
@@ -592,7 +596,7 @@ app.delete("/labor-config/:category", async (c) => {
 
 // ── Health Scoring ────────────────────────────────────────────────────────────
 
-app.post("/run-health-scoring", async (c) => {
+app.post("/run-health-scoring", requireRole("admin"), async (c) => {
   const db = c.env.DB;
 
   const rows = await db
@@ -618,7 +622,7 @@ app.post("/run-health-scoring", async (c) => {
 
 // ── Settings: demo mode (vendor lens for partner demos) ──────────────────────
 
-app.get("/settings/demo-mode", async (c) => {
+app.get("/settings/demo-mode", requireRole("admin"), async (c) => {
   const vendor = await getDemoVendor(c.env.DB);
   return c.json({ vendor });
 });
@@ -627,7 +631,7 @@ const demoModeSchema = z.object({
   vendor: z.enum(["zoom", "ringcentral"]).nullable(),
 });
 
-app.put("/settings/demo-mode", async (c) => {
+app.put("/settings/demo-mode", requireRole("admin"), async (c) => {
   const auth = c.get("auth");
   const parsed = demoModeSchema.safeParse(await c.req.json());
   if (!parsed.success) {
