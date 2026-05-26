@@ -1733,10 +1733,16 @@ export const api = {
       new_revision: { version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null };
     }>(`/solutions/${id}/sow-version`, { method: "POST", body: JSON.stringify(payload) }),
 
-  /** Update SOW cover-page metadata (currently just msa_date). Doesn't touch
-   *  revisions — those are append-only via generateSowVersion. */
-  updateSowMetadata: (id: string, payload: { msa_date?: string | null }) =>
-    request<{ sow_metadata: { msa_date?: string | null; revisions: unknown[] } }>(
+  /** Update SOW cover-page metadata (msa_date, target_go_live_date,
+   *  duration_band, custom_weeks). Doesn't touch revisions — those are
+   *  append-only via generateSowVersion. */
+  updateSowMetadata: (id: string, payload: {
+    msa_date?: string | null;
+    target_go_live_date?: string | null;
+    duration_band?: "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | null;
+    custom_weeks?: number | null;
+  }) =>
+    request<{ sow_metadata: { msa_date?: string | null; target_go_live_date?: string | null; duration_band?: string | null; custom_weeks?: number | null; revisions: unknown[] } }>(
       `/solutions/${id}/sow-metadata`, { method: "PATCH", body: JSON.stringify(payload) }
     ),
 

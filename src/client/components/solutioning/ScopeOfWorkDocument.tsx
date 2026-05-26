@@ -47,8 +47,17 @@ export type SowRevision = {
   saved_by_name: string | null;
   note?: string | null;
 };
+/** Total-duration band; drives the Key Dates table. "custom" pairs with `custom_weeks`. */
+export type SowDurationBand = "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom";
+
 export type SowMetadata = {
   msa_date?: string | null;
+  /** PM-entered target go-live (YYYY-MM-DD). When set, the SOW's Key Dates
+   *  table auto-derives Kickoff/Planning/Port/UAT/Closure rows from it. */
+  target_go_live_date?: string | null;
+  duration_band?: SowDurationBand | null;
+  /** Only used when duration_band === "custom". */
+  custom_weeks?: number | null;
   revisions: SowRevision[];
 };
 
@@ -57,7 +66,10 @@ export function parseSowMetadata(blob: string | null | undefined): SowMetadata {
   try {
     const p = JSON.parse(blob) as Partial<SowMetadata>;
     return {
-      msa_date: p.msa_date ?? null,
+      msa_date:            p.msa_date ?? null,
+      target_go_live_date: p.target_go_live_date ?? null,
+      duration_band:       p.duration_band ?? null,
+      custom_weeks:        p.custom_weeks ?? null,
       revisions: Array.isArray(p.revisions) ? p.revisions : [],
     };
   } catch {
@@ -115,11 +127,24 @@ export default function ScopeOfWorkDocument({
   const [generating, setGenerating] = useState(false);
   const [savingMsa, setSavingMsa] = useState(false);
   const [msaDateDraft, setMsaDateDraft] = useState(sowMetadata?.msa_date ?? "");
+  // Drafts for the timeline-derivation inputs. When blank, the renderer
+  // falls back to the needs assessment's project_context answers (target
+  // go-live + project_duration_band).
+  const [goLiveDraft, setGoLiveDraft]   = useState(sowMetadata?.target_go_live_date ?? "");
+  const [bandDraft, setBandDraft]       = useState<string>(sowMetadata?.duration_band ?? "");
+  const [customWeeksDraft, setCustomWeeksDraft] = useState<string>(sowMetadata?.custom_weeks?.toString() ?? "");
+  const [savingTimeline, setSavingTimeline] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
 
   useEffect(() => { setMsaDateDraft(sowMetadata?.msa_date ?? ""); }, [sowMetadata?.msa_date]);
+  useEffect(() => {
+    setGoLiveDraft(sowMetadata?.target_go_live_date ?? "");
+    setBandDraft(sowMetadata?.duration_band ?? "");
+    setCustomWeeksDraft(sowMetadata?.custom_weeks?.toString() ?? "");
+  }, [sowMetadata?.target_go_live_date, sowMetadata?.duration_band, sowMetadata?.custom_weeks]);
 
   const variant = resolveSowVariant(solution.vendor, solution.solution_types ?? []);
+  const naAnswers = (needsAssessment?.answers ?? {}) as Record<string, unknown>;
   const counts = pickCounts(sowData ?? null, needsAssessment);
 
   // Fee math: prefer flat (tiered / basic) when configured; otherwise compute
@@ -156,6 +181,16 @@ export default function ScopeOfWorkDocument({
     sowNumber: sowMetadata?.revisions?.length ? sowMetadata.revisions[sowMetadata.revisions.length - 1].version : "V1 (draft)",
     issueDateText: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     msaDate: sowMetadata?.msa_date ?? null,
+    // Date cascade for the Key Dates table: PM's explicit SOW form value
+    // wins; otherwise pull from the needs assessment (project_context
+    // section); otherwise null and the cover renders "[MM/DD/YYYY]" rows.
+    targetGoLiveDate: sowMetadata?.target_go_live_date
+                   ?? (naAnswers["target_go_live_date"] as string | undefined)
+                   ?? null,
+    durationBand: sowMetadata?.duration_band
+               ?? (naAnswers["project_duration_band"] as ("4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | undefined))
+               ?? null,
+    customWeeks: sowMetadata?.custom_weeks ?? null,
     statusText: solution.status === "won" ? "Executed" : solution.status === "scope" ? "Draft for Review" : "Draft",
     revisions: (sowMetadata?.revisions ?? []).map((r) => ({
       version: r.version, saved_at: r.saved_at, saved_by_name: r.saved_by_name, note: r.note,
@@ -199,6 +234,25 @@ export default function ScopeOfWorkDocument({
       showToast(err instanceof Error ? err.message : "Failed to save MSA date", "error");
     } finally {
       setSavingMsa(false);
+    }
+  }
+
+  async function saveTimeline() {
+    setSavingTimeline(true);
+    try {
+      const band = bandDraft ? (bandDraft as "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom") : null;
+      const custom = band === "custom" ? (parseInt(customWeeksDraft, 10) || null) : null;
+      await api.updateSowMetadata(solution.id, {
+        target_go_live_date: goLiveDraft || null,
+        duration_band: band,
+        custom_weeks: custom,
+      });
+      showToast("Timeline inputs saved.", "success");
+      onMetadataChanged?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save timeline", "error");
+    } finally {
+      setSavingTimeline(false);
     }
   }
 
@@ -249,6 +303,62 @@ export default function ScopeOfWorkDocument({
             {savingMsa ? "Saving…" : "Save MSA date"}
           </button>
         </div>
+
+        {/* Timeline derivation inputs — drive the Key Dates table on the SOW
+            cover. Cascades through naAnswers when blank: when the PM has
+            filled in `target_go_live_date` + `project_duration_band` on the
+            needs assessment, these don't even need to be touched. The
+            renderer will use the NA values automatically. */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 6 }}>
+          <label style={{ display: "block" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", display: "block", marginBottom: 4 }}>Target go-live date</span>
+            <input
+              type="date"
+              className="ms-input"
+              value={goLiveDraft}
+              onChange={(e) => setGoLiveDraft(e.target.value)}
+              disabled={savingTimeline}
+              style={{ fontSize: 13 }}
+            />
+          </label>
+          <label style={{ display: "block" }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", display: "block", marginBottom: 4 }}>Proposed project duration</span>
+            <select
+              className="ms-input"
+              value={bandDraft}
+              onChange={(e) => setBandDraft(e.target.value)}
+              disabled={savingTimeline}
+              style={{ fontSize: 13 }}
+            >
+              <option value="">— (assume 8–12 weeks)</option>
+              <option value="4_6_weeks">4–6 weeks</option>
+              <option value="6_8_weeks">6–8 weeks</option>
+              <option value="8_12_weeks">8–12 weeks (standard UCaaS)</option>
+              <option value="custom">Custom…</option>
+            </select>
+          </label>
+          {bandDraft === "custom" && (
+            <label style={{ display: "block" }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", display: "block", marginBottom: 4 }}>Custom weeks</span>
+              <input
+                type="number"
+                min={1}
+                max={52}
+                className="ms-input"
+                value={customWeeksDraft}
+                onChange={(e) => setCustomWeeksDraft(e.target.value)}
+                disabled={savingTimeline}
+                style={{ fontSize: 13, width: 90 }}
+              />
+            </label>
+          )}
+          <button className="ms-btn-secondary" onClick={saveTimeline} disabled={savingTimeline} style={{ fontSize: 12 }}>
+            {savingTimeline ? "Saving…" : "Save timeline"}
+          </button>
+        </div>
+        <p style={{ fontSize: 11, color: "#64748b", marginTop: 0, marginBottom: 14 }}>
+          When blank, the SOW falls back to the needs assessment's <em>Target go-live date</em> + <em>Proposed project duration</em> answers. The Planning Complete and Port Orders Submitted milestones scale with the chosen band; Kickoff (+5 business days from SOW exec) and Closure (+1 week from Go-Live) stay fixed.
+        </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "flex-end", marginBottom: 14 }}>
           <label style={{ flex: 1, minWidth: 260 }}>

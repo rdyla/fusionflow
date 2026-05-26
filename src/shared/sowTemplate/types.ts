@@ -43,6 +43,19 @@ export type SowBuildContext = {
   issueDateText: string;
   /** PM-entered MSA date (YYYY-MM-DD) or null. */
   msaDate: string | null;
+  /** PM-entered target go-live date (YYYY-MM-DD). When set, Key Dates rows
+   *  on the cover are derived backward from this date — Planning Complete,
+   *  Port Orders Submitted, UAT, Go-Live, and Project Closure all compute
+   *  from this + the duration band. When null, those rows render as
+   *  "[MM/DD/YYYY]" placeholders just like they did before this feature. */
+  targetGoLiveDate: string | null;
+  /** Total-project duration band — drives the Planning/Port-Orders offsets
+   *  on the Key Dates table. "8_12_weeks" is the default assumption when
+   *  go-live is set but band isn't. */
+  durationBand: "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | null;
+  /** When durationBand === "custom", the explicit week count. Ignored
+   *  otherwise. */
+  customWeeks: number | null;
   /** SOW Status — pulled from the solution status. */
   statusText: string;
   /** Revision history rows for the cover-page table. */
