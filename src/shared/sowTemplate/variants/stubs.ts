@@ -25,6 +25,7 @@ function buildStub(
   projectReferenceTemplate: string,
   primaryLabel: string,
   secondaryLabels: { label2: string; label3: string; label4: string },
+  heroImageKey: string | undefined,
 ): SowVariant {
   return {
     id,
@@ -33,6 +34,7 @@ function buildStub(
     projectReferenceTemplate,
     isStub: true,
     showE911Footnote: false,
+    heroImageKey,
 
     snapshotTiles: [
       { label: "Locations",          value: (ctx) => String(ctx.locationCount || 0) },
@@ -152,6 +154,11 @@ function buildStub(
   };
 }
 
+// Hero image keys — see ScopeOfWorkDocument.tsx HERO_URLS for the actual
+// asset mapping. Each variant nominates the imagery family that best matches
+// its product: UCaaS gets the connectivity hero, CCaaS gets the contact-
+// center hero, CI / VA / AIR get the AI/data hero.
+
 export const ZOOM_CCAAS_STUB: SowVariant = buildStub(
   "ccaas",
   "zoom",
@@ -159,6 +166,7 @@ export const ZOOM_CCAAS_STUB: SowVariant = buildStub(
   "Zoom Contact Center Implementation – {customer}",
   "Agents (CCaaS)",
   { label2: "Queues",       label3: "Skills",        label4: "Integrations" },
+  "ccaas",
 );
 
 export const ZOOM_CI_STUB: SowVariant = buildStub(
@@ -168,6 +176,7 @@ export const ZOOM_CI_STUB: SowVariant = buildStub(
   "Zoom Revenue Accelerator Implementation – {customer}",
   "Recorded Seats",
   { label2: "Integrations", label3: "Trackers",      label4: "Reporting" },
+  "ai_data",
 );
 
 export const ZOOM_VA_STUB: SowVariant = buildStub(
@@ -177,6 +186,7 @@ export const ZOOM_VA_STUB: SowVariant = buildStub(
   "Zoom AI Virtual Agent Implementation – {customer}",
   "Bots",
   { label2: "Intents",      label3: "Integrations",  label4: "Languages" },
+  "ai_data",
 );
 
 export const RC_UCAAS_STUB: SowVariant = buildStub(
@@ -186,6 +196,7 @@ export const RC_UCAAS_STUB: SowVariant = buildStub(
   "RingCentral UCaaS Migration – {customer}",
   "RingCentral Users (UCaaS)",
   { label2: "DIDs to Port", label3: "Meetings",      label4: "Integrations" },
+  "ucaas_generic",
 );
 
 export const RC_CCAAS_STUB: SowVariant = buildStub(
@@ -195,6 +206,7 @@ export const RC_CCAAS_STUB: SowVariant = buildStub(
   "RingCentral Contact Center Implementation – {customer}",
   "Agents (CCaaS)",
   { label2: "Queues",       label3: "Skills",        label4: "Integrations" },
+  "ccaas",
 );
 
 export const RC_AIR_STUB: SowVariant = buildStub(
@@ -204,4 +216,5 @@ export const RC_AIR_STUB: SowVariant = buildStub(
   "RingCentral AI Receptionist Implementation – {customer}",
   "AI Receptionist Numbers",
   { label2: "Integrations", label3: "Languages",     label4: "Skills" },
+  "ai_data",
 );
