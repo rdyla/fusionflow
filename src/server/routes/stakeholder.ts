@@ -93,6 +93,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     nextMeetingTaskRow,
     docRow,
     projectHealth,
+    phaseRows,
   ] = await Promise.all([
     db
       .prepare(
@@ -231,6 +232,20 @@ app.get("/:id/stakeholder-summary", async (c) => {
       .bind(projectId)
       .all<{ id: string; name: string; created_at: string; uploaded_by: string | null }>(),
     computeProjectHealth(db, projectId, { target_go_live_date: project.target_go_live_date, updated_at: project.updated_at }),
+    // Per-phase task counts for the phase-progress panel. Phases with
+    // site_id IS NULL are project-shared (Initiate, on multi-site projects).
+    db
+      .prepare(
+        `SELECT p.id, p.name, p.sort_order, p.status, p.site_id,
+                COUNT(t.id) AS total_tasks,
+                SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done_tasks
+         FROM phases p
+         LEFT JOIN tasks t ON t.phase_id = p.id
+         WHERE p.project_id = ?
+         GROUP BY p.id`
+      )
+      .bind(projectId)
+      .all<{ id: string; name: string; sort_order: number | null; status: string | null; site_id: string | null; total_tasks: number; done_tasks: number }>(),
   ]);
 
   const sites = sitesRows.results ?? [];
@@ -396,8 +411,49 @@ app.get("/:id/stakeholder-summary", async (c) => {
       timeline_url: `/projects/${project.id}#timeline`,
       next_call_join_url: nextCall?.join_url ?? null,
     },
+    phase_progress: buildPhaseProgress(phaseRows.results ?? [], sites),
   });
 });
+
+/**
+ * Group phases by site_id and compute per-phase % completion. Output is a
+ * column-major list — shared (site_id=NULL) first, then one entry per site
+ * in display_order. Each entry carries phases sorted by sort_order ASC.
+ *
+ * Empty phases (no tasks) get 0% so the slider visually represents "not
+ * started yet" instead of being absent. The phase row still surfaces so
+ * PMs see the placeholder.
+ */
+function buildPhaseProgress(
+  rows: Array<{ id: string; name: string; sort_order: number | null; status: string | null; site_id: string | null; total_tasks: number; done_tasks: number }>,
+  sites: Array<{ id: string; name: string }>,
+): Array<{ site_id: string | null; site_name: string | null; phases: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
+  const groups = new Map<string | "shared", Array<typeof rows[number] & { pct: number }>>();
+  for (const r of rows) {
+    const key = r.site_id ?? "shared";
+    const total = r.total_tasks ?? 0;
+    const done = r.done_tasks ?? 0;
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    const arr = groups.get(key) ?? [];
+    arr.push({ ...r, pct });
+    groups.set(key, arr);
+  }
+  for (const arr of groups.values()) {
+    arr.sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
+  }
+  const out: Array<{ site_id: string | null; site_name: string | null; phases: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
+  const sharedPhases = groups.get("shared");
+  if (sharedPhases && sharedPhases.length > 0) {
+    out.push({ site_id: null, site_name: null, phases: sharedPhases.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+  }
+  for (const s of sites) {
+    const sitePhases = groups.get(s.id);
+    if (sitePhases && sitePhases.length > 0) {
+      out.push({ site_id: s.id, site_name: s.name, phases: sitePhases.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+    }
+  }
+  return out;
+}
 
 /**
  * Given a project's status-meeting cadence, return the next occurrence in
