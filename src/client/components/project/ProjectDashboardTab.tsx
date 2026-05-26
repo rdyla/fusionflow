@@ -215,24 +215,39 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
 
         {/* Team & links */}
         <Panel title="Team & links">
-          <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
-            <tbody>
-              {team.pm && <TeamRow label="PM" name={team.pm.name ?? team.pm.email} />}
-              {team.engineer && <TeamRow label="Engineer" name={team.engineer.name ?? team.engineer.email} />}
-              {team.primary_contact && <TeamRow label="Contact" name={team.primary_contact.name} />}
-              {team.partner_ae && <TeamRow label="Partner AE" name={team.partner_ae.name ?? team.partner_ae.email} />}
-            </tbody>
-          </table>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {team.pm && <ContactCard label="Project Manager" member={team.pm} showScheduler={currentUserRole === "client" || currentUserRole === "partner_ae"} />}
+            {team.engineers.map((eng) => (
+              <ContactCard
+                key={eng.id}
+                label="Implementation Engineer"
+                member={eng}
+                showScheduler={currentUserRole === "client" || currentUserRole === "partner_ae"}
+              />
+            ))}
+            {team.partner_ae && <ContactCard label="Partner AE" member={team.partner_ae} showScheduler={false} />}
+            {team.primary_contact && (
+              <div style={{ border: `1px solid ${PF_BORDER}`, borderRadius: 10, padding: "10px 12px", background: "#f8fafc" }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
+                  Primary Contact
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY }}>{team.primary_contact.name}</div>
+                {team.primary_contact.job_title && (
+                  <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 2 }}>{team.primary_contact.job_title}</div>
+                )}
+                {team.primary_contact.email && (
+                  <a href={`mailto:${team.primary_contact.email}`} style={{ fontSize: 12, color: PF_BLUE, textDecoration: "none", display: "block", marginTop: 4 }}>
+                    {team.primary_contact.email}
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
 
           <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
             {stats.next_call?.join_url && (
               <LinkButton href={stats.next_call.join_url} primary>
                 Join {fmtCallDate(stats.next_call.scheduled_at)} call
-              </LinkButton>
-            )}
-            {(currentUserRole === "client" || currentUserRole === "partner_ae") && team.pm?.scheduler_url && (
-              <LinkButton href={team.pm.scheduler_url}>
-                Schedule with {team.pm.name ?? "PM"}
               </LinkButton>
             )}
             {links.sharepoint_url && (
@@ -333,12 +348,72 @@ function Subheading({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TeamRow({ label, name }: { label: string; name: string | null }) {
+function initials(name: string | null, email: string): string {
+  if (name) {
+    const parts = name.trim().split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
+}
+
+function ContactCard({
+  label,
+  member,
+  showScheduler,
+}: {
+  label: string;
+  member: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null; avatar_url: string | null };
+  showScheduler: boolean;
+}) {
+  const display = member.name ?? member.email;
+  const abbr = initials(member.name, member.email);
   return (
-    <tr>
-      <td style={{ padding: "4px 0", color: TEXT_MUTED, fontSize: 12, width: 90 }}>{label}</td>
-      <td style={{ padding: "4px 0", color: TEXT_PRIMARY, fontWeight: 600, textAlign: "right" }}>{name ?? "—"}</td>
-    </tr>
+    <div style={{ border: `1px solid ${PF_BORDER}`, borderRadius: 10, padding: "10px 12px", background: "#f8fafc" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+        {member.avatar_url ? (
+          <img
+            src={member.avatar_url}
+            alt={display}
+            style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: `1px solid ${PF_BORDER}` }}
+          />
+        ) : (
+          <div style={{
+            width: 40, height: 40, borderRadius: "50%",
+            background: "linear-gradient(135deg, #63c1ea, #17c662)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: 13, fontWeight: 700, color: "#fff", letterSpacing: "0.04em",
+            flexShrink: 0,
+          }}>
+            {abbr}
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+            {label}
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: TEXT_PRIMARY, marginTop: 2, lineHeight: 1.25 }}>{display}</div>
+          {member.title && (
+            <div style={{ fontSize: 11, color: TEXT_MUTED, marginTop: 1 }}>{member.title}</div>
+          )}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2, marginTop: 8, fontSize: 12 }}>
+        <a href={`mailto:${member.email}`} style={{ color: PF_BLUE, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {member.email}
+        </a>
+        {member.phone && (
+          <a href={`tel:${member.phone.replace(/[^\d+]/g, "")}`} style={{ color: PF_BLUE, textDecoration: "none" }}>
+            {member.phone}
+          </a>
+        )}
+        {showScheduler && member.scheduler_url && (
+          <a href={member.scheduler_url} target="_blank" rel="noopener noreferrer" style={{ color: PF_GREEN, textDecoration: "none", fontWeight: 600 }}>
+            Schedule a meeting →
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
 

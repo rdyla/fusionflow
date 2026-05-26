@@ -1083,6 +1083,16 @@ export type Site = {
 // ── Stakeholder Dashboard ────────────────────────────────────────────────────
 export type StakeholderHealth = "on_track" | "at_risk" | "off_track";
 
+export type TeamMember = {
+  id: string;
+  name: string | null;
+  email: string;
+  title: string | null;
+  phone: string | null;
+  scheduler_url: string | null;
+  avatar_url: string | null;
+};
+
 export type StakeholderSummary = {
   project: {
     id: string;
@@ -1155,10 +1165,10 @@ export type StakeholderSummary = {
     created_at: string;
   }>;
   team: {
-    pm: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null } | null;
-    engineer: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null } | null;
+    pm: TeamMember | null;
+    engineers: TeamMember[];
     primary_contact: { name: string; email: string | null; job_title: string | null } | null;
-    partner_ae: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null } | null;
+    partner_ae: TeamMember | null;
   };
   links: {
     sharepoint_url: string | null;
