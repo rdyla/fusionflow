@@ -86,7 +86,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     blockers,
     notes,
     pmRow,
-    engineerRow,
+    engineerRows,
     primaryContactRow,
     partnerAeRow,
     customerRow,
@@ -182,17 +182,17 @@ app.get("/:id/stakeholder-summary", async (c) => {
       .bind(projectId)
       .all<{ id: string; body: string; created_at: string; visibility: string | null; author_name: string | null }>(),
     project.pm_user_id
-      ? db.prepare("SELECT id, name, email, title, phone, scheduler_url FROM users WHERE id = ?").bind(project.pm_user_id).first<{ id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null }>()
+      ? db.prepare("SELECT id, name, email, title, phone, scheduler_url, avatar_url FROM users WHERE id = ?").bind(project.pm_user_id).first<{ id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null; avatar_url: string | null }>()
       : Promise.resolve(null),
     db
       .prepare(
-        `SELECT u.id, u.name, u.email, u.title, u.phone, u.scheduler_url FROM project_staff ps
+        `SELECT u.id, u.name, u.email, u.title, u.phone, u.scheduler_url, u.avatar_url FROM project_staff ps
          JOIN users u ON u.id = ps.user_id
          WHERE ps.project_id = ? AND ps.staff_role = 'engineer'
-         ORDER BY ps.created_at ASC LIMIT 1`
+         ORDER BY ps.created_at ASC`
       )
       .bind(projectId)
-      .first<{ id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null }>(),
+      .all<{ id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null; avatar_url: string | null }>(),
     db
       .prepare(
         `SELECT name, email, job_title FROM project_contacts
@@ -202,13 +202,13 @@ app.get("/:id/stakeholder-summary", async (c) => {
       .first<{ name: string; email: string | null; job_title: string | null }>(),
     db
       .prepare(
-        `SELECT u.id, u.name, u.email, u.title, u.phone, u.scheduler_url FROM project_staff ps
+        `SELECT u.id, u.name, u.email, u.title, u.phone, u.scheduler_url, u.avatar_url FROM project_staff ps
          JOIN users u ON u.id = ps.user_id
          WHERE ps.project_id = ? AND ps.staff_role = 'partner_ae'
          ORDER BY ps.created_at ASC LIMIT 1`
       )
       .bind(projectId)
-      .first<{ id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null }>(),
+      .first<{ id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null; avatar_url: string | null }>(),
     project.customer_id
       ? db.prepare("SELECT sharepoint_url FROM customers WHERE id = ?").bind(project.customer_id).first<{ sharepoint_url: string | null }>()
       : Promise.resolve(null),
@@ -378,10 +378,12 @@ app.get("/:id/stakeholder-summary", async (c) => {
     })),
     key_updates: keyUpdatesFeed,
     team: {
-      pm: pmRow ? { id: pmRow.id, name: pmRow.name, email: pmRow.email, title: pmRow.title, phone: pmRow.phone, scheduler_url: pmRow.scheduler_url } : null,
-      engineer: engineerRow ? { id: engineerRow.id, name: engineerRow.name, email: engineerRow.email, title: engineerRow.title, phone: engineerRow.phone, scheduler_url: engineerRow.scheduler_url } : null,
+      pm: pmRow ? { id: pmRow.id, name: pmRow.name, email: pmRow.email, title: pmRow.title, phone: pmRow.phone, scheduler_url: pmRow.scheduler_url, avatar_url: pmRow.avatar_url } : null,
+      engineers: (engineerRows.results ?? []).map((e) => ({
+        id: e.id, name: e.name, email: e.email, title: e.title, phone: e.phone, scheduler_url: e.scheduler_url, avatar_url: e.avatar_url,
+      })),
       primary_contact: primaryContactRow ?? null,
-      partner_ae: partnerAeRow ? { id: partnerAeRow.id, name: partnerAeRow.name, email: partnerAeRow.email, title: partnerAeRow.title, phone: partnerAeRow.phone, scheduler_url: partnerAeRow.scheduler_url } : null,
+      partner_ae: partnerAeRow ? { id: partnerAeRow.id, name: partnerAeRow.name, email: partnerAeRow.email, title: partnerAeRow.title, phone: partnerAeRow.phone, scheduler_url: partnerAeRow.scheduler_url, avatar_url: partnerAeRow.avatar_url } : null,
     },
     links: {
       // Prefer the project's own SharePoint folder so stakeholders land
