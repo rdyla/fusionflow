@@ -63,66 +63,102 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
 // ── Sections ─────────────────────────────────────────────────────────────────
 
 function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string): string {
+  // Faithful port of the docx title page:
+  //   - Logo at top-left, "Confidential" stamp at top-right
+  //   - "STATEMENT OF WORK" large title
+  //   - Subtitle = variant.productLine ("Zoom UCaaS Professional Services")
+  //   - "Document Control" header
+  //   - 2-column PREPARED FOR / PREPARED BY block
+  //   - SOW Details two-column table (Number, Issue Date, MSA, Project Ref, Status)
+  //   - Revision History table
+  //   - Confidentiality notice at the bottom
+  //
+  // All of that lives on one cover page; the executive summary and the rest
+  // of the doc come on subsequent pages.
+
   const stubBanner = variant.isStub
     ? `<div class="stub-banner">STUB — content for ${esc(variant.productLine)} is placeholder. Do not issue without review.</div>`
     : "";
+
+  const preparedForLines: string[] = [esc(ctx.customerName)];
+  if (ctx.customerPrimaryContact?.name)  preparedForLines.push(esc(ctx.customerPrimaryContact.name));
+  if (ctx.customerPrimaryContact?.title) preparedForLines.push(esc(ctx.customerPrimaryContact.title));
+  if (ctx.customerPrimaryContact?.email) preparedForLines.push(`${esc(ctx.customerPrimaryContact.email)}${ctx.customerPrimaryContact.phone ? `  |  ${esc(ctx.customerPrimaryContact.phone)}` : ""}`);
+  if (ctx.customerAddress)               preparedForLines.push(esc(ctx.customerAddress));
+
+  const preparedByLines: string[] = ["Packet Fusion, Inc.", esc(ctx.preparedBy.name)];
+  if (ctx.preparedBy.title) preparedByLines.push(esc(ctx.preparedBy.title));
+  if (ctx.preparedBy.email) preparedByLines.push(`${esc(ctx.preparedBy.email)}${ctx.preparedBy.phone ? `  |  ${esc(ctx.preparedBy.phone)}` : ""}`);
+
+  const detailsRows = [
+    { label: "SOW Number",        value: esc(ctx.sowNumber) },
+    { label: "Issue Date",        value: esc(ctx.issueDateText) },
+    { label: "Master Agreement",  value: `Packet Fusion Master Services Agreement dated ${esc(fmtDate(ctx.msaDate))}` },
+    { label: "Project Reference", value: esc(ctx.projectReference) },
+    { label: "SOW Status",        value: esc(ctx.statusText) },
+  ];
+
+  const revisionRows = ctx.revisions.length > 0
+    ? ctx.revisions.map((r) => `
+        <tr>
+          <td>${esc(r.version)}</td>
+          <td>${esc(fmtDate(r.saved_at))}</td>
+          <td>${esc(r.saved_by_name ?? "")}</td>
+          <td>${esc(r.note ?? "")}</td>
+        </tr>`).join("")
+    : `<tr><td colspan="4" class="muted" style="text-align:center;">No revisions recorded yet.</td></tr>`;
+
   return `
     <section class="cover">
       ${stubBanner}
-      <div class="cover-eyebrow">${esc(variant.productLine)}</div>
-      <div class="cover-title">STATEMENT OF WORK</div>
-      <div class="cover-customer">${esc(ctx.customerName)}</div>
-      <div class="cover-meta">
-        <div>
-          <div class="cover-meta-label">PREPARED FOR</div>
-          <div class="cover-meta-value">${esc(ctx.customerName)}</div>
-          ${ctx.customerPrimaryContact ? `<div class="cover-meta-value">${esc(ctx.customerPrimaryContact.name)}</div>` : ""}
-          ${ctx.customerPrimaryContact?.title ? `<div class="cover-meta-value">${esc(ctx.customerPrimaryContact.title)}</div>` : ""}
-          ${ctx.customerPrimaryContact?.email ? `<div class="cover-meta-value">${esc(ctx.customerPrimaryContact.email)}${ctx.customerPrimaryContact.phone ? `  |  ${esc(ctx.customerPrimaryContact.phone)}` : ""}</div>` : ""}
-          ${ctx.customerAddress ? `<div class="cover-meta-value">${esc(ctx.customerAddress)}</div>` : ""}
-        </div>
-        <div>
-          <div class="cover-meta-label">PREPARED BY</div>
-          <div class="cover-meta-value">Packet Fusion, Inc.</div>
-          <div class="cover-meta-value">${esc(ctx.preparedBy.name)}</div>
-          ${ctx.preparedBy.title ? `<div class="cover-meta-value">${esc(ctx.preparedBy.title)}</div>` : ""}
-          ${ctx.preparedBy.email ? `<div class="cover-meta-value">${esc(ctx.preparedBy.email)}${ctx.preparedBy.phone ? `  |  ${esc(ctx.preparedBy.phone)}` : ""}</div>` : ""}
-        </div>
-        <div>
-          <div class="cover-meta-label">SOW DETAILS</div>
-          <div class="cover-meta-value"><strong>${esc(ctx.sowNumber)}</strong></div>
-          <div class="cover-meta-value">Issued ${esc(ctx.issueDateText)}</div>
-          <div class="cover-meta-value">MSA dated ${esc(fmtDate(ctx.msaDate))}</div>
-          <div class="cover-meta-value">${esc(ctx.projectReference)}</div>
-          <div class="cover-meta-value">${esc(ctx.statusText)}</div>
-        </div>
-      </div>
-      <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
-    </section>
-  `;
-}
 
-function revisionHistory(ctx: SowBuildContext): string {
-  if (ctx.revisions.length === 0) return "";
-  return `
-    <section class="page-section">
-      <h2>Revision History</h2>
-      <table class="data-table">
-        <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Description</th></tr></thead>
+      <div class="cover-head">
+        <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
+        <div class="cover-confidential">CONFIDENTIAL</div>
+      </div>
+
+      <div class="cover-title-block">
+        <div class="cover-title">STATEMENT OF WORK</div>
+        <div class="cover-subtitle">${esc(variant.productLine)}</div>
+      </div>
+
+      <div class="cover-section-header">Document Control</div>
+
+      <table class="cover-prepared">
+        <thead>
+          <tr>
+            <th>PREPARED FOR</th>
+            <th>PREPARED BY</th>
+          </tr>
+        </thead>
         <tbody>
-          ${ctx.revisions.map((r) => `
-            <tr>
-              <td>${esc(r.version)}</td>
-              <td>${esc(fmtDate(r.saved_at))}</td>
-              <td>${esc(r.saved_by_name ?? "")}</td>
-              <td>${esc(r.note ?? "")}</td>
-            </tr>`).join("")}
+          <tr>
+            <td>${preparedForLines.map((l) => `<div>${l}</div>`).join("")}</td>
+            <td>${preparedByLines.map((l) => `<div>${l}</div>`).join("")}</td>
+          </tr>
         </tbody>
       </table>
+
+      <table class="cover-details">
+        <tbody>
+          ${detailsRows.map((r) => `<tr><th>${esc(r.label)}</th><td>${r.value}</td></tr>`).join("")}
+        </tbody>
+      </table>
+
+      <div class="cover-section-header" style="margin-top:18px;">Revision History</div>
+      <table class="data-table cover-revisions">
+        <thead><tr><th>Version</th><th>Date</th><th>Author</th><th>Description of Change</th></tr></thead>
+        <tbody>${revisionRows}</tbody>
+      </table>
+
       <p class="confidentiality"><strong>Confidentiality Notice.</strong> This document contains confidential and proprietary information of Packet Fusion, Inc. and the Customer named above. It is provided solely for the purpose of evaluating and executing the services described herein and may not be reproduced, distributed, or disclosed to any third party without the prior written consent of Packet Fusion.</p>
     </section>
   `;
 }
+
+// Title-page now embeds the revision history; the separate revisionHistory()
+// section that used to follow the cover is no longer needed.
+function revisionHistory(_ctx: SowBuildContext): string { return ""; }
 
 function executiveSummary(variant: SowVariant, ctx: SowBuildContext): string {
   return `
@@ -514,14 +550,24 @@ function styles(): string {
     .pricing-summary .total-row td { border-top: 2px solid ${NAVY}; background: rgba(0,59,92,0.04); }
     .page-section { page-break-inside: auto; margin-bottom: 14px; }
     /* Cover */
-    .cover { padding: 0.5in 0 0.25in; min-height: 9in; position: relative; page-break-after: always; }
-    .cover-eyebrow { font-size: 10pt; font-weight: 700; color: ${GREEN}; text-transform: uppercase; letter-spacing: 0.18em; margin-bottom: 16px; }
-    .cover-title { font-size: 34pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.02em; line-height: 1.05; margin-bottom: 24px; }
-    .cover-customer { font-size: 20pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.01em; line-height: 1.1; margin-bottom: 28px; }
-    .cover-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-top: 22px; border-top: 2px solid ${GREEN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .cover-meta-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.16em; color: ${GREEN}; margin-bottom: 5px; }
-    .cover-meta-value { font-size: 10.5pt; font-weight: 600; color: ${NAVY}; line-height: 1.4; }
-    .cover-logo { position: absolute; bottom: 0.25in; right: 0; height: 36px; }
+    .cover { padding: 0; min-height: 9in; position: relative; page-break-after: always; }
+    .cover-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 3px solid ${GREEN}; margin-bottom: 38px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-logo { height: 42px; }
+    .cover-confidential { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.22em; color: ${GREEN}; text-transform: uppercase; }
+    .cover-title-block { margin-bottom: 32px; }
+    .cover-title { font-size: 38pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.025em; line-height: 1.02; }
+    .cover-subtitle { font-size: 16pt; font-weight: 700; color: ${GREEN}; margin-top: 8px; letter-spacing: 0.01em; }
+    .cover-section-header { font-size: 11pt; font-weight: 800; color: ${NAVY}; text-transform: uppercase; letter-spacing: 0.14em; padding-bottom: 4px; border-bottom: 1px solid ${GREEN}; margin: 10px 0 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    /* PREPARED FOR / PREPARED BY two-column table */
+    .cover-prepared { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .cover-prepared th { background: ${GREY}; color: ${NAVY}; text-align: left; padding: 6px 10px; border: 1px solid #b8c5cf; font-weight: 800; font-size: 9.5pt; letter-spacing: 0.12em; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-prepared td { padding: 8px 10px; border: 1px solid #d6dde2; vertical-align: top; font-size: 10.5pt; color: ${NAVY}; }
+    .cover-prepared td div { margin: 1px 0; }
+    /* SOW Details key/value table */
+    .cover-details { width: 100%; border-collapse: collapse; margin-bottom: 14px; }
+    .cover-details th { background: rgba(0,59,92,0.04); color: ${NAVY}; text-align: left; padding: 6px 10px; border: 1px solid #d6dde2; font-weight: 700; font-size: 10pt; width: 30%; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-details td { padding: 6px 10px; border: 1px solid #d6dde2; font-size: 10.5pt; color: #1a1a1a; }
+    .cover-revisions th { background: ${GREY}; }
     /* Snapshot tiles */
     .snap-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 8px 0 16px; }
     .snap-tile { background: rgba(0,59,92,0.04); border: 1px solid ${GREY}; border-radius: 6px; padding: 12px 14px; text-align: center; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
