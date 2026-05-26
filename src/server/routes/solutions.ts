@@ -542,8 +542,20 @@ type SowRevision = {
   note?: string | null;
 };
 
+/**
+ * Duration bands drive the Key Dates table on the SOW cover. Planning &
+ * Port Order milestones scale with total project length; the other rows
+ * (Kickoff +5bd from SOW exec, UAT -1wk, Closure +1wk) stay fixed.
+ *
+ * "custom" pairs with `custom_weeks` for non-standard engagements.
+ */
+type DurationBand = "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom";
+
 type SowMetadata = {
   msa_date?: string | null;
+  target_go_live_date?: string | null;
+  duration_band?: DurationBand | null;
+  custom_weeks?: number | null;
   revisions: SowRevision[];
 };
 
@@ -553,6 +565,9 @@ function readSowMetadata(blob: string | null | undefined): SowMetadata {
     const parsed = JSON.parse(blob) as Partial<SowMetadata>;
     return {
       msa_date: parsed.msa_date ?? null,
+      target_go_live_date: parsed.target_go_live_date ?? null,
+      duration_band: parsed.duration_band ?? null,
+      custom_weeks: parsed.custom_weeks ?? null,
       revisions: Array.isArray(parsed.revisions) ? parsed.revisions : [],
     };
   } catch {
@@ -606,7 +621,10 @@ app.post("/:id/sow-version", async (c) => {
 });
 
 const sowMetadataSchema = z.object({
-  msa_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  msa_date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  target_go_live_date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  duration_band:        z.enum(["4_6_weeks", "6_8_weeks", "8_12_weeks", "custom"]).nullable().optional(),
+  custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
 });
 
 app.patch("/:id/sow-metadata", async (c) => {
@@ -629,7 +647,10 @@ app.patch("/:id/sow-metadata", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const meta = readSowMetadata(existing.sow_metadata);
-  if (parsed.data.msa_date !== undefined) meta.msa_date = parsed.data.msa_date;
+  if (parsed.data.msa_date !== undefined)             meta.msa_date = parsed.data.msa_date;
+  if (parsed.data.target_go_live_date !== undefined)  meta.target_go_live_date = parsed.data.target_go_live_date;
+  if (parsed.data.duration_band !== undefined)        meta.duration_band = parsed.data.duration_band;
+  if (parsed.data.custom_weeks !== undefined)         meta.custom_weeks = parsed.data.custom_weeks;
 
   await db
     .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
