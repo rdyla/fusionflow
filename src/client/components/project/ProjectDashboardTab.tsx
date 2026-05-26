@@ -67,7 +67,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
   if (error) return <Center error>{error}</Center>;
   if (!data) return <Center>No data.</Center>;
 
-  const { stats, sites, open_tasks, assignee_breakdown, blockers, key_updates, team, links, phase_progress } = data;
+  const { stats, sites, open_tasks, assignee_phase_breakdown, blockers, key_updates, team, links, phase_progress } = data;
   const multiSite = sites.length > 0;
   const rollupLabel = multiSite ? `Across ${sites.length} site${sites.length === 1 ? "" : "s"}` : "Across this project";
 
@@ -174,26 +174,38 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
             </ul>
           )}
 
-          {assignee_breakdown.length > 0 && multiSite && (
+          {assignee_phase_breakdown.rows.length > 0 && assignee_phase_breakdown.phase_columns.length > 0 && (
             <>
               <Subheading>By assignee</Subheading>
               <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: "4px 0", textAlign: "left", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}></th>
+                    {assignee_phase_breakdown.phase_columns.map((name) => (
+                      <th key={name} style={{ padding: "4px 0", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", paddingLeft: 8 }}>
+                        {name}
+                      </th>
+                    ))}
+                    <th style={{ padding: "4px 0", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", paddingLeft: 8 }}>
+                      Total
+                    </th>
+                  </tr>
+                </thead>
                 <tbody>
-                  {assignee_breakdown.slice(0, 6).map((a) => (
+                  {assignee_phase_breakdown.rows.slice(0, 8).map((a) => (
                     <tr key={a.user_id}>
-                      <td style={{ padding: "4px 0", color: TEXT_MUTED }}>{a.name}</td>
-                      {sites.map((s, i) => (
-                        <td key={s.id} style={{ padding: "4px 0", textAlign: "right", color: TEXT_MUTED, paddingLeft: 8 }}>
-                          <span style={{ color: TEXT_FAINT, fontSize: 10 }}>S{i + 1}</span>{" "}
-                          <strong style={{ color: TEXT_PRIMARY }}>{a.counts[s.id] ?? 0}</strong>
-                        </td>
-                      ))}
-                      {a.shared > 0 && (
-                        <td style={{ padding: "4px 0", textAlign: "right", color: TEXT_MUTED, paddingLeft: 8 }}>
-                          <span style={{ color: TEXT_FAINT, fontSize: 10 }}>Init</span>{" "}
-                          <strong style={{ color: TEXT_PRIMARY }}>{a.shared}</strong>
-                        </td>
-                      )}
+                      <td style={{ padding: "4px 0", color: TEXT_MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 140 }}>{a.name}</td>
+                      {assignee_phase_breakdown.phase_columns.map((name) => {
+                        const v = a.counts[name] ?? 0;
+                        return (
+                          <td key={name} style={{ padding: "4px 0", textAlign: "right", paddingLeft: 8 }}>
+                            <strong style={{ color: v > 0 ? TEXT_PRIMARY : TEXT_FAINT }}>{v}</strong>
+                          </td>
+                        );
+                      })}
+                      <td style={{ padding: "4px 0", textAlign: "right", paddingLeft: 8 }}>
+                        <strong style={{ color: PF_BLUE }}>{a.total}</strong>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

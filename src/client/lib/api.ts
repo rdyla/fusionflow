@@ -1149,6 +1149,18 @@ export type StakeholderSummary = {
     shared: number;
     total: number;
   }>;
+  /** Per-assignee × phase-name pivot for the "By assignee" table on the
+   *  Open Tasks panel. Phase names are rolled up across sites so multi-
+   *  site projects show one "Plan" column instead of one per site. */
+  assignee_phase_breakdown: {
+    phase_columns: string[];
+    rows: Array<{
+      user_id: string;
+      name: string;
+      counts: Record<string, number>;
+      total: number;
+    }>;
+  };
   blockers: Array<{
     id: string;
     title: string;

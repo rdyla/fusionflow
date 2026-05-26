@@ -83,6 +83,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     perSiteTaskCounts,
     openTasks,
     assigneeAgg,
+    assigneePhaseAgg,
     blockers,
     notes,
     pmRow,
@@ -158,6 +159,26 @@ app.get("/:id/stakeholder-summary", async (c) => {
       )
       .bind(projectId)
       .all<{ assignee_user_id: string; assignee_name: string | null; site_id: string | null; cnt: number }>(),
+    // Per-assignee × phase-name pivot for the "By assignee" breakdown on
+    // the Open Tasks panel. Phases are grouped by NAME so multi-site
+    // projects collapse "Plan" across all sites into a single column —
+    // the PM wants "how many open tasks does Sarah have in Execute"
+    // regardless of which site that work belongs to.
+    db
+      .prepare(
+        `SELECT t.assignee_user_id, u.name AS assignee_name,
+                p.name AS phase_name, MIN(p.sort_order) AS sort_order,
+                COUNT(*) AS cnt
+         FROM tasks t
+         LEFT JOIN users u  ON u.id = t.assignee_user_id
+         LEFT JOIN phases p ON p.id = t.phase_id
+         WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
+           AND t.assignee_user_id IS NOT NULL
+           AND p.name IS NOT NULL
+         GROUP BY t.assignee_user_id, p.name`
+      )
+      .bind(projectId)
+      .all<{ assignee_user_id: string; assignee_name: string | null; phase_name: string; sort_order: number | null; cnt: number }>(),
     db
       .prepare(
         `SELECT r.id, r.title, r.description, r.severity, r.status,
@@ -329,6 +350,30 @@ app.get("/:id/stakeholder-summary", async (c) => {
   }
   const assigneeBreakdown = [...assigneeMap.values()].sort((a, b) => b.total - a.total);
 
+  // ── Per-assignee × phase-name pivot (universal — single + multi-site) ──────
+  // On multi-site, the same phase NAME ("Plan", "Execute") exists once per
+  // site. We collapse them so the table reads as "how much open work does
+  // each assignee have at each PMI stage" without exploding into N×M columns.
+  const phaseColumnOrder = new Map<string, number>();
+  const assigneePhaseMap = new Map<string, { user_id: string; name: string; counts: Record<string, number>; total: number }>();
+  for (const row of assigneePhaseAgg.results ?? []) {
+    if (!row.assignee_user_id) continue;
+    const existing = phaseColumnOrder.get(row.phase_name);
+    const order = row.sort_order ?? 9999;
+    if (existing === undefined || order < existing) phaseColumnOrder.set(row.phase_name, order);
+    let entry = assigneePhaseMap.get(row.assignee_user_id);
+    if (!entry) {
+      entry = { user_id: row.assignee_user_id, name: row.assignee_name ?? "Unknown", counts: {}, total: 0 };
+      assigneePhaseMap.set(row.assignee_user_id, entry);
+    }
+    entry.counts[row.phase_name] = (entry.counts[row.phase_name] ?? 0) + row.cnt;
+    entry.total += row.cnt;
+  }
+  const phaseColumns = [...phaseColumnOrder.entries()]
+    .sort((a, b) => a[1] - b[1])
+    .map(([name]) => name);
+  const assigneePhaseBreakdown = [...assigneePhaseMap.values()].sort((a, b) => b.total - a.total);
+
   // ── Site name map for labeling open tasks ──────────────────────────────────
   const siteNameMap = new Map(sites.map((s) => [s.id, s.name]));
 
@@ -383,6 +428,10 @@ app.get("/:id/stakeholder-summary", async (c) => {
       is_meeting: !!t.meeting_join_url,
     })),
     assignee_breakdown: assigneeBreakdown,
+    assignee_phase_breakdown: {
+      phase_columns: phaseColumns,
+      rows: assigneePhaseBreakdown,
+    },
     blockers: blockerRows.map((b) => ({
       id: b.id,
       title: b.title,
