@@ -36,6 +36,7 @@ type ProjectRow = {
   target_go_live_date: string | null;
   updated_at: string | null;
   crm_case_id: string | null;
+  sharepoint_folder_url: string | null;
   status_meeting_title: string | null;
   status_meeting_dow: number | null;
   status_meeting_time_local: string | null;
@@ -62,7 +63,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
   const project = await db
     .prepare(
       `SELECT id, name, customer_name, customer_id, pm_user_id,
-              target_go_live_date, updated_at, crm_case_id,
+              target_go_live_date, updated_at, crm_case_id, sharepoint_folder_url,
               status_meeting_title, status_meeting_dow, status_meeting_time_local,
               status_meeting_timezone, status_meeting_duration_min, status_meeting_join_url
        FROM projects WHERE id = ?`
@@ -383,7 +384,12 @@ app.get("/:id/stakeholder-summary", async (c) => {
       partner_ae: partnerAeRow ? { id: partnerAeRow.id, name: partnerAeRow.name, email: partnerAeRow.email } : null,
     },
     links: {
-      sharepoint_url: customerRow?.sharepoint_url ?? null,
+      // Prefer the project's own SharePoint folder so stakeholders land
+      // directly on the right workspace (discovery workbooks, phone bills,
+      // CSRs, etc.) instead of the shared customer root. Fall back to the
+      // customer SP root for projects that pre-date the auto-folder feature
+      // and haven't run the "Create project folder" retrofit yet.
+      sharepoint_url: project.sharepoint_folder_url ?? customerRow?.sharepoint_url ?? null,
       crm_case_id: project.crm_case_id,
       timeline_url: `/projects/${project.id}#timeline`,
       next_call_join_url: nextCall?.join_url ?? null,
