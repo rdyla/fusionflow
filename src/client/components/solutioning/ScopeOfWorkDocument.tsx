@@ -224,21 +224,71 @@ export default function ScopeOfWorkDocument({
     goLiveCount:     counts.goLives,
   };
 
-  function openPrintWindow() {
+  function buildSowDocHtml(): string {
     const resolve = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
     const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
-    const html = buildSowHtml({
+    return buildSowHtml({
       variant, ctx,
       logoUrl: resolve(logoUrl),
       heroImageUrl: heroAsset ? resolve(heroAsset) : null,
       kickoffDate: null,
       goLiveDate: null,
     });
+  }
+
+  function openPrintWindow() {
+    const html = buildSowDocHtml();
     const win = window.open("", "_blank", "width=960,height=750");
     if (!win) return;
     win.document.write(html);
     win.document.close();
     win.focus();
+  }
+
+  /**
+   * Export the SOW as a Word-compatible .doc file.
+   *
+   * Uses the Microsoft "Word HTML" format — an officially-supported Word
+   * format since Word 2003 that wraps HTML in the Office XML namespaces.
+   * Word opens it natively, Track Changes works, and the customer can
+   * Save As .docx in one click if they need OOXML on their end.
+   *
+   * Chose this over a real OOXML library (html-to-docx etc.) because:
+   *   - Zero deps (no Buffer polyfill, no bundle bloat)
+   *   - Lossless content fidelity — Word renders our HTML/CSS faithfully
+   *   - Real .docx libraries downgrade complex tables and lose styling
+   *
+   * Trade-off: print-only CSS (`@page` margins, hero background images,
+   * the BUDGETARY watermark) won't survive — those are layout polish for
+   * the print/PDF path. The text and table content render fully.
+   */
+  function downloadAsWord() {
+    const html = buildSowDocHtml();
+    // Inject Office namespaces + MSO instructions onto the existing
+    // doctype/html shell. The doctype gets dropped (Word doesn't expect
+    // a doctype in Word HTML); namespaces signal "treat me as a Word doc".
+    const wordHtml = html
+      .replace(/^<!doctype html>/i, "")
+      .replace(
+        /^<html>/,
+        `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">`,
+      )
+      .replace(
+        /<head>/,
+        `<head>\n<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/><w:DoNotShowInsertionsAndDeletions/></w:WordDocument></xml><![endif]-->`,
+      );
+
+    // UTF-8 BOM so Word picks up the encoding without prompting.
+    const blob = new Blob(["﻿", wordHtml], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeName} - SOW ${ctx.sowNumber}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function saveMsaDate() {
@@ -292,6 +342,13 @@ export default function ScopeOfWorkDocument({
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 16 }}>
         <button className="ms-btn-primary" onClick={openPrintWindow} style={{ background: "#03395f" }}>
           Export / Print SOW
+        </button>
+        <button
+          className="ms-btn-secondary"
+          onClick={downloadAsWord}
+          title="Download a Word-compatible file the customer can red-line with Track Changes. Opens directly in Word; save-as .docx if customer needs OOXML."
+        >
+          Download for Word (.doc)
         </button>
         {variant.isStub && (
           <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
