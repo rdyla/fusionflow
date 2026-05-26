@@ -46,9 +46,10 @@ const FUZZY_MATCH_THRESHOLD = 0.6;
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// ── Admin CRUD (all require admin role) ────────────────────────────────────────
+// ── Template CRUD — read endpoints open to PM so they can pick a template
+//    to apply; mutations stay admin-only so PMs can't edit the global library.
 
-app.get("/templates", requireRole("admin"), async (c) => {
+app.get("/templates", requireRole("admin", "pm"), async (c) => {
   const db = c.env.DB;
   const templates = await db
     .prepare(
