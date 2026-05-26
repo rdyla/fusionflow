@@ -24,11 +24,18 @@ import { api } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import logoUrl from "../../assets/packetfusion-fullcolor.png";
 import zoomUcaasHero from "../../assets/sow-hero-zoom-ucaas.jpg";
+import heroUcaasGeneric from "../../assets/sow bg 1.png";
+import heroCcaas        from "../../assets/sow bg 4.png";
+import heroAiData       from "../../assets/sow bg 3.png";
+// sow bg 2 (security/infra) reserved for future MSO / managed-services variants.
 
-// Per-variant hero illustration map. Stubs and variants without artwork
-// resolve to undefined; the renderer falls back to a text-only cover.
+// Per-variant hero illustration map. Variants without an entry get a clean
+// text-only cover (logo + title centered) — no broken-image fallback.
 const HERO_URLS: Record<string, string> = {
-  zoom_ucaas: zoomUcaasHero,
+  zoom_ucaas:     zoomUcaasHero,    // The docx-sourced UCaaS ecosystem hero
+  ucaas_generic:  heroUcaasGeneric, // Shared between non-Zoom UCaaS variants
+  ccaas:          heroCcaas,        // Contact center (Zoom + RingCentral)
+  ai_data:        heroAiData,       // CI / VA / RC AIR — AI/data imagery
 };
 
 // ── Sow metadata blob shape (mirrors server) ─────────────────────────────────

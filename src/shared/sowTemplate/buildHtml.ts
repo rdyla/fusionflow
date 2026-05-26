@@ -79,16 +79,18 @@ function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, h
   if (heroImageUrl) {
     return `
       <section class="cover cover--hero" style="background-image: linear-gradient(rgba(0,30,50,0.05), rgba(0,30,50,0.25)), url('${heroImageUrl}');">
-        ${stubBanner}
-        <div class="cover-head">
-          <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo cover-logo--on-hero" />
-          <div class="cover-confidential cover-confidential--on-hero">CONFIDENTIAL</div>
-        </div>
-        <div class="cover-hero-text">
-          <div class="cover-title cover-title--on-hero">STATEMENT OF WORK</div>
-          <div class="cover-subtitle cover-subtitle--on-hero">${esc(variant.productLine)}</div>
-          <div class="cover-customer-line">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
-          <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+        <div class="cover-inner">
+          ${stubBanner}
+          <div class="cover-head">
+            <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo cover-logo--on-hero" />
+            <div class="cover-confidential cover-confidential--on-hero">CONFIDENTIAL</div>
+          </div>
+          <div class="cover-hero-text">
+            <div class="cover-title cover-title--on-hero">STATEMENT OF WORK</div>
+            <div class="cover-subtitle cover-subtitle--on-hero">${esc(variant.productLine)}</div>
+            <div class="cover-customer-line">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
+            <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+          </div>
         </div>
       </section>
     `;
@@ -552,6 +554,10 @@ function section13(ctx: SowBuildContext): string {
 function styles(): string {
   return `
     @page { size: letter; margin: 0.75in; }
+    /* The hero cover page wants zero @page margin so the illustration prints
+       edge-to-edge. Named-page selector targets only the first sheet so the
+       rest of the doc keeps its normal margins. */
+    @page :first { margin: 0; }
     body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; font-size: 11pt; line-height: 1.45; margin: 0; }
     h1 { font-size: 18pt; color: ${NAVY}; border-bottom: 2px solid ${GREEN}; padding-bottom: 4px; margin-top: 32px; margin-bottom: 12px; }
     h2 { font-size: 15pt; color: ${NAVY}; margin-top: 24px; margin-bottom: 10px; }
@@ -578,14 +584,26 @@ function styles(): string {
     .cover-subtitle { font-size: 16pt; font-weight: 700; color: ${GREEN}; margin-top: 8px; letter-spacing: 0.01em; }
     .cover-customer-line { font-size: 13pt; color: ${NAVY}; margin-top: 18px; font-weight: 600; }
     .cover-issue-line { font-size: 10.5pt; color: #475569; margin-top: 6px; letter-spacing: 0.04em; }
-    /* Hero-cover variant — illustration as the page background, title overlaid */
+    /* Hero-cover variant — illustration as the page background edge-to-edge.
+       Outer .cover--hero carries the background and zero padding so the image
+       bleeds to the page edges. Inner .cover-inner gives the title block + the
+       logo/CONFIDENTIAL header breathing room (~0.6in inset) so the text
+       doesn't touch the printed paper edges. */
     .cover--hero {
       background-size: cover;
       background-position: center;
       background-repeat: no-repeat;
       color: #ffffff;
-      padding: 0.5in 0.5in 0.5in;
+      padding: 0;
+      margin: 0;
+      min-height: 10in; /* fills a letter page top-to-bottom */
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }
+    .cover--hero .cover-inner {
+      padding: 0.5in 0.6in 0.5in;
+      min-height: 10in;
+      display: flex;
+      flex-direction: column;
     }
     .cover--hero .cover-head { border-bottom-color: rgba(255,255,255,0.4); }
     .cover-logo--on-hero { filter: brightness(0) invert(1); /* makes the logo white over the dark image */ }
