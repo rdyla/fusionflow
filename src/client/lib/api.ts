@@ -123,6 +123,10 @@ export type Solution = {
   handoff_notes: string | null;
   phd_data: string | null;
   sow_data: string | null;
+  /** JSON blob: { msa_date?, revisions[] }. Mutated only via the SOW
+   *  metadata endpoints — `generateSowVersion` appends a revision and
+   *  `updateSowMetadata` patches the msa_date. */
+  sow_metadata: string | null;
   gap_analysis: string | null;
   linked_project_id: string | null;
   customer_id: string | null;
@@ -1719,6 +1723,22 @@ export const api = {
 
   deleteSolution: (id: string) =>
     request<{ success: boolean }>(`/solutions/${id}`, { method: "DELETE" }),
+
+  /** Snapshot the current SOW as a new version (V1, V2, ...). Captures the
+   *  current user as the author. Optional note becomes the "Description"
+   *  column in the cover page's revision-history table. */
+  generateSowVersion: (id: string, payload: { note?: string | null }) =>
+    request<{
+      sow_metadata: { msa_date?: string | null; revisions: Array<{ version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null }> };
+      new_revision: { version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null };
+    }>(`/solutions/${id}/sow-version`, { method: "POST", body: JSON.stringify(payload) }),
+
+  /** Update SOW cover-page metadata (currently just msa_date). Doesn't touch
+   *  revisions — those are append-only via generateSowVersion. */
+  updateSowMetadata: (id: string, payload: { msa_date?: string | null }) =>
+    request<{ sow_metadata: { msa_date?: string | null; revisions: unknown[] } }>(
+      `/solutions/${id}/sow-metadata`, { method: "PATCH", body: JSON.stringify(payload) }
+    ),
 
   createProjectFromSolution: (id: string) =>
     request<Project>(`/solutions/${id}/create-project`, { method: "POST" }),

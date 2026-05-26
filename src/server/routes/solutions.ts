@@ -523,6 +523,122 @@ app.patch("/:id", async (c) => {
   return c.json(normalizedUpdated);
 });
 
+// ── SOW Metadata + Versioning ─────────────────────────────────────────────────
+//
+// sow_metadata is a JSON blob on the solution row: { msa_date?, revisions[] }.
+// "Generate Version" appends to revisions[]. The latest revision's `version`
+// (e.g. "V3") is the SOW's current version; the array doubles as the revision
+// history shown on the SOW cover page.
+//
+// We deliberately don't expose a full PATCH on the blob — every mutation
+// goes through one of the two endpoints below so callers can't accidentally
+// blow away revision history with a stale write.
+
+type SowRevision = {
+  version: string;
+  saved_at: string;
+  saved_by_user_id: string | null;
+  saved_by_name: string | null;
+  note?: string | null;
+};
+
+type SowMetadata = {
+  msa_date?: string | null;
+  revisions: SowRevision[];
+};
+
+function readSowMetadata(blob: string | null | undefined): SowMetadata {
+  if (!blob) return { revisions: [] };
+  try {
+    const parsed = JSON.parse(blob) as Partial<SowMetadata>;
+    return {
+      msa_date: parsed.msa_date ?? null,
+      revisions: Array.isArray(parsed.revisions) ? parsed.revisions : [],
+    };
+  } catch {
+    return { revisions: [] };
+  }
+}
+
+/** Returns the next monotonic version string. Skips no numbers — V1, V2, V3, ... */
+function nextVersion(revisions: SowRevision[]): string {
+  const max = revisions.reduce((acc, r) => {
+    const n = Number((r.version ?? "").replace(/^V/i, ""));
+    return Number.isFinite(n) && n > acc ? n : acc;
+  }, 0);
+  return `V${max + 1}`;
+}
+
+const sowVersionSchema = z.object({
+  note: z.string().max(2000).nullable().optional(),
+});
+
+app.post("/:id/sow-version", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const existing = await db
+    .prepare("SELECT id, sow_metadata FROM solutions WHERE id = ? LIMIT 1")
+    .bind(solutionId)
+    .first<{ id: string; sow_metadata: string | null }>();
+  if (!existing) throw new HTTPException(404, { message: "Solution not found" });
+
+  const parsed = sowVersionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+
+  const meta = readSowMetadata(existing.sow_metadata);
+  const newRev: SowRevision = {
+    version: nextVersion(meta.revisions),
+    saved_at: new Date().toISOString(),
+    saved_by_user_id: auth.user.id,
+    saved_by_name: auth.user.name ?? auth.user.email,
+    note: parsed.data.note?.trim() || null,
+  };
+  meta.revisions = [...meta.revisions, newRev];
+
+  await db
+    .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(JSON.stringify(meta), solutionId)
+    .run();
+
+  return c.json({ sow_metadata: meta, new_revision: newRev });
+});
+
+const sowMetadataSchema = z.object({
+  msa_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+
+app.patch("/:id/sow-metadata", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  // Tap into the existing access path — same gate as PATCH /:id.
+  const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
+    ? await getTeamUserIds(auth.user.id, db)
+    : [auth.user.id];
+  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+  const existing = await db
+    .prepare(`SELECT s.id, s.sow_metadata FROM solutions s WHERE s.id = ? AND (${where}) LIMIT 1`)
+    .bind(solutionId, ...bindings)
+    .first<{ id: string; sow_metadata: string | null }>();
+  if (!existing) throw new HTTPException(404, { message: "Solution not found" });
+
+  const parsed = sowMetadataSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+
+  const meta = readSowMetadata(existing.sow_metadata);
+  if (parsed.data.msa_date !== undefined) meta.msa_date = parsed.data.msa_date;
+
+  await db
+    .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(JSON.stringify(meta), solutionId)
+    .run();
+
+  return c.json({ sow_metadata: meta });
+});
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 app.delete("/:id", async (c) => {

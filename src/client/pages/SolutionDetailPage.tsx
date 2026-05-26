@@ -5,7 +5,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
-import ScopeOfWorkDocument from "../components/solutioning/ScopeOfWorkDocument";
+import ScopeOfWorkDocument, { parseSowMetadata } from "../components/solutioning/ScopeOfWorkDocument";
 import SowAddOnsEditor from "../components/solutioning/SowAddOnsEditor";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
@@ -1328,7 +1328,12 @@ export default function SolutionDetailPage() {
             laborEstimates={Object.values(laborEstimates)}
             scopeText={scope}
             sowData={sowData}
+            sowMetadata={parseSowMetadata(solution.sow_metadata)}
             currentUser={currentUser}
+            onMetadataChanged={async () => {
+              const refreshed = await api.solution(solution.id);
+              setSolution(refreshed);
+            }}
           />
 
           {/* Scope notes textarea — feeds into the generated document */}
