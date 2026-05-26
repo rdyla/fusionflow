@@ -63,11 +63,27 @@ export type User = {
   is_support_supervisor?: number;
   is_project_resource?: number;
   avatar_url?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  scheduler_url?: string | null;
   dynamics_account_id?: string | null;
   manager_id?: string | null;
   zoom_user_id?: string | null;
   can_open_cases?: boolean;
   cs_permission?: "none" | "user" | "power_user";
+};
+
+export type MyProfile = {
+  id: string;
+  email: string;
+  role: string;
+  organization_name: string | null;
+  name: string | null;
+  title: string | null;
+  phone: string | null;
+  scheduler_url: string | null;
+  avatar_url: string | null;
+  has_custom_avatar: boolean;
 };
 
 // Re-exported from the shared canonical source so every call site lines up
@@ -1139,10 +1155,10 @@ export type StakeholderSummary = {
     created_at: string;
   }>;
   team: {
-    pm: { id: string; name: string | null; email: string } | null;
-    engineer: { id: string; name: string | null; email: string } | null;
+    pm: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null } | null;
+    engineer: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null } | null;
     primary_contact: { name: string; email: string | null; job_title: string | null } | null;
-    partner_ae: { id: string; name: string | null; email: string } | null;
+    partner_ae: { id: string; name: string | null; email: string; title: string | null; phone: string | null; scheduler_url: string | null } | null;
   };
   links: {
     sharepoint_url: string | null;
@@ -2165,6 +2181,38 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ vendor }),
     }),
+
+  // ── Self-service profile ─────────────────────────────────────────────────────
+  getMyProfile: () => request<MyProfile>("/me/profile"),
+  updateMyProfile: (payload: {
+    name?: string;
+    title?: string | null;
+    phone?: string | null;
+    scheduler_url?: string | null;
+  }) =>
+    request<{ ok: true }>("/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  uploadMyAvatar: async (file: File): Promise<{ avatar_url: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/me/avatar`, {
+      method: "POST",
+      body: form,
+      headers: { ...getImpersonationHeaders() },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+      const message = (typeof body?.error === "string" ? body.error : null)
+        ?? (typeof body?.message === "string" ? body.message : null)
+        ?? `API error: ${res.status}`;
+      throw new ApiError(res.status, message, body);
+    }
+    return res.json();
+  },
+  deleteMyAvatar: () =>
+    request<{ ok: true }>("/me/avatar", { method: "DELETE" }),
 };
 
 // ── Meeting prep types ─────────────────────────────────────────────────────
