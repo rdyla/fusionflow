@@ -177,33 +177,33 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
           {assignee_phase_breakdown.rows.length > 0 && assignee_phase_breakdown.phase_columns.length > 0 && (
             <>
               <Subheading>By assignee</Subheading>
-              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
+              <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse", tableLayout: "fixed" }}>
                 <thead>
                   <tr>
                     <th style={{ padding: "4px 0", textAlign: "left", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em" }}></th>
                     {assignee_phase_breakdown.phase_columns.map((name) => (
-                      <th key={name} style={{ padding: "4px 0", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", paddingLeft: 8 }}>
-                        {name}
+                      <th key={name} title={name} style={{ padding: "4px 2px", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>
+                        {abbreviatePhase(name)}
                       </th>
                     ))}
-                    <th style={{ padding: "4px 0", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, textTransform: "uppercase", letterSpacing: "0.06em", paddingLeft: 8 }}>
-                      Total
+                    <th style={{ padding: "4px 2px", textAlign: "right", color: TEXT_FAINT, fontWeight: 500, fontSize: 10, letterSpacing: "0.04em" }}>
+                      TOT
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {assignee_phase_breakdown.rows.slice(0, 8).map((a) => (
                     <tr key={a.user_id}>
-                      <td style={{ padding: "4px 0", color: TEXT_MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 140 }}>{a.name}</td>
+                      <td style={{ padding: "4px 0", color: TEXT_MUTED, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.name}</td>
                       {assignee_phase_breakdown.phase_columns.map((name) => {
                         const v = a.counts[name] ?? 0;
                         return (
-                          <td key={name} style={{ padding: "4px 0", textAlign: "right", paddingLeft: 8 }}>
+                          <td key={name} style={{ padding: "4px 2px", textAlign: "right" }}>
                             <strong style={{ color: v > 0 ? TEXT_PRIMARY : TEXT_FAINT }}>{v}</strong>
                           </td>
                         );
                       })}
-                      <td style={{ padding: "4px 0", textAlign: "right", paddingLeft: 8 }}>
+                      <td style={{ padding: "4px 2px", textAlign: "right" }}>
                         <strong style={{ color: PF_BLUE }}>{a.total}</strong>
                       </td>
                     </tr>
@@ -551,6 +551,21 @@ function Center({ children, error }: { children: React.ReactNode; error?: boolea
 }
 
 // ── Formatting helpers ─────────────────────────────────────────────────────
+
+/**
+ * Compact column header for phase-name tables. Single-word phases use the
+ * first 4 chars uppercased (Initiation → INIT, Planning → PLAN). Multi-
+ * word phases use the initial of each word (Monitoring/Controlling → MC,
+ * Go Live / Production → GLP). The full name is supplied via `title` so
+ * hovering surfaces it.
+ */
+function abbreviatePhase(name: string): string {
+  const cleaned = name.replace(/[^A-Za-z\s/]/g, "").trim();
+  const words = cleaned.split(/[\s/]+/).filter(Boolean);
+  if (words.length === 0) return "—";
+  if (words.length === 1) return words[0].slice(0, 4).toUpperCase();
+  return words.slice(0, 3).map((w) => w[0]?.toUpperCase() ?? "").join("");
+}
 
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
