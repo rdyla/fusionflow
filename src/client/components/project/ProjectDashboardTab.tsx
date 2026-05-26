@@ -67,7 +67,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
   if (error) return <Center error>{error}</Center>;
   if (!data) return <Center>No data.</Center>;
 
-  const { stats, sites, open_tasks, assignee_breakdown, blockers, key_updates, team, links } = data;
+  const { stats, sites, open_tasks, assignee_breakdown, blockers, key_updates, team, links, phase_progress } = data;
   const multiSite = sites.length > 0;
   const rollupLabel = multiSite ? `Across ${sites.length} site${sites.length === 1 ? "" : "s"}` : "Across this project";
 
@@ -109,6 +109,41 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
             gap: 12, marginBottom: 18,
           }}>
             {sites.map((s) => <SiteCard key={s.id} site={s} />)}
+          </div>
+        </>
+      )}
+
+      {/* Phase progress — one column per site (plus shared if multi-site).
+          Single-site projects collapse to a single full-width column. */}
+      {phase_progress.length > 0 && (
+        <>
+          <SectionLabel>Phase progress</SectionLabel>
+          <div style={{
+            background: "#fff", border: `1px solid ${PF_BORDER}`, borderRadius: 12,
+            padding: "16px 18px", marginBottom: 18,
+          }}>
+            <div style={{
+              display: "grid",
+              gridTemplateColumns: `repeat(${phase_progress.length}, minmax(0, 1fr))`,
+              gap: 18,
+            }}>
+              {phase_progress.map((col) => (
+                <div key={col.site_id ?? "shared"} style={{ minWidth: 0 }}>
+                  {phase_progress.length > 1 && (
+                    <div style={{
+                      fontSize: 10, fontWeight: 700, color: PF_BLUE,
+                      textTransform: "uppercase", letterSpacing: "0.1em",
+                      marginBottom: 10, paddingBottom: 8, borderBottom: `1px solid ${PF_BORDER}`,
+                    }}>
+                      {col.site_name ?? "Shared"}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {col.phases.map((p) => <PhaseSlider key={p.id} phase={p} />)}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </>
       )}
@@ -339,6 +374,33 @@ function Subheading({ children }: { children: React.ReactNode }) {
       color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em",
     }}>
       {children}
+    </div>
+  );
+}
+
+function PhaseSlider({
+  phase,
+}: {
+  phase: { name: string; status: string | null; total_tasks: number; done_tasks: number; pct: number };
+}) {
+  const isComplete = phase.pct >= 100;
+  const isNotStarted = phase.total_tasks === 0 || (phase.done_tasks === 0 && phase.status !== "in_progress");
+  const fill = isComplete ? PF_GREEN : isNotStarted ? "#cbd5e1" : PF_BLUE;
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
+        <span style={{ fontSize: 12, fontWeight: 600, color: TEXT_PRIMARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {phase.name}
+        </span>
+        <span style={{ fontSize: 11, color: TEXT_MUTED, flexShrink: 0 }}>
+          {phase.total_tasks > 0
+            ? `${phase.done_tasks}/${phase.total_tasks} · ${phase.pct}%`
+            : "no tasks"}
+        </span>
+      </div>
+      <div style={{ background: "#f1f5f9", borderRadius: 4, height: 6, overflow: "hidden" }}>
+        <div style={{ background: fill, height: "100%", width: `${phase.pct}%`, transition: "width 0.3s ease" }} />
+      </div>
     </div>
   );
 }

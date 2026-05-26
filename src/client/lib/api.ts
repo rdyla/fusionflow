@@ -1176,6 +1176,23 @@ export type StakeholderSummary = {
     timeline_url: string;
     next_call_join_url: string | null;
   };
+  /** Phase-progress sliders shown on the dashboard. One entry per
+   *  "column" — shared first (Initiate on multi-site projects), then one
+   *  per site in display order. Single-site projects have one entry with
+   *  `site_id = null` containing all phases. */
+  phase_progress: Array<{
+    site_id: string | null;
+    site_name: string | null;
+    phases: Array<{
+      id: string;
+      name: string;
+      sort_order: number | null;
+      status: string | null;
+      total_tasks: number;
+      done_tasks: number;
+      pct: number;
+    }>;
+  }>;
 };
 
 export const api = {
