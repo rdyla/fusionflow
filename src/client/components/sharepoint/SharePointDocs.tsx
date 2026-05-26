@@ -156,7 +156,10 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
     const currentUrl = folderStack[folderStack.length - 1].url;
     setUploading(true);
     try {
-      const { file: uploaded } = await api.spUpload(currentUrl, file, uploadDescription || null);
+      const { file: uploaded } = await api.spUpload(currentUrl, file, {
+        description: uploadDescription || null,
+        projectId: projectId ?? null,
+      });
       setFiles((prev) => {
         const without = prev.filter((f) => f.name !== uploaded.name);
         return [uploaded, ...without];
@@ -443,7 +446,7 @@ function FileRow({
             placeholder when empty so PMs/customers know they can fill it in. */}
         {!file.isFolder && (
           editing ? (
-            <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+            <div style={{ display: "flex", gap: 6, marginTop: 8, alignItems: "center" }}>
               <input
                 autoFocus
                 value={draft}
@@ -454,36 +457,38 @@ function FileRow({
                 }}
                 disabled={saving}
                 placeholder="What is this file?"
-                style={{ flex: 1, fontSize: 12, padding: "3px 8px", border: "1px solid #cbd5e1", borderRadius: 4 }}
+                style={{ flex: 1, fontSize: 12, padding: "4px 8px", border: "1px solid #cbd5e1", borderRadius: 4 }}
               />
               <button
                 onClick={save}
                 disabled={saving}
-                style={{ background: "#03395f", color: "#fff", border: "none", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer" }}
+                style={{ background: "#03395f", color: "#fff", border: "none", borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer" }}
               >
                 {saving ? "…" : "Save"}
               </button>
               <button
                 onClick={() => { setEditing(false); setDraft(file.description ?? ""); }}
                 disabled={saving}
-                style={{ background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer", color: "#64748b" }}
+                style={{ background: "#fff", border: "1px solid #cbd5e1", borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", color: "#64748b" }}
               >
                 Cancel
               </button>
             </div>
           ) : (
-            <button
-              onClick={() => { setDraft(file.description ?? ""); setEditing(true); }}
-              style={{
-                background: "none", border: "none", padding: 0, marginTop: 2,
-                fontSize: 12, color: file.description ? "#475569" : "#94a3b8",
-                cursor: "pointer", textAlign: "left", fontStyle: file.description ? "normal" : "italic",
-                lineHeight: 1.4,
-              }}
-              title="Click to edit description"
-            >
-              {file.description || "+ Add description"}
-            </button>
+            <div style={{ marginTop: 6 }}>
+              <button
+                onClick={() => { setDraft(file.description ?? ""); setEditing(true); }}
+                style={{
+                  display: "block", background: "none", border: "none", padding: 0,
+                  fontSize: 12, color: file.description ? "#475569" : "#94a3b8",
+                  cursor: "pointer", textAlign: "left", fontStyle: file.description ? "normal" : "italic",
+                  lineHeight: 1.4,
+                }}
+                title="Click to edit description"
+              >
+                {file.description || "+ Add description"}
+              </button>
+            </div>
           )
         )}
 

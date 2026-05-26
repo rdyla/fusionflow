@@ -6,9 +6,39 @@ import {
   uploadToSharePoint,
   deleteSharePointFile,
   updateSharePointFileDescription,
+  type SPFile,
 } from "../services/graphService";
+import { inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+
+/**
+ * Overlay per-file uploader attribution from `sharepoint_uploads` onto a
+ * Graph-sourced SPFile[]. Files uploaded via the SP web UI directly aren't
+ * shadowed in our table — those keep the Graph identity ("FusionFlow" /
+ * "SharePoint App") which is honest about the fact that we don't know who
+ * touched them outside our portal.
+ */
+async function overlayUploaderAttribution(db: D1Database, files: SPFile[]): Promise<SPFile[]> {
+  const fileIds = files.filter((f) => !f.isFolder).map((f) => f.id);
+  if (fileIds.length === 0) return files;
+  const ph = inPlaceholders(fileIds);
+  const rows = await db
+    .prepare(`SELECT sp_item_id, uploaded_by_name, uploaded_by_email, uploaded_at
+              FROM sharepoint_uploads WHERE sp_item_id IN (${ph})`)
+    .bind(...fileIds)
+    .all<{ sp_item_id: string; uploaded_by_name: string | null; uploaded_by_email: string | null; uploaded_at: string }>();
+  const byId = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r]));
+  return files.map((f) => {
+    const row = byId.get(f.id);
+    if (!row) return f;
+    return {
+      ...f,
+      createdAt: row.uploaded_at,
+      createdByName: row.uploaded_by_name ?? f.createdByName,
+    };
+  });
+}
 
 // GET /api/sharepoint/locations?recordId=xxx
 // Returns all SharePoint document locations for a Dynamics CRM record ID
@@ -27,13 +57,15 @@ app.get("/locations", async (c) => {
 });
 
 // GET /api/sharepoint/files?url=xxx
-// Lists files in a SharePoint folder by its absolute URL
+// Lists files in a SharePoint folder by its absolute URL. Overlays per-file
+// uploader attribution from sharepoint_uploads where we have it.
 app.get("/files", async (c) => {
   const url = c.req.query("url");
   if (!url) return c.json({ error: "url required" }, 400);
 
   try {
-    const files = await listSharePointFiles(c.env, url);
+    const raw = await listSharePointFiles(c.env, url);
+    const files = await overlayUploaderAttribution(c.env.DB, raw);
     return c.json({ files });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list SharePoint files";
@@ -42,13 +74,18 @@ app.get("/files", async (c) => {
   }
 });
 
-// POST /api/sharepoint/upload?url=xxx&description=...
+// POST /api/sharepoint/upload?url=xxx&description=...&projectId=xxx
 // Uploads a file to a SharePoint folder. Expects multipart/form-data with a "file" field.
 // Description (optional) is set on the SP driveItem as a second PATCH after the content PUT.
+// When projectId is provided, the upload is shadowed in sharepoint_uploads so
+// we can attribute the upload to the authenticated user on subsequent list calls
+// (Graph runs app-only so its createdBy is always the app principal).
 app.post("/upload", async (c) => {
   const folderUrl = c.req.query("url");
   if (!folderUrl) return c.json({ error: "url required" }, 400);
   const description = c.req.query("description") ?? null;
+  const projectId = c.req.query("projectId") ?? null;
+  const auth = c.get("auth");
 
   try {
     const formData = await c.req.formData();
@@ -64,6 +101,36 @@ app.post("/upload", async (c) => {
       file.type || "application/octet-stream",
       description
     );
+
+    // Shadow attribution so the file row shows who actually uploaded. Skipped
+    // when projectId is missing — old callers continue to work but get the
+    // app-principal name in the UI. ON CONFLICT REPLACE handles re-uploads
+    // (same filename → same sp_item_id) so the latest uploader wins.
+    if (projectId && auth?.user) {
+      try {
+        await c.env.DB
+          .prepare(
+            `INSERT INTO sharepoint_uploads
+               (sp_item_id, project_id, web_url, uploaded_by_user_id, uploaded_by_name, uploaded_by_email, uploaded_at)
+             VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+             ON CONFLICT(sp_item_id) DO UPDATE SET
+               project_id          = excluded.project_id,
+               web_url             = excluded.web_url,
+               uploaded_by_user_id = excluded.uploaded_by_user_id,
+               uploaded_by_name    = excluded.uploaded_by_name,
+               uploaded_by_email   = excluded.uploaded_by_email,
+               uploaded_at         = CURRENT_TIMESTAMP`
+          )
+          .bind(uploaded.id, projectId, uploaded.webUrl, auth.user.id, auth.user.name ?? auth.user.email, auth.user.email)
+          .run();
+        // Also stamp the response with what the UI will see on next refresh —
+        // saves an extra round-trip.
+        uploaded.createdByName = auth.user.name ?? auth.user.email;
+        uploaded.createdAt = new Date().toISOString();
+      } catch (err) {
+        console.warn("[sp.upload] attribution insert failed:", err instanceof Error ? err.message : err);
+      }
+    }
 
     return c.json({ file: uploaded });
   } catch (err) {
@@ -97,13 +164,19 @@ app.patch("/file/description", async (c) => {
 });
 
 // DELETE /api/sharepoint/file?webUrl=xxx
-// Deletes a file by its SharePoint web URL
+// Deletes a file by its SharePoint web URL. Also cleans up its sharepoint_uploads
+// attribution row (by web_url) — best-effort, leftover rows are harmless.
 app.delete("/file", async (c) => {
   const webUrl = c.req.query("webUrl");
   if (!webUrl) return c.json({ error: "webUrl required" }, 400);
 
   try {
     await deleteSharePointFile(c.env, webUrl);
+    try {
+      await c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE web_url = ?").bind(webUrl).run();
+    } catch (cleanupErr) {
+      console.warn("[sp.delete] attribution cleanup failed:", cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);
+    }
     return c.json({ ok: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to delete SharePoint file";

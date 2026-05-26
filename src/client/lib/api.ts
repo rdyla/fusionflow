@@ -1508,11 +1508,16 @@ export const api = {
     request<{ locations: SPLocation[] }>(`/sharepoint/locations?recordId=${encodeURIComponent(recordId)}`),
   spFiles: (folderUrl: string) =>
     request<{ files: SPFile[] }>(`/sharepoint/files?url=${encodeURIComponent(folderUrl)}`),
-  spUpload: async (folderUrl: string, file: File, description?: string | null): Promise<{ file: SPFile }> => {
+  /** Upload a file to a SharePoint folder. When `projectId` is provided, the
+   *  server shadows the upload in sharepoint_uploads so the file list can
+   *  show the real uploader (Graph runs app-only, so its createdBy is the
+   *  app principal). */
+  spUpload: async (folderUrl: string, file: File, opts?: { description?: string | null; projectId?: string | null }): Promise<{ file: SPFile }> => {
     const form = new FormData();
     form.append("file", file);
     const params = new URLSearchParams({ url: folderUrl });
-    if (description?.trim()) params.set("description", description.trim());
+    if (opts?.description?.trim()) params.set("description", opts.description.trim());
+    if (opts?.projectId) params.set("projectId", opts.projectId);
     const res = await fetch(`${API_BASE}/sharepoint/upload?${params.toString()}`, {
       method: "POST",
       headers: { ...getImpersonationHeaders() },
