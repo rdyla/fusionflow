@@ -58,7 +58,7 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null): string {
+function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null, forWord: boolean): string {
   // The docx title page is a full-bleed hero illustration (navy/teal cloud +
   // UCaaS ecosystem) with the title text overlaid. Document Control + the
   // metadata/revision tables sit on page 2.
@@ -67,10 +67,39 @@ function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, h
   // it, we render the hero variant of the cover. Stubs and variants without
   // hero artwork fall back to a text-only cover (still has the logo header,
   // title, subtitle — just no illustration).
+  //
+  // Word export note: Word doesn't reliably honor CSS background-image on
+  // <section> elements, so the print path renders the hero as a background
+  // image with overlaid white text. For the Word path we restructure: render
+  // the hero as a full-width <img> followed by the title block beneath, with
+  // dark text on white. That way the illustration survives the export and
+  // the cover still reads as a cover when opened in Word.
 
   const stubBanner = variant.isStub
     ? `<div class="stub-banner">STUB — content for ${esc(variant.productLine)} is placeholder. Do not issue without review.</div>`
     : "";
+
+  if (heroImageUrl && forWord) {
+    // Word-friendly cover: hero as inline <img>, text below.
+    return `
+      <section class="cover cover--word">
+        ${stubBanner}
+        <div class="cover-head">
+          <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
+          <div class="cover-confidential">CONFIDENTIAL</div>
+        </div>
+        <div style="margin: 18px 0;">
+          <img src="${heroImageUrl}" alt="" style="width:100%; max-width:100%; display:block;" />
+        </div>
+        <div class="cover-title-block">
+          <div class="cover-title">STATEMENT OF WORK</div>
+          <div class="cover-subtitle">${esc(variant.productLine)}</div>
+          <div class="cover-customer-line" style="margin-top:18px;">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
+          <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+        </div>
+      </section>
+    `;
+  }
 
   if (heroImageUrl) {
     return `
@@ -660,6 +689,12 @@ function styles(): string {
     .page-section { page-break-inside: auto; margin-bottom: 14px; }
     /* Cover */
     .cover { padding: 0; min-height: 9.6in; position: relative; page-break-after: always; }
+    /* Word-export cover: hero is an inline <img>, title block sits below in
+       normal text color. No @page tricks, no overlaid text — Word renders
+       this faithfully. */
+    .cover--word { min-height: auto; padding: 18px 0; page-break-after: always; }
+    .cover--word .cover-title { font-size: 32pt; }
+    .cover--word .cover-subtitle { font-size: 14pt; margin-top: 6px; }
     .cover-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 3px solid ${GREEN}; margin-bottom: 38px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .cover-logo { height: 42px; }
     .cover-confidential { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.22em; color: ${GREEN}; text-transform: uppercase; }
@@ -749,14 +784,21 @@ export function buildSowHtml(args: {
   /** Optional: project's kickoff + go-live dates for the Key Dates table. */
   kickoffDate?: string | null;
   goLiveDate?: string | null;
+  /** When true, render in a Word-friendly layout: hero as inline <img>
+   *  rather than CSS background-image (Word doesn't render CSS backgrounds
+   *  reliably), and skip print-only effects (watermark transform).
+   *  Caller is responsible for passing data-URL images for full
+   *  portability of the resulting .doc. */
+  forWordExport?: boolean;
 }): string {
   const { variant, ctx, logoUrl } = args;
   const heroImageUrl = args.heroImageUrl ?? null;
+  const forWord = args.forWordExport === true;
   const watermark = ctx.isBudgetary
     ? `<div class="budgetary-watermark">BUDGETARY</div>`
     : "";
   const body = [
-    coverPage(variant, ctx, logoUrl, heroImageUrl),
+    coverPage(variant, ctx, logoUrl, heroImageUrl, forWord),
     documentControlPage(variant, ctx),
     revisionHistory(ctx),
     executiveSummary(variant, ctx),
