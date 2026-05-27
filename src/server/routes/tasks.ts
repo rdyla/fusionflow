@@ -7,7 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
 import {
-  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry,
+  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry,
 } from "../services/dynamicsService";
 import { syncProjectBlockedStatus } from "../lib/teamUtils";
 
@@ -516,6 +516,20 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
     const message = err instanceof Error ? err.message : "CRM time entry failed";
     console.error("createTimeEntry error:", message);
     throw new HTTPException(502, { message: `CRM error: ${message}` });
+  }
+
+  // Payroll's integration only picks up Completed entries; leaving the entry
+  // in Open creates a stuck record in their feed. Hard-fail if the close
+  // PATCH errors — the create-then-close is a single logical operation from
+  // the user's perspective, and a half-completed state is worse than a clean
+  // error they can retry from. Local row is intentionally not inserted on
+  // failure; the orphan in CRM is the cost of keeping retry idempotent-ish.
+  try {
+    await closeTimeEntry(c.env, crmTimeEntryId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry close failed";
+    console.error("closeTimeEntry error:", message, "orphan entry:", crmTimeEntryId);
+    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
   }
 
   const entryId = crypto.randomUUID();
