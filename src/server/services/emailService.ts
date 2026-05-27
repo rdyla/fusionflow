@@ -24,6 +24,7 @@ type EmailPayload = {
 };
 
 const PF_DOMAIN = "@packetfusion.com";
+const STAGING_TEST_DOMAINS = ["@gmail.com"];
 
 /**
  * Fire-and-forget email via Microsoft Graph sendMail. Never throws —
@@ -31,7 +32,7 @@ const PF_DOMAIN = "@packetfusion.com";
  *
  * Routing rules:
  *   DEV_EMAIL set   → all mail diverted to that address (local dev only)
- *   APP_URL staging → only @packetfusion.com recipients receive mail
+ *   APP_URL staging → only @packetfusion.com + STAGING_TEST_DOMAINS recipients receive mail
  *   otherwise       → normal production delivery
  */
 export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> {
@@ -51,9 +52,13 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
     finalRecipients = [env.DEV_EMAIL];
     subject = `[DEV → ${validRecipients.join(", ")}] ${subject}`;
   } else if (env.APP_URL?.includes("staging")) {
-    finalRecipients = validRecipients.filter(r => r.toLowerCase().endsWith(PF_DOMAIN));
+    const allowedSuffixes = [PF_DOMAIN, ...STAGING_TEST_DOMAINS];
+    finalRecipients = validRecipients.filter(r => {
+      const lower = r.toLowerCase();
+      return allowedSuffixes.some(s => lower.endsWith(s));
+    });
     if (finalRecipients.length === 0) {
-      console.info(`[email] Staging: suppressed email to non-PF recipients (${validRecipients.join(", ")})`);
+      console.info(`[email] Staging: suppressed email to non-allowlisted recipients (${validRecipients.join(", ")})`);
       return;
     }
     subject = `[STAGING] ${subject}`;
