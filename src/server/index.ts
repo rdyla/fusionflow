@@ -37,6 +37,7 @@ import stagingPromoteRoutes from "./routes/stagingPromote";
 import stakeholderRoutes from "./routes/stakeholder";
 import sitesRoutes from "./routes/sites";
 import meRoutes from "./routes/me";
+import sowExportRoutes from "./routes/sowExport";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -97,6 +98,7 @@ app.route("/api/admin/staging", stagingPromoteRoutes);
 app.route("/api/projects", stakeholderRoutes);
 app.route("/api/projects", sitesRoutes);
 app.route("/api/me", meRoutes);
+app.route("/api/sow", sowExportRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means

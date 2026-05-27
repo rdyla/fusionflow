@@ -266,60 +266,70 @@ export default function ScopeOfWorkDocument({
   }
 
   /**
-   * Export the SOW as a Word-compatible .doc file using Microsoft's Word
-   * HTML format (HTML wrapped in the Office XML namespaces, supported by
-   * Word since 2003). Word opens it as a native Word document, Track
-   * Changes works, and the user can Save As .docx in one click.
+   * Export the SOW as a real .docx via server-side LibreOffice conversion.
    *
-   * History: PR #244 attempted a real OOXML .docx via html-to-docx but
-   * the library produced files Word couldn't open ("Word experienced an
-   * error" — most likely choking on large embedded images or unsupported
-   * CSS in our HTML). Reverted to the .doc Word-HTML approach since the
-   * body content + tables render cleanly there. The cover hero image is
-   * dropped entirely for Word — text-only cover renders predictably and
-   * is appropriate for an editable doc; PMs who want the full-bleed
-   * hero use the print/PDF path.
+   * Flow:
+   *   1. Build the SOW HTML same as the print path (full hero, all styling)
+   *   2. POST it to /api/sow/word-export
+   *   3. Worker forwards to the LibreOffice Lambda
+   *   4. Lambda runs `libreoffice --headless --convert-to docx`
+   *   5. Binary streams back through the Worker and triggers download
+   *
+   * Prior attempts (PR #242 Word-HTML, PR #244 html-to-docx, PR #245
+   * text-only-cover) all hit ceilings — Word HTML mangles images, the
+   * library produced unopenable files, and the text-only fallback lost
+   * the visual identity. LibreOffice's HTML→DOCX is the same engine Word
+   * itself uses for cross-format conversion; it handles the cover image
+   * + complex tables correctly.
+   *
+   * The conversion service has to be deployed once via
+   * aws/sow-converter/README.md before this works. Until then the
+   * endpoint returns 503 with a clear message.
    */
   async function downloadAsWord() {
     setDownloadingDoc(true);
     try {
-      const resolve = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
+      const resolveAsset = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
+      const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
 
-      // Inline the logo so the .doc is portable when emailed. Hero image
-      // is intentionally NOT passed — the Word path uses the text-only
-      // cover (see forWordExport branching in coverPage).
-      const logoDataUrl = await fetchAsDataUrl(resolve(logoUrl));
+      // Inline images so the HTML LibreOffice receives is self-contained.
+      // The Lambda can't fetch resources from the public internet during
+      // conversion (no relative-URL resolution, and pointing it at our
+      // CDN would race with auth + caching).
+      const [logoDataUrl, heroDataUrl] = await Promise.all([
+        fetchAsDataUrl(resolveAsset(logoUrl)),
+        heroAsset ? fetchAsDataUrl(resolveAsset(heroAsset)) : Promise.resolve(null),
+      ]);
 
       const html = buildSowHtml({
         variant, ctx,
         logoUrl: logoDataUrl,
-        heroImageUrl: null,
+        heroImageUrl: heroDataUrl,
         kickoffDate: null,
         goLiveDate: null,
         forWordExport: true,
       });
 
-      // Inject Office namespaces + MSO instructions onto the existing
-      // doctype/html shell. Drop the doctype (Word doesn't expect one);
-      // the namespaces tell Word "treat me as a Word doc."
-      const wordHtml = html
-        .replace(/^<!doctype html>/i, "")
-        .replace(
-          /^<html>/,
-          `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">`,
-        )
-        .replace(
-          /<head>/,
-          `<head>\n<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/><w:DoNotShowInsertionsAndDeletions/></w:WordDocument></xml><![endif]-->`,
-        );
-
-      // UTF-8 BOM so Word picks up the encoding without prompting.
-      const blob = new Blob(["﻿", wordHtml], { type: "application/msword" });
-      const url = URL.createObjectURL(blob);
       const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
+      const filename = `${safeName} - SOW ${ctx.sowNumber}`;
+
+      const res = await fetch("/api/sow/word-export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ html, filename }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => null) as { error?: string; message?: string } | null;
+        const message = body?.error ?? body?.message ?? `Word export failed (HTTP ${res.status})`;
+        throw new Error(message);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${safeName} - SOW ${ctx.sowNumber}.doc`;
+      link.download = `${filename}.docx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -387,9 +397,9 @@ export default function ScopeOfWorkDocument({
           className="ms-btn-secondary"
           onClick={downloadAsWord}
           disabled={downloadingDoc}
-          title="Download a Word-compatible file you can edit and the customer can red-line with Track Changes. Opens directly in Word; save-as .docx in one click if needed."
+          title="Download a real .docx with full layout + images. Converted server-side via LibreOffice. Edit in Word, send to customer for Track Changes review."
         >
-          {downloadingDoc ? "Building…" : "Download for Word (.doc)"}
+          {downloadingDoc ? "Converting…" : "Download for Word (.docx)"}
         </button>
         {variant.isStub && (
           <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>

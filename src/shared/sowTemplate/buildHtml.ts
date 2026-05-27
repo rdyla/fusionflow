@@ -59,16 +59,16 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
 // ── Sections ─────────────────────────────────────────────────────────────────
 
 function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null, _forWord: boolean): string {
-  // The print/PDF title page is a full-bleed hero illustration (navy/teal
-  // cloud + UCaaS ecosystem) with the title text overlaid. Document Control
-  // and the metadata/revision tables sit on page 2.
+  // The title page is a full-bleed hero illustration (navy/teal cloud +
+  // UCaaS ecosystem) with the title text overlaid. Document Control and
+  // the metadata/revision tables sit on page 2.
   //
-  // For the Word export path the caller passes `heroImageUrl: null` so this
-  // falls through to the text-only cover — Word doesn't honor CSS
-  // background-image on sections, and inline-image substitutes caused
-  // layout problems (image floated, pagination broke). Text-only is the
-  // reliable shape for an editable document; PMs needing the full-bleed
-  // hero use the print/PDF path.
+  // Word export note: the .docx pipeline (LibreOffice headless via the
+  // converter Lambda — see aws/sow-converter/) handles CSS background-
+  // image on sections correctly, so the same HTML produces a faithful
+  // .docx cover. The previous compromises (text-only cover, inline-img
+  // cover, html-to-docx) were workarounds for browser-side conversion
+  // limits that no longer apply now that LibreOffice does the rendering.
 
   const stubBanner = variant.isStub
     ? `<div class="stub-banner">STUB — content for ${esc(variant.productLine)} is placeholder. Do not issue without review.</div>`
