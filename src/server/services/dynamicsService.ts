@@ -885,7 +885,9 @@ export async function getPortalContact(env: Env, email: string): Promise<PortalC
   const escaped = email.toLowerCase().replace(/'/g, "''");
   const select = "contactid,firstname,lastname,emailaddress1,vtx_portaluser,amc_allowcaseopening,_parentcustomerid_value";
   const filter = `emailaddress1 eq '${escaped}' and vtx_portaluser eq true`;
-  const path = `/contacts?$select=${select}&$filter=${filter}&$top=1`;
+  // Encode the filter so user-controlled chars (+, &, #, spaces) survive the URL — `+` in a
+  // query string decodes to a space, which silently turns a real email into a non-match.
+  const path = `/contacts?$select=${select}&$filter=${encodeURIComponent(filter)}&$top=1`;
 
   try {
     const data = await dynamicsGetAnnotated<{ value: RawPortalContact[] }>(env, path);
