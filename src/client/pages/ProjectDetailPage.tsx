@@ -90,6 +90,52 @@ function Badge({ label, color, style }: { label: string; color: string; style?: 
   );
 }
 
+// Inline contact-method icons used inside team chips in the project meta
+// section. Each populated method renders as its own clickable link so users
+// can see at a glance which contact paths are available (and one click is
+// enough to invoke any of them). Falls back to render nothing when a user
+// has no contact info on file.
+function ContactIcons({ email, phone, schedulerUrl, accent }: {
+  email?: string | null;
+  phone?: string | null;
+  schedulerUrl?: string | null;
+  accent: string;
+}) {
+  if (!email && !phone && !schedulerUrl) return null;
+  const iconStyle: React.CSSProperties = {
+    color: "#94a3b8",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    textDecoration: "none",
+    transition: "color 0.1s, background 0.1s",
+  };
+  const hoverIn  = (e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = accent; e.currentTarget.style.background = "rgba(0,0,0,0.04)"; };
+  const hoverOut = (e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "transparent"; };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 1, marginLeft: 4 }}>
+      {email && (
+        <a href={`mailto:${email}`} title={`Email ${email}`} style={iconStyle} onMouseEnter={hoverIn} onMouseLeave={hoverOut} aria-label={`Email ${email}`}>
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="currentColor"><path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4Zm1 .5 5 3 5-3V4H3v.5Zm10 1.2L8.3 8.5a1 1 0 0 1-1.1 0L3 5.7V12h10V5.7Z"/></svg>
+        </a>
+      )}
+      {phone && (
+        <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} title={`Call ${phone}`} style={iconStyle} onMouseEnter={hoverIn} onMouseLeave={hoverOut} aria-label={`Call ${phone}`}>
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="currentColor"><path d="M3.7 1.2a1.5 1.5 0 0 1 1.6.2L7 3.1c.5.4.7 1.1.4 1.7L6.7 6.2a8 8 0 0 0 3.1 3.1l1.4-.7c.6-.3 1.3-.1 1.7.4l1.7 1.7a1.5 1.5 0 0 1 .2 1.6c-.5 1-1.5 1.7-2.6 1.7C7.7 14 2 8.3 2 3.4c0-1.1.6-2.1 1.7-2.6Z"/></svg>
+        </a>
+      )}
+      {schedulerUrl && (
+        <a href={schedulerUrl} target="_blank" rel="noopener noreferrer" title="Schedule a meeting" style={iconStyle} onMouseEnter={hoverIn} onMouseLeave={hoverOut} aria-label="Schedule a meeting">
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="currentColor"><path d="M5 1.5a.5.5 0 0 1 1 0V3h4V1.5a.5.5 0 0 1 1 0V3h1.5A1.5 1.5 0 0 1 14 4.5v9A1.5 1.5 0 0 1 12.5 15h-9A1.5 1.5 0 0 1 2 13.5v-9A1.5 1.5 0 0 1 3.5 3H5V1.5ZM3 6v7.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V6H3Z"/></svg>
+        </a>
+      )}
+    </span>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetailPage() {
@@ -742,25 +788,22 @@ export default function ProjectDetailPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
             <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginRight: 4 }}>Account Team</span>
             {[
-              { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email },
-              { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email },
-              { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email },
+              { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email,  phone: project.customer_pf_ae_phone,  scheduler: project.customer_pf_ae_scheduler_url  },
+              { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email,  phone: project.customer_pf_sa_phone,  scheduler: project.customer_pf_sa_scheduler_url  },
+              { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email, phone: project.customer_pf_csm_phone, scheduler: project.customer_pf_csm_scheduler_url },
             ].filter(m => m.name).map((m) => {
               const photo = m.email ? customerTeamPhotoMap[m.email] : null;
               const abbr = m.name!.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
-              const chipStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(11,154,173,0.07)", border: "1px solid rgba(11,154,173,0.25)", borderRadius: 20, fontSize: 12, textDecoration: "none" };
-              const body = (
-                <>
+              return (
+                <span key={m.role} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 6px 3px 4px", background: "rgba(11,154,173,0.07)", border: "1px solid rgba(11,154,173,0.25)", borderRadius: 20, fontSize: 12 }}>
                   {photo
                     ? <img src={photo} alt={m.name!} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                     : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(11,154,173,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#0b9aad", flexShrink: 0 }}>{abbr}</span>}
                   <span style={{ color: "#334155", fontWeight: 500 }}>{m.name}</span>
                   <span style={{ color: "#94a3b8", fontSize: 10 }}>{m.role}</span>
-                </>
+                  <ContactIcons email={m.email} phone={m.phone} schedulerUrl={m.scheduler} accent="#0b9aad" />
+                </span>
               );
-              return m.email
-                ? <a key={m.role} href={`mailto:${m.email}`} title={m.email} style={chipStyle}>{body}</a>
-                : <span key={m.role} title={m.role} style={chipStyle}>{body}</span>;
             })}
           </div>
         )}
@@ -771,11 +814,13 @@ export default function ProjectDetailPage() {
             if (!project.pm_user_id) return null;
             const pmFromMap = userMap.get(project.pm_user_id);
             const pmName  = pmFromMap?.name  ?? (project as unknown as Record<string, unknown>).pm_name  as string | null ?? null;
-            const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
+            const pmEmail = pmFromMap?.email ?? project.pm_email ?? null;
             if (!pmName && !pmEmail) return null;
             const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
             const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
-            return { key: "pm", label: "PM", name: pmName ?? pmEmail ?? "", email: pmEmail, photo, abbr, color: "blue" as const };
+            const phone     = pmFromMap?.phone         ?? project.pm_phone         ?? null;
+            const scheduler = pmFromMap?.scheduler_url ?? project.pm_scheduler_url ?? null;
+            return { key: "pm", label: "PM", name: pmName ?? pmEmail ?? "", email: pmEmail, phone, scheduler, photo, abbr, color: "blue" as const };
           })();
           const internalStaffChips = projectStaff
             .filter(s => s.staff_role !== "partner_ae"
@@ -785,14 +830,14 @@ export default function ProjectDetailPage() {
               const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
               const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
               const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-              return { key: s.id, label: roleLabel[s.staff_role] ?? s.staff_role, name: s.name ?? s.email, email: s.email, photo, abbr, color: "blue" as const };
+              return { key: s.id, label: roleLabel[s.staff_role] ?? s.staff_role, name: s.name ?? s.email, email: s.email, phone: s.phone, scheduler: s.scheduler_url, photo, abbr, color: "blue" as const };
             });
           const partnerChips = projectStaff
             .filter(s => s.staff_role === "partner_ae")
             .map((s) => {
               const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
               const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-              return { key: s.id, label: "Partner AE", name: s.name ?? s.email, email: s.email, photo, abbr, color: "green" as const };
+              return { key: s.id, label: "Partner AE", name: s.name ?? s.email, email: s.email, phone: s.phone, scheduler: s.scheduler_url, photo, abbr, color: "green" as const };
             });
           const allProjectChips = [...(pmChip ? [pmChip] : []), ...internalStaffChips, ...partnerChips];
           if (allProjectChips.length === 0) return null;
@@ -804,19 +849,17 @@ export default function ProjectDetailPage() {
                 const border = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
                 const fg     = c.color === "green" ? "#107c10"              : "#63c1ea";
                 const avBg   = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
-                const chip = (
-                  <>
+                const accent = c.color === "green" ? "#107c10"              : "#0078d4";
+                return (
+                  <span key={c.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 6px 3px 4px", background: bg, border: `1px solid ${border}`, borderRadius: 20, fontSize: 12 }}>
                     {c.photo
                       ? <img src={c.photo} alt={c.name} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
                       : <span style={{ width: 22, height: 22, borderRadius: "50%", background: avBg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: fg, flexShrink: 0 }}>{c.abbr}</span>}
                     <span style={{ color: "#334155", fontWeight: 500 }}>{c.name}</span>
                     <span style={{ color: "#94a3b8", fontSize: 10 }}>{c.label}</span>
-                  </>
+                    <ContactIcons email={c.email} phone={c.phone} schedulerUrl={c.scheduler} accent={accent} />
+                  </span>
                 );
-                const chipStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: bg, border: `1px solid ${border}`, borderRadius: 20, fontSize: 12, textDecoration: "none" };
-                return c.email
-                  ? <a key={c.key} href={`mailto:${c.email}`} title={c.email} style={chipStyle}>{chip}</a>
-                  : <span key={c.key} title={c.label} style={chipStyle}>{chip}</span>;
               })}
             </div>
           );
