@@ -58,48 +58,21 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null, forWord: boolean): string {
-  // The docx title page is a full-bleed hero illustration (navy/teal cloud +
-  // UCaaS ecosystem) with the title text overlaid. Document Control + the
-  // metadata/revision tables sit on page 2.
+function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null, _forWord: boolean): string {
+  // The print/PDF title page is a full-bleed hero illustration (navy/teal
+  // cloud + UCaaS ecosystem) with the title text overlaid. Document Control
+  // and the metadata/revision tables sit on page 2.
   //
-  // If the variant declares a heroImageKey AND the client resolved a URL for
-  // it, we render the hero variant of the cover. Stubs and variants without
-  // hero artwork fall back to a text-only cover (still has the logo header,
-  // title, subtitle — just no illustration).
-  //
-  // Word export note: Word doesn't reliably honor CSS background-image on
-  // <section> elements, so the print path renders the hero as a background
-  // image with overlaid white text. For the Word path we restructure: render
-  // the hero as a full-width <img> followed by the title block beneath, with
-  // dark text on white. That way the illustration survives the export and
-  // the cover still reads as a cover when opened in Word.
+  // For the Word export path the caller passes `heroImageUrl: null` so this
+  // falls through to the text-only cover — Word doesn't honor CSS
+  // background-image on sections, and inline-image substitutes caused
+  // layout problems (image floated, pagination broke). Text-only is the
+  // reliable shape for an editable document; PMs needing the full-bleed
+  // hero use the print/PDF path.
 
   const stubBanner = variant.isStub
     ? `<div class="stub-banner">STUB — content for ${esc(variant.productLine)} is placeholder. Do not issue without review.</div>`
     : "";
-
-  if (heroImageUrl && forWord) {
-    // Word-friendly cover: hero as inline <img>, text below.
-    return `
-      <section class="cover cover--word">
-        ${stubBanner}
-        <div class="cover-head">
-          <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
-          <div class="cover-confidential">CONFIDENTIAL</div>
-        </div>
-        <div style="margin: 18px 0;">
-          <img src="${heroImageUrl}" alt="" style="width:100%; max-width:100%; display:block;" />
-        </div>
-        <div class="cover-title-block">
-          <div class="cover-title">STATEMENT OF WORK</div>
-          <div class="cover-subtitle">${esc(variant.productLine)}</div>
-          <div class="cover-customer-line" style="margin-top:18px;">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
-          <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
-        </div>
-      </section>
-    `;
-  }
 
   if (heroImageUrl) {
     return `
@@ -689,12 +662,6 @@ function styles(): string {
     .page-section { page-break-inside: auto; margin-bottom: 14px; }
     /* Cover */
     .cover { padding: 0; min-height: 9.6in; position: relative; page-break-after: always; }
-    /* Word-export cover: hero is an inline <img>, title block sits below in
-       normal text color. No @page tricks, no overlaid text — Word renders
-       this faithfully. */
-    .cover--word { min-height: auto; padding: 18px 0; page-break-after: always; }
-    .cover--word .cover-title { font-size: 32pt; }
-    .cover--word .cover-subtitle { font-size: 14pt; margin-top: 6px; }
     .cover-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 3px solid ${GREEN}; margin-bottom: 38px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .cover-logo { height: 42px; }
     .cover-confidential { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.22em; color: ${GREEN}; text-transform: uppercase; }
