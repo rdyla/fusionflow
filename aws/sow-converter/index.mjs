@@ -97,11 +97,12 @@ export const handler = async (event) => {
 };
 
 function runLibreOffice(args) {
-  // Spawn with HOME=/tmp so LibreOffice's profile init writes somewhere
-  // writable. PATH includes the binary because the base image installs
-  // libreoffice into /usr/bin.
+  // `soffice` is LibreOffice's canonical CLI; `libreoffice` is just a
+  // symlink in some distros (and missing in our tarball install on
+  // AL2023). HOME=/tmp because the profile-init step needs a writable
+  // home directory; /tmp is the only writable path on Lambda.
   return new Promise((resolve, reject) => {
-    const proc = spawn("libreoffice", args, {
+    const proc = spawn("soffice", args, {
       env: { ...process.env, HOME: "/tmp" },
     });
     let stderr = "";
@@ -109,7 +110,7 @@ function runLibreOffice(args) {
     proc.on("error", reject);
     proc.on("close", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`libreoffice exited ${code}: ${stderr.trim()}`));
+      else reject(new Error(`soffice exited ${code}: ${stderr.trim()}`));
     });
   });
 }
