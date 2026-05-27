@@ -795,13 +795,17 @@ export default function ProjectDetailPage() {
               const photo = m.email ? customerTeamPhotoMap[m.email] : null;
               const abbr = m.name!.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
               return (
-                <span key={m.role} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 6px 3px 4px", background: "rgba(11,154,173,0.07)", border: "1px solid rgba(11,154,173,0.25)", borderRadius: 20, fontSize: 12 }}>
+                <span key={m.role} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px 4px 4px", background: "rgba(11,154,173,0.07)", border: "1px solid rgba(11,154,173,0.25)", borderRadius: 22, fontSize: 13 }}>
                   {photo
-                    ? <img src={photo} alt={m.name!} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                    : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(11,154,173,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#0b9aad", flexShrink: 0 }}>{abbr}</span>}
-                  <span style={{ color: "#334155", fontWeight: 500 }}>{m.name}</span>
-                  <span style={{ color: "#94a3b8", fontSize: 10 }}>{m.role}</span>
-                  <ContactIcons email={m.email} phone={m.phone} schedulerUrl={m.scheduler} accent="#0b9aad" />
+                    ? <img src={photo} alt={m.name!} style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <span style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(11,154,173,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#0b9aad", flexShrink: 0 }}>{abbr}</span>}
+                  <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, lineHeight: 1.15 }}>
+                    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
+                      <span style={{ color: "#334155", fontWeight: 600 }}>{m.name}</span>
+                      <span style={{ color: "#94a3b8", fontSize: 10 }}>{m.role}</span>
+                    </span>
+                    <ContactIcons email={m.email} phone={m.phone} schedulerUrl={m.scheduler} accent="#0b9aad" />
+                  </span>
                 </span>
               );
             })}
@@ -851,13 +855,17 @@ export default function ProjectDetailPage() {
                 const avBg   = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
                 const accent = c.color === "green" ? "#107c10"              : "#0078d4";
                 return (
-                  <span key={c.key} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 6px 3px 4px", background: bg, border: `1px solid ${border}`, borderRadius: 20, fontSize: 12 }}>
+                  <span key={c.key} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px 4px 4px", background: bg, border: `1px solid ${border}`, borderRadius: 22, fontSize: 13 }}>
                     {c.photo
-                      ? <img src={c.photo} alt={c.name} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: avBg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: fg, flexShrink: 0 }}>{c.abbr}</span>}
-                    <span style={{ color: "#334155", fontWeight: 500 }}>{c.name}</span>
-                    <span style={{ color: "#94a3b8", fontSize: 10 }}>{c.label}</span>
-                    <ContactIcons email={c.email} phone={c.phone} schedulerUrl={c.scheduler} accent={accent} />
+                      ? <img src={c.photo} alt={c.name} style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 32, height: 32, borderRadius: "50%", background: avBg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: fg, flexShrink: 0 }}>{c.abbr}</span>}
+                    <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, lineHeight: 1.15 }}>
+                      <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
+                        <span style={{ color: "#334155", fontWeight: 600 }}>{c.name}</span>
+                        <span style={{ color: "#94a3b8", fontSize: 10 }}>{c.label}</span>
+                      </span>
+                      <ContactIcons email={c.email} phone={c.phone} schedulerUrl={c.scheduler} accent={accent} />
+                    </span>
                   </span>
                 );
               })}
