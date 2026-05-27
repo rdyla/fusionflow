@@ -720,15 +720,23 @@ export default function ProjectDetailPage() {
               </Link>
             )}
           </div>
-          {project.customer_sharepoint_url && (
-            <a href={project.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
-              SharePoint ↗
-            </a>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {project.target_go_live_date && (
+              <span style={{ fontSize: 12, color: "#64748b" }}>
+                <span style={{ fontWeight: 600, marginRight: 4 }}>Go-Live:</span>
+                {formatDate(project.target_go_live_date)}
+              </span>
+            )}
+            {project.customer_sharepoint_url && (
+              <a href={project.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                SharePoint ↗
+              </a>
+            )}
+          </div>
         </div>
 
-        {/* Row 2: Vendor + tech-type pills · Go-Live · Edit (vendor/tech only) */}
+        {/* Row 2: Vendor + tech-type pills · Edit (vendor/tech only) */}
         {editingTech ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f1f5f9", maxWidth: 520 }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -769,17 +777,11 @@ export default function ProjectDetailPage() {
               <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
             )}
             <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
-            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 12, color: "#64748b" }}>
-                <span style={{ fontWeight: 600, marginRight: 4 }}>Go-Live:</span>
-                {formatDate(project.target_go_live_date)}
-              </span>
-              {canEdit && (
-                <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>
-                  Edit
-                </button>
-              )}
-            </div>
+            {canEdit && (
+              <button className="ms-btn-ghost" onClick={startEditTech} style={{ marginLeft: "auto", fontSize: 12, padding: "2px 10px" }}>
+                Edit
+              </button>
+            )}
           </div>
         )}
 
