@@ -1,0 +1,11 @@
+{
+  "name": "cloudconnect-sow-converter",
+  "version": "1.0.0",
+  "description": "AWS Lambda function: converts CloudConnect SOW HTML to a .docx via LibreOffice headless.",
+  "type": "module",
+  "main": "index.mjs",
+  "private": true,
+  "engines": {
+    "node": "20.x"
+  }
+}
