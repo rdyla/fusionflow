@@ -64,7 +64,9 @@ docker tag $ECR_REPO:latest $ECR_URI:latest
 docker push $ECR_URI:latest
 ```
 
-First push uploads ~600MB (LibreOffice). Be patient. Subsequent pushes only push what changed (handler code, usually a few KB).
+First push uploads ~1.5GB (LibreOffice from the official tarball + base image + fonts). Be patient — first push runs 5–10 min depending on bandwidth. Subsequent pushes only re-upload what changed (handler code, usually a few KB).
+
+**If the build fails on the `dnf install -y libreoffice ...` step:** that means an older Dockerfile that tried to install LibreOffice from AL2023's repos (which don't carry it). Make sure you have the current Dockerfile from the repo — it installs LibreOffice from the project's official RPM tarball via curl.
 
 ## Step 4 — Create the IAM role for the Lambda
 
@@ -233,7 +235,7 @@ aws lambda update-function-configuration \
 
 For low-volume internal use (e.g., a few SOWs per day):
 - Lambda compute: pennies/month
-- ECR storage: ~$0.10/GB/month for the ~600MB image → ~$0.06/month
+- ECR storage: ~$0.10/GB/month for the ~1.5GB image → ~$0.15/month
 - CloudWatch Logs: pennies/month
 
 Effectively free unless you start running thousands of conversions a day.
@@ -243,8 +245,11 @@ Effectively free unless you start running thousands of conversions a day.
 **Cold start times out (>60s)**
 Bump memory to 3008 MB. Lambda gives more CPU at higher memory, which speeds LibreOffice.
 
-**Conversion returns 500 with `libreoffice exited 1`**
+**Conversion returns 500 with `soffice exited 1`**
 Check CloudWatch Logs (`aws logs tail /aws/lambda/cloudconnect-sow-converter --follow`). Usually a font or locale issue; the Dockerfile installs the standard set but a corner-case HTML element can trip it.
+
+**Bumping the LibreOffice version**
+Edit `LO_VERSION` in the Dockerfile to the new stable version. The `/opt/libreoffice<version>` path uses MAJOR.MINOR only — if you bump from 24.8.x to 25.2.x, also update the `ENV PATH=` line to match.
 
 **401 Unauthorized**
 Shared secret mismatch. Verify with:
