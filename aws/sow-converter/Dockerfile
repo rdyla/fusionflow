@@ -26,7 +26,6 @@ RUN dnf install -y \
     liberation-serif-fonts \
     liberation-mono-fonts \
     google-noto-sans-fonts \
-    --setopt=install_weak_deps=false \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 
