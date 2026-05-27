@@ -23,7 +23,10 @@ RUN apt-get update \
       python3 \
       libcurl4-openssl-dev \
       autoconf \
+      automake \
       libtool \
+      pkg-config \
+      m4 \
       git \
  && rm -rf /var/lib/apt/lists/*
 
