@@ -266,25 +266,29 @@ export default function ScopeOfWorkDocument({
   }
 
   /**
-   * Export the SOW as a Word-compatible .doc file.
+   * Export the SOW as a real .docx (OOXML) file via `html-to-docx`.
    *
-   * Uses the Microsoft "Word HTML" format — an officially-supported Word
-   * format since Word 2003 that wraps HTML in the Office XML namespaces.
-   * Word opens it natively, Track Changes works, and the user can Save
-   * As .docx in one click if they need OOXML.
+   * Why a library + polyfills instead of the old Word-HTML trick:
+   *   - Produces a true .docx, not a renamed .doc — opens cleanly in Word,
+   *     Google Docs, Pages, and modern doc viewers; no "file format and
+   *     extension don't match" warnings.
+   *   - Better fidelity for tables, lists, and headings than Word-HTML.
+   *   - Images are embedded as proper OOXML drawings, not <img> tags.
    *
-   * Two adaptations for Word fidelity:
-   *   1. Logo + hero illustration are fetched and inlined as base64 data
-   *      URLs so the .doc is self-contained when emailed (relative URLs
-   *      won't resolve once the file leaves the browser).
-   *   2. The renderer is invoked with `forWordExport: true`, which
-   *      restructures the cover to put the hero in an <img> tag instead
-   *      of a CSS background — Word handles inline images cleanly but
-   *      not CSS background-image on sections.
+   * Setup: html-to-docx is a Node-targeted lib; Vite is configured with
+   * vite-plugin-node-polyfills so Buffer + process are available in the
+   * browser (see vite.config.ts).
    *
-   * Trade-off: print-only CSS (@page margins, BUDGETARY watermark
-   * transform) still won't survive. Text + tables + cover image all
-   * render in Word.
+   * Cover image handling: even .docx can't render CSS `background-image`
+   * on a section as a page background. The renderer's `forWordExport: true`
+   * variant puts the hero into an inline <img> followed by the title
+   * block — the illustration is preserved (just not a full-bleed
+   * background). For a true behind-text page-background hero we'd need a
+   * pre-authored .docx template + docx-templates merger; that's a follow-
+   * up if PMs want pixel-perfect cover fidelity in Word.
+   *
+   * Print-only CSS (@page, BUDGETARY watermark transform) is still
+   * dropped — that's a print-pipeline concern, not Word's.
    */
   async function downloadAsWord() {
     setDownloadingDoc(true);
@@ -292,7 +296,8 @@ export default function ScopeOfWorkDocument({
       const resolve = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
       const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
 
-      // Inline images so the resulting .doc is portable.
+      // Inline images so html-to-docx can embed them (it can't reach back
+      // through the network on its own).
       const [logoDataUrl, heroDataUrl] = await Promise.all([
         fetchAsDataUrl(resolve(logoUrl)),
         heroAsset ? fetchAsDataUrl(resolve(heroAsset)) : Promise.resolve(null),
@@ -307,27 +312,20 @@ export default function ScopeOfWorkDocument({
         forWordExport: true,
       });
 
-      // Inject Office namespaces + MSO instructions onto the existing
-      // doctype/html shell. Drop the doctype (Word doesn't expect one);
-      // the namespaces tell Word "treat me as a Word doc."
-      const wordHtml = html
-        .replace(/^<!doctype html>/i, "")
-        .replace(
-          /^<html>/,
-          `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" xmlns="http://www.w3.org/TR/REC-html40">`,
-        )
-        .replace(
-          /<head>/,
-          `<head>\n<!--[if gte mso 9]><xml><w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom><w:DoNotPromptForConvert/><w:DoNotShowInsertionsAndDeletions/></w:WordDocument></xml><![endif]-->`,
-        );
+      // Dynamic import keeps html-to-docx (and its polyfill chain) out of
+      // the main bundle. Only loads when a PM actually clicks Download.
+      const HTMLtoDOCX = (await import("html-to-docx")).default;
+      const docxBlob = await HTMLtoDOCX(html, undefined, {
+        orientation: "portrait",
+        pageNumber: false,
+        margins: { top: 1080, right: 1080, bottom: 1080, left: 1080 }, // ~0.75in
+      }) as Blob;
 
-      // UTF-8 BOM so Word picks up the encoding without prompting.
-      const blob = new Blob(["﻿", wordHtml], { type: "application/msword" });
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(docxBlob);
       const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${safeName} - SOW ${ctx.sowNumber}.doc`;
+      link.download = `${safeName} - SOW ${ctx.sowNumber}.docx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -395,9 +393,9 @@ export default function ScopeOfWorkDocument({
           className="ms-btn-secondary"
           onClick={downloadAsWord}
           disabled={downloadingDoc}
-          title="Download a Word-compatible file the customer can red-line with Track Changes. Opens directly in Word; save-as .docx if customer needs OOXML."
+          title="Download a real .docx file the customer can red-line with Track Changes. Opens in Word, Google Docs, or Pages."
         >
-          {downloadingDoc ? "Building…" : "Download for Word (.doc)"}
+          {downloadingDoc ? "Building…" : "Download for Word (.docx)"}
         </button>
         {variant.isStub && (
           <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
