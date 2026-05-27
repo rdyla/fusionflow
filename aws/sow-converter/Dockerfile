@@ -52,10 +52,13 @@ RUN apt-get update \
  && fc-cache -f
 
 # Bring in the pre-built Lambda Runtime Interface Client from the
-# builder stage. Symlink at /usr/local/bin/aws-lambda-ric → relative
-# path inside the node_modules dir, so both must be copied.
+# builder stage. We only need the package itself; the /usr/local/bin
+# symlink doesn't survive a cross-stage COPY cleanly (Node ends up
+# resolving the binary's relative imports against the symlink path,
+# not the real file path, which makes `../dist/index.mjs` look in the
+# wrong place). Instead we invoke the actual bin file directly via
+# `node` in ENTRYPOINT.
 COPY --from=builder /usr/local/lib/node_modules/aws-lambda-ric /usr/local/lib/node_modules/aws-lambda-ric
-COPY --from=builder /usr/local/bin/aws-lambda-ric /usr/local/bin/aws-lambda-ric
 
 # Pre-init the LibreOffice user profile so the first cold-Lambda
 # conversion doesn't pay the ~5s profile-creation tax. Failures here
@@ -68,5 +71,5 @@ WORKDIR /var/task
 COPY package.json ./
 COPY index.mjs ./
 
-ENTRYPOINT ["/usr/local/bin/aws-lambda-ric"]
+ENTRYPOINT ["node", "/usr/local/lib/node_modules/aws-lambda-ric/bin/index.mjs"]
 CMD ["index.handler"]
