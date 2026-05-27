@@ -16,7 +16,15 @@
 # ──────────────────────────────────────────────────────────────────────
 FROM node:20-bookworm-slim AS builder
 
-RUN apt-get update \
+# apt-get update sometimes fails with "invalid signature" in CloudShell's
+# Docker BuildKit (transient infra / cached layer interaction issue).
+# Refreshing debian-archive-keyring first sidesteps it. The initial
+# `update -o Acquire::AllowInsecureRepositories=true` lets us reach the
+# repo to fetch the keyring; subsequent updates run with full validation.
+RUN apt-get -o Acquire::AllowInsecureRepositories=true update \
+ && apt-get install -y --no-install-recommends --allow-unauthenticated \
+      debian-archive-keyring \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
       build-essential \
       cmake \
@@ -39,8 +47,12 @@ FROM node:20-bookworm-slim
 
 # Runtime deps only: LibreOffice + the fonts the SOW HTML expects
 # (Liberation substitutes for Times New Roman / Arial; Noto fills
-# Unicode coverage for customer names).
-RUN apt-get update \
+# Unicode coverage for customer names). Same keyring-refresh dance as
+# the builder stage — see comment there for context.
+RUN apt-get -o Acquire::AllowInsecureRepositories=true update \
+ && apt-get install -y --no-install-recommends --allow-unauthenticated \
+      debian-archive-keyring \
+ && apt-get update \
  && apt-get install -y --no-install-recommends \
       libreoffice \
       libreoffice-writer \
