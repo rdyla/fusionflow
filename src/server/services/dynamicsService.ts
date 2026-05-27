@@ -1082,3 +1082,15 @@ export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Pr
   }
   return dynamicsCreate(env, "/amc_timeentries", body);
 }
+
+// Transitions an amc_timeentry from Open (statecode=0, statuscode=1) to
+// Completed (statecode=1, statuscode=2). Payroll's downstream sync keys off
+// Completed entries — Open ones get treated as in-flight and confuse the
+// integration. Called right after createTimeEntry so every entry we push
+// lands in a payroll-ready state on the first round-trip.
+export async function closeTimeEntry(env: Env, entryId: string): Promise<void> {
+  await dynamicsPatch(env, `/amc_timeentries(${entryId})`, {
+    statecode: 1,
+    statuscode: 2,
+  });
+}
