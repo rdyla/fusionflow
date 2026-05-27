@@ -651,65 +651,40 @@ export default function ProjectDetailPage() {
         </Link>
       </div>
 
-      {/* Customer Metadata Section — shown when linked to a customer */}
-      {project.customer_id && (
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
-              <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
-                {project.customer_name ?? project.customer_display_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+      {/* Combined project meta card — read-only display of customer +
+          project + vendor/tech + go-live + project team + account team.
+          Editing for team membership and Go-Live date lives in the Overview
+          tab's "Team & Controls" card; this section is an at-a-glance echo. */}
+      <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
+        {/* Row 1: project name + customer link · SharePoint link */}
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+          <div>
+            <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+              {project.health && (
+                <span
+                  title={`Health: ${humanize(project.health)}`}
+                  style={{ width: 12, height: 12, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }}
+                />
+              )}
+              {project.name}
+            </h1>
+            {project.customer_id && (
+              <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                {project.customer_name ?? project.customer_display_name} <span style={{ fontSize: 11 }}>↗</span>
               </Link>
-            </div>
-            {project.customer_sharepoint_url && (
-              <a href={project.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
-                SharePoint ↗
-              </a>
             )}
           </div>
-          {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name) && (
-            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {[
-                { role: "Account Executive", name: project.customer_pf_ae_name, email: project.customer_pf_ae_email },
-                { role: "Solution Architect", name: project.customer_pf_sa_name, email: project.customer_pf_sa_email },
-                { role: "Client Success Manager", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email },
-              ].filter(m => m.name).map((m) => {
-                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
-                const abbr = m.name!.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
-                return (
-                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    {photo
-                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                    }
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {project.customer_sharepoint_url && (
+            <a href={project.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+              SharePoint ↗
+            </a>
           )}
         </div>
-      )}
 
-      {/* Project header card */}
-      <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-          {project.health && (
-            <span
-              title={`Health: ${humanize(project.health)}`}
-              style={{ width: 12, height: 12, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }}
-            />
-          )}
-          {project.name}
-        </h1>
-
-        {/* Vendor + solution type badges (editable for admin/pm via a single Edit toggle) */}
+        {/* Row 2: Vendor + tech-type pills · Go-Live · Edit (vendor/tech only) */}
         {editingTech ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18, maxWidth: 520 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f1f5f9", maxWidth: 520 }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</span>
               <select
@@ -739,7 +714,7 @@ export default function ProjectDetailPage() {
             </div>
           </div>
         ) : (
-          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f1f5f9" }}>
             {project.vendor ? (
               <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
                 {vendorLabel(project.vendor)}
@@ -748,14 +723,104 @@ export default function ProjectDetailPage() {
               <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
             )}
             <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
-            {canEdit && (
-              <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>
-                Edit
-              </button>
-            )}
+            <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 12, color: "#64748b" }}>
+                <span style={{ fontWeight: 600, marginRight: 4 }}>Go-Live:</span>
+                {formatDate(project.target_go_live_date)}
+              </span>
+              {canEdit && (
+                <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>
+                  Edit
+                </button>
+              )}
+            </div>
           </div>
         )}
 
+        {/* Row 3: Account Team — Packet Fusion AE / SA / CSM tied to the customer. */}
+        {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name) && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginRight: 4 }}>Account Team</span>
+            {[
+              { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email },
+              { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email },
+              { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email },
+            ].filter(m => m.name).map((m) => {
+              const photo = m.email ? customerTeamPhotoMap[m.email] : null;
+              const abbr = m.name!.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
+              const chipStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(11,154,173,0.07)", border: "1px solid rgba(11,154,173,0.25)", borderRadius: 20, fontSize: 12, textDecoration: "none" };
+              const body = (
+                <>
+                  {photo
+                    ? <img src={photo} alt={m.name!} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(11,154,173,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#0b9aad", flexShrink: 0 }}>{abbr}</span>}
+                  <span style={{ color: "#334155", fontWeight: 500 }}>{m.name}</span>
+                  <span style={{ color: "#94a3b8", fontSize: 10 }}>{m.role}</span>
+                </>
+              );
+              return m.email
+                ? <a key={m.role} href={`mailto:${m.email}`} title={m.email} style={chipStyle}>{body}</a>
+                : <span key={m.role} title={m.role} style={chipStyle}>{body}</span>;
+            })}
+          </div>
+        )}
+
+        {/* Row 4: Project Team — PM, engineers/other internal staff, partner AEs. */}
+        {(() => {
+          const pmChip = (() => {
+            if (!project.pm_user_id) return null;
+            const pmFromMap = userMap.get(project.pm_user_id);
+            const pmName  = pmFromMap?.name  ?? (project as unknown as Record<string, unknown>).pm_name  as string | null ?? null;
+            const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
+            if (!pmName && !pmEmail) return null;
+            const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
+            const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
+            return { key: "pm", label: "PM", name: pmName ?? pmEmail ?? "", email: pmEmail, photo, abbr, color: "blue" as const };
+          })();
+          const internalStaffChips = projectStaff
+            .filter(s => s.staff_role !== "partner_ae"
+              && !["ae", "sa", "csm"].includes(s.staff_role)
+              && !(s.staff_role === "pm" && s.user_id === project.pm_user_id))
+            .map((s) => {
+              const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
+              const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
+              const photo = staffPhotoMap[s.email] ?? s.avatar_url;
+              return { key: s.id, label: roleLabel[s.staff_role] ?? s.staff_role, name: s.name ?? s.email, email: s.email, photo, abbr, color: "blue" as const };
+            });
+          const partnerChips = projectStaff
+            .filter(s => s.staff_role === "partner_ae")
+            .map((s) => {
+              const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
+              const photo = staffPhotoMap[s.email] ?? s.avatar_url;
+              return { key: s.id, label: "Partner AE", name: s.name ?? s.email, email: s.email, photo, abbr, color: "green" as const };
+            });
+          const allProjectChips = [...(pmChip ? [pmChip] : []), ...internalStaffChips, ...partnerChips];
+          if (allProjectChips.length === 0) return null;
+          return (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginRight: 4 }}>Project Team</span>
+              {allProjectChips.map((c) => {
+                const bg     = c.color === "green" ? "rgba(16,124,16,0.07)" : "rgba(0,120,212,0.08)";
+                const border = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
+                const fg     = c.color === "green" ? "#107c10"              : "#63c1ea";
+                const avBg   = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
+                const chip = (
+                  <>
+                    {c.photo
+                      ? <img src={c.photo} alt={c.name} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: avBg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: fg, flexShrink: 0 }}>{c.abbr}</span>}
+                    <span style={{ color: "#334155", fontWeight: 500 }}>{c.name}</span>
+                    <span style={{ color: "#94a3b8", fontSize: 10 }}>{c.label}</span>
+                  </>
+                );
+                const chipStyle: React.CSSProperties = { display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: bg, border: `1px solid ${border}`, borderRadius: 20, fontSize: 12, textDecoration: "none" };
+                return c.email
+                  ? <a key={c.key} href={`mailto:${c.email}`} title={c.email} style={chipStyle}>{chip}</a>
+                  : <span key={c.key} title={c.label} style={chipStyle}>{chip}</span>;
+              })}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Tab navigation */}
