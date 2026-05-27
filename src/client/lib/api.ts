@@ -247,10 +247,19 @@ export type Project = {
   has_optimization: number | null;
   customer_pf_ae_name: string | null;
   customer_pf_ae_email: string | null;
+  customer_pf_ae_phone: string | null;
+  customer_pf_ae_scheduler_url: string | null;
   customer_pf_sa_name: string | null;
   customer_pf_sa_email: string | null;
+  customer_pf_sa_phone: string | null;
+  customer_pf_sa_scheduler_url: string | null;
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
+  customer_pf_csm_phone: string | null;
+  customer_pf_csm_scheduler_url: string | null;
+  pm_email?: string | null;
+  pm_phone?: string | null;
+  pm_scheduler_url?: string | null;
   customer_sharepoint_url: string | null;
   /** Project's own SharePoint folder URL — a subfolder under the customer's
    *  sharepoint_url created on project insert (best-effort). NULL on projects
@@ -812,6 +821,8 @@ export type ProjectStaffMember = {
   staff_role: string;
   name: string | null;
   email: string;
+  phone: string | null;
+  scheduler_url: string | null;
   role: string;
   avatar_url: string | null;
   organization_name: string | null;

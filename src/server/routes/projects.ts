@@ -147,11 +147,11 @@ app.get("/:id", async (c) => {
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.sharepoint_folder_url,
              p.created_at, p.updated_at,
-             pmu.email AS pm_email,
+             pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,
-             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
-             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
-             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email, cpu1.phone AS customer_pf_ae_phone, cpu1.scheduler_url AS customer_pf_ae_scheduler_url,
+             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email, cpu2.phone AS customer_pf_sa_phone, cpu2.scheduler_url AS customer_pf_sa_scheduler_url,
+             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email, cpu3.phone AS customer_pf_csm_phone, cpu3.scheduler_url AS customer_pf_csm_scheduler_url,
              c.sharepoint_url AS customer_sharepoint_url,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
       FROM projects p
@@ -637,7 +637,7 @@ app.get("/:id/staff", async (c) => {
 
   const rows = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url, u.organization_name
+           u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps
     JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ?
@@ -662,7 +662,7 @@ app.post("/:id/staff", async (c) => {
 
   const created = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url, u.organization_name
+           u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
   `).bind(projectId, user_id, staff_role).first();
@@ -737,17 +737,17 @@ app.post("/:id/crm-sync", async (c) => {
   const [staff, updatedProject] = await Promise.all([
     db.prepare(`
       SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-             u.name, u.email, u.role, u.avatar_url, u.organization_name
+             u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
       FROM project_staff ps JOIN users u ON u.id = ps.user_id
       WHERE ps.project_id = ?
       ORDER BY ps.staff_role, u.name
     `).bind(projectId).all(),
     db.prepare(`
-      SELECT p.*, pmu.email AS pm_email,
+      SELECT p.*, pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,
-             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
-             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
-             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email, cpu1.phone AS customer_pf_ae_phone, cpu1.scheduler_url AS customer_pf_ae_scheduler_url,
+             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email, cpu2.phone AS customer_pf_sa_phone, cpu2.scheduler_url AS customer_pf_sa_scheduler_url,
+             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email, cpu3.phone AS customer_pf_csm_phone, cpu3.scheduler_url AS customer_pf_csm_scheduler_url,
              c.sharepoint_url AS customer_sharepoint_url
       FROM projects p
       LEFT JOIN users pmu ON pmu.id = p.pm_user_id
