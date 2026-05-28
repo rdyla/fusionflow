@@ -9,13 +9,13 @@ import { createNotification } from "../lib/notifications";
 import {
   getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry,
 } from "../services/dynamicsService";
-import { syncProjectBlockedStatus, syncStageStatus, maybeGraduateProject } from "../lib/teamUtils";
+import { syncProjectBlockedStatus, syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
   SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority, meeting_join_url,
+         completed_at, status, priority, meeting_join_url, is_go_live_event,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
@@ -81,6 +81,7 @@ app.post("/:id/tasks", async (c) => {
 
   // Re-derive the parent stage's status now that a new task lives under it.
   await syncStageStatus(db, stage_id ?? null);
+  await syncProjectGoLiveDate(db, projectId);
 
   const created = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
@@ -222,6 +223,10 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     await syncStageStatus(db, updated.stage_id);
   }
   await maybeGraduateProject(db, projectId, auth.user.id);
+  // If a go-live event task's due_date moves, the project's target_go_live_date
+  // follows. Re-sync after any task update — cheap enough that we don't gate
+  // on the specific fields that changed.
+  await syncProjectGoLiveDate(db, projectId);
 
   const appUrl = c.env.APP_URL ?? "";
   const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
@@ -586,9 +591,11 @@ app.delete("/:id/tasks/:taskId", async (c) => {
     .run();
 
   // Removing a task may flip the parent stage's status (e.g. it was the
-  // only un-completed task → stage is now fully done).
+  // only un-completed task → stage is now fully done) AND, if the deleted
+  // task was the go-live event, the project's target_go_live_date.
   await syncStageStatus(db, existing.stage_id);
   await maybeGraduateProject(db, projectId, auth.user.id);
+  await syncProjectGoLiveDate(db, projectId);
 
   return c.json({ success: true });
 });

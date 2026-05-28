@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject } from "../services/accessService";
+import { syncProjectGoLiveDate } from "../lib/teamUtils";
 import {
   buildTaggedTitle,
   canonicalizeSolutionType,
@@ -330,14 +331,37 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .bind(template_id)
     .all<{ id: string; name: string; order_index: number; working_days: number | null }>();
 
-  // When the caller supplied a go-live, chain stage dates backward from it.
-  // Same algorithm Timeline Builder uses (see shared/workdayMath.ts).
+  const tasks = await db
+    .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
+    .bind(template_id)
+    .all<{ id: string; stage_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null; is_go_live_event: number | null }>();
+
+  // When the caller supplied a go-live, anchor the GO-LIVE STAGE's end on
+  // that date (not the total chain end). Stages after the go-live stage
+  // — Closing, Hypercare — extend forward past the date. Mirrors the
+  // Timeline Builder's `workdaysThroughGoLive` (see shared/workdayMath.ts
+  // and TimelineBuilder.tsx). Falls back to total-chain anchoring when
+  // the template has no flagged go-live task (legacy templates).
   const stageDateMap = new Map<string, { start: string; end: string }>(); // template_stage_id -> dates
   if (target_go_live_date) {
     const stageList = stages.results ?? [];
-    const totalWorkdays = stageList.reduce((sum, p) => sum + (p.working_days ?? 0), 0);
-    if (totalWorkdays > 0) {
-      const anchor = startFromGoLive(target_go_live_date, totalWorkdays);
+    const taskList = tasks.results ?? [];
+    // Find the LAST stage containing a flagged go-live task. Last so combo
+    // templates (multi-solution) anchor on the latest go-live.
+    let goLiveStageIdx = -1;
+    for (let i = stageList.length - 1; i >= 0; i--) {
+      const stageId = stageList[i].id;
+      if (taskList.some((t) => t.stage_id === stageId && t.is_go_live_event === 1)) {
+        goLiveStageIdx = i;
+        break;
+      }
+    }
+    const anchorIdx = goLiveStageIdx >= 0 ? goLiveStageIdx : stageList.length - 1;
+    const workdaysThroughAnchor = stageList
+      .slice(0, anchorIdx + 1)
+      .reduce((sum, p) => sum + (p.working_days ?? 0), 0);
+    if (workdaysThroughAnchor > 0) {
+      const anchor = startFromGoLive(target_go_live_date, workdaysThroughAnchor);
       const chain = chainForward(
         anchor,
         stageList.map((p) => ({ id: p.id, working_days: p.working_days ?? 0 }))
@@ -345,11 +369,6 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
       for (const r of chain) stageDateMap.set(r.id, { start: r.start, end: r.end });
     }
   }
-
-  const tasks = await db
-    .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
-    .bind(template_id)
-    .all<{ id: string; stage_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
 
   // Load existing stages by name so we can reuse them instead of duplicating.
   // When phase-scoped, only consider stages under that same phase — a "Plan"
@@ -557,9 +576,9 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     const taskEnd   = stageDates?.planned_end ?? null;
     await db
       .prepare(
-        "INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date, is_go_live_event) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd)
+      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd, task.is_go_live_event ?? 0)
       .run();
     if (mappedStageId) {
       const stageTasks = tasksByStage.get(mappedStageId);
@@ -569,6 +588,10 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     }
     tasksCreated++;
   }
+
+  // Sync project.target_go_live_date from any flagged go-live event tasks
+  // that were just inserted from the template.
+  await syncProjectGoLiveDate(db, projectId);
 
   return c.json({ stages_created: stagesCreated, tasks_created: tasksCreated, tasks_merged: tasksMerged });
 });
@@ -599,6 +622,9 @@ const applyTimelineSchema = z.object({
       priority: z.string().nullable().optional(),
       start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      /** Carries the canonical-go-live flag forward from template_tasks
+       *  so project.target_go_live_date can derive from this task's date. */
+      isGoLiveEvent: z.boolean().optional(),
     })),
   })).min(1),
 });
@@ -649,7 +675,7 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
   const roleToContactId: Record<string, string | null> = { zoom_porting: portingContactId };
 
   // Build all the task inserts so the wipe + rebuild runs in a single atomic batch.
-  type NewTask = { id: string; stage_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string };
+  type NewTask = { id: string; stage_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string; is_go_live_event: number };
   const newTasks: NewTask[] = [];
   for (let stageIdx = 0; stageIdx < stagePayload.length; stageIdx++) {
     const stagePayloadEntry = stagePayload[stageIdx];
@@ -668,6 +694,7 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
         scheduled_start: t.start,
         scheduled_end: t.end,
         due_date: t.end,
+        is_go_live_event: t.isGoLiveEvent ? 1 : 0,
       });
     }
   }
@@ -685,10 +712,15 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
       .prepare("INSERT INTO stages (id, project_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, 'not_started')")
       .bind(p.id, projectId, p.name, p.sort_order, p.start, p.end)),
     ...newTasks.map((t) => db
-      .prepare("INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)")
-      .bind(t.id, projectId, t.stage_id, t.title, t.priority, t.assignee_user_id, t.assignee_contact_id, t.scheduled_start, t.scheduled_end, t.due_date)),
+      .prepare("INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date, is_go_live_event) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?, ?)")
+      .bind(t.id, projectId, t.stage_id, t.title, t.priority, t.assignee_user_id, t.assignee_contact_id, t.scheduled_start, t.scheduled_end, t.due_date, t.is_go_live_event)),
   ];
   await db.batch(stmts);
+
+  // Sync the project's target_go_live_date from the newly-inserted go-live
+  // event task(s). If the timeline didn't flag any, no-op (project keeps
+  // whatever was set before the rebuild).
+  await syncProjectGoLiveDate(db, projectId);
 
   return c.json({ stages_created: newStages.length, tasks_created: newTasks.length });
 });

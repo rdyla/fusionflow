@@ -129,3 +129,33 @@ export async function maybeGraduateProject(db: D1Database, projectId: string, gr
     .bind(crypto.randomUUID(), projectId, graduatedByUserId)
     .run();
 }
+
+/**
+ * Sync a project's target_go_live_date from the canonical go-live event
+ * task(s) (tasks.is_go_live_event = 1). On multi-phase projects there can
+ * be multiple flagged tasks (one per rollout phase); the project's target
+ * is the MAX of their due_dates — i.e. the FINAL go-live across the project.
+ *
+ * If no flagged task exists, target_go_live_date is left untouched (allows
+ * brand-new projects to keep whatever was set at create-time until a
+ * template-applied task carries the flag forward).
+ *
+ * Call after task POST / PATCH / DELETE in routes/tasks.ts.
+ */
+export async function syncProjectGoLiveDate(db: D1Database, projectId: string): Promise<void> {
+  const row = await db
+    .prepare(
+      `SELECT MAX(due_date) AS go_live FROM tasks
+       WHERE project_id = ? AND is_go_live_event = 1 AND due_date IS NOT NULL`
+    )
+    .bind(projectId)
+    .first<{ go_live: string | null }>();
+
+  const goLive = row?.go_live ?? null;
+  if (!goLive) return;
+
+  await db
+    .prepare("UPDATE projects SET target_go_live_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (target_go_live_date IS NULL OR target_go_live_date != ?)")
+    .bind(goLive, projectId, goLive)
+    .run();
+}

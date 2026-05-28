@@ -304,6 +304,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
             priority: t.priority,
             start: t.start,
             end: t.end,
+            isGoLiveEvent: t.isGoLiveEvent,
           })),
         })),
       });

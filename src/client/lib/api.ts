@@ -625,6 +625,10 @@ export type Task = {
    *  go-live / etc.); the stakeholder view's "Next call" picks the earliest
    *  upcoming task with a join URL. */
   meeting_join_url: string | null;
+  /** Canonical go-live event flag (mirrors template_tasks.is_go_live_event
+   *  from migration 0081, carried into tasks by migration 0095). When set,
+   *  the task's due_date drives projects.target_go_live_date. */
+  is_go_live_event: number | null;
 };
 
 export type TimeEntrySetup = {
@@ -2113,7 +2117,7 @@ export const api = {
         target_go_live_date: targetGoLiveDate ?? null,
       }),
     }),
-  applyTimeline: (projectId: string, payload: { stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
+  applyTimeline: (projectId: string, payload: { stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string; isGoLiveEvent?: boolean }> }> }) =>
     request<{ stages_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
       method: "POST",
       body: JSON.stringify(payload),
