@@ -371,12 +371,17 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   }
 
   // Load existing stages by name so we can reuse them instead of duplicating.
-  // When phase-scoped, only consider stages under that same phase — a "Plan"
-  // stage on the Zoom Phone phase should NOT be reused for the Zoom CC phase.
+  // When phase-scoped, consider both the same-phase stages AND any project-
+  // shared stages (phase_id IS NULL — Initiate on multi-phase projects).
+  // Without the shared-stage union, applying a template to a phase that
+  // doesn't yet have a phase-scoped Initiate row would CREATE a duplicate
+  // Initiate stage under that phase even though the project already has
+  // a shared one. That left projects with two Initiate stages and one of
+  // them empty after the per-phase filter (see PR review notes).
   const existingStages = await (
     scopedPhaseId
       ? db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND phase_id = ?")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND (phase_id = ? OR phase_id IS NULL)")
           .bind(projectId, scopedPhaseId)
       : db
           .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND phase_id IS NULL")
