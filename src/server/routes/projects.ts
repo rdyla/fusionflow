@@ -251,6 +251,18 @@ app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, serializeSolutionTypes(solution_types), kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, dynamics_account_id ?? null, crm_case_id ?? null)
     .run();
 
+  // Every project owns at least one deployment phase. Single-phase projects
+  // operate entirely on this default; multi-phase projects add more rows via
+  // the Phases panel. Created here so the PM never has to manually seed it
+  // before applying a template.
+  await db
+    .prepare(
+      `INSERT INTO phases (id, project_id, name, target_go_live_date, display_order)
+       VALUES (?, ?, 'Main', ?, 0)`
+    )
+    .bind(`phase-${projectId}`, projectId, target_go_live_date ?? null)
+    .run();
+
   // Best-effort: create the project's SharePoint subfolder under the customer's
   // SP root. resolveCustomerSharePointUrl lazily backfills the customer's
   // sharepoint_url from Dynamics doc locations if it isn't set yet — most

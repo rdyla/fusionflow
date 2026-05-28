@@ -230,11 +230,6 @@ export default function ProjectDetailPage() {
   const [savingCaseLink, setSavingCaseLink] = useState(false);
 
   // Apply template
-  const [templateList, setTemplateList] = useState<{ id: string; name: string; stage_count?: number; task_count?: number }[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ stages_created: number; tasks_created: number; tasks_merged: number } | null>(null);
 
   // Manual stage creation
   const [newStageName, setNewStageName] = useState("");
@@ -366,11 +361,6 @@ export default function ProjectDetailPage() {
     load();
   }, [id]);
 
-  // Load template list for apply-template panel (admin + pm)
-  useEffect(() => {
-    api.templatesList().then(setTemplateList).catch(() => {});
-  }, []);
-
   // Load case compliance data when the case tab is opened
   useEffect(() => {
     if (tab !== "case" || !project?.id) return;
@@ -434,33 +424,9 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleApplyTemplate() {
-    if (!project || !selectedTemplateId) return;
-    setApplyingTemplate(true);
-    try {
-      const result = await api.applyTemplate(project.id, selectedTemplateId);
-      setApplyResult(result);
-      setShowApplyConfirm(false);
-      // Reload stages and tasks
-      const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);
-      setStages(newStages);
-      setTasks(newTasks);
-      {
-        const parts: string[] = [];
-        parts.push(`${result.stages_created} new stage${result.stages_created !== 1 ? "s" : ""}`);
-        parts.push(`${result.tasks_created} task${result.tasks_created !== 1 ? "s" : ""} added`);
-        if (result.tasks_merged > 0) {
-          parts.push(`${result.tasks_merged} merged into existing tasks`);
-        }
-        showToast(`Template applied: ${parts.join(", ")}.`, "success");
-      }
-      setSelectedTemplateId("");
-    } catch {
-      showToast("Failed to apply template", "error");
-    } finally {
-      setApplyingTemplate(false);
-    }
-  }
+  // Project-level handleApplyTemplate retired with the Project Settings
+  // card. Phase-scoped template apply lives in the Phases panel's
+  // ApplyTemplateModal (src/client/components/project/PhasesPanel.tsx).
 
   async function handleAddStaff() {
     if (!addStaffUserId || !addStaffRole || !project) return;
@@ -996,30 +962,9 @@ export default function ProjectDetailPage() {
 
         return (
           <div style={{ display: "grid", gap: 16 }}>
-            {/* ── Project Settings card ──────────────────────────────────────
-                Status was auto-derived from stages + open blockers in PR E1,
-                so the status dropdown is gone. Template apply still lives
-                here as the project-level fallback for projects that don't
-                yet have any deployment phases; PR E2 will move it into the
-                Phases panel and retire this card entirely. */}
-            {canEdit && templateList.length > 0 && (
-              <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-                <div className="ms-section-title" style={{ marginBottom: 10 }}>Template</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
-                    <option value="">— Template —</option>
-                    {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                  </select>
-                  <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
-                  {applyResult && (
-                    <span style={{ fontSize: 12, color: "#059669" }}>
-                      {applyResult.stages_created} stages, {applyResult.tasks_created} tasks added
-                      {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
-                    </span>
-                  )}
-                </div>
-              </div>
-            )}
+            {/* Project Settings card retired (May-2026). Status is auto-derived
+                (PR E1); Template apply moved into the Phases panel below
+                (PR E2 — every project owns at least one Main phase). */}
 
             {/* ── Project Details (vendor + Solution Types) ────────────────── */}
             <div className="ms-section-card">
@@ -3039,32 +2984,9 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Apply Template Confirm */}
-      {showApplyConfirm && selectedTemplateId && (() => {
-        const tmpl = templateList.find((t) => t.id === selectedTemplateId);
-        return (
-          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowApplyConfirm(false); }}>
-            <div className="ms-modal" style={{ maxWidth: 440 }}>
-              <h2>Apply Template</h2>
-              <p style={{ color: "#475569", margin: "12px 0 20px" }}>
-                This will add <strong>{tmpl?.stage_count ?? "?"} stages</strong> and{" "}
-                <strong>{tmpl?.task_count ?? "?"} tasks</strong> from{" "}
-                <strong style={{ color: "#1e293b" }}>{tmpl?.name}</strong> to this project. Continue?
-              </p>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  className="ms-btn-primary"
-                  disabled={applyingTemplate}
-                  onClick={handleApplyTemplate}
-                >
-                  {applyingTemplate ? "Applying..." : "Apply Template"}
-                </button>
-                <button className="ms-btn-secondary" onClick={() => setShowApplyConfirm(false)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Project-level Apply-Template confirm modal retired with the
+          Project Settings card. Phase-scoped template apply lives in
+          components/project/PhasesPanel.tsx → ApplyTemplateModal. */}
 
     </div>
   );
