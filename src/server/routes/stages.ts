@@ -17,7 +17,7 @@ app.get("/:id/stages", async (c) => {
   const rows = await db
     .prepare(
       `SELECT id, project_id, name, sort_order, planned_start, planned_end,
-              actual_start, actual_end, status
+              actual_start, actual_end, status, phase_id
        FROM stages
        WHERE project_id = ?
        ORDER BY sort_order ASC`

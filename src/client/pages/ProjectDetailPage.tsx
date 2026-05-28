@@ -6,6 +6,7 @@ import {
   type Document,
   type DynamicsContact,
   type Note,
+  type Phase,
   type Stage,
   type Project,
   type ProjectContact,
@@ -136,6 +137,48 @@ function ContactIcons({ email, phone, schedulerUrl, accent }: {
   );
 }
 
+// Phase tab picker — rendered above Tasks + Timeline on multi-phase
+// projects. "Initiate" is a synthetic tab for the shared (phase_id IS
+// NULL) stages; the rest are phase rows in display_order.
+function PhasePicker({
+  phases, hasSharedStages, selected, onSelect,
+}: {
+  phases: Phase[];
+  hasSharedStages: boolean;
+  selected: string;
+  onSelect: (v: string) => void;
+}) {
+  const tab = (key: string, label: string) => {
+    const active = key === selected;
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => onSelect(key)}
+        style={{
+          padding: "5px 14px",
+          fontSize: 12,
+          fontWeight: 600,
+          borderRadius: 999,
+          border: `1px solid ${active ? "#0078d4" : "#cbd5e1"}`,
+          background: active ? "#0078d4" : "#fff",
+          color: active ? "#fff" : "#475569",
+          cursor: "pointer",
+          transition: "background 0.1s, color 0.1s, border-color 0.1s",
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+      {hasSharedStages && tab("shared", "Initiate")}
+      {phases.map((p) => tab(p.id, p.name))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetailPage() {
@@ -145,6 +188,11 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  // Multi-phase projects (phases.length >= 2) render a phase picker above
+  // Tasks + Timeline; the picker filters by phase. Selection uses "shared"
+  // for the Initiate (phase_id IS NULL) view, or the phase row's id.
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
   const [risks, setRisks] = useState<Risk[]>([]);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -300,9 +348,57 @@ export default function ProjectDetailPage() {
     return u ? `${u.name ?? u.email} · (off project)` : "(unknown user)";
   }
 
+  // Multi-phase project detection drives the phase-picker visibility on
+  // Tasks + Timeline. Single-phase projects (the default after PR E2's
+  // unification) render no picker — there's only one phase to look at.
+  const multiPhase = phases.length >= 2;
+  const hasSharedStages = useMemo(() => stages.some((s) => s.phase_id === null), [stages]);
+  const phasePickerLsKey = id ? `cloudconnect:project:selectedPhase:${id}` : null;
+
+  // Initialize / repair selectedPhaseId when phases load (or change). Falls
+  // back to "shared" (Initiate tab) if shared stages exist, else the first
+  // phase row. Persisted choice wins as long as it still references a live
+  // phase.
+  useEffect(() => {
+    if (!multiPhase) return;
+    if (phases.length === 0) return;
+    const phaseIds = new Set(phases.map((p) => p.id));
+    const persisted = phasePickerLsKey ? localStorage.getItem(phasePickerLsKey) : null;
+    const isValid = (v: string) => v === "shared" ? hasSharedStages : phaseIds.has(v);
+    if (selectedPhaseId && isValid(selectedPhaseId)) return;
+    if (persisted && isValid(persisted)) {
+      setSelectedPhaseId(persisted);
+      return;
+    }
+    setSelectedPhaseId(hasSharedStages ? "shared" : phases[0].id);
+  }, [multiPhase, phases, hasSharedStages, selectedPhaseId, phasePickerLsKey]);
+
+  useEffect(() => {
+    if (!phasePickerLsKey || !selectedPhaseId) return;
+    try { localStorage.setItem(phasePickerLsKey, selectedPhaseId); } catch { /* private mode etc. */ }
+  }, [phasePickerLsKey, selectedPhaseId]);
+
+  // Stages filtered to the selected phase for Tasks + Timeline tabs.
+  // Single-phase projects skip the filter entirely.
+  const visibleStages = useMemo(() => {
+    if (!multiPhase) return stages;
+    if (selectedPhaseId === "shared") return stages.filter((s) => s.phase_id === null);
+    if (!selectedPhaseId) return stages;
+    return stages.filter((s) => s.phase_id === selectedPhaseId);
+  }, [stages, multiPhase, selectedPhaseId]);
+
+  // Tasks restricted to the visible stages — so the Timeline's internal
+  // datedTasks / summary / date-bounds math doesn't include tasks from
+  // hidden phases.
+  const visibleStageIds = useMemo(() => new Set(visibleStages.map((s) => s.id)), [visibleStages]);
+  const visibleTasks = useMemo(
+    () => multiPhase ? tasks.filter((t) => t.stage_id !== null && visibleStageIds.has(t.stage_id)) : tasks,
+    [tasks, multiPhase, visibleStageIds]
+  );
+
   const groupedTasks = useMemo(
-    () => stages.map((stage) => ({ stage, tasks: filteredTasks.filter((t) => t.stage_id === stage.id) })),
-    [stages, filteredTasks]
+    () => visibleStages.map((stage) => ({ stage, tasks: filteredTasks.filter((t) => t.stage_id === stage.id) })),
+    [visibleStages, filteredTasks]
   );
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   function userName(id: string | null) {
@@ -324,6 +420,7 @@ export default function ProjectDetailPage() {
           ]);
         api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
+        api.phases(id).then(setPhases).catch(() => {});
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
         if (staffData.length > 0) {
@@ -759,9 +856,18 @@ export default function ProjectDetailPage() {
 
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (
+        <>
+        {multiPhase && (
+          <PhasePicker
+            phases={phases}
+            hasSharedStages={hasSharedStages}
+            selected={selectedPhaseId}
+            onSelect={setSelectedPhaseId}
+          />
+        )}
         <ProjectTimeline
-          stages={stages}
-          tasks={tasks}
+          stages={visibleStages}
+          tasks={visibleTasks}
           // Hide recording markers for clients — meeting topics on the Gantt could
           // surface internal discussion names. Matches the Activity-tab gating.
           recordings={currentUserRole === "client" ? [] : recordings}
@@ -789,6 +895,7 @@ export default function ProjectDetailPage() {
             }, 50);
           }}
         />
+        </>
       )}
 
       {/* ── Overview ────────────────────────────────────────────────────── */}
@@ -1068,7 +1175,11 @@ export default function ProjectDetailPage() {
               projectId={project.id}
               canEdit={canEdit}
               onChange={async () => {
-                const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);
+                // Phase add/delete/edit can move stages between phase_id values
+                // and may flip the project between single-phase and multi-phase
+                // — keep our cache fresh on all three.
+                const [newPhases, newStages, newTasks] = await Promise.all([api.phases(project.id), api.stages(project.id), api.tasks(project.id)]);
+                setPhases(newPhases);
                 setStages(newStages);
                 setTasks(newTasks);
               }}
@@ -1101,6 +1212,14 @@ export default function ProjectDetailPage() {
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {tab === "tasks" && (
         <>
+        {multiPhase && (
+          <PhasePicker
+            phases={phases}
+            hasSharedStages={hasSharedStages}
+            selected={selectedPhaseId}
+            onSelect={setSelectedPhaseId}
+          />
+        )}
         <div className="ms-section-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
             <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Stage</div>
@@ -1124,9 +1243,11 @@ export default function ProjectDetailPage() {
             </div>
           )}
           <div style={{ display: "grid", gap: 24 }}>
-            {stages.length === 0 && (
+            {visibleStages.length === 0 && (
               <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
-                No stages yet. Apply a template above, or add stages manually below.
+                {multiPhase
+                  ? "No stages on this phase yet — apply a template via the Overview tab."
+                  : "No stages yet. Apply a template above, or add stages manually below."}
               </div>
             )}
             {groupedTasks.map(({ stage, tasks: stageTasks }) => {
