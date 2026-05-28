@@ -282,8 +282,11 @@ app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
   return c.json(created ? normalizeSolutionTypesField(created) : null, 201);
 });
 
+// Project status is auto-derived from stages + open blockers — see
+// teamUtils.syncProjectStatus, fired from routes/tasks.ts and routes/risks.ts
+// on any task or blocker write. PMs can't set it manually anymore
+// (May-2026); a `status` field in the payload is silently dropped by zod.
 const updateProjectSchema = z.object({
-  status: z.enum(["not_started", "in_progress", "blocked", "complete"]).optional(),
   health: z.string().min(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),

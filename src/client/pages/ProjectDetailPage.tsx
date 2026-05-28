@@ -162,13 +162,10 @@ export default function ProjectDetailPage() {
   const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editStatus, setEditStatus] = useState("");
   const [editingTech, setEditingTech] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
   const [editVendor, setEditVendor] = useState("");
   const [savingTech, setSavingTech] = useState(false);
-  const [savingProject, setSavingProject] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
   const [newNoteVisibility, setNewNoteVisibility] = useState<"internal" | "partner" | "public">("internal");
   const [savingNote, setSavingNote] = useState(false);
@@ -332,7 +329,6 @@ export default function ProjectDetailPage() {
           ]);
         api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
-        setEditStatus(projectData.status ?? "");
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
         if (staffData.length > 0) {
@@ -408,27 +404,10 @@ export default function ProjectDetailPage() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  async function handleSaveProject() {
-    if (!project) return;
-    setSavingProject(true);
-    setSaveMessage(null);
-    try {
-      // target_go_live_date is now derived server-side from the go-live event
-      // task (syncProjectGoLiveDate). Not sent here.
-      const updated = await api.updateProject(project.id, {
-        status: editStatus || undefined,
-      });
-      setProject(updated);
-      setSaveMessage("Saved.");
-      showToast("Project updated successfully.", "success");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update project";
-      setSaveMessage(message);
-      showToast(message, "error");
-    } finally {
-      setSavingProject(false);
-    }
-  }
+  // Project-level Save was retired with the Project Settings card — status
+  // is auto-derived and target_go_live_date follows the canonical go-live
+  // task. handleSaveProject and its surrounding state intentionally
+  // removed.
 
   function startEditTech() {
     if (!project) return;
@@ -1017,41 +996,26 @@ export default function ProjectDetailPage() {
 
         return (
           <div style={{ display: "grid", gap: 16 }}>
-            {/* ── Project Settings (PM/admin only) ─────────────────────────── */}
-            {canEdit && (
+            {/* ── Project Settings card ──────────────────────────────────────
+                Status was auto-derived from stages + open blockers in PR E1,
+                so the status dropdown is gone. Template apply still lives
+                here as the project-level fallback for projects that don't
+                yet have any deployment phases; PR E2 will move it into the
+                Phases panel and retire this card entirely. */}
+            {canEdit && templateList.length > 0 && (
               <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-                <div className="ms-section-title" style={{ marginBottom: 10 }}>Project Settings</div>
+                <div className="ms-section-title" style={{ marginBottom: 10 }}>Template</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                    <option value="">Status</option>
-                    <option value="not_started">Not Started</option>
-                    <option value="in_progress">In Progress</option>
-                    <option value="blocked">Blocked</option>
-                    <option value="complete">Complete</option>
+                  <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
+                    <option value="">— Template —</option>
+                    {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
-                  {/* Go-Live is now derived from the canonical go-live event
-                      task (tasks.is_go_live_event = 1) — edit its due date
-                      via the Tasks tab. The meta header above already shows
-                      the current value. */}
-                  <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={handleSaveProject} disabled={savingProject}>
-                    {savingProject ? "Saving…" : "Save"}
-                  </button>
-                  {saveMessage && <span style={{ fontSize: 12, color: "#64748b" }}>{saveMessage}</span>}
-                  {templateList.length > 0 && (
-                    <>
-                      <span style={{ color: "#e2e8f0", margin: "0 2px" }}>|</span>
-                      <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
-                        <option value="">— Template —</option>
-                        {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </select>
-                      <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
-                      {applyResult && (
-                        <span style={{ fontSize: 12, color: "#059669" }}>
-                          {applyResult.stages_created} stages, {applyResult.tasks_created} tasks added
-                          {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
-                        </span>
-                      )}
-                    </>
+                  <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
+                  {applyResult && (
+                    <span style={{ fontSize: 12, color: "#059669" }}>
+                      {applyResult.stages_created} stages, {applyResult.tasks_created} tasks added
+                      {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
+                    </span>
                   )}
                 </div>
               </div>
