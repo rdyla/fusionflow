@@ -26,34 +26,56 @@ export function inPlaceholders(ids: string[]): string {
 }
 
 /**
- * Syncs project.status to "blocked" when any task is blocked or any open
- * blocker exists.  Reverts to "in_progress" when all blockers are resolved
- * and no tasks remain blocked (only if the project was previously auto-blocked).
+ * Auto-derive project.status from stages + open blockers and persist it.
+ * Precedence (top wins):
+ *   1. any open risk OR any task in `blocked` status      → 'blocked'
+ *   2. ≥ 1 stage AND every stage status = 'completed'     → 'complete'
+ *   3. any stage status = 'in_progress'                   → 'in_progress'
+ *   4. else (empty / all not_started)                     → 'not_started'
+ *
+ * Project status is no longer set manually by PMs (May-2026) — it's
+ * derived here whenever a task changes (via syncStageStatus) or a
+ * blocker is added / closed. Call from routes/tasks.ts and routes/risks.ts.
+ *
+ * Replaces the older syncProjectBlockedStatus which only handled the
+ * blocked ⇄ in_progress transition.
  */
+export async function syncProjectStatus(db: D1Database, projectId: string): Promise<string> {
+  // Single round-trip to gather the counts we need.
+  const row = await db
+    .prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM tasks WHERE project_id = ? AND status = 'blocked') AS blocked_tasks,
+         (SELECT COUNT(*) FROM risks WHERE project_id = ? AND status = 'open')    AS open_risks,
+         (SELECT COUNT(*) FROM stages WHERE project_id = ?)                       AS total_stages,
+         (SELECT COUNT(*) FROM stages WHERE project_id = ? AND status = 'completed')   AS done_stages,
+         (SELECT COUNT(*) FROM stages WHERE project_id = ? AND status = 'in_progress') AS active_stages`
+    )
+    .bind(projectId, projectId, projectId, projectId, projectId)
+    .first<{ blocked_tasks: number; open_risks: number; total_stages: number; done_stages: number; active_stages: number }>();
+
+  const blockedTasks  = row?.blocked_tasks  ?? 0;
+  const openRisks     = row?.open_risks     ?? 0;
+  const totalStages   = row?.total_stages   ?? 0;
+  const doneStages    = row?.done_stages    ?? 0;
+  const activeStages  = row?.active_stages  ?? 0;
+
+  const derived = (blockedTasks > 0 || openRisks > 0) ? "blocked"
+    : (totalStages > 0 && doneStages === totalStages) ? "complete"
+    : activeStages > 0 ? "in_progress"
+    : "not_started";
+
+  await db
+    .prepare("UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (status IS NULL OR status != ?)")
+    .bind(derived, projectId, derived)
+    .run();
+
+  return derived;
+}
+
+/** @deprecated kept for backward call sites — forwards to syncProjectStatus. */
 export async function syncProjectBlockedStatus(db: D1Database, projectId: string): Promise<void> {
-  const project = await db
-    .prepare("SELECT status FROM projects WHERE id = ? LIMIT 1")
-    .bind(projectId)
-    .first<{ status: string | null }>();
-  if (!project || project.status === "complete" || project.status === "not_started") return;
-
-  const blockedTask = await db
-    .prepare("SELECT id FROM tasks WHERE project_id = ? AND status = 'blocked' LIMIT 1")
-    .bind(projectId)
-    .first();
-
-  const openBlocker = await db
-    .prepare("SELECT id FROM risks WHERE project_id = ? AND status = 'open' LIMIT 1")
-    .bind(projectId)
-    .first();
-
-  const shouldBeBlocked = !!(blockedTask || openBlocker);
-
-  if (shouldBeBlocked && project.status !== "blocked") {
-    await db.prepare("UPDATE projects SET status = 'blocked', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(projectId).run();
-  } else if (!shouldBeBlocked && project.status === "blocked") {
-    await db.prepare("UPDATE projects SET status = 'in_progress', updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(projectId).run();
-  }
+  await syncProjectStatus(db, projectId);
 }
 
 /**

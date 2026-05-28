@@ -6,7 +6,7 @@ import { canViewProject, canEditProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { riskAssigned, pmRiskNotification } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
-import { syncProjectBlockedStatus } from "../lib/teamUtils";
+import { syncProjectStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -68,7 +68,7 @@ app.post("/:id/risks", async (c) => {
   const created = await db.prepare(`SELECT ${RISK_COLUMNS} FROM risks WHERE id = ? LIMIT 1`).bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null; owner_contact_id: string | null; task_id: string | null }>();
 
   // Auto-block the project when an open blocker is added
-  await syncProjectBlockedStatus(db, projectId);
+  await syncProjectStatus(db, projectId);
 
   if (created) {
     const appUrl = c.env.APP_URL ?? "";
@@ -187,7 +187,7 @@ app.patch("/:id/risks/:riskId", async (c) => {
   const updated = await db.prepare(`SELECT ${RISK_COLUMNS} FROM risks WHERE id = ? LIMIT 1`).bind(riskId).first<{ id: string; title: string; description: string | null; severity: string | null; status: string | null; task_id: string | null }>();
 
   // Sync project blocked status after blocker update
-  await syncProjectBlockedStatus(db, projectId);
+  await syncProjectStatus(db, projectId);
 
   // Notify PM of risk update (skip if PM made the change)
   const appUrl = c.env.APP_URL ?? "";
@@ -219,7 +219,7 @@ app.delete("/:id/risks/:riskId", async (c) => {
   if (!existing) throw new HTTPException(404, { message: "Risk not found" });
 
   await db.prepare("DELETE FROM risks WHERE id = ?").bind(riskId).run();
-  await syncProjectBlockedStatus(db, projectId);
+  await syncProjectStatus(db, projectId);
   return c.json({ success: true });
 });
 

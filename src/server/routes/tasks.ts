@@ -9,7 +9,7 @@ import { createNotification } from "../lib/notifications";
 import {
   getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry,
 } from "../services/dynamicsService";
-import { syncProjectBlockedStatus, syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate } from "../lib/teamUtils";
+import { syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate, syncProjectStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -82,6 +82,7 @@ app.post("/:id/tasks", async (c) => {
   // Re-derive the parent stage's status now that a new task lives under it.
   await syncStageStatus(db, stage_id ?? null);
   await syncProjectGoLiveDate(db, projectId);
+  await syncProjectStatus(db, projectId);
 
   const created = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
@@ -267,9 +268,11 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     }
   }
 
-  // Sync project blocked status whenever task status changes
+  // Sync project.status whenever task status changes — picks up
+  // blocked / in_progress / completed transitions from the stages we
+  // just resynced above plus any blocked tasks / open risks.
   if (updates.status !== undefined) {
-    await syncProjectBlockedStatus(db, projectId);
+    await syncProjectStatus(db, projectId);
   }
 
   // Notify PM if task just became blocked
@@ -596,6 +599,7 @@ app.delete("/:id/tasks/:taskId", async (c) => {
   await syncStageStatus(db, existing.stage_id);
   await maybeGraduateProject(db, projectId, auth.user.id);
   await syncProjectGoLiveDate(db, projectId);
+  await syncProjectStatus(db, projectId);
 
   return c.json({ success: true });
 });
