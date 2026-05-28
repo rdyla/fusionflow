@@ -10,8 +10,10 @@
 ALTER TABLE phases RENAME TO stages;
 ALTER TABLE template_phases RENAME TO template_stages;
 
--- Foreign-key columns on dependent tables
-ALTER TABLE milestones       RENAME COLUMN phase_id TO stage_id;
+-- Foreign-key columns on dependent tables.
+-- NOTE: `milestones` was dropped in migration 0041; not renamed here
+-- (it still appears in 0001_initial.sql but does not exist on
+-- staging/prod, so a rename would fail).
 ALTER TABLE tasks            RENAME COLUMN phase_id TO stage_id;
 ALTER TABLE documents        RENAME COLUMN phase_id TO stage_id;
 ALTER TABLE zoom_recordings  RENAME COLUMN phase_id TO stage_id;
