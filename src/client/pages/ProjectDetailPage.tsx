@@ -215,6 +215,12 @@ export default function ProjectDetailPage() {
   // Captured at Edit-open so the Save flow can detect removed solution
   // types and offer to clean up tasks tagged with them.
   const [originalSolutionTypes, setOriginalSolutionTypes] = useState<SolutionType[]>([]);
+  // Solution-type cleanup confirm state. Non-null while the modal is open;
+  // captures the delete/retag counts so the dialog can display them. MUST
+  // live up here with the other useStates — declaring it down by
+  // saveEditTech would put it AFTER the loading/error/no-project early
+  // returns and trip React error #310 (hooks order mismatch).
+  const [solutionCleanup, setSolutionCleanup] = useState<{ removed: SolutionType[]; deleteCount: number; retagCount: number } | null>(null);
   const [editVendor, setEditVendor] = useState("");
   const [savingTech, setSavingTech] = useState(false);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -507,10 +513,7 @@ export default function ProjectDetailPage() {
     setEditingTech(true);
   }
 
-  // Solution-type cleanup confirm state. Non-null while the modal is open.
-  // Captures the counts so the modal can show "X deleted, Y re-tagged".
   type CleanupSummary = { removed: SolutionType[]; deleteCount: number; retagCount: number };
-  const [solutionCleanup, setSolutionCleanup] = useState<CleanupSummary | null>(null);
 
   /** Compute how many project tasks would be deleted / re-tagged if the
    *  given solution types were removed. Stays entirely client-side so the
