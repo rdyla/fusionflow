@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api, type Solution, type SolutionStatus, type User, type CrmAccountTeam,
+  type DynamicsOpportunity,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { useDemoMode } from "../lib/demoMode";
@@ -125,6 +126,7 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
 const EMPTY_FORM = {
   customer_name: "",
   dynamics_account_id: "",
+  crm_opportunity_id: "",
   journeys: [] as string[],
   ucaas_vendor: "" as "" | "zoom" | "ringcentral" | "agnostic",
   pf_ae_user_id: "",
@@ -148,6 +150,12 @@ export default function SolutionsPage() {
   const [crmSearching, setCrmSearching] = useState(false);
   const [crmTeam, setCrmTeam] = useState<CrmAccountTeam | null>(null);
   const [crmTeamLoading, setCrmTeamLoading] = useState(false);
+  // Open opportunities (statecode=0) for the selected account. Loaded lazily
+  // when an account is picked; cleared when the user re-edits the customer
+  // field. Empty list after a load means D365 returned no matches and the
+  // user needs the "Create new opportunity" affordance (added in PR 3).
+  const [opportunities, setOpportunities] = useState<DynamicsOpportunity[]>([]);
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -182,11 +190,15 @@ export default function SolutionsPage() {
   }
 
   function selectCrmAccount(account: { id: string; name: string }) {
-    setForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.id }));
+    // Reset crm_opportunity_id on every account pick — last-selected opp from
+    // a different account has nothing to do with the new account's pipeline.
+    setForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.id, crm_opportunity_id: "" }));
     setCrmSearch(account.name);
     setCrmResults([]);
     setCrmTeam(null);
     setCrmTeamLoading(true);
+    setOpportunities([]);
+    setOpportunitiesLoading(true);
     api.optimizeCrmAccountTeam(account.id)
       .then((team) => {
         setCrmTeam(team);
@@ -199,19 +211,26 @@ export default function SolutionsPage() {
       })
       .catch(() => setCrmTeam(null))
       .finally(() => setCrmTeamLoading(false));
+    api.getDynamicsOpportunities(account.id, "open")
+      .then(setOpportunities)
+      .catch(() => setOpportunities([]))
+      .finally(() => setOpportunitiesLoading(false));
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.customer_name.trim()) return;
+    if (!form.dynamics_account_id) { showToast("Pick a CRM account.", "error"); return; }
+    if (!form.crm_opportunity_id) { showToast("Pick an opportunity from CRM.", "error"); return; }
     if (!form.journeys.length) { showToast("Select at least one journey.", "error"); return; }
     setSaving(true);
     try {
       const payload: Parameters<typeof api.createSolution>[0] = {
         customer_name: form.customer_name.trim(),
+        dynamics_account_id: form.dynamics_account_id,
+        crm_opportunity_id: form.crm_opportunity_id,
         journeys: form.journeys,
       };
-      if (form.dynamics_account_id) payload.dynamics_account_id = form.dynamics_account_id;
       if (form.pf_ae_user_id) payload.pf_ae_user_id = form.pf_ae_user_id;
       if (form.pf_sa_user_id) payload.pf_sa_user_id = form.pf_sa_user_id;
       if (form.pf_csm_user_id) payload.pf_csm_user_id = form.pf_csm_user_id;
@@ -367,10 +386,121 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); } }}>
           <div className="ms-modal" style={{ maxWidth: 560 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
+
+              {/* ── Customer (CRM-bound) ── */}
+              {/* Customer field is on top because PR 2 will add a "Create new account"
+                  affordance here — if the SA can't find the account they often need
+                  to start the create flow before anything else gets filled in. */}
+              <label className="ms-label">
+                <span>Customer *</span>
+                <div style={{ position: "relative" }}>
+                  <input
+                    autoFocus
+                    className="ms-input"
+                    placeholder="Search CRM…"
+                    value={crmSearch || form.customer_name}
+                    onChange={(e) => {
+                      setCrmSearch(e.target.value);
+                      // Editing the customer field invalidates the current CRM
+                      // bindings (account, opportunity, team) — clear them all
+                      // so the SA can't accidentally submit with stale ids
+                      // attached to a different customer's name.
+                      setForm((f) => ({ ...f, customer_name: e.target.value, dynamics_account_id: "", crm_opportunity_id: "" }));
+                      setOpportunities([]);
+                      setCrmTeam(null);
+                      handleCrmSearch(e.target.value);
+                    }}
+                    required
+                  />
+                  {(crmSearching || crmResults.length > 0) && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
+                      {crmSearching && <div style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 13 }}>Searching…</div>}
+                      {crmResults.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.1)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+                          onClick={() => selectCrmAccount(r)}
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {form.dynamics_account_id && (
+                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
+                )}
+              </label>
+
+              {/* ── Opportunity (scoped to the picked account) ── */}
+              {/* Only meaningful once an account is bound. D365 statecode=0
+                  (Open) only — won/lost opps have nowhere to attach new
+                  pre-sales work. PR 3 will add a "Create new opportunity"
+                  affordance here for accounts with no open opportunities. */}
+              {form.dynamics_account_id && (
+                <label className="ms-label">
+                  <span>Opportunity *</span>
+                  {opportunitiesLoading ? (
+                    <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading opportunities…</div>
+                  ) : opportunities.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#b45309", padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
+                      No open opportunities found on this account. Create one in CRM, then re-select the account.
+                    </div>
+                  ) : (
+                    <select
+                      className="ms-input"
+                      value={form.crm_opportunity_id}
+                      onChange={(e) => setForm((f) => ({ ...f, crm_opportunity_id: e.target.value }))}
+                      required
+                    >
+                      <option value="">— Select an opportunity —</option>
+                      {opportunities.map((o) => (
+                        <option key={o.opportunityid} value={o.opportunityid}>
+                          {o.name}
+                          {o.estimatedclosedate ? ` · est. close ${o.estimatedclosedate.slice(0, 10)}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </label>
+              )}
+
+              {/* ── CRM team suggestion ── */}
+              {(crmTeamLoading || crmTeam) && (
+                <div style={{ padding: "10px 14px", background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad", marginBottom: 8 }}>From CRM</div>
+                  {crmTeamLoading ? (
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Loading team…</div>
+                  ) : crmTeam && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                      {[
+                        { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
+                        { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
+                        { label: "CSM", name: crmTeam.csm_name, email: crmTeam.csm_email },
+                      ].map(({ label, name, email }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
+                          {name ? (
+                            <>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{name}</div>
+                              {email && <div style={{ fontSize: 11, color: "#64748b" }}>{email}</div>}
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ── Journey Picker ── */}
               <div className="ms-label">
@@ -460,75 +590,6 @@ export default function SolutionsPage() {
                 )}
               </div>
 
-              {/* Customer — CRM lookup or manual */}
-              <label className="ms-label">
-                <span>Customer *</span>
-                <div style={{ position: "relative" }}>
-                  <input
-                    autoFocus
-                    className="ms-input"
-                    placeholder="Search CRM or enter name…"
-                    value={crmSearch || form.customer_name}
-                    onChange={(e) => {
-                      setCrmSearch(e.target.value);
-                      setForm((f) => ({ ...f, customer_name: e.target.value, dynamics_account_id: "" }));
-                      handleCrmSearch(e.target.value);
-                    }}
-                    required
-                  />
-                  {(crmSearching || crmResults.length > 0) && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
-                      {crmSearching && <div style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 13 }}>Searching…</div>}
-                      {crmResults.map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer" }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.1)"; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-                          onClick={() => selectCrmAccount(r)}
-                        >
-                          {r.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {form.dynamics_account_id && (
-                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
-                )}
-              </label>
-
-              {/* CRM team suggestion */}
-              {(crmTeamLoading || crmTeam) && (
-                <div style={{ padding: "10px 14px", background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad", marginBottom: 8 }}>From CRM</div>
-                  {crmTeamLoading ? (
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Loading team…</div>
-                  ) : crmTeam && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                      {[
-                        { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
-                        { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
-                        { label: "CSM", name: crmTeam.csm_name, email: crmTeam.csm_email },
-                      ].map(({ label, name, email }) => (
-                        <div key={label}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
-                          {name ? (
-                            <>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{name}</div>
-                              {email && <div style={{ fontSize: 11, color: "#64748b" }}>{email}</div>}
-                            </>
-                          ) : (
-                            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* PF AE — hidden when CRM team is loaded */}
                 {!crmTeam && (
@@ -611,10 +672,26 @@ export default function SolutionsPage() {
 
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn-primary" disabled={saving || !form.customer_name.trim()}>
+                <button
+                  type="submit"
+                  className="ms-btn-primary"
+                  disabled={
+                    saving ||
+                    !form.customer_name.trim() ||
+                    !form.dynamics_account_id ||
+                    !form.crm_opportunity_id ||
+                    form.journeys.length === 0
+                  }
+                  title={
+                    !form.dynamics_account_id ? "Pick a CRM account first" :
+                    !form.crm_opportunity_id ? "Pick an opportunity from CRM" :
+                    form.journeys.length === 0 ? "Select at least one journey" :
+                    undefined
+                  }
+                >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); }}>
                   Cancel
                 </button>
               </div>

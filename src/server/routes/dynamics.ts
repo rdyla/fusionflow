@@ -40,16 +40,21 @@ app.get("/accounts/:id/contacts", async (c) => {
   }
 });
 
-// GET /api/dynamics/accounts/:id/opportunities
+// GET /api/dynamics/accounts/:id/opportunities[?state=open|all]
+// `state=open` (default) filters to statecode=0 — used by the solution
+// creation modal, which only binds new solutions to in-flight opportunities.
+// `state=all` returns every state so the projects page can display a pinned
+// opportunity's name even after it's been won/lost.
 app.get("/accounts/:id/opportunities", async (c) => {
   const accountId = c.req.param("id");
+  const state = c.req.query("state") ?? "open";
 
   if (!accountId) {
     throw new HTTPException(400, { message: "Account ID required" });
   }
 
   try {
-    const opps = await getAccountOpportunities(c.env, accountId);
+    const opps = await getAccountOpportunities(c.env, accountId, { openOnly: state !== "all" });
     return c.json(opps);
   } catch (err) {
     console.error("Dynamics opportunities fetch error:", err);

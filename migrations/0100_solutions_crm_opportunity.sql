@@ -1,0 +1,11 @@
+-- Solutions now require a linked CRM opportunity in addition to a CRM
+-- account. The Solution creation flow gets a new picker scoped to the
+-- selected account; both crm_account_id (dynamics_account_id) and this
+-- new crm_opportunity_id are required server-side before a solution can
+-- be created (post-#286 follow-up: a solution can't move past 'draft'
+-- without a real opportunity to bind sales work to).
+--
+-- Nullable so legacy rows survive the migration — the gate only fires on
+-- new POST /solutions. Backfill of legacy rows happens later in the arc
+-- once we have the create-account/create-opportunity D365 write flows.
+ALTER TABLE solutions ADD COLUMN crm_opportunity_id TEXT;
