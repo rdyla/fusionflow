@@ -95,6 +95,8 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
           value={`${stats.tasks.total}`}
           sublabel={`${stats.tasks.done} done · ${stats.tasks.in_progress} in progress`}
           graphic={<TaskMiniDonut done={stats.tasks.done} inProgress={stats.tasks.in_progress} notStarted={taskNotStarted} />}
+          onClick={() => onChangeTab?.("tasks")}
+          clickLabel="View tasks"
         />
         <KpiTile
           label="Blockers"
@@ -102,6 +104,8 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
           sublabel={stats.blockers.critical > 0 ? `${stats.blockers.critical} critical` : "—"}
           danger={stats.blockers.critical > 0}
           graphic={<BlockersAlertIcon critical={stats.blockers.critical > 0} />}
+          onClick={() => onChangeTab?.("blockers")}
+          clickLabel="View blockers"
         />
         <KpiTile
           label={multiPhase ? "Days to final go-live" : "Days to go-live"}
@@ -192,21 +196,35 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
 // ── KPI tile ─────────────────────────────────────────────────────────────────
 
 function KpiTile({
-  label, value, sublabel, danger, graphic,
+  label, value, sublabel, danger, graphic, onClick, clickLabel,
 }: {
   label: string;
   value?: string;
   sublabel?: string;
   danger?: boolean;
   graphic?: React.ReactNode;
+  onClick?: () => void;
+  clickLabel?: string;
 }) {
+  const interactive = !!onClick;
   return (
-    <div style={{
-      background: "#fff",
-      border: `1px solid ${danger ? "#fecaca" : PF_BORDER}`,
-      borderRadius: 12, padding: "14px 16px", minHeight: 110,
-      display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-    }}>
+    <div
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={interactive ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick!(); } } : undefined}
+      title={clickLabel}
+      onMouseEnter={interactive ? (e) => { e.currentTarget.style.boxShadow = "0 4px 12px rgba(3, 57, 95, 0.08)"; e.currentTarget.style.borderColor = danger ? "#fca5a5" : "#bfdbfe"; } : undefined}
+      onMouseLeave={interactive ? (e) => { e.currentTarget.style.boxShadow = ""; e.currentTarget.style.borderColor = danger ? "#fecaca" : PF_BORDER; } : undefined}
+      style={{
+        background: "#fff",
+        border: `1px solid ${danger ? "#fecaca" : PF_BORDER}`,
+        borderRadius: 12, padding: "14px 16px", minHeight: 110,
+        display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+        cursor: interactive ? "pointer" : "default",
+        transition: "box-shadow 0.15s, border-color 0.15s",
+      }}
+    >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 10, fontWeight: 700, color: TEXT_MUTED, textTransform: "uppercase", letterSpacing: "0.08em" }}>
           {label}
