@@ -387,6 +387,15 @@ export default function ProjectDetailPage() {
     return stages.filter((s) => s.phase_id === selectedPhaseId);
   }, [stages, multiPhase, selectedPhaseId]);
 
+  // Tasks restricted to the visible stages — so the Timeline's internal
+  // datedTasks / summary / date-bounds math doesn't include tasks from
+  // hidden phases.
+  const visibleStageIds = useMemo(() => new Set(visibleStages.map((s) => s.id)), [visibleStages]);
+  const visibleTasks = useMemo(
+    () => multiPhase ? tasks.filter((t) => t.stage_id !== null && visibleStageIds.has(t.stage_id)) : tasks,
+    [tasks, multiPhase, visibleStageIds]
+  );
+
   const groupedTasks = useMemo(
     () => visibleStages.map((stage) => ({ stage, tasks: filteredTasks.filter((t) => t.stage_id === stage.id) })),
     [visibleStages, filteredTasks]
@@ -858,7 +867,7 @@ export default function ProjectDetailPage() {
         )}
         <ProjectTimeline
           stages={visibleStages}
-          tasks={tasks}
+          tasks={visibleTasks}
           // Hide recording markers for clients — meeting topics on the Gantt could
           // surface internal discussion names. Matches the Activity-tab gating.
           recordings={currentUserRole === "client" ? [] : recordings}

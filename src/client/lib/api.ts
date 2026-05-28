@@ -578,6 +578,10 @@ export type Stage = {
   actual_start: string | null;
   actual_end: string | null;
   status: string | null;
+  /** Which deployment phase this stage belongs to. NULL = shared
+   *  (project-level Initiate on multi-phase projects). The Tasks +
+   *  Timeline tabs use this for per-phase filtering. */
+  phase_id: string | null;
 };
 
 /** Preview shape returned by GET /projects/:id/cascade/preview. */
