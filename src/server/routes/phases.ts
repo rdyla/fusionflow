@@ -99,20 +99,41 @@ app.post("/:id/phases", async (c) => {
     .prepare("SELECT COUNT(*) AS c FROM phases WHERE project_id = ? AND id != ?")
     .bind(projectId, phaseId)
     .first<{ c: number }>();
-  const isFirstPhase = (otherPhasesRow?.c ?? 0) === 0;
+  const phasesBefore = otherPhasesRow?.c ?? 0;
 
-  if (isFirstPhase) {
-    // Move all non-Initiate, currently-shared stages to this phase.
-    // "Initiate" detection: stage name contains 'initiat' (case-insensitive).
+  if (phasesBefore === 0) {
+    // Legacy / defensive path: project has no other phases (shouldn't happen
+    // after PR E2 since project creation seeds a Main phase, but covers any
+    // project whose Main got deleted). Pull all shared stages — including
+    // Initiate — under this phase, since "shared with one phase" is
+    // meaningless.
     await db
-      .prepare(
-        `UPDATE stages SET phase_id = ?
-         WHERE project_id = ? AND phase_id IS NULL
-           AND LOWER(name) NOT LIKE '%initiat%'`
-      )
+      .prepare("UPDATE stages SET phase_id = ? WHERE project_id = ? AND phase_id IS NULL")
       .bind(phaseId, projectId)
       .run();
-  } else {
+  } else if (phasesBefore === 1) {
+    // Going from single-phase (Initiate currently lives under the existing
+    // phase, per E2's invariant) to multi-phase. Unshare Initiate by lifting
+    // it back to phase_id = NULL so it acts as the project's shared
+    // Initiate, then clone the existing phase's NON-Initiate stage chain
+    // under the new phase.
+    const existingPhase = await db
+      .prepare("SELECT id FROM phases WHERE project_id = ? AND id != ? LIMIT 1")
+      .bind(projectId, phaseId)
+      .first<{ id: string }>();
+    if (existingPhase) {
+      await db
+        .prepare(
+          `UPDATE stages SET phase_id = NULL
+           WHERE project_id = ? AND phase_id = ?
+             AND LOWER(name) LIKE '%initiat%'`
+        )
+        .bind(projectId, existingPhase.id)
+        .run();
+      // Fall through to the standard "clone first phase" path below.
+    }
+  }
+  if (phasesBefore >= 1) {
     // Clone the FIRST phase's stage shape under this new phase. Pull the first
     // phase's stages (by display_order on phases) and re-insert with new IDs
     // and phase_id = the new phase. Tasks intentionally NOT cloned.
@@ -240,6 +261,24 @@ app.delete("/:id/phases/:phaseId", async (c) => {
   }
   // Then drop the phase — stages cascade via FK.
   await c.env.DB.prepare("DELETE FROM phases WHERE id = ?").bind(phaseId).run();
+
+  // If the project just dropped back to a single phase, fold the shared
+  // Initiate stages under the remaining phase. Mirrors the unshare done
+  // on going single-→-multi in the POST handler above.
+  const remainingPhases = await c.env.DB
+    .prepare("SELECT id FROM phases WHERE project_id = ? ORDER BY display_order ASC LIMIT 2")
+    .bind(projectId)
+    .all<{ id: string }>();
+  const remaining = remainingPhases.results ?? [];
+  if (remaining.length === 1) {
+    await c.env.DB
+      .prepare(
+        `UPDATE stages SET phase_id = ?
+         WHERE project_id = ? AND phase_id IS NULL`
+      )
+      .bind(remaining[0].id, projectId)
+      .run();
+  }
 
   return c.json({ success: true, deleted_stage_count: stageIds.length });
 });
