@@ -67,8 +67,8 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
         )}
       </div>
 
-      <div style={{ fontSize: 12, color: "#64748b", marginBottom: phases.length > 0 ? 10 : 0 }}>
-        Use phases for any project that ships in staggered cutovers — multi-location rollouts (HQ → Remote phase 1 → Remote phase 2) or multi-product deployments where one tech goes live before the other (Zoom Phone first, then Zoom Contact Center a few months later). Single-phase projects can ignore this section.
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 10 }}>
+        Every project starts with one Main phase — apply a template + set a go-live date on it. Add more phases for staggered cutovers (multi-location rollouts: HQ → Remote phase 1 → Remote phase 2) or multi-product deployments where one tech goes live before another (Zoom Phone first, then Zoom Contact Center).
       </div>
 
       {loading ? (
@@ -86,7 +86,6 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
       {addOpen && (
         <AddPhaseModal
           projectId={projectId}
-          existingPhaseCount={phases.length}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false);
@@ -189,7 +188,7 @@ function PhaseRow({ phase, canEdit, projectId, onChanged, onDelete }: { phase: P
   );
 }
 
-function AddPhaseModal({ projectId, existingPhaseCount, onClose, onCreated }: { projectId: string; existingPhaseCount: number; onClose: () => void; onCreated: () => void }) {
+function AddPhaseModal({ projectId, onClose, onCreated }: { projectId: string; onClose: () => void; onCreated: () => void }) {
   const { showToast } = useToast();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -203,10 +202,7 @@ function AddPhaseModal({ projectId, existingPhaseCount, onClose, onCreated }: { 
     setSaving(true);
     try {
       await api.createPhase(projectId, { name: name.trim(), target_go_live_date: target || null });
-      showToast(existingPhaseCount === 0
-        ? `Added ${name.trim()}. Existing non-Initiate stages have been moved under this phase.`
-        : `Added ${name.trim()}. Cloned stage chain from your first phase (no tasks copied).`,
-        "success");
+      showToast(`Added ${name.trim()}. Cloned stage chain from your first phase (no tasks copied).`, "success");
       onCreated();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to add phase", "error");
@@ -232,19 +228,10 @@ function AddPhaseModal({ projectId, existingPhaseCount, onClose, onCreated }: { 
 
         <div style={{
           marginTop: 10, padding: "10px 12px",
-          background: existingPhaseCount === 0 ? "#fef3c7" : "#dbeafe",
-          border: `1px solid ${existingPhaseCount === 0 ? "#fde68a" : "#93c5fd"}`,
-          borderRadius: 6, fontSize: 12, color: existingPhaseCount === 0 ? "#854d0e" : "#1e40af",
+          background: "#dbeafe", border: "1px solid #93c5fd",
+          borderRadius: 6, fontSize: 12, color: "#1e40af",
         }}>
-          {existingPhaseCount === 0 ? (
-            <>
-              <strong>First phase for this project.</strong> Existing non-Initiate stages (Plan / Execute / Monitor / Go-Live / Hypercare etc.) will be moved under this phase. Tasks come along automatically. Any stage named "Initiate" stays shared.
-            </>
-          ) : (
-            <>
-              <strong>Cloning from your first phase.</strong> The stage chain from your earliest phase is copied (stage rows only — tasks are not duplicated, since downstream phases typically have their own task list).
-            </>
-          )}
+          <strong>Cloning from your first phase.</strong> The stage chain from your earliest phase is copied (stage rows only — tasks are not duplicated, since downstream phases typically have their own task list).
         </div>
 
         <label style={{ display: "block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#334155" }}>
