@@ -9,15 +9,19 @@
 --
 -- Backfill: existing projects don't carry the flag through template apply
 -- (template apply pre-dated this column), so we match by title against the
--- known canonical go-live event titles. Titles may carry a solution-type
--- suffix from buildTaggedTitle (e.g. "Go Live Event · UCaaS"), so we use
--- LIKE with a wildcard.
+-- canonical go-live event titles from migration 0081.
+--
+-- Tasks created via apply-template get a `[TAG]` prefix from
+-- buildTaggedTitle (e.g. `[UCaaS] Go Live Event`), so the backfill strips
+-- any leading `[...] ` and compares the raw title.
 
 ALTER TABLE tasks ADD COLUMN is_go_live_event INTEGER NOT NULL DEFAULT 0;
 
--- Backfill known canonical titles (from migration 0081's flagged template_tasks)
 UPDATE tasks SET is_go_live_event = 1
-WHERE title LIKE 'Go Live Event%'
-   OR title LIKE 'Cutover Execution%'
-   OR title LIKE 'Production Cutover%'
-   OR title LIKE 'Go-Live Execution%';
+WHERE (
+  CASE
+    WHEN title LIKE '[%]%' AND INSTR(title, '] ') > 0
+      THEN SUBSTR(title, INSTR(title, '] ') + 2)
+    ELSE title
+  END
+) IN ('Go Live Event', 'Cutover Execution', 'Production Cutover', 'Go-Live Execution');
