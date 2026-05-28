@@ -15,7 +15,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
   SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority, meeting_join_url,
+         completed_at, status, priority, meeting_join_url, is_go_live_event,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;

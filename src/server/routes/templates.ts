@@ -331,14 +331,37 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .bind(template_id)
     .all<{ id: string; name: string; order_index: number; working_days: number | null }>();
 
-  // When the caller supplied a go-live, chain stage dates backward from it.
-  // Same algorithm Timeline Builder uses (see shared/workdayMath.ts).
+  const tasks = await db
+    .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
+    .bind(template_id)
+    .all<{ id: string; stage_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null; is_go_live_event: number | null }>();
+
+  // When the caller supplied a go-live, anchor the GO-LIVE STAGE's end on
+  // that date (not the total chain end). Stages after the go-live stage
+  // — Closing, Hypercare — extend forward past the date. Mirrors the
+  // Timeline Builder's `workdaysThroughGoLive` (see shared/workdayMath.ts
+  // and TimelineBuilder.tsx). Falls back to total-chain anchoring when
+  // the template has no flagged go-live task (legacy templates).
   const stageDateMap = new Map<string, { start: string; end: string }>(); // template_stage_id -> dates
   if (target_go_live_date) {
     const stageList = stages.results ?? [];
-    const totalWorkdays = stageList.reduce((sum, p) => sum + (p.working_days ?? 0), 0);
-    if (totalWorkdays > 0) {
-      const anchor = startFromGoLive(target_go_live_date, totalWorkdays);
+    const taskList = tasks.results ?? [];
+    // Find the LAST stage containing a flagged go-live task. Last so combo
+    // templates (multi-solution) anchor on the latest go-live.
+    let goLiveStageIdx = -1;
+    for (let i = stageList.length - 1; i >= 0; i--) {
+      const stageId = stageList[i].id;
+      if (taskList.some((t) => t.stage_id === stageId && t.is_go_live_event === 1)) {
+        goLiveStageIdx = i;
+        break;
+      }
+    }
+    const anchorIdx = goLiveStageIdx >= 0 ? goLiveStageIdx : stageList.length - 1;
+    const workdaysThroughAnchor = stageList
+      .slice(0, anchorIdx + 1)
+      .reduce((sum, p) => sum + (p.working_days ?? 0), 0);
+    if (workdaysThroughAnchor > 0) {
+      const anchor = startFromGoLive(target_go_live_date, workdaysThroughAnchor);
       const chain = chainForward(
         anchor,
         stageList.map((p) => ({ id: p.id, working_days: p.working_days ?? 0 }))
@@ -346,11 +369,6 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
       for (const r of chain) stageDateMap.set(r.id, { start: r.start, end: r.end });
     }
   }
-
-  const tasks = await db
-    .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
-    .bind(template_id)
-    .all<{ id: string; stage_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null; is_go_live_event: number | null }>();
 
   // Load existing stages by name so we can reuse them instead of duplicating.
   // When phase-scoped, only consider stages under that same phase — a "Plan"

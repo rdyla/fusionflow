@@ -25,3 +25,23 @@ WHERE (
     ELSE title
   END
 ) IN ('Go Live Event', 'Cutover Execution', 'Production Cutover', 'Go-Live Execution');
+
+-- Now that the flag is on the right tasks, sync each project's stored
+-- target_go_live_date to MAX(due_date) of its flagged tasks. Otherwise
+-- the stored free-form value (set via the old Overview input) and the
+-- canonical task's date can drift, with the in-app helper only
+-- catching up after the next task PATCH.
+UPDATE projects SET
+  target_go_live_date = (
+    SELECT MAX(t.due_date) FROM tasks t
+    WHERE t.project_id = projects.id
+      AND t.is_go_live_event = 1
+      AND t.due_date IS NOT NULL
+  ),
+  updated_at = CURRENT_TIMESTAMP
+WHERE EXISTS (
+  SELECT 1 FROM tasks t
+  WHERE t.project_id = projects.id
+    AND t.is_go_live_event = 1
+    AND t.due_date IS NOT NULL
+);

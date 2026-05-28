@@ -572,6 +572,17 @@ export default function ProjectDetailPage() {
     try {
       const updated = await api.updateTask(project.id, taskId, patch);
       setTasks((ts) => ts.map((t) => (t.id === taskId ? updated : t)));
+      // When a go-live event task's date moves, the server auto-syncs
+      // projects.target_go_live_date — refetch the project so the meta
+      // header reflects the new value in-session.
+      const touchedGoLive = (prev.is_go_live_event === 1 || updated.is_go_live_event === 1)
+        && (patch.due_date !== undefined || patch.scheduled_end !== undefined);
+      if (touchedGoLive) {
+        try {
+          const refreshed = await api.project(project.id);
+          setProject(refreshed);
+        } catch { /* swallow — meta header just stays at the previous value */ }
+      }
     } catch (err) {
       setTasks((ts) => ts.map((t) => (t.id === taskId ? prev : t)));
       showToast(err instanceof Error ? err.message : "Failed to update task", "error");
@@ -580,9 +591,18 @@ export default function ProjectDetailPage() {
 
   async function handleDeleteTask(taskId: string) {
     if (!project) return;
+    const prev = tasks.find((t) => t.id === taskId);
     try {
       await api.deleteTask(project.id, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setTasks((p) => p.filter((t) => t.id !== taskId));
+      // If the deleted task was the canonical go-live event, refetch the
+      // project so the meta header drops the stale Go-Live date.
+      if (prev?.is_go_live_event === 1) {
+        try {
+          const refreshed = await api.project(project.id);
+          setProject(refreshed);
+        } catch { /* swallow */ }
+      }
       showToast("Task deleted.", "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to delete task", "error");

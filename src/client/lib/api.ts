@@ -625,6 +625,10 @@ export type Task = {
    *  go-live / etc.); the stakeholder view's "Next call" picks the earliest
    *  upcoming task with a join URL. */
   meeting_join_url: string | null;
+  /** Canonical go-live event flag (mirrors template_tasks.is_go_live_event
+   *  from migration 0081, carried into tasks by migration 0095). When set,
+   *  the task's due_date drives projects.target_go_live_date. */
+  is_go_live_event: number | null;
 };
 
 export type TimeEntrySetup = {
