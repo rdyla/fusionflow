@@ -423,7 +423,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
       due_date: t.due_date,
       priority: t.priority,
       phase_id: t.phase_id,
-      site_name: t.phase_id ? (phaseNameMap.get(t.phase_id) ?? null) : null,
+      phase_name: t.phase_id ? (phaseNameMap.get(t.phase_id) ?? null) : null,
       assignee_name: t.assignee_name,
       is_meeting: !!t.meeting_join_url,
     })),
@@ -476,7 +476,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
 function buildStageProgress(
   rows: Array<{ id: string; name: string; sort_order: number | null; status: string | null; phase_id: string | null; total_tasks: number; done_tasks: number }>,
   phases: Array<{ id: string; name: string }>,
-): Array<{ phase_id: string | null; site_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
+): Array<{ phase_id: string | null; phase_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
   const groups = new Map<string | "shared", Array<typeof rows[number] & { pct: number }>>();
   for (const r of rows) {
     const key = r.phase_id ?? "shared";
@@ -490,15 +490,15 @@ function buildStageProgress(
   for (const arr of groups.values()) {
     arr.sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
   }
-  const out: Array<{ phase_id: string | null; site_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
+  const out: Array<{ phase_id: string | null; phase_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
   const sharedStages = groups.get("shared");
   if (sharedStages && sharedStages.length > 0) {
-    out.push({ phase_id: null, site_name: null, stages: sharedStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+    out.push({ phase_id: null, phase_name: null, stages: sharedStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
   }
   for (const s of phases) {
     const phaseStages = groups.get(s.id);
     if (phaseStages && phaseStages.length > 0) {
-      out.push({ phase_id: s.id, site_name: s.name, stages: phaseStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+      out.push({ phase_id: s.id, phase_name: s.name, stages: phaseStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
     }
   }
   return out;

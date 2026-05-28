@@ -1147,7 +1147,7 @@ export type StakeholderSummary = {
     due_date: string | null;
     priority: string | null;
     phase_id: string | null;
-    site_name: string | null;
+    phase_name: string | null;
     assignee_name: string | null;
     is_meeting: boolean;
   }>;
@@ -1206,7 +1206,7 @@ export type StakeholderSummary = {
    *  `phase_id = null` containing all stages. */
   stage_progress: Array<{
     phase_id: string | null;
-    site_name: string | null;
+    phase_name: string | null;
     stages: Array<{
       id: string;
       name: string;
