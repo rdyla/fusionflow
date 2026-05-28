@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
+import { requireRole } from "../middleware/requireRole";
+import { createAccount, searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -20,6 +22,33 @@ app.get("/accounts", async (c) => {
     // Don't expose Dynamics errors to the client — just return empty
     console.error("Dynamics account search error:", err);
     return c.json([]);
+  }
+});
+
+// POST /api/dynamics/accounts — create a new D365 account from the New
+// Solution flow. SA + admin only (mirrors who can create solutions).
+// Returns the created account in the same shape as searchAccounts so the
+// client can drop it straight into the customer picker.
+const createAccountSchema = z.object({
+  name: z.string().min(1).max(160),
+  emailaddress1: z.string().email().max(100),
+  websiteurl: z.string().url().max(200).optional().or(z.literal("")),
+});
+app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
+  const parsed = createAccountSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const { name, emailaddress1, websiteurl } = parsed.data;
+
+  try {
+    const account = await createAccount(c.env, {
+      name,
+      emailaddress1,
+      websiteurl: websiteurl || null,
+    });
+    return c.json(account, 201);
+  } catch (err) {
+    console.error("Dynamics account create error:", err);
+    throw new HTTPException(502, { message: "Failed to create account in CRM" });
   }
 });
 

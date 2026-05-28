@@ -1302,6 +1302,15 @@ export const api = {
   searchDynamicsAccounts: (q: string) =>
     request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
 
+  /** Create a new D365 Account. SA + admin only on the server. Returns the
+   *  created account in the same shape as a search result so the caller can
+   *  drop it straight into the customer picker. */
+  createDynamicsAccount: (payload: { name: string; emailaddress1: string; websiteurl?: string }) =>
+    request<DynamicsAccount>("/dynamics/accounts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
 
