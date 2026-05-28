@@ -1350,6 +1350,9 @@ export const api = {
       status_meeting_timezone?: string | null;
       status_meeting_duration_min?: number | null;
       status_meeting_join_url?: string | null;
+      /** Bundles a solution-type-removal task cleanup with the project
+       *  update — see PATCH /:id handler in routes/projects.ts. */
+      cleanup_solution_types?: SolutionType[];
     }
   ) =>
     request<Project>(`/projects/${id}`, {

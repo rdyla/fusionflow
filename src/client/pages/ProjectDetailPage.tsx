@@ -212,6 +212,9 @@ export default function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingTech, setEditingTech] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
+  // Captured at Edit-open so the Save flow can detect removed solution
+  // types and offer to clean up tasks tagged with them.
+  const [originalSolutionTypes, setOriginalSolutionTypes] = useState<SolutionType[]>([]);
   const [editVendor, setEditVendor] = useState("");
   const [savingTech, setSavingTech] = useState(false);
   const [newNoteBody, setNewNoteBody] = useState("");
@@ -499,26 +502,82 @@ export default function ProjectDetailPage() {
   function startEditTech() {
     if (!project) return;
     setEditSolutionTypes(parseSolutionTypes(project.solution_types));
+    setOriginalSolutionTypes(parseSolutionTypes(project.solution_types));
     setEditVendor(project.vendor ?? "");
     setEditingTech(true);
   }
 
-  async function saveEditTech() {
+  // Solution-type cleanup confirm state. Non-null while the modal is open.
+  // Captures the counts so the modal can show "X deleted, Y re-tagged".
+  type CleanupSummary = { removed: SolutionType[]; deleteCount: number; retagCount: number };
+  const [solutionCleanup, setSolutionCleanup] = useState<CleanupSummary | null>(null);
+
+  /** Compute how many project tasks would be deleted / re-tagged if the
+   *  given solution types were removed. Stays entirely client-side so the
+   *  Edit Save flow doesn't add a server round-trip when there's nothing
+   *  to clean up. */
+  function previewSolutionCleanup(removed: SolutionType[]): CleanupSummary {
+    if (removed.length === 0) return { removed, deleteCount: 0, retagCount: 0 };
+    const removedSet = new Set(removed);
+    let deleteCount = 0;
+    let retagCount = 0;
+    for (const t of tasks) {
+      const parsed = parseTaggedTitle(t.title);
+      if (parsed.types.length === 0) continue;
+      const surviving = parsed.types.filter((tp) => !removedSet.has(tp));
+      if (surviving.length === 0) deleteCount++;
+      else if (surviving.length !== parsed.types.length) retagCount++;
+    }
+    return { removed, deleteCount, retagCount };
+  }
+
+  async function persistEditTech(includeCleanup: boolean) {
     if (!project) return;
     setSavingTech(true);
     try {
-      const updated = await api.updateProject(project.id, {
+      const payload: Parameters<typeof api.updateProject>[1] = {
         vendor: editVendor || null,
         solution_types: editSolutionTypes,
-      });
+      };
+      if (includeCleanup && solutionCleanup && solutionCleanup.removed.length > 0) {
+        payload.cleanup_solution_types = solutionCleanup.removed;
+      }
+      const updated = await api.updateProject(project.id, payload);
       setProject(updated);
       setEditingTech(false);
-      showToast("Project details updated.", "success");
+      setSolutionCleanup(null);
+      if (includeCleanup && solutionCleanup) {
+        const parts: string[] = [];
+        if (solutionCleanup.deleteCount > 0) parts.push(`${solutionCleanup.deleteCount} deleted`);
+        if (solutionCleanup.retagCount > 0) parts.push(`${solutionCleanup.retagCount} re-tagged`);
+        showToast(`Project details updated; tasks: ${parts.join(", ")}.`, "success");
+        // Reload tasks since the cleanup may have removed or re-tagged some.
+        const newTasks = await api.tasks(project.id);
+        setTasks(newTasks);
+      } else {
+        showToast("Project details updated.", "success");
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to update project details", "error");
     } finally {
       setSavingTech(false);
     }
+  }
+
+  async function saveEditTech() {
+    if (!project) return;
+    const removed = originalSolutionTypes.filter((t) => !editSolutionTypes.includes(t));
+    if (removed.length === 0) {
+      await persistEditTech(false);
+      return;
+    }
+    const summary = previewSolutionCleanup(removed);
+    if (summary.deleteCount === 0 && summary.retagCount === 0) {
+      // Types removed but no tagged tasks reference them — silently save.
+      await persistEditTech(false);
+      return;
+    }
+    setSolutionCleanup(summary);
   }
 
   // Project-level handleApplyTemplate retired with the Project Settings
@@ -2717,6 +2776,32 @@ export default function ProjectDetailPage() {
           </div>
         );
       })()}
+
+      {/* ── Solution-type removal cleanup confirm ─────────────────────────── */}
+      {solutionCleanup && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSolutionCleanup(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 500 }}>
+            <h2>Clean up tagged tasks?</h2>
+            <p style={{ color: "#475569", margin: "12px 0 8px", fontSize: 13 }}>
+              Removing {solutionCleanup.removed.map((t) => SOLUTION_TYPE_LABELS[t]).join(", ")} from this project's solution types.
+            </p>
+            <p style={{ color: "#475569", margin: "0 0 16px", fontSize: 13 }}>
+              {solutionCleanup.deleteCount > 0 && <><strong>{solutionCleanup.deleteCount}</strong> task{solutionCleanup.deleteCount === 1 ? " is" : "s are"} tagged only with the removed type{solutionCleanup.removed.length === 1 ? "" : "s"} — they'll be <strong>deleted</strong>.</>}
+              {solutionCleanup.deleteCount > 0 && solutionCleanup.retagCount > 0 && <br />}
+              {solutionCleanup.retagCount > 0 && <><strong>{solutionCleanup.retagCount}</strong> task{solutionCleanup.retagCount === 1 ? "" : "s"} carry combo tags (e.g. [UCaaS+CCaaS]) — they'll be <strong>re-tagged</strong> with the surviving type{editSolutionTypes.length === 1 ? "" : "s"}.</>}
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="ms-btn-ghost" onClick={() => setSolutionCleanup(null)} disabled={savingTech}>Cancel</button>
+              <button className="ms-btn-secondary" onClick={() => persistEditTech(false)} disabled={savingTech}>
+                Skip cleanup
+              </button>
+              <button className="ms-btn-primary" onClick={() => persistEditTech(true)} disabled={savingTech}>
+                {savingTech ? "Saving…" : "Save and clean up"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Cascade Modal ─────────────────────────────────────────────────── */}
       {cascadeFromTask && project && (

@@ -50,7 +50,8 @@ async function resolveCustomerSharePointUrl(
   }
 }
 import { findOrCreatePfUser } from "../lib/crmUsers";
-import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, buildTaggedTitle, parseTaggedTitle, type SolutionType } from "../../shared/solutionTypes";
+import { syncStageStatus, syncProjectStatus, syncProjectGoLiveDate } from "../lib/teamUtils";
 import { canonicalizeVendor } from "../../shared/vendors";
 import { getDemoVendor } from "../lib/appSettings";
 
@@ -318,6 +319,12 @@ const updateProjectSchema = z.object({
   status_meeting_timezone: z.string().max(64).nullable().optional(),
   status_meeting_duration_min: z.number().int().min(5).max(480).nullable().optional(),
   status_meeting_join_url: z.string().max(2000).nullable().optional(),
+  /** When a PM removes one or more solution_types from a combo project,
+   *  setting this list also cleans up tasks tagged with those types via
+   *  buildTaggedTitle. Tasks whose only types are in the cleanup list get
+   *  deleted; tasks with overlapping types get re-tagged with the
+   *  surviving types. Stages and stage-level dates are unaffected. */
+  cleanup_solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
@@ -342,7 +349,7 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .bind(projectId)
     .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null }>();
 
-  const { clear_health_override, ...updates } = parsed.data;
+  const { clear_health_override, cleanup_solution_types, ...updates } = parsed.data;
   const fields: string[] = [];
   const values: unknown[] = [];
 
@@ -401,6 +408,38 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
     )
     .bind(...values, projectId)
     .run();
+
+  // Solution-type cleanup — runs after the project UPDATE so the project's
+  // canonical solution_types is already what the PM picked. Tasks whose
+  // only tagged types are in the cleanup list get deleted; tasks with
+  // surviving types are re-tagged.
+  if (cleanup_solution_types && cleanup_solution_types.length > 0) {
+    const removed = new Set<SolutionType>(cleanup_solution_types);
+    const taskRows = await db
+      .prepare("SELECT id, stage_id, title FROM tasks WHERE project_id = ?")
+      .bind(projectId)
+      .all<{ id: string; stage_id: string | null; title: string }>();
+    const stageIdsTouched = new Set<string>();
+    for (const t of (taskRows.results ?? [])) {
+      const parsed = parseTaggedTitle(t.title);
+      if (parsed.types.length === 0) continue; // no recognized tag → leave alone
+      const surviving = parsed.types.filter((tp) => !removed.has(tp));
+      if (surviving.length === 0) {
+        await db.prepare("DELETE FROM tasks WHERE id = ?").bind(t.id).run();
+        if (t.stage_id) stageIdsTouched.add(t.stage_id);
+      } else if (surviving.length !== parsed.types.length) {
+        const newTitle = buildTaggedTitle(surviving, parsed.rawTitle);
+        await db.prepare("UPDATE tasks SET title = ? WHERE id = ?").bind(newTitle, t.id).run();
+      }
+    }
+    // Stages that lost their only task can flip status (e.g. completed → not_started)
+    // and the project's blocker/go-live picture may change too.
+    for (const stageId of stageIdsTouched) {
+      await syncStageStatus(db, stageId);
+    }
+    await syncProjectGoLiveDate(db, projectId);
+    await syncProjectStatus(db, projectId);
+  }
 
   const updated = await db
     .prepare("SELECT * FROM projects WHERE id = ? LIMIT 1")
