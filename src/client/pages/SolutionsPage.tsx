@@ -211,7 +211,7 @@ export default function SolutionsPage() {
       })
       .catch(() => setCrmTeam(null))
       .finally(() => setCrmTeamLoading(false));
-    api.getDynamicsOpportunities(account.id, "open")
+    api.getDynamicsOpportunities(account.id, "open_or_won")
       .then(setOpportunities)
       .catch(() => setOpportunities([]))
       .finally(() => setOpportunitiesLoading(false));
@@ -387,7 +387,7 @@ export default function SolutionsPage() {
       {/* Create Modal */}
       {showCreate && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); } }}>
-          <div className="ms-modal" style={{ maxWidth: 560 }}>
+          <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
 
@@ -451,7 +451,7 @@ export default function SolutionsPage() {
                     <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading opportunities…</div>
                   ) : opportunities.length === 0 ? (
                     <div style={{ fontSize: 12, color: "#b45309", padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
-                      No open opportunities found on this account. Create one in CRM, then re-select the account.
+                      No open or recently-won opportunities found on this account. Create one in CRM, then re-select the account.
                     </div>
                   ) : (
                     <select
@@ -464,6 +464,7 @@ export default function SolutionsPage() {
                       {opportunities.map((o) => (
                         <option key={o.opportunityid} value={o.opportunityid}>
                           {o.name}
+                          {o.statecode === 1 ? " · Won" : ""}
                           {o.estimatedclosedate ? ` · est. close ${o.estimatedclosedate.slice(0, 10)}` : ""}
                         </option>
                       ))}
