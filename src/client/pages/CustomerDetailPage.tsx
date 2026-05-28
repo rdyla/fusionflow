@@ -561,7 +561,7 @@ export default function CustomerDetailPage() {
               setSolutionOpportunities([]);
               if (customer?.crm_account_id) {
                 setSolutionOpportunitiesLoading(true);
-                api.getDynamicsOpportunities(customer.crm_account_id, "open")
+                api.getDynamicsOpportunities(customer.crm_account_id, "open_or_won")
                   .then(setSolutionOpportunities)
                   .catch(() => setSolutionOpportunities([]))
                   .finally(() => setSolutionOpportunitiesLoading(false));
@@ -827,7 +827,7 @@ export default function CustomerDetailPage() {
                   <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading opportunities…</div>
                 ) : solutionOpportunities.length === 0 ? (
                   <div style={{ fontSize: 12, color: "#b45309", padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
-                    No open opportunities found on this account. Create one in CRM, then re-open this dialog.
+                    No open or recently-won opportunities found on this account. Create one in CRM, then re-open this dialog.
                   </div>
                 ) : (
                   <select
@@ -840,6 +840,7 @@ export default function CustomerDetailPage() {
                     {solutionOpportunities.map((o) => (
                       <option key={o.opportunityid} value={o.opportunityid}>
                         {o.name}
+                        {o.statecode === 1 ? " · Won" : ""}
                         {o.estimatedclosedate ? ` · est. close ${o.estimatedclosedate.slice(0, 10)}` : ""}
                       </option>
                     ))}

@@ -1305,10 +1305,11 @@ export const api = {
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
 
-  /** `state` defaults to "open" (statecode=0) — solution creation flow only.
-   *  Pass "all" to include won/lost opportunities (e.g. the projects page
-   *  displaying a pinned opp's name after it's been won). */
-  getDynamicsOpportunities: (accountId: string, state: "open" | "all" = "open") =>
+  /** `state` defaults to "open_or_won" (statecode in 0, 1) — solution creation
+   *  binds to in-flight or recently-won deals (implementation often kicks off
+   *  right after a deal is marked Won). Pass "open" to restrict further, or
+   *  "all" to include lost opps too. */
+  getDynamicsOpportunities: (accountId: string, state: "open" | "open_or_won" | "all" = "open_or_won") =>
     request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities?state=${state}`),
 
   searchDynamicsCases: (params: { accountId?: string; q?: string }) => {
