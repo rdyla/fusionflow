@@ -163,7 +163,6 @@ export default function ProjectDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
-  const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
   const [editingTech, setEditingTech] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
   const [editVendor, setEditVendor] = useState("");
@@ -334,7 +333,6 @@ export default function ProjectDetailPage() {
         api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
         setEditStatus(projectData.status ?? "");
-        setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
         if (staffData.length > 0) {
@@ -415,9 +413,10 @@ export default function ProjectDetailPage() {
     setSavingProject(true);
     setSaveMessage(null);
     try {
+      // target_go_live_date is now derived server-side from the go-live event
+      // task (syncProjectGoLiveDate). Not sent here.
       const updated = await api.updateProject(project.id, {
         status: editStatus || undefined,
-        target_go_live_date: editTargetGoLiveDate || undefined,
       });
       setProject(updated);
       setSaveMessage("Saved.");
@@ -1010,10 +1009,10 @@ export default function ProjectDetailPage() {
                     <option value="blocked">Blocked</option>
                     <option value="complete">Complete</option>
                   </select>
-                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
-                    Go-Live
-                    <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
-                  </label>
+                  {/* Go-Live is now derived from the canonical go-live event
+                      task (tasks.is_go_live_event = 1) — edit its due date
+                      via the Tasks tab. The meta header above already shows
+                      the current value. */}
                   <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={handleSaveProject} disabled={savingProject}>
                     {savingProject ? "Saving…" : "Save"}
                   </button>
