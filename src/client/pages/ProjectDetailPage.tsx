@@ -701,13 +701,11 @@ export default function ProjectDetailPage() {
         </Link>
       </div>
 
-      {/* Combined project meta card — read-only display of customer +
-          project + vendor/tech + go-live + project team + account team.
-          Editing for team membership and Go-Live date lives in the Overview
-          tab's "Team & Controls" card; this section is an at-a-glance echo. */}
-      <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        {/* Row 1: project name + customer link · SharePoint link */}
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 14 }}>
+      {/* Slim project meta — name + customer + Go-Live + SharePoint only.
+          All other context (vendor/tech, account team, project team,
+          customer/partner contacts) lives on the Overview tab. */}
+      <div className="ms-card" style={{ padding: "16px 24px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
           <div>
             <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
               {project.health && (
@@ -739,145 +737,6 @@ export default function ProjectDetailPage() {
             )}
           </div>
         </div>
-
-        {/* Row 2: Vendor + tech-type pills · Edit (vendor/tech only) */}
-        {editingTech ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f1f5f9", maxWidth: 520 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</span>
-              <select
-                className="ms-input"
-                value={editVendor}
-                onChange={(e) => setEditVendor(e.target.value)}
-                disabled={savingTech}
-                style={{ fontSize: 13, padding: "6px 10px" }}
-              >
-                <option value="">— Not set —</option>
-                {VENDOR_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Solution Types</span>
-              <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingTech} />
-            </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="ms-btn-primary" onClick={saveEditTech} disabled={savingTech}>
-                {savingTech ? "Saving…" : "Save"}
-              </button>
-              <button className="ms-btn-ghost" onClick={() => setEditingTech(false)} disabled={savingTech}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 14, paddingBottom: 14, borderBottom: "1px solid #f1f5f9" }}>
-            {project.vendor ? (
-              <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
-                {vendorLabel(project.vendor)}
-              </span>
-            ) : (
-              <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
-            )}
-            <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
-            {canEdit && (
-              <button className="ms-btn-ghost" onClick={startEditTech} style={{ marginLeft: "auto", fontSize: 12, padding: "2px 10px" }}>
-                Edit
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Row 3: Account Team — Packet Fusion AE / SA / CSM tied to the customer. */}
-        {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name) && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginRight: 4 }}>Account Team</span>
-            {[
-              { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email,  phone: project.customer_pf_ae_phone,  scheduler: project.customer_pf_ae_scheduler_url  },
-              { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email,  phone: project.customer_pf_sa_phone,  scheduler: project.customer_pf_sa_scheduler_url  },
-              { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email, phone: project.customer_pf_csm_phone, scheduler: project.customer_pf_csm_scheduler_url },
-            ].filter(m => m.name).map((m) => {
-              const photo = m.email ? customerTeamPhotoMap[m.email] : null;
-              const abbr = m.name!.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
-              return (
-                <span key={m.role} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px 4px 4px", background: "rgba(11,154,173,0.07)", border: "1px solid rgba(11,154,173,0.25)", borderRadius: 22, fontSize: 13 }}>
-                  {photo
-                    ? <img src={photo} alt={m.name!} style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                    : <span style={{ width: 32, height: 32, borderRadius: "50%", background: "rgba(11,154,173,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "#0b9aad", flexShrink: 0 }}>{abbr}</span>}
-                  <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, lineHeight: 1.15 }}>
-                    <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
-                      <span style={{ color: "#334155", fontWeight: 600 }}>{m.name}</span>
-                      <span style={{ color: "#94a3b8", fontSize: 10 }}>{m.role}</span>
-                    </span>
-                    <ContactIcons email={m.email} phone={m.phone} schedulerUrl={m.scheduler} accent="#0b9aad" />
-                  </span>
-                </span>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Row 4: Project Team — PM, engineers/other internal staff, partner AEs. */}
-        {(() => {
-          const pmChip = (() => {
-            if (!project.pm_user_id) return null;
-            const pmFromMap = userMap.get(project.pm_user_id);
-            const pmName  = pmFromMap?.name  ?? (project as unknown as Record<string, unknown>).pm_name  as string | null ?? null;
-            const pmEmail = pmFromMap?.email ?? project.pm_email ?? null;
-            if (!pmName && !pmEmail) return null;
-            const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
-            const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
-            const phone     = pmFromMap?.phone         ?? project.pm_phone         ?? null;
-            const scheduler = pmFromMap?.scheduler_url ?? project.pm_scheduler_url ?? null;
-            return { key: "pm", label: "PM", name: pmName ?? pmEmail ?? "", email: pmEmail, phone, scheduler, photo, abbr, color: "blue" as const };
-          })();
-          const internalStaffChips = projectStaff
-            .filter(s => s.staff_role !== "partner_ae"
-              && !["ae", "sa", "csm"].includes(s.staff_role)
-              && !(s.staff_role === "pm" && s.user_id === project.pm_user_id))
-            .map((s) => {
-              const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-              const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
-              const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-              return { key: s.id, label: roleLabel[s.staff_role] ?? s.staff_role, name: s.name ?? s.email, email: s.email, phone: s.phone, scheduler: s.scheduler_url, photo, abbr, color: "blue" as const };
-            });
-          const partnerChips = projectStaff
-            .filter(s => s.staff_role === "partner_ae")
-            .map((s) => {
-              const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-              const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-              return { key: s.id, label: "Partner AE", name: s.name ?? s.email, email: s.email, phone: s.phone, scheduler: s.scheduler_url, photo, abbr, color: "green" as const };
-            });
-          const allProjectChips = [...(pmChip ? [pmChip] : []), ...internalStaffChips, ...partnerChips];
-          if (allProjectChips.length === 0) return null;
-          return (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginRight: 4 }}>Project Team</span>
-              {allProjectChips.map((c) => {
-                const bg     = c.color === "green" ? "rgba(16,124,16,0.07)" : "rgba(0,120,212,0.08)";
-                const border = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
-                const fg     = c.color === "green" ? "#107c10"              : "#63c1ea";
-                const avBg   = c.color === "green" ? "rgba(16,124,16,0.2)"  : "rgba(0,120,212,0.2)";
-                const accent = c.color === "green" ? "#107c10"              : "#0078d4";
-                return (
-                  <span key={c.key} style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "4px 12px 4px 4px", background: bg, border: `1px solid ${border}`, borderRadius: 22, fontSize: 13 }}>
-                    {c.photo
-                      ? <img src={c.photo} alt={c.name} style={{ width: 32, height: 32, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 32, height: 32, borderRadius: "50%", background: avBg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: fg, flexShrink: 0 }}>{c.abbr}</span>}
-                    <span style={{ display: "inline-flex", flexDirection: "column", gap: 1, lineHeight: 1.15 }}>
-                      <span style={{ display: "inline-flex", alignItems: "baseline", gap: 5 }}>
-                        <span style={{ color: "#334155", fontWeight: 600 }}>{c.name}</span>
-                        <span style={{ color: "#94a3b8", fontSize: 10 }}>{c.label}</span>
-                      </span>
-                      <ContactIcons email={c.email} phone={c.phone} schedulerUrl={c.scheduler} accent={accent} />
-                    </span>
-                  </span>
-                );
-              })}
-            </div>
-          );
-        })()}
       </div>
 
       {/* Tab navigation */}
@@ -896,7 +755,7 @@ export default function ProjectDetailPage() {
         const visibleTabs: DetailTab[] = isPartnerAe
           ? ["dashboard", ...externalSPTab]
           : isClient
-          ? ["dashboard", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
+          ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
           : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
@@ -965,262 +824,341 @@ export default function ProjectDetailPage() {
       )}
 
       {/* ── Overview ────────────────────────────────────────────────────── */}
-      {tab === "overview" && (
-        <div style={{ display: "grid", gap: 16 }}>
-          {/* ── Team & Controls (consolidated) ───────────────────────────── */}
-          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-            {/* Staff chips row */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>Team</span>
-              {/* PM chip */}
-              {project.pm_user_id && (() => {
-                const pmFromMap = userMap.get(project.pm_user_id);
-                const pmName = pmFromMap?.name ?? (project as unknown as Record<string, unknown>).pm_name as string | null ?? null;
-                const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
-                if (!pmName && !pmEmail) return null;
-                const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
-                const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
-                return (
-                  <span key="pm" title={`PM · ${pmEmail ?? ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12 }}>
-                    {photo
-                      ? <img src={photo} alt={pmName ?? pmEmail ?? ""} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
-                    }
-                    <span style={{ color: "#334155", fontWeight: 500 }}>{pmName ?? pmEmail}</span>
-                    <span style={{ color: "#94a3b8", fontSize: 10 }}>PM</span>
-                  </span>
-                );
-              })()}
-              {/* PF staff chips — skip the staff_role='pm' row for the project's primary PM
-                  since that user already renders via the dedicated PM chip above. */}
-              {projectStaff.filter(s =>
-                s.staff_role !== "partner_ae"
-                && !["ae", "sa", "csm"].includes(s.staff_role)
-                && !(s.staff_role === "pm" && s.user_id === project.pm_user_id)
-              ).map((s) => {
-                const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
-                const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-                return (
-                  <span key={s.id} title={`${s.staff_role} · ${s.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 4px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12, position: "relative" }}>
-                    {photo
-                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
-                    }
-                    <span style={{ color: "#334155", fontWeight: 500, paddingRight: canEdit ? 0 : 4 }}>{s.name ?? s.email}</span>
-                    {canEdit && <span style={{ color: "#94a3b8", fontSize: 10, paddingRight: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</span>}
-                    {canEdit && <button onClick={() => handleRemoveStaff(s.id)} style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" }} title="Remove">✕</button>}
-                  </span>
-                );
-              })}
-              {/* Partner AE chips */}
-              {projectStaff.filter(s => s.staff_role === "partner_ae").map((s) => {
-                const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-                return (
-                  <span key={s.id} title={`Partner AE · ${s.organization_name ?? ""} · ${s.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 4px 3px 4px", background: "rgba(16,124,16,0.07)", border: "1px solid rgba(16,124,16,0.2)", borderRadius: 20, fontSize: 12 }}>
-                    {photo
-                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(16,124,16,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#107c10", flexShrink: 0 }}>{abbr}</span>
-                    }
-                    <span style={{ color: "#334155", fontWeight: 500, paddingRight: canEdit ? 0 : 4 }}>{s.name ?? s.email}</span>
-                    {canEdit && <span style={{ color: "#94a3b8", fontSize: 10, paddingRight: 2 }}>Partner</span>}
-                    {canEdit && <button onClick={() => handleRemovePartner(s.id)} style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" }} title="Remove">✕</button>}
-                  </span>
-                );
-              })}
-              {/* Add buttons */}
-              {canEdit && (
-                <>
-                  <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
-                  {(() => {
-                    const partnerStaff = projectStaff.filter(s => s.staff_role === "partner_ae");
-                    const assignablePartners = users.filter(u => u.role === "partner_ae" && !partnerStaff.some(s => s.user_id === u.id));
-                    return <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner</button>;
-                  })()}
-                  {project.dynamics_account_id && (
-                    <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} disabled={crmSyncing} onClick={handleCrmSync}>{crmSyncing ? "Syncing…" : "Sync CRM"}</button>
+      {tab === "overview" && (() => {
+        const isClient = currentUserRole === "client";
+
+        // Per-section accent palette. Each contact card gets a left-border stripe
+        // + matching avatar-fallback color so the four sections are visually
+        // distinct at a glance.
+        type Accent = { fg: string; border: string; pill: string };
+        const ACCENT_TEAL:  Accent = { fg: "#0b9aad", border: "rgba(11,154,173,0.25)", pill: "rgba(11,154,173,0.12)" };
+        const ACCENT_BLUE:  Accent = { fg: "#0078d4", border: "rgba(0,120,212,0.25)",  pill: "rgba(0,120,212,0.12)"  };
+        const ACCENT_GREEN: Accent = { fg: "#107c10", border: "rgba(16,124,16,0.25)",  pill: "rgba(16,124,16,0.12)"  };
+        const ACCENT_CYAN:  Accent = { fg: "#63c1ea", border: "rgba(99,193,234,0.3)",  pill: "rgba(99,193,234,0.14)" };
+        const ACCENT_AMBER: Accent = { fg: "#d97706", border: "rgba(217,119,6,0.3)",   pill: "rgba(217,119,6,0.14)"  };
+
+        // Normalized person row used by all 4 contact sections.
+        // `accent` lets an individual row override the section color — used to
+        // keep Partner AEs visually distinct (green) inside the otherwise-blue
+        // Project Team section.
+        type PersonRow = {
+          key: string;
+          name: string;
+          label?: string | null;
+          jobTitle?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          scheduler?: string | null;
+          photo?: string | null;
+          accent?: Accent;
+          onRemove?: () => void;
+        };
+
+        const renderPerson = (p: PersonRow, accent: Accent) => {
+          const abbr = (p.name || p.email || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+          return (
+            <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
+              {p.photo
+                ? <img src={p.photo} alt={p.name} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                : <span style={{ width: 40, height: 40, borderRadius: "50%", background: accent.pill, color: accent.fg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{abbr}</span>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{p.name}</span>
+                  {p.label && (
+                    <span className="ms-badge" style={{ background: accent.pill, color: accent.fg, border: `1px solid ${accent.border}`, fontSize: 10, padding: "1px 8px" }}>
+                      {p.label}
+                    </span>
                   )}
-                </>
+                </div>
+                {p.jobTitle && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{p.jobTitle}</div>}
+              </div>
+              <ContactIcons email={p.email} phone={p.phone} schedulerUrl={p.scheduler} accent={accent.fg} />
+              {p.onRemove && (
+                <button onClick={p.onRemove} title="Remove" style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "4px 8px", flexShrink: 0 }}>✕</button>
+              )}
+            </div>
+          );
+        };
+
+        const renderSection = (props: { title: string; accent: Accent; rows: PersonRow[]; empty: string; action?: React.ReactNode }) => (
+          <div className="ms-section-card" style={{ borderLeft: `3px solid ${props.accent.fg}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+              <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0, color: props.accent.fg }}>{props.title}</div>
+              {props.action}
+            </div>
+            {props.rows.length === 0
+              ? <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>{props.empty}</div>
+              : <div style={{ display: "grid", gap: 8 }}>{props.rows.map((r) => renderPerson(r, r.accent ?? props.accent))}</div>}
+          </div>
+        );
+
+        // ── Account Team: PF AE / SA / CSM tied to the customer record ─────────────
+        const accountTeamRows: PersonRow[] = ([
+          { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email,  phone: project.customer_pf_ae_phone,  scheduler: project.customer_pf_ae_scheduler_url  },
+          { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email,  phone: project.customer_pf_sa_phone,  scheduler: project.customer_pf_sa_scheduler_url  },
+          { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email, phone: project.customer_pf_csm_phone, scheduler: project.customer_pf_csm_scheduler_url },
+        ] as const).filter((m) => !!m.name).map((m) => ({
+          key: m.role,
+          name: m.name!,
+          label: m.role,
+          email: m.email,
+          phone: m.phone,
+          scheduler: m.scheduler,
+          photo: m.email ? customerTeamPhotoMap[m.email] : null,
+        }));
+
+        // ── Project Team: PM + internal staff + partner AEs ────────────────────────
+        const pmRow: PersonRow | null = (() => {
+          if (!project.pm_user_id) return null;
+          const pmFromMap = userMap.get(project.pm_user_id);
+          const pmName = pmFromMap?.name ?? (project as unknown as Record<string, unknown>).pm_name as string | null ?? null;
+          const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
+          if (!pmName && !pmEmail) return null;
+          return {
+            key: "pm",
+            name: pmName ?? pmEmail ?? "",
+            label: "PM",
+            email: pmEmail,
+            phone: pmFromMap?.phone ?? project.pm_phone ?? null,
+            scheduler: pmFromMap?.scheduler_url ?? project.pm_scheduler_url ?? null,
+            photo: (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null,
+          };
+        })();
+        const roleLabel: Record<string, string> = { engineer: "Engineer", pm: "PM" };
+        const internalStaffRows: PersonRow[] = projectStaff
+          .filter((s) => s.staff_role !== "partner_ae"
+            && !["ae", "sa", "csm"].includes(s.staff_role)
+            && !(s.staff_role === "pm" && s.user_id === project.pm_user_id))
+          .map((s) => ({
+            key: s.id,
+            name: s.name ?? s.email,
+            label: roleLabel[s.staff_role] ?? s.staff_role,
+            email: s.email,
+            phone: s.phone,
+            scheduler: s.scheduler_url,
+            photo: staffPhotoMap[s.email] ?? s.avatar_url,
+            onRemove: canEdit ? () => handleRemoveStaff(s.id) : undefined,
+          }));
+        const partnerAeRows: PersonRow[] = projectStaff
+          .filter((s) => s.staff_role === "partner_ae")
+          .map((s) => ({
+            key: s.id,
+            name: s.name ?? s.email,
+            label: "Partner AE",
+            email: s.email,
+            phone: s.phone,
+            scheduler: s.scheduler_url,
+            photo: staffPhotoMap[s.email] ?? s.avatar_url,
+            accent: ACCENT_GREEN,
+            onRemove: canEdit ? () => handleRemovePartner(s.id) : undefined,
+          }));
+
+        // ── Customer + Partner contacts (project_contacts, split UI-side) ──────────
+        const customerContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
+        const partnerContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
+
+        function openAddContactModal(side: "customer" | "partner") {
+          setContactSide(side);
+          setShowContactModal(true);
+          const useCrm = side === "customer" && !!project!.dynamics_account_id;
+          setContactModalTab(useCrm ? "crm" : "manual");
+          setContactRole("");
+          setManualContact({ name: "", email: "", phone: "", job_title: "" });
+          if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
+            setCrmContactsLoading(true);
+            api.getDynamicsContacts(project!.dynamics_account_id)
+              .then(setCrmContacts)
+              .catch(() => {})
+              .finally(() => setCrmContactsLoading(false));
+          }
+        }
+
+        const projectContactToRow = (c: typeof contacts[number]): PersonRow => ({
+          key: c.id,
+          name: c.name,
+          label: c.contact_role,
+          jobTitle: c.job_title,
+          email: c.email,
+          phone: c.phone,
+          onRemove: canEdit ? async () => {
+            await api.removeProjectContact(project!.id, c.id);
+            setContacts((prev) => prev.filter((x) => x.id !== c.id));
+          } : undefined,
+        });
+        const customerContactRows = customerContacts.map(projectContactToRow);
+        const partnerContactRows  = partnerContacts.map(projectContactToRow);
+
+        // Two-column layout that collapses to one column on narrow viewports.
+        const twoCol: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 16 };
+        const ghostBtn: React.CSSProperties = { fontSize: 11, padding: "3px 10px", borderRadius: 4 };
+
+        return (
+          <div style={{ display: "grid", gap: 16 }}>
+            {/* ── Project Settings (PM/admin only) ─────────────────────────── */}
+            {canEdit && (
+              <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+                <div className="ms-section-title" style={{ marginBottom: 10 }}>Project Settings</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
+                    <option value="">Status</option>
+                    <option value="not_started">Not Started</option>
+                    <option value="in_progress">In Progress</option>
+                    <option value="blocked">Blocked</option>
+                    <option value="complete">Complete</option>
+                  </select>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
+                    Go-Live
+                    <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
+                  </label>
+                  <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={handleSaveProject} disabled={savingProject}>
+                    {savingProject ? "Saving…" : "Save"}
+                  </button>
+                  {saveMessage && <span style={{ fontSize: 12, color: "#64748b" }}>{saveMessage}</span>}
+                  {templateList.length > 0 && (
+                    <>
+                      <span style={{ color: "#e2e8f0", margin: "0 2px" }}>|</span>
+                      <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
+                        <option value="">— Template —</option>
+                        {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      </select>
+                      <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
+                      {applyResult && (
+                        <span style={{ fontSize: 12, color: "#059669" }}>
+                          {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added
+                          {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── Project Details (vendor + Solution Types) ────────────────── */}
+            <div className="ms-section-card">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+                <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Project Details</div>
+                {!editingTech && canEdit && (
+                  <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>Edit</button>
+                )}
+              </div>
+              {editingTech ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 520 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</span>
+                    <select className="ms-input" value={editVendor} onChange={(e) => setEditVendor(e.target.value)} disabled={savingTech} style={{ fontSize: 13, padding: "6px 10px" }}>
+                      <option value="">— Not set —</option>
+                      {VENDOR_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Solution Types</span>
+                    <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingTech} />
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="ms-btn-primary" onClick={saveEditTech} disabled={savingTech}>{savingTech ? "Saving…" : "Save"}</button>
+                    <button className="ms-btn-ghost" onClick={() => setEditingTech(false)} disabled={savingTech}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  {project.vendor ? (
+                    <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
+                      {vendorLabel(project.vendor)}
+                    </span>
+                  ) : (
+                    <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
+                  )}
+                  <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
+                </div>
               )}
             </div>
 
-            {/* Controls row */}
-            {canEdit && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 10, borderTop: "1px solid #f1f5f9" }}>
-                <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                  <option value="">Status</option>
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="complete">Complete</option>
-                </select>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
-                  Go-Live
-                  <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
-                </label>
-                <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={handleSaveProject} disabled={savingProject}>
-                  {savingProject ? "Saving…" : "Save"}
-                </button>
-                {saveMessage && <span style={{ fontSize: 12, color: "#64748b" }}>{saveMessage}</span>}
-                {templateList.length > 0 && (
-                  <>
-                    <span style={{ color: "#e2e8f0", margin: "0 2px" }}>|</span>
-                    <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
-                      <option value="">— Template —</option>
-                      {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                    <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
-                    {applyResult && (
-                      <span style={{ fontSize: 12, color: "#059669" }}>
-                        {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added
-                        {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
-                      </span>
+            {/* ── Account Team │ Project Team (2-column) ───────────────────── */}
+            <div style={twoCol}>
+              {renderSection({
+                title: "Account Team",
+                accent: ACCENT_TEAL,
+                rows: accountTeamRows,
+                empty: "No customer Account Team set in CRM.",
+              })}
+              {renderSection({
+                title: "Project Team",
+                accent: ACCENT_BLUE,
+                rows: [...(pmRow ? [pmRow] : []), ...internalStaffRows, ...partnerAeRows],
+                empty: "No project team assigned yet.",
+                action: canEdit ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
+                    {(() => {
+                      const partnerStaff = projectStaff.filter((s) => s.staff_role === "partner_ae");
+                      const assignablePartners = users.filter((u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id));
+                      return <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner</button>;
+                    })()}
+                    {project.dynamics_account_id && (
+                      <button className="ms-btn-ghost" style={ghostBtn} disabled={crmSyncing} onClick={handleCrmSync}>{crmSyncing ? "Syncing…" : "Sync CRM"}</button>
                     )}
-                  </>
-                )}
+                  </div>
+                ) : undefined,
+              })}
+            </div>
+
+            {/* ── Customer Contacts │ Partner/Provider Contacts (2-column) ──── */}
+            <div style={twoCol}>
+              {renderSection({
+                title: "Customer Contacts",
+                accent: ACCENT_CYAN,
+                rows: customerContactRows,
+                empty: "No customer contacts added yet.",
+                action: canEdit ? (
+                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("customer")}>+ Add Contact</button>
+                ) : undefined,
+              })}
+              {renderSection({
+                title: "Partner / Provider Contacts",
+                accent: ACCENT_AMBER,
+                rows: partnerContactRows,
+                empty: "No partner/provider contacts yet (e.g. porting coordinator).",
+                action: canEdit ? (
+                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("partner")}>+ Add Contact</button>
+                ) : undefined,
+              })}
+            </div>
+
+            {/* ── Sites (multi-site projects) — full width ─────────────────── */}
+            <SitesPanel
+              projectId={project.id}
+              canEdit={canEdit}
+              onChange={async () => {
+                const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
+                setPhases(newPhases);
+                setTasks(newTasks);
+              }}
+            />
+
+            {/* ── Status Meeting │ Meeting Prep (PM/admin only, 2-column) ──── */}
+            {!isClient && (
+              <div style={twoCol}>
+                <StatusMeetingPanel
+                  project={project}
+                  canEdit={canEdit}
+                  onSaved={(updated) => setProject(updated)}
+                />
+                <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+                  <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                    {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                      <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
+                        <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
-
-          {/* ── Customer + Partner Contacts ──────────────────────────────── */}
-          {/* Two stacked sections — customer-side roles vs partner/provider
-              roles (Porting Coordinator etc.). Underlying storage is one
-              project_contacts table; classification is purely UI-side. */}
-          {(() => {
-            const customerContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
-            const partnerContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
-
-            function openAddContactModal(side: "customer" | "partner") {
-              setContactSide(side);
-              setShowContactModal(true);
-              // CRM lookup only applies to customer contacts; partners are manual-only.
-              const useCrm = side === "customer" && !!project!.dynamics_account_id;
-              setContactModalTab(useCrm ? "crm" : "manual");
-              setContactRole("");
-              setManualContact({ name: "", email: "", phone: "", job_title: "" });
-              if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
-                setCrmContactsLoading(true);
-                api.getDynamicsContacts(project!.dynamics_account_id)
-                  .then(setCrmContacts)
-                  .catch(() => {})
-                  .finally(() => setCrmContactsLoading(false));
-              }
-            }
-
-            const renderContactRow = (c: typeof contacts[number]) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
-                <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
-                  {c.name.charAt(0).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
-                    {c.contact_role && (
-                      <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
-                        {c.contact_role}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>
-                    {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
-                {canEdit && (
-                  <button
-                    className="ms-btn-ghost"
-                    style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
-                    onClick={async () => {
-                      await api.removeProjectContact(project!.id, c.id);
-                      setContacts((prev) => prev.filter((x) => x.id !== c.id));
-                    }}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            );
-
-            return (
-              <>
-                {/* Customer */}
-                <div className="ms-section-card">
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                    <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Customer Contacts</div>
-                    {canEdit && (
-                      <button className="ms-btn-secondary" onClick={() => openAddContactModal("customer")}>
-                        + Add Customer Contact
-                      </button>
-                    )}
-                  </div>
-                  {customerContacts.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                      No customer contacts added yet.
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>{customerContacts.map(renderContactRow)}</div>
-                  )}
-                </div>
-
-                {/* Partner / Provider */}
-                <div className="ms-section-card">
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                    <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Partner / Provider Contacts</div>
-                    {canEdit && (
-                      <button className="ms-btn-secondary" onClick={() => openAddContactModal("partner")}>
-                        + Add Partner Contact
-                      </button>
-                    )}
-                  </div>
-                  {partnerContacts.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                      No partner/provider contacts added yet. (e.g. porting coordinator on the partner team.)
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>{partnerContacts.map(renderContactRow)}</div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
-
-          {/* KPIs / phase stepper / upcoming tasks / blockers now live on the
-              Dashboard tab — see ProjectDashboardTab. Overview keeps the
-              team + contacts surface for PM-facing context only. */}
-
-          {/* ── Deployment sites (multi-site projects) ────────────────────── */}
-          <SitesPanel
-            projectId={project.id}
-            canEdit={canEdit}
-            onChange={async () => {
-              const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
-              setPhases(newPhases);
-              setTasks(newTasks);
-            }}
-          />
-
-          {/* ── Recurring status meeting cadence (drives Dashboard's Next call tile) ─ */}
-          <StatusMeetingPanel
-            project={project}
-            canEdit={canEdit}
-            onSaved={(updated) => setProject(updated)}
-          />
-
-          {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
-          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-            <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
-                <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
-                  <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Counts removed — Dashboard tab is the canonical metrics surface. */}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {tab === "tasks" && (
