@@ -94,7 +94,7 @@ function renderKickoffSection(
         `<p style="margin:0 0 10px;">Virtual-agent topics we'll work through during discovery. You don't need answers at kickoff &mdash; start identifying who internally owns each topic.</p>
          <ul style="margin:0;padding-left:18px;">
            <li style="margin:0 0 8px;">Knowledge base content sources and content owners</li>
-           <li style="margin:0 0 8px;">Phase 1 intent prioritization (top 10&ndash;25 intents)</li>
+           <li style="margin:0 0 8px;">Stage 1 intent prioritization (top 10&ndash;25 intents)</li>
            <li style="margin:0 0 8px;">Escalation paths to live agents &mdash; handoff triggers and warm-transfer destinations</li>
            <li style="margin:0 0 8px;">Customer-to-system mapping and APIs to query for caller identification</li>
            <li style="margin:0;">Voice and chat channel selection</li>

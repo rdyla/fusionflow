@@ -47,7 +47,7 @@ const MEETING_TYPE_LABEL_PLACEHOLDERS: Record<MeetingType, string> = {
   kickoff:       "(optional) e.g. Re-kickoff after scope change",
   discovery:     "(optional) e.g. Network Architecture",
   design_review: "(optional) e.g. Call Flow Design",
-  uat:           "(optional) e.g. Phase 2 UAT",
+  uat:           "(optional) e.g. Stage 2 UAT",
   go_live:       "(optional) e.g. Site B Cutover",
 };
 

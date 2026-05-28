@@ -6,8 +6,8 @@
  * abstraction; see PR following #211). Multi-site behavior lives INSIDE the
  * project via the `sites` table: e.g. City of Thousand Oaks is one project
  * containing Libraries / Treatment / HQ sites, each with its own per-site
- * PMI phase chain and go-live date. The Initiate phase is shared across all
- * sites (its phase row has site_id = NULL).
+ * PMI stage chain and go-live date. The Initiate stage is shared across all
+ * sites (its stage row has site_id = NULL).
  *
  * Single-site projects (sites table empty) get a clean two-row layout: stat
  * tiles + three detail columns. Multi-site projects render an adaptive
@@ -83,7 +83,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     perSiteTaskCounts,
     openTasks,
     assigneeAgg,
-    assigneePhaseAgg,
+    assigneeStageAgg,
     blockers,
     notes,
     pmRow,
@@ -94,7 +94,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     nextMeetingTaskRow,
     docRow,
     projectHealth,
-    phaseRows,
+    stageRows,
   ] = await Promise.all([
     db
       .prepare(
@@ -115,16 +115,16 @@ app.get("/:id/stakeholder-summary", async (c) => {
       )
       .bind(projectId)
       .first<{ total: number; done: number; in_progress: number; not_started: number }>(),
-    // Per-site task counts joined through phases.site_id. Tasks on shared
-    // phases (site_id IS NULL) land under a NULL key and aren't rolled into
-    // any site card — they belong to the shared Initiate phase.
+    // Per-site task counts joined through stages.site_id. Tasks on shared
+    // stages (site_id IS NULL) land under a NULL key and aren't rolled into
+    // any site card — they belong to the shared Initiate stage.
     db
       .prepare(
         `SELECT p.site_id AS site_id,
                 COUNT(*) AS total,
                 SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done
          FROM tasks t
-         JOIN phases p ON p.id = t.phase_id
+         JOIN stages p ON p.id = t.stage_id
          WHERE t.project_id = ?
          GROUP BY p.site_id`
       )
@@ -132,19 +132,19 @@ app.get("/:id/stakeholder-summary", async (c) => {
       .all<{ site_id: string | null; total: number; done: number }>(),
     db
       .prepare(
-        `SELECT t.id, t.title, t.due_date, t.priority, t.phase_id, t.status,
+        `SELECT t.id, t.title, t.due_date, t.priority, t.stage_id, t.status,
                 t.meeting_join_url, t.assignee_user_id, u.name AS assignee_name,
                 p.site_id AS site_id
          FROM tasks t
          LEFT JOIN users u  ON u.id = t.assignee_user_id
-         LEFT JOIN phases p ON p.id = t.phase_id
+         LEFT JOIN stages p ON p.id = t.stage_id
          WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
          ORDER BY COALESCE(t.due_date, '9999-12-31') ASC
          LIMIT 8`
       )
       .bind(projectId)
-      .all<{ id: string; title: string; due_date: string | null; priority: string | null; phase_id: string | null; status: string | null; meeting_join_url: string | null; assignee_user_id: string | null; assignee_name: string | null; site_id: string | null }>(),
-    // Per-assignee × per-site pivot. Tasks on shared phases land under a
+      .all<{ id: string; title: string; due_date: string | null; priority: string | null; stage_id: string | null; status: string | null; meeting_join_url: string | null; assignee_user_id: string | null; assignee_name: string | null; site_id: string | null }>(),
+    // Per-assignee × per-site pivot. Tasks on shared stages land under a
     // NULL site_id key and surface in a separate "shared" total.
     db
       .prepare(
@@ -152,33 +152,33 @@ app.get("/:id/stakeholder-summary", async (c) => {
                 p.site_id AS site_id, COUNT(*) AS cnt
          FROM tasks t
          LEFT JOIN users u  ON u.id = t.assignee_user_id
-         LEFT JOIN phases p ON p.id = t.phase_id
+         LEFT JOIN stages p ON p.id = t.stage_id
          WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
            AND t.assignee_user_id IS NOT NULL
          GROUP BY t.assignee_user_id, p.site_id`
       )
       .bind(projectId)
       .all<{ assignee_user_id: string; assignee_name: string | null; site_id: string | null; cnt: number }>(),
-    // Per-assignee × phase-name pivot for the "By assignee" breakdown on
-    // the Open Tasks panel. Phases are grouped by NAME so multi-site
+    // Per-assignee × stage-name pivot for the "By assignee" breakdown on
+    // the Open Tasks panel. Stages are grouped by NAME so multi-site
     // projects collapse "Plan" across all sites into a single column —
     // the PM wants "how many open tasks does Sarah have in Execute"
     // regardless of which site that work belongs to.
     db
       .prepare(
         `SELECT t.assignee_user_id, u.name AS assignee_name,
-                p.name AS phase_name, MIN(p.sort_order) AS sort_order,
+                p.name AS stage_name, MIN(p.sort_order) AS sort_order,
                 COUNT(*) AS cnt
          FROM tasks t
          LEFT JOIN users u  ON u.id = t.assignee_user_id
-         LEFT JOIN phases p ON p.id = t.phase_id
+         LEFT JOIN stages p ON p.id = t.stage_id
          WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
            AND t.assignee_user_id IS NOT NULL
            AND p.name IS NOT NULL
          GROUP BY t.assignee_user_id, p.name`
       )
       .bind(projectId)
-      .all<{ assignee_user_id: string; assignee_name: string | null; phase_name: string; sort_order: number | null; cnt: number }>(),
+      .all<{ assignee_user_id: string; assignee_name: string | null; stage_name: string; sort_order: number | null; cnt: number }>(),
     db
       .prepare(
         `SELECT r.id, r.title, r.description, r.severity, r.status,
@@ -253,15 +253,15 @@ app.get("/:id/stakeholder-summary", async (c) => {
       .bind(projectId)
       .all<{ id: string; name: string; created_at: string; uploaded_by: string | null }>(),
     computeProjectHealth(db, projectId, { target_go_live_date: project.target_go_live_date, updated_at: project.updated_at }),
-    // Per-phase task counts for the phase-progress panel. Phases with
+    // Per-stage task counts for the stage-progress panel. Stages with
     // site_id IS NULL are project-shared (Initiate, on multi-site projects).
     db
       .prepare(
         `SELECT p.id, p.name, p.sort_order, p.status, p.site_id,
                 COUNT(t.id) AS total_tasks,
                 SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done_tasks
-         FROM phases p
-         LEFT JOIN tasks t ON t.phase_id = p.id
+         FROM stages p
+         LEFT JOIN tasks t ON t.stage_id = p.id
          WHERE p.project_id = ?
          GROUP BY p.id`
       )
@@ -334,7 +334,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
 
   // ── Per-assignee pivot ─────────────────────────────────────────────────────
   // Multi-site: counts keyed by site_id + a separate `shared` total for
-  // tasks on the project's shared phases (Initiate). Single-site: all task
+  // tasks on the project's shared stages (Initiate). Single-site: all task
   // counts collapse into `total`.
   const assigneeMap = new Map<string, { user_id: string; name: string; counts: Record<string, number>; shared: number; total: number }>();
   for (const row of assigneeAgg.results ?? []) {
@@ -350,29 +350,29 @@ app.get("/:id/stakeholder-summary", async (c) => {
   }
   const assigneeBreakdown = [...assigneeMap.values()].sort((a, b) => b.total - a.total);
 
-  // ── Per-assignee × phase-name pivot (universal — single + multi-site) ──────
-  // On multi-site, the same phase NAME ("Plan", "Execute") exists once per
+  // ── Per-assignee × stage-name pivot (universal — single + multi-site) ──────
+  // On multi-site, the same stage NAME ("Plan", "Execute") exists once per
   // site. We collapse them so the table reads as "how much open work does
   // each assignee have at each PMI stage" without exploding into N×M columns.
-  const phaseColumnOrder = new Map<string, number>();
-  const assigneePhaseMap = new Map<string, { user_id: string; name: string; counts: Record<string, number>; total: number }>();
-  for (const row of assigneePhaseAgg.results ?? []) {
+  const stageColumnOrder = new Map<string, number>();
+  const assigneeStageMap = new Map<string, { user_id: string; name: string; counts: Record<string, number>; total: number }>();
+  for (const row of assigneeStageAgg.results ?? []) {
     if (!row.assignee_user_id) continue;
-    const existing = phaseColumnOrder.get(row.phase_name);
+    const existing = stageColumnOrder.get(row.stage_name);
     const order = row.sort_order ?? 9999;
-    if (existing === undefined || order < existing) phaseColumnOrder.set(row.phase_name, order);
-    let entry = assigneePhaseMap.get(row.assignee_user_id);
+    if (existing === undefined || order < existing) stageColumnOrder.set(row.stage_name, order);
+    let entry = assigneeStageMap.get(row.assignee_user_id);
     if (!entry) {
       entry = { user_id: row.assignee_user_id, name: row.assignee_name ?? "Unknown", counts: {}, total: 0 };
-      assigneePhaseMap.set(row.assignee_user_id, entry);
+      assigneeStageMap.set(row.assignee_user_id, entry);
     }
-    entry.counts[row.phase_name] = (entry.counts[row.phase_name] ?? 0) + row.cnt;
+    entry.counts[row.stage_name] = (entry.counts[row.stage_name] ?? 0) + row.cnt;
     entry.total += row.cnt;
   }
-  const phaseColumns = [...phaseColumnOrder.entries()]
+  const stageColumns = [...stageColumnOrder.entries()]
     .sort((a, b) => a[1] - b[1])
     .map(([name]) => name);
-  const assigneePhaseBreakdown = [...assigneePhaseMap.values()].sort((a, b) => b.total - a.total);
+  const assigneeStageBreakdown = [...assigneeStageMap.values()].sort((a, b) => b.total - a.total);
 
   // ── Site name map for labeling open tasks ──────────────────────────────────
   const siteNameMap = new Map(sites.map((s) => [s.id, s.name]));
@@ -428,9 +428,9 @@ app.get("/:id/stakeholder-summary", async (c) => {
       is_meeting: !!t.meeting_join_url,
     })),
     assignee_breakdown: assigneeBreakdown,
-    assignee_phase_breakdown: {
-      phase_columns: phaseColumns,
-      rows: assigneePhaseBreakdown,
+    assignee_stage_breakdown: {
+      stage_columns: stageColumns,
+      rows: assigneeStageBreakdown,
     },
     blockers: blockerRows.map((b) => ({
       id: b.id,
@@ -460,23 +460,23 @@ app.get("/:id/stakeholder-summary", async (c) => {
       timeline_url: `/projects/${project.id}#timeline`,
       next_call_join_url: nextCall?.join_url ?? null,
     },
-    phase_progress: buildPhaseProgress(phaseRows.results ?? [], sites),
+    stage_progress: buildStageProgress(stageRows.results ?? [], sites),
   });
 });
 
 /**
- * Group phases by site_id and compute per-phase % completion. Output is a
+ * Group stages by site_id and compute per-stage % completion. Output is a
  * column-major list — shared (site_id=NULL) first, then one entry per site
- * in display_order. Each entry carries phases sorted by sort_order ASC.
+ * in display_order. Each entry carries stages sorted by sort_order ASC.
  *
- * Empty phases (no tasks) get 0% so the slider visually represents "not
- * started yet" instead of being absent. The phase row still surfaces so
+ * Empty stages (no tasks) get 0% so the slider visually represents "not
+ * started yet" instead of being absent. The stage row still surfaces so
  * PMs see the placeholder.
  */
-function buildPhaseProgress(
+function buildStageProgress(
   rows: Array<{ id: string; name: string; sort_order: number | null; status: string | null; site_id: string | null; total_tasks: number; done_tasks: number }>,
   sites: Array<{ id: string; name: string }>,
-): Array<{ site_id: string | null; site_name: string | null; phases: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
+): Array<{ site_id: string | null; site_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
   const groups = new Map<string | "shared", Array<typeof rows[number] & { pct: number }>>();
   for (const r of rows) {
     const key = r.site_id ?? "shared";
@@ -490,15 +490,15 @@ function buildPhaseProgress(
   for (const arr of groups.values()) {
     arr.sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
   }
-  const out: Array<{ site_id: string | null; site_name: string | null; phases: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
-  const sharedPhases = groups.get("shared");
-  if (sharedPhases && sharedPhases.length > 0) {
-    out.push({ site_id: null, site_name: null, phases: sharedPhases.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+  const out: Array<{ site_id: string | null; site_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
+  const sharedStages = groups.get("shared");
+  if (sharedStages && sharedStages.length > 0) {
+    out.push({ site_id: null, site_name: null, stages: sharedStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
   }
   for (const s of sites) {
-    const sitePhases = groups.get(s.id);
-    if (sitePhases && sitePhases.length > 0) {
-      out.push({ site_id: s.id, site_name: s.name, phases: sitePhases.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+    const siteStages = groups.get(s.id);
+    if (siteStages && siteStages.length > 0) {
+      out.push({ site_id: s.id, site_name: s.name, stages: siteStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
     }
   }
   return out;

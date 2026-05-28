@@ -2,17 +2,17 @@
  * Sites CRUD for multi-site projects (e.g. City of Thousand Oaks rolling
  * out Libraries → Treatment → HQ on staggered timelines).
  *
- * Schema lives at migration 0085: `sites` table + `phases.site_id` (nullable).
- * site_id IS NULL on a phase means "shared" — the project's Initiate phase
- * is shared across all sites. Non-null means the phase belongs to that
+ * Schema lives at migration 0085: `sites` table + `stages.site_id` (nullable).
+ * site_id IS NULL on a stage means "shared" — the project's Initiate stage
+ * is shared across all sites. Non-null means the stage belongs to that
  * site's per-site PMI chain (Plan / Execute / Monitor / Go-Live / Hypercare).
  *
- * Create-time phase wiring (the part that earns its keep):
- *   - First site on a project that already has post-Initiate phases:
- *     MOVE those phases under the new site (set site_id). Tasks come along
- *     for free since they reference phase_id. "Initiate"-like phases stay
+ * Create-time stage wiring (the part that earns its keep):
+ *   - First site on a project that already has post-Initiate stages:
+ *     MOVE those stages under the new site (set site_id). Tasks come along
+ *     for free since they reference stage_id. "Initiate"-like stages stay
  *     shared (detected by name match — case-insensitive 'initiat').
- *   - Subsequent sites: CLONE the first site's phase shape (new phase
+ *   - Subsequent sites: CLONE the first site's stage shape (new stage
  *     rows, same names/dates/sort_order). Tasks are NOT cloned —
  *     downstream sites typically have their own task lists, and copying
  *     N tasks × M sites quickly becomes a mess to clean up.
@@ -93,7 +93,7 @@ app.post("/:id/sites", async (c) => {
     .bind(siteId, projectId, name, target_go_live_date ?? null, displayOrder)
     .run();
 
-  // ── Phase wiring ─────────────────────────────────────────────────────────
+  // ── Stage wiring ─────────────────────────────────────────────────────────
   // How many sites existed BEFORE this one?
   const otherSitesRow = await db
     .prepare("SELECT COUNT(*) AS c FROM sites WHERE project_id = ? AND id != ?")
@@ -102,19 +102,19 @@ app.post("/:id/sites", async (c) => {
   const isFirstSite = (otherSitesRow?.c ?? 0) === 0;
 
   if (isFirstSite) {
-    // Move all non-Initiate, currently-shared phases to this site.
-    // "Initiate" detection: phase name contains 'initiat' (case-insensitive).
+    // Move all non-Initiate, currently-shared stages to this site.
+    // "Initiate" detection: stage name contains 'initiat' (case-insensitive).
     await db
       .prepare(
-        `UPDATE phases SET site_id = ?
+        `UPDATE stages SET site_id = ?
          WHERE project_id = ? AND site_id IS NULL
            AND LOWER(name) NOT LIKE '%initiat%'`
       )
       .bind(siteId, projectId)
       .run();
   } else {
-    // Clone the FIRST site's phase shape under this new site. Pull the first
-    // site's phases (by display_order on sites) and re-insert with new IDs
+    // Clone the FIRST site's stage shape under this new site. Pull the first
+    // site's stages (by display_order on sites) and re-insert with new IDs
     // and site_id = the new site. Tasks intentionally NOT cloned.
     const firstSiteRow = await db
       .prepare(
@@ -125,18 +125,18 @@ app.post("/:id/sites", async (c) => {
       .bind(projectId, siteId)
       .first<{ id: string }>();
     if (firstSiteRow) {
-      const sourcePhases = await db
+      const sourceStages = await db
         .prepare(
           `SELECT name, sort_order, planned_start, planned_end, status
-           FROM phases WHERE project_id = ? AND site_id = ?
+           FROM stages WHERE project_id = ? AND site_id = ?
            ORDER BY COALESCE(sort_order, 0) ASC`
         )
         .bind(projectId, firstSiteRow.id)
         .all<{ name: string; sort_order: number | null; planned_start: string | null; planned_end: string | null; status: string | null }>();
-      for (const ph of (sourcePhases.results ?? [])) {
+      for (const ph of (sourceStages.results ?? [])) {
         await db
           .prepare(
-            `INSERT INTO phases (id, project_id, site_id, name, sort_order, planned_start, planned_end, status)
+            `INSERT INTO stages (id, project_id, site_id, name, sort_order, planned_start, planned_end, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           )
           .bind(crypto.randomUUID(), projectId, siteId, ph.name, ph.sort_order, ph.planned_start, ph.planned_end, ph.status)
@@ -219,29 +219,29 @@ app.delete("/:id/sites/:siteId", async (c) => {
     .first();
   if (!exists) throw new HTTPException(404, { message: "Site not found" });
 
-  // Phases (and their tasks) cascade via the FK ON DELETE CASCADE established
-  // in migration 0085. Tasks reference phase_id, so deleting phases cleans
-  // tasks transitively through the phase ref — but tasks.phase_id has no
+  // Stages (and their tasks) cascade via the FK ON DELETE CASCADE established
+  // in migration 0085. Tasks reference stage_id, so deleting stages cleans
+  // tasks transitively through the stage ref — but tasks.stage_id has no
   // formal CASCADE constraint, so explicitly null those out first to avoid
   // dangling references. We also delete the orphaned tasks (only the ones
-  // that belong to a phase being removed).
-  const phaseRows = await c.env.DB
-    .prepare("SELECT id FROM phases WHERE site_id = ?")
+  // that belong to a stage being removed).
+  const stageRows = await c.env.DB
+    .prepare("SELECT id FROM stages WHERE site_id = ?")
     .bind(siteId)
     .all<{ id: string }>();
-  const phaseIds = (phaseRows.results ?? []).map((p) => p.id);
-  if (phaseIds.length > 0) {
-    const placeholders = phaseIds.map(() => "?").join(",");
-    // Delete tasks for these phases first.
+  const stageIds = (stageRows.results ?? []).map((p) => p.id);
+  if (stageIds.length > 0) {
+    const placeholders = stageIds.map(() => "?").join(",");
+    // Delete tasks for these stages first.
     await c.env.DB
-      .prepare(`DELETE FROM tasks WHERE phase_id IN (${placeholders})`)
-      .bind(...phaseIds)
+      .prepare(`DELETE FROM tasks WHERE stage_id IN (${placeholders})`)
+      .bind(...stageIds)
       .run();
   }
-  // Then drop the site — phases cascade via FK.
+  // Then drop the site — stages cascade via FK.
   await c.env.DB.prepare("DELETE FROM sites WHERE id = ?").bind(siteId).run();
 
-  return c.json({ success: true, deleted_phase_count: phaseIds.length });
+  return c.json({ success: true, deleted_stage_count: stageIds.length });
 });
 
 export default app;

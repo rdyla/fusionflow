@@ -2,15 +2,15 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { saveCreds, deleteCreds, getCredsConfigured, getZoomStatus, getZoomRecordings, matchRecordingsToPhases } from "../services/zoomService";
+import { saveCreds, deleteCreds, getCredsConfigured, getZoomStatus, getZoomRecordings, matchRecordingsToStages } from "../services/zoomService";
 import { canEditProject, canViewProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const RECORDING_SELECT = `
-  SELECT zr.*, ph.name AS phase_name, t.title AS task_name
+  SELECT zr.*, ph.name AS stage_name, t.title AS task_name
   FROM zoom_recordings zr
-  LEFT JOIN phases ph ON ph.id = zr.phase_id
+  LEFT JOIN stages ph ON ph.id = zr.stage_id
   LEFT JOIN tasks t ON t.id = zr.task_id
 `;
 
@@ -97,9 +97,9 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
       .first<{ zoom_user_id: string | null; email: string | null }>() ?? null;
   }
 
-  const [phasesResult, linkedResult, alreadyLinked] = await Promise.all([
+  const [stagesResult, linkedResult, alreadyLinked] = await Promise.all([
     c.env.DB
-      .prepare("SELECT id, name, planned_start, planned_end FROM phases WHERE project_id = ? ORDER BY sort_order ASC")
+      .prepare("SELECT id, name, planned_start, planned_end FROM stages WHERE project_id = ? ORDER BY sort_order ASC")
       .bind(projectId)
       .all<{ id: string; name: string; planned_start: string | null; planned_end: string | null }>(),
     c.env.DB
@@ -112,7 +112,7 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
       .all<Record<string, unknown>>(),
   ]);
 
-  const phases = phasesResult.results ?? [];
+  const stages = stagesResult.results ?? [];
   const linkedMeetingIds = new Set((linkedResult.results ?? []).map((r) => r.meeting_id));
 
   let meetings;
@@ -126,13 +126,13 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
 
   const newMeetings = meetings.filter((m) => !linkedMeetingIds.has(String(m.id)));
   const hasPm = pmInfo !== null;
-  const matches = matchRecordingsToPhases(newMeetings, phases, project?.crm_case_id ?? null, project?.customer_name ?? null, hasPm);
+  const matches = matchRecordingsToStages(newMeetings, stages, project?.crm_case_id ?? null, project?.customer_name ?? null, hasPm);
 
   const suggestions = matches
     .filter((m) => (m.meeting.recording_files ?? []).length > 0)
     .map((m) => {
-      const phaseId = m.phase_id;
-      const phaseName = phaseId ? (phases.find((p) => p.id === phaseId)?.name ?? null) : null;
+      const stageId = m.stage_id;
+      const stageName = stageId ? (stages.find((p) => p.id === stageId)?.name ?? null) : null;
       return {
         meeting_id: String(m.meeting.id),
         topic: m.meeting.topic,
@@ -142,8 +142,8 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
         recording_files: m.meeting.recording_files ?? [],
         recording_password: m.meeting.recording_play_passcode ?? null,
         share_url: m.meeting.share_url ?? null,
-        suggested_phase_id: phaseId,
-        suggested_phase_name: phaseName,
+        suggested_stage_id: stageId,
+        suggested_stage_name: stageName,
         match_reason: m.match_reason,
       };
     });
@@ -160,7 +160,7 @@ app.post("/:projectId/zoom/recordings/sync", async (c) => {
 const confirmSchema = z.object({
   confirmations: z.array(z.object({
     meeting_id: z.string(),
-    phase_id: z.string().nullable(),
+    stage_id: z.string().nullable(),
     task_id: z.string().nullable().optional(),
     topic: z.string(),
     start_time: z.string(),
@@ -188,17 +188,17 @@ app.post("/:projectId/zoom/recordings/confirm", async (c) => {
     const id = crypto.randomUUID();
     await c.env.DB
       .prepare(`
-        INSERT INTO zoom_recordings (id, project_id, phase_id, task_id, meeting_id, topic, start_time, duration_mins, host_email, recording_files, recording_password, share_url, match_reason, manually_assigned)
+        INSERT INTO zoom_recordings (id, project_id, stage_id, task_id, meeting_id, topic, start_time, duration_mins, host_email, recording_files, recording_password, share_url, match_reason, manually_assigned)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         ON CONFLICT (project_id, meeting_id) DO UPDATE SET
-          phase_id = excluded.phase_id,
+          stage_id = excluded.stage_id,
           task_id = excluded.task_id,
           recording_password = excluded.recording_password,
           share_url = excluded.share_url,
           match_reason = excluded.match_reason,
           updated_at = CURRENT_TIMESTAMP
       `)
-      .bind(id, projectId, conf.phase_id ?? null, conf.task_id ?? null, conf.meeting_id, conf.topic, conf.start_time, conf.duration_mins, conf.host_email ?? null, JSON.stringify(conf.recording_files), conf.recording_password ?? null, conf.share_url ?? null, conf.match_reason ?? null)
+      .bind(id, projectId, conf.stage_id ?? null, conf.task_id ?? null, conf.meeting_id, conf.topic, conf.start_time, conf.duration_mins, conf.host_email ?? null, JSON.stringify(conf.recording_files), conf.recording_password ?? null, conf.share_url ?? null, conf.match_reason ?? null)
       .run();
 
     const row = await c.env.DB
@@ -219,11 +219,11 @@ app.patch("/:projectId/zoom/recordings/:recordingId", async (c) => {
   const allowed = await canEditProject(c.env.DB, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { phase_id, task_id } = await c.req.json() as { phase_id: string | null; task_id?: string | null };
+  const { stage_id, task_id } = await c.req.json() as { stage_id: string | null; task_id?: string | null };
 
   await c.env.DB
-    .prepare("UPDATE zoom_recordings SET phase_id = ?, task_id = ?, manually_assigned = 1, match_reason = 'manual', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?")
-    .bind(phase_id ?? null, task_id ?? null, recordingId, projectId)
+    .prepare("UPDATE zoom_recordings SET stage_id = ?, task_id = ?, manually_assigned = 1, match_reason = 'manual', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND project_id = ?")
+    .bind(stage_id ?? null, task_id ?? null, recordingId, projectId)
     .run();
 
   const row = await c.env.DB

@@ -907,7 +907,7 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ ...TD_LABEL, ...tdBorder }}>Phases / Go-Lives</td>
+                  <td style={{ ...TD_LABEL, ...tdBorder }}>Stages / Go-Lives</td>
                   <td style={{ ...TD_INPUT, ...tdBorder }}>
                     <Cell value={phd.deployment.phases_count} onChange={v => update("deployment", { ...phd.deployment, phases_count: v })} canEdit={canEdit} placeholder="0" />
                   </td>

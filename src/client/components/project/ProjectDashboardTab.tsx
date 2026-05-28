@@ -4,7 +4,7 @@
  * Anchored on a single project. Stats are scoped to that project. Multi-site
  * behavior lives INSIDE the project via the `sites` table: City of Thousand
  * Oaks is one project containing Libraries / Treatment / HQ sites, each with
- * its own per-site PMI phase chain and go-live. The Sites row only renders
+ * its own per-site PMI stage chain and go-live. The Sites row only renders
  * when the project has 1+ sites; single-site projects get a clean two-row
  * layout (stat tiles + three detail panels).
  *
@@ -67,7 +67,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
   if (error) return <Center error>{error}</Center>;
   if (!data) return <Center>No data.</Center>;
 
-  const { stats, sites, open_tasks, assignee_phase_breakdown, blockers, key_updates, team, links, phase_progress } = data;
+  const { stats, sites, open_tasks, assignee_stage_breakdown, blockers, key_updates, team, links, stage_progress } = data;
   const multiSite = sites.length > 0;
   const rollupLabel = multiSite ? `Across ${sites.length} site${sites.length === 1 ? "" : "s"}` : "Across this project";
 
@@ -113,23 +113,23 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
         </>
       )}
 
-      {/* Phase progress — one column per site (plus shared if multi-site).
+      {/* Stage progress — one column per site (plus shared if multi-site).
           Single-site projects collapse to a single full-width column. */}
-      {phase_progress.length > 0 && (
+      {stage_progress.length > 0 && (
         <>
-          <SectionLabel>Phase progress</SectionLabel>
+          <SectionLabel>Stage progress</SectionLabel>
           <div style={{
             background: "#fff", border: `1px solid ${PF_BORDER}`, borderRadius: 12,
             padding: "16px 18px", marginBottom: 18,
           }}>
             <div style={{
               display: "grid",
-              gridTemplateColumns: `repeat(${phase_progress.length}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${stage_progress.length}, minmax(0, 1fr))`,
               gap: 18,
             }}>
-              {phase_progress.map((col) => (
+              {stage_progress.map((col) => (
                 <div key={col.site_id ?? "shared"} style={{ minWidth: 0 }}>
-                  {phase_progress.length > 1 && (
+                  {stage_progress.length > 1 && (
                     <div style={{
                       fontSize: 10, fontWeight: 700, color: PF_BLUE,
                       textTransform: "uppercase", letterSpacing: "0.1em",
@@ -139,7 +139,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
                     </div>
                   )}
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                    {col.phases.map((p) => <PhaseSlider key={p.id} phase={p} />)}
+                    {col.stages.map((p) => <StageSlider key={p.id} stage={p} />)}
                   </div>
                 </div>
               ))}
@@ -174,11 +174,11 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
             </ul>
           )}
 
-          {assignee_phase_breakdown.rows.length > 0 && assignee_phase_breakdown.phase_columns.length > 0 && (
+          {assignee_stage_breakdown.rows.length > 0 && assignee_stage_breakdown.stage_columns.length > 0 && (
             <>
               <Subheading>Open tasks remaining by assignee</Subheading>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {assignee_phase_breakdown.rows.slice(0, 8).map((a) => (
+                {assignee_stage_breakdown.rows.slice(0, 8).map((a) => (
                   <div key={a.user_id}>
                     <div style={{
                       display: "flex", justifyContent: "space-between", alignItems: "baseline",
@@ -191,7 +191,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
                     </div>
                     <table style={{ width: "100%", fontSize: 12, borderCollapse: "collapse" }}>
                       <tbody>
-                        {assignee_phase_breakdown.phase_columns.map((name) => {
+                        {assignee_stage_breakdown.stage_columns.map((name) => {
                           const v = a.counts[name] ?? 0;
                           return (
                             <tr key={name}>
@@ -387,28 +387,28 @@ function Subheading({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PhaseSlider({
-  phase,
+function StageSlider({
+  stage,
 }: {
-  phase: { name: string; status: string | null; total_tasks: number; done_tasks: number; pct: number };
+  stage: { name: string; status: string | null; total_tasks: number; done_tasks: number; pct: number };
 }) {
-  const isComplete = phase.pct >= 100;
-  const isNotStarted = phase.total_tasks === 0 || (phase.done_tasks === 0 && phase.status !== "in_progress");
+  const isComplete = stage.pct >= 100;
+  const isNotStarted = stage.total_tasks === 0 || (stage.done_tasks === 0 && stage.status !== "in_progress");
   const fill = isComplete ? PF_GREEN : isNotStarted ? "#cbd5e1" : PF_BLUE;
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: TEXT_PRIMARY, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {phase.name}
+          {stage.name}
         </span>
         <span style={{ fontSize: 11, color: TEXT_MUTED, flexShrink: 0 }}>
-          {phase.total_tasks > 0
-            ? `${phase.done_tasks}/${phase.total_tasks} · ${phase.pct}%`
+          {stage.total_tasks > 0
+            ? `${stage.done_tasks}/${stage.total_tasks} · ${stage.pct}%`
             : "no tasks"}
         </span>
       </div>
       <div style={{ background: "#f1f5f9", borderRadius: 4, height: 6, overflow: "hidden" }}>
-        <div style={{ background: fill, height: "100%", width: `${phase.pct}%`, transition: "width 0.3s ease" }} />
+        <div style={{ background: fill, height: "100%", width: `${stage.pct}%`, transition: "width 0.3s ease" }} />
       </div>
     </div>
   );

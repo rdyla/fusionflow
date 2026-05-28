@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
-import type { Phase, Task, ZoomRecording } from "../../lib/api";
+import type { Stage, Task, ZoomRecording } from "../../lib/api";
 import { type SolutionType, parseTaggedTitle } from "../../../shared/solutionTypes";
 import { SolutionTypeFilterPills } from "../ui/SolutionTypeFilterPills";
 
 const GANTT_COLLAPSED_KEY = "cloudconnect:timeline:gantt:collapsed";
-const PHASE_EXPANDED_KEY_PREFIX = "cloudconnect:timeline:gantt:expandedPhases:";
+const PHASE_EXPANDED_KEY_PREFIX = "cloudconnect:timeline:gantt:expandedStages:";
 
-type PhaseUpdate = {
+type StageUpdate = {
   status?: "not_started" | "in_progress" | "completed";
   planned_start?: string | null;
   planned_end?: string | null;
@@ -15,19 +15,19 @@ type PhaseUpdate = {
 };
 
 type Props = {
-  phases: Phase[];
+  stages: Stage[];
   tasks?: Task[];
   recordings?: ZoomRecording[];
-  /** Used to namespace localStorage for per-phase collapse state. Falls back to phases[0]?.project_id when omitted. */
+  /** Used to namespace localStorage for per-stage collapse state. Falls back to stages[0]?.project_id when omitted. */
   projectId?: string;
   /** Solution-type filter — owned by the parent so the Tasks tab and Gantt share state. */
   availableTypes?: readonly SolutionType[];
   selectedTypes?: ReadonlySet<SolutionType>;
   onToggleType?: (type: SolutionType) => void;
-  onUpdatePhase: (phaseId: string, updates: PhaseUpdate) => Promise<void>;
+  onUpdateStage: (stageId: string, updates: StageUpdate) => Promise<void>;
   ganttOnly?: boolean;
-  onClickPhase?: (phaseId: string) => void;
-  onClickTask?: (taskId: string, phaseId: string | null) => void;
+  onClickStage?: (stageId: string) => void;
+  onClickTask?: (taskId: string, stageId: string | null) => void;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -81,9 +81,9 @@ const STATUS_LABEL: Record<string, string> = {
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
-export default function ProjectTimeline({ phases, tasks = [], recordings = [], projectId, availableTypes = [], selectedTypes, onToggleType, onUpdatePhase, ganttOnly = false, onClickPhase, onClickTask }: Props) {
-  const [editingPhaseId, setEditingPhaseId] = useState<string | null>(null);
-  const [phaseForm, setPhaseForm] = useState<PhaseUpdate & { _id: string }>({ _id: "" });
+export default function ProjectTimeline({ stages, tasks = [], recordings = [], projectId, availableTypes = [], selectedTypes, onToggleType, onUpdateStage, ganttOnly = false, onClickStage, onClickTask }: Props) {
+  const [editingStageId, setEditingStageId] = useState<string | null>(null);
+  const [stageForm, setStageForm] = useState<StageUpdate & { _id: string }>({ _id: "" });
   const [saving, setSaving] = useState(false);
   const [ganttCollapsed, setGanttCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
@@ -96,10 +96,10 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
   }, [ganttCollapsed]);
 
   // Stable namespace key for per-project localStorage entries
-  const storageKey = projectId ?? phases[0]?.project_id ?? null;
+  const storageKey = projectId ?? stages[0]?.project_id ?? null;
 
-  // Per-phase expanded set — empty = all collapsed (PM-requested default)
-  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(() => {
+  // Per-stage expanded set — empty = all collapsed (PM-requested default)
+  const [expandedStages, setExpandedStages] = useState<Set<string>>(() => {
     if (typeof window === "undefined" || !storageKey) return new Set();
     const raw = window.localStorage.getItem(PHASE_EXPANDED_KEY_PREFIX + storageKey);
     if (!raw) return new Set();
@@ -114,14 +114,14 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
 
   useEffect(() => {
     if (typeof window === "undefined" || !storageKey) return;
-    window.localStorage.setItem(PHASE_EXPANDED_KEY_PREFIX + storageKey, JSON.stringify([...expandedPhases]));
-  }, [expandedPhases, storageKey]);
+    window.localStorage.setItem(PHASE_EXPANDED_KEY_PREFIX + storageKey, JSON.stringify([...expandedStages]));
+  }, [expandedStages, storageKey]);
 
-  function togglePhase(phaseId: string) {
-    setExpandedPhases((prev) => {
+  function toggleStage(stageId: string) {
+    setExpandedStages((prev) => {
       const next = new Set(prev);
-      if (next.has(phaseId)) next.delete(phaseId);
-      else next.add(phaseId);
+      if (next.has(stageId)) next.delete(stageId);
+      else next.add(stageId);
       return next;
     });
   }
@@ -140,16 +140,16 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
 
   // ── Gantt ──────────────────────────────────────────────────────────────────
 
-  const datedPhases = phases.filter((p) => p.planned_start && p.planned_end);
+  const datedStages = stages.filter((p) => p.planned_start && p.planned_end);
   let ganttContent: React.ReactNode = null;
 
   // Type-filter first, then keep tasks that have at least one date (due/done/scheduled) for bounding
   const filteredTasks = tasks.filter(taskMatchesTypeFilter);
   const datedTasks = filteredTasks.filter((t) => t.scheduled_start || t.scheduled_end || t.due_date || t.completed_at);
 
-  if (datedPhases.length > 0 || datedTasks.length > 0) {
+  if (datedStages.length > 0 || datedTasks.length > 0) {
     const allMs: number[] = [];
-    datedPhases.forEach((p) => { allMs.push(parseDate(p.planned_start)!, parseDate(p.planned_end)!); });
+    datedStages.forEach((p) => { allMs.push(parseDate(p.planned_start)!, parseDate(p.planned_end)!); });
     datedTasks.forEach((t) => {
       const s = parseDate(t.scheduled_start); if (s) allMs.push(s);
       const e = parseDate(t.scheduled_end);   if (e) allMs.push(e);
@@ -169,7 +169,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
     const LABEL_W = 180;
 
     const fmtMonth = (ms: number) => new Date(ms).toLocaleDateString("en-US", { month: "short", year: "numeric" });
-    const summary = `${phases.length} phase${phases.length === 1 ? "" : "s"} · ${datedTasks.length} dated task${datedTasks.length === 1 ? "" : "s"} · ${fmtMonth(rawMin)} → ${fmtMonth(rawMax)}`;
+    const summary = `${stages.length} stage${stages.length === 1 ? "" : "s"} · ${datedTasks.length} dated task${datedTasks.length === 1 ? "" : "s"} · ${fmtMonth(rawMin)} → ${fmtMonth(rawMax)}`;
 
     ganttContent = (
       <div className="ms-section-card" style={{ marginBottom: 20 }}>
@@ -249,36 +249,36 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
               <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.1)" }} />
             </div>
 
-            {/* Phase rows — tasks/recordings only render when phase is expanded */}
-            {phases.map((phase) => {
-              const pStart = parseDate(phase.planned_start);
-              const pEnd   = parseDate(phase.planned_end);
-              const aStart = parseDate(phase.actual_start);
-              const aEnd   = parseDate(phase.actual_end);
+            {/* Stage rows — tasks/recordings only render when stage is expanded */}
+            {stages.map((stage) => {
+              const pStart = parseDate(stage.planned_start);
+              const pEnd   = parseDate(stage.planned_end);
+              const aStart = parseDate(stage.actual_start);
+              const aEnd   = parseDate(stage.actual_end);
               const hasPlan   = pStart !== null && pEnd !== null;
               const hasActual = aStart !== null && aEnd !== null;
-              const color = STATUS_COLOR[phase.status ?? "not_started"] ?? STATUS_COLOR.not_started;
-              const phaseTasks = datedTasks.filter((t) => t.phase_id === phase.id);
-              const phaseRecordings = recordings.filter((r) => r.phase_id === phase.id);
-              const childCount = phaseTasks.length + phaseRecordings.length;
-              const isExpanded = expandedPhases.has(phase.id);
+              const color = STATUS_COLOR[stage.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+              const stageTasks = datedTasks.filter((t) => t.stage_id === stage.id);
+              const stageRecordings = recordings.filter((r) => r.stage_id === stage.id);
+              const childCount = stageTasks.length + stageRecordings.length;
+              const isExpanded = expandedStages.has(stage.id);
               const isExpandable = childCount > 0;
 
               return (
-                <React.Fragment key={phase.id}>
-                  {/* Phase bar row */}
+                <React.Fragment key={stage.id}>
+                  {/* Stage bar row */}
                   <div style={{ display: "flex", alignItems: "center", marginBottom: 4, minHeight: 28 }}>
                     <div
-                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingLeft: 8, paddingRight: 12, textAlign: "left", cursor: isExpandable || onClickPhase ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 6, whiteSpace: "normal", wordBreak: "break-word" }}
-                      onClick={() => { if (isExpandable) togglePhase(phase.id); else onClickPhase?.(phase.id); }}
-                      title={isExpandable ? (isExpanded ? "Collapse phase" : `Expand phase (${childCount})`) : phase.name}
+                      style={{ width: LABEL_W, flexShrink: 0, fontSize: 12, fontWeight: 600, color: "#475569", paddingLeft: 8, paddingRight: 12, textAlign: "left", cursor: isExpandable || onClickStage ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "flex-start", gap: 6, whiteSpace: "normal", wordBreak: "break-word" }}
+                      onClick={() => { if (isExpandable) toggleStage(stage.id); else onClickStage?.(stage.id); }}
+                      title={isExpandable ? (isExpanded ? "Collapse stage" : `Expand stage (${childCount})`) : stage.name}
                     >
                       {isExpandable && (
                         <span style={{ fontSize: 9, color: "#94a3b8", width: 10, textAlign: "center", flexShrink: 0 }}>
                           {isExpanded ? "▾" : "▸"}
                         </span>
                       )}
-                      <span>{phase.name}</span>
+                      <span>{stage.name}</span>
                       {isExpandable && !isExpanded && (
                         <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 400, flexShrink: 0 }}>({childCount})</span>
                       )}
@@ -300,13 +300,13 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                             alignItems: "center",
                             paddingLeft: 6,
                             overflow: "hidden",
-                            cursor: onClickPhase ? "pointer" : "default",
+                            cursor: onClickStage ? "pointer" : "default",
                           }}
-                          title={`Planned: ${phase.planned_start} → ${phase.planned_end}`}
-                          onClick={() => onClickPhase?.(phase.id)}
+                          title={`Planned: ${stage.planned_start} → ${stage.planned_end}`}
+                          onClick={() => onClickStage?.(stage.id)}
                         >
                           <span style={{ fontSize: 10, color: "#fff", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {phase.name}
+                            {stage.name}
                           </span>
                         </div>
                       )}
@@ -323,7 +323,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                             opacity: 0.75,
                             minWidth: 4,
                           }}
-                          title={`Actual: ${phase.actual_start} → ${phase.actual_end}`}
+                          title={`Actual: ${stage.actual_start} → ${stage.actual_end}`}
                         />
                       )}
                       {!hasPlan && (
@@ -332,8 +332,8 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                     </div>
                   </div>
 
-                  {/* Task rows — only when phase expanded. Each task: hollow ring at due, filled dot at done, line between. */}
-                  {isExpanded && phaseTasks.map((task) => {
+                  {/* Task rows — only when stage expanded. Each task: hollow ring at due, filled dot at done, line between. */}
+                  {isExpanded && stageTasks.map((task) => {
                     const dueMs  = parseDate(task.due_date);
                     const doneMs = parseDate(task.completed_at);
                     const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
@@ -345,7 +345,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                       <div key={task.id} style={{ display: "flex", alignItems: "center", marginBottom: 3, minHeight: 18 }}>
                         <div
                           style={{ width: LABEL_W, flexShrink: 0, fontSize: 11, color: "#94a3b8", paddingRight: 8, paddingLeft: 16, textAlign: "left", cursor: onClickTask ? "pointer" : "default", whiteSpace: "normal", wordBreak: "break-word" }}
-                          onClick={() => onClickTask?.(task.id, task.phase_id)}
+                          onClick={() => onClickTask?.(task.id, task.stage_id)}
                         >
                           {taskDisplayTitle(task)}
                         </div>
@@ -379,7 +379,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                                 cursor: onClickTask ? "pointer" : "default",
                               }}
                               title={`Due: ${task.due_date}`}
-                              onClick={() => onClickTask?.(task.id, task.phase_id)}
+                              onClick={() => onClickTask?.(task.id, task.stage_id)}
                             />
                           )}
                           {doneLeft !== null && (
@@ -396,7 +396,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                                 cursor: onClickTask ? "pointer" : "default",
                               }}
                               title={`Done: ${task.completed_at?.slice(0, 10) ?? ""}`}
-                              onClick={() => onClickTask?.(task.id, task.phase_id)}
+                              onClick={() => onClickTask?.(task.id, task.stage_id)}
                             />
                           )}
                         </div>
@@ -404,8 +404,8 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                     );
                   })}
 
-                  {/* Recording dots for this phase — only when expanded */}
-                  {isExpanded && phaseRecordings.map((r) => {
+                  {/* Recording dots for this stage — only when expanded */}
+                  {isExpanded && stageRecordings.map((r) => {
                     const rMs = parseDate(r.start_time.slice(0, 10));
                     if (!rMs) return null;
                     return (
@@ -426,17 +426,17 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                     );
                   })}
 
-                  {/* Small gap after each expanded phase group */}
+                  {/* Small gap after each expanded stage group */}
                   {isExpanded && childCount > 0 && <div style={{ height: 4 }} />}
                 </React.Fragment>
               );
             })}
 
-            {/* Unassigned recording markers — recordings not linked to any phase */}
-            {recordings.filter((r) => !r.phase_id).length > 0 && (
+            {/* Unassigned recording markers — recordings not linked to any stage */}
+            {recordings.filter((r) => !r.stage_id).length > 0 && (
               <>
                 <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "6px 0 6px", marginLeft: LABEL_W }} />
-                {recordings.filter((r) => !r.phase_id).map((r) => {
+                {recordings.filter((r) => !r.stage_id).map((r) => {
                   const rMs = parseDate(r.start_time.slice(0, 10));
                   if (!rMs) return null;
                   return (
@@ -465,7 +465,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
             <div style={{ display: "flex", gap: 18, marginTop: 10, paddingLeft: LABEL_W, fontSize: 11, color: "#64748b", flexWrap: "wrap" }}>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 4, background: "#0078d4", borderRadius: 2, display: "inline-block" }} />
-                Phase
+                Stage
               </span>
               <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
                 <span style={{ width: 16, height: 4, background: "#107c10", borderRadius: 2, display: "inline-block" }} />
@@ -493,31 +493,31 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
     );
   }
 
-  // ── Phase editing ──────────────────────────────────────────────────────────
+  // ── Stage editing ──────────────────────────────────────────────────────────
 
-  function startEdit(phase: Phase) {
-    setEditingPhaseId(phase.id);
-    setPhaseForm({
-      _id: phase.id,
-      status: (phase.status as PhaseUpdate["status"]) ?? "not_started",
-      planned_start: phase.planned_start ?? "",
-      planned_end:   phase.planned_end ?? "",
-      actual_start:  phase.actual_start ?? "",
-      actual_end:    phase.actual_end ?? "",
+  function startEdit(stage: Stage) {
+    setEditingStageId(stage.id);
+    setStageForm({
+      _id: stage.id,
+      status: (stage.status as StageUpdate["status"]) ?? "not_started",
+      planned_start: stage.planned_start ?? "",
+      planned_end:   stage.planned_end ?? "",
+      actual_start:  stage.actual_start ?? "",
+      actual_end:    stage.actual_end ?? "",
     });
   }
 
-  async function handleSave(phase: Phase) {
+  async function handleSave(stage: Stage) {
     setSaving(true);
     try {
-      await onUpdatePhase(phase.id, {
-        status:        phaseForm.status,
-        planned_start: phaseForm.planned_start || null,
-        planned_end:   phaseForm.planned_end || null,
-        actual_start:  phaseForm.actual_start || null,
-        actual_end:    phaseForm.actual_end || null,
+      await onUpdateStage(stage.id, {
+        status:        stageForm.status,
+        planned_start: stageForm.planned_start || null,
+        planned_end:   stageForm.planned_end || null,
+        actual_start:  stageForm.actual_start || null,
+        actual_end:    stageForm.actual_end || null,
       });
-      setEditingPhaseId(null);
+      setEditingStageId(null);
     } finally {
       setSaving(false);
     }
@@ -532,24 +532,24 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
       {ganttContent}
 
       <div className="ms-section-card">
-        <div className="ms-section-title">Phase Details</div>
+        <div className="ms-section-title">Stage Details</div>
         <div style={{ display: "grid", gap: 8 }}>
-          {phases.map((phase) => {
-            const isEditing = editingPhaseId === phase.id;
-            const color = STATUS_COLOR[phase.status ?? "not_started"] ?? STATUS_COLOR.not_started;
+          {stages.map((stage) => {
+            const isEditing = editingStageId === stage.id;
+            const color = STATUS_COLOR[stage.status ?? "not_started"] ?? STATUS_COLOR.not_started;
 
             return (
-              <div key={phase.id} className="ms-row-item">
+              <div key={stage.id} className="ms-row-item">
                 {isEditing ? (
                   <div style={{ flex: 1, display: "grid", gap: 12 }}>
-                    <div style={{ fontWeight: 700, color: "#1e293b", fontSize: 14 }}>{phase.name}</div>
+                    <div style={{ fontWeight: 700, color: "#1e293b", fontSize: 14 }}>{stage.name}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
                       <label className="ms-label">
                         <span>Status</span>
                         <select
                           className="ms-input"
-                          value={phaseForm.status ?? ""}
-                          onChange={(e) => setPhaseForm({ ...phaseForm, status: e.target.value as PhaseUpdate["status"] })}
+                          value={stageForm.status ?? ""}
+                          onChange={(e) => setStageForm({ ...stageForm, status: e.target.value as StageUpdate["status"] })}
                         >
                           <option value="not_started">Not Started</option>
                           <option value="in_progress">In Progress</option>
@@ -558,59 +558,59 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                       </label>
                       <label className="ms-label">
                         <span>Planned Start</span>
-                        <input type="date" className="ms-input" value={phaseForm.planned_start ?? ""} onChange={(e) => setPhaseForm({ ...phaseForm, planned_start: e.target.value })} />
+                        <input type="date" className="ms-input" value={stageForm.planned_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_start: e.target.value })} />
                       </label>
                       <label className="ms-label">
                         <span>Planned End</span>
-                        <input type="date" className="ms-input" value={phaseForm.planned_end ?? ""} onChange={(e) => setPhaseForm({ ...phaseForm, planned_end: e.target.value })} />
+                        <input type="date" className="ms-input" value={stageForm.planned_end ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_end: e.target.value })} />
                       </label>
                       <label className="ms-label">
                         <span>Actual Start</span>
-                        <input type="date" className="ms-input" value={phaseForm.actual_start ?? ""} onChange={(e) => setPhaseForm({ ...phaseForm, actual_start: e.target.value })} />
+                        <input type="date" className="ms-input" value={stageForm.actual_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, actual_start: e.target.value })} />
                       </label>
                       <label className="ms-label">
                         <span>Actual End</span>
-                        <input type="date" className="ms-input" value={phaseForm.actual_end ?? ""} onChange={(e) => setPhaseForm({ ...phaseForm, actual_end: e.target.value })} />
+                        <input type="date" className="ms-input" value={stageForm.actual_end ?? ""} onChange={(e) => setStageForm({ ...stageForm, actual_end: e.target.value })} />
                       </label>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <button className="ms-btn-primary" onClick={() => handleSave(phase)} disabled={saving}>
+                      <button className="ms-btn-primary" onClick={() => handleSave(stage)} disabled={saving}>
                         {saving ? "Saving…" : "Save"}
                       </button>
-                      <button className="ms-btn-secondary" onClick={() => setEditingPhaseId(null)}>Cancel</button>
+                      <button className="ms-btn-secondary" onClick={() => setEditingStageId(null)}>Cancel</button>
                     </div>
                   </div>
                 ) : (
                   <div style={{ flex: 1, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16 }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
-                        <div style={{ fontWeight: 600, color: "#1e293b", fontSize: 14 }}>{phase.name}</div>
+                        <div style={{ fontWeight: 600, color: "#1e293b", fontSize: 14 }}>{stage.name}</div>
                         <span
                           className="ms-badge"
                           style={{ background: color + "1a", color, border: `1px solid ${color}40`, textTransform: "none" }}
                         >
-                          {STATUS_LABEL[phase.status ?? "not_started"] ?? phase.status}
+                          {STATUS_LABEL[stage.status ?? "not_started"] ?? stage.status}
                         </span>
                       </div>
 
                       <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
-                        Planned: {phase.planned_start ?? "—"} → {phase.planned_end ?? "—"}
-                        {(phase.actual_start || phase.actual_end) && (
+                        Planned: {stage.planned_start ?? "—"} → {stage.planned_end ?? "—"}
+                        {(stage.actual_start || stage.actual_end) && (
                           <span style={{ marginLeft: 14, color: "#059669" }}>
-                            Actual: {phase.actual_start ?? "—"} → {phase.actual_end ?? "—"}
+                            Actual: {stage.actual_start ?? "—"} → {stage.actual_end ?? "—"}
                           </span>
                         )}
                       </div>
 
                       {/* Progress track */}
                       <div style={{ height: 6, borderRadius: 3, background: "rgba(255,255,255,0.1)", overflow: "hidden", maxWidth: 280 }}>
-                        <div style={{ width: progressWidth(phase.status), height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
+                        <div style={{ width: progressWidth(stage.status), height: "100%", background: color, borderRadius: 3, transition: "width 0.3s" }} />
                       </div>
 
 
-                      {recordings.filter((r) => r.phase_id === phase.id).length > 0 && (
+                      {recordings.filter((r) => r.stage_id === stage.id).length > 0 && (
                         <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
-                          {recordings.filter((r) => r.phase_id === phase.id).map((rec) => (
+                          {recordings.filter((r) => r.stage_id === stage.id).map((rec) => (
                             <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: "#7c3aed" }}>
                               <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#7c3aed", flexShrink: 0, display: "inline-block" }} />
                               <span style={{ fontWeight: 500 }}>{rec.topic}</span>
@@ -624,7 +624,7 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
                         </div>
                       )}
                     </div>
-                    <button className="ms-btn-ghost" onClick={() => startEdit(phase)} style={{ flexShrink: 0 }}>
+                    <button className="ms-btn-ghost" onClick={() => startEdit(stage)} style={{ flexShrink: 0 }}>
                       Edit
                     </button>
                   </div>
@@ -633,8 +633,8 @@ export default function ProjectTimeline({ phases, tasks = [], recordings = [], p
             );
           })}
 
-          {phases.length === 0 && (
-            <div style={{ color: "#94a3b8", fontSize: 14, padding: "8px 0" }}>No phases defined.</div>
+          {stages.length === 0 && (
+            <div style={{ color: "#94a3b8", fontSize: 14, padding: "8px 0" }}>No stages defined.</div>
           )}
         </div>
       </div>

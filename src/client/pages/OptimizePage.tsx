@@ -204,7 +204,7 @@ export default function OptimizePage() {
           <div style={{ fontSize: 32, marginBottom: 12 }}>🎯</div>
           <div style={{ fontSize: 15, fontWeight: 600, color: "#475569", marginBottom: 8 }}>No Optimize accounts yet</div>
           <div style={{ fontSize: 13 }}>
-            Projects automatically appear here when all implementation phases are complete.
+            Projects automatically appear here when all implementation stages are complete.
             {eligible.length > 0 && (
               <span> Or manually mark an eligible project complete using the button above.</span>
             )}
@@ -499,7 +499,7 @@ export default function OptimizePage() {
           <div className="ms-modal" style={{ maxWidth: 520 }}>
             <h2>Complete Project</h2>
             <p style={{ color: "#475569", fontSize: 13, margin: "8px 0 16px" }}>
-              These projects have all implementation phases completed. Marking them complete moves them into the Optimize lifecycle for ongoing review and roadmap planning.
+              These projects have all implementation stages completed. Marking them complete moves them into the Optimize lifecycle for ongoing review and roadmap planning.
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {eligible.map((p) => (

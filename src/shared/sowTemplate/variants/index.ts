@@ -4,7 +4,7 @@
  * Single-type solutions resolve to one variant directly. Combo solutions
  * (multiple canonical solution_types) resolve each type independently and
  * then run them through mergeVariants() to produce one unified combo
- * variant — phases merge with dedupe, scope-at-a-glance unions, snapshot
+ * variant — stages merge with dedupe, scope-at-a-glance unions, snapshot
  * tiles get curated across all variants. See ../merge.ts.
  */
 

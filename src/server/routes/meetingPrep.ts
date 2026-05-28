@@ -380,7 +380,7 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
 
   // For per-site UAT / go-live sends, fold the site name into the label so the
   // subject + history line carry site context (e.g. "UAT prep (Libraries) — …"
-  // or "UAT prep (Libraries · Phase 1 readiness) — …" if PM also typed a label).
+  // or "UAT prep (Libraries · Stage 1 readiness) — …" if PM also typed a label).
   let resolvedLabel = draft.label?.trim() || null;
   if ((meetingType === "uat" || meetingType === "go_live") && draft.siteId) {
     // `c` is typed `any` here (legacy), so the .first() generic isn't valid —

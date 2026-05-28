@@ -106,14 +106,14 @@ app.get("/", async (c) => {
   // ── Fetch page ────────────────────────────────────────────────────────────
   const rows = await db
     .prepare(
-      `SELECT t.id, t.project_id, t.phase_id, t.title, t.assignee_user_id,
+      `SELECT t.id, t.project_id, t.stage_id, t.title, t.assignee_user_id,
               t.due_date, t.status, t.priority, t.completed_at,
               p.name AS project_name,
-              ph.name AS phase_name,
+              ph.name AS stage_name,
               u.name AS assignee_name
        FROM tasks t
        JOIN projects p ON p.id = t.project_id
-       LEFT JOIN phases ph ON ph.id = t.phase_id
+       LEFT JOIN stages ph ON ph.id = t.stage_id
        LEFT JOIN users u ON u.id = t.assignee_user_id
        ${whereClause}
        ORDER BY

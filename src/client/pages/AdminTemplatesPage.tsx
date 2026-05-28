@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type Template, type TemplatePhase, type TemplateTask } from "../lib/api";
+import { api, type Template, type TemplateStage, type TemplateTask } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const SOLUTION_TYPE_OPTIONS = [
@@ -61,13 +61,13 @@ export default function AdminTemplatesPage() {
   // Delete confirm
   const [deletingTemplate, setDeletingTemplate] = useState<Template | null>(null);
 
-  // Add phase
-  const [addingPhaseToTemplate, setAddingPhaseToTemplate] = useState<string | null>(null);
-  const [newPhaseName, setNewPhaseName] = useState("");
-  const [savingPhase, setSavingPhase] = useState(false);
+  // Add stage
+  const [addingStageToTemplate, setAddingStageToTemplate] = useState<string | null>(null);
+  const [newStageName, setNewStageName] = useState("");
+  const [savingStage, setSavingStage] = useState(false);
 
   // Add task
-  const [addingTaskState, setAddingTaskState] = useState<{ templateId: string; phaseId: string | null } | null>(null);
+  const [addingTaskState, setAddingTaskState] = useState<{ templateId: string; stageId: string | null } | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("medium");
   const [savingTask, setSavingTask] = useState(false);
@@ -175,65 +175,65 @@ export default function AdminTemplatesPage() {
     }
   }
 
-  async function handleAddPhase(templateId: string) {
-    if (!newPhaseName.trim()) return;
-    setSavingPhase(true);
+  async function handleAddStage(templateId: string) {
+    if (!newStageName.trim()) return;
+    setSavingStage(true);
     try {
-      const currentPhases = expandedDetail?.phases ?? [];
-      const maxOrder = currentPhases.reduce((m, p) => Math.max(m, p.order_index), 0);
-      const phase = await api.adminAddTemplatePhase(templateId, {
-        name: newPhaseName.trim(),
+      const currentStages = expandedDetail?.stages ?? [];
+      const maxOrder = currentStages.reduce((m, p) => Math.max(m, p.order_index), 0);
+      const stage = await api.adminAddTemplateStage(templateId, {
+        name: newStageName.trim(),
         order_index: maxOrder + 1,
       });
-      const phaseWithTasks: TemplatePhase = { ...phase, tasks: [] };
-      setExpandedDetail((prev) => prev ? { ...prev, phases: [...(prev.phases ?? []), phaseWithTasks] } : prev);
-      setTemplates((prev) => prev.map((t) => t.id === templateId ? { ...t, phase_count: (t.phase_count ?? 0) + 1 } : t));
-      setNewPhaseName("");
-      setAddingPhaseToTemplate(null);
-      showToast("Phase added.", "success");
+      const stageWithTasks: TemplateStage = { ...stage, tasks: [] };
+      setExpandedDetail((prev) => prev ? { ...prev, stages: [...(prev.stages ?? []), stageWithTasks] } : prev);
+      setTemplates((prev) => prev.map((t) => t.id === templateId ? { ...t, stage_count: (t.stage_count ?? 0) + 1 } : t));
+      setNewStageName("");
+      setAddingStageToTemplate(null);
+      showToast("Stage added.", "success");
     } catch {
-      showToast("Failed to add phase", "error");
+      showToast("Failed to add stage", "error");
     } finally {
-      setSavingPhase(false);
+      setSavingStage(false);
     }
   }
 
-  async function handleDeletePhase(templateId: string, phaseId: string) {
+  async function handleDeleteStage(templateId: string, stageId: string) {
     try {
-      await api.adminDeleteTemplatePhase(templateId, phaseId);
+      await api.adminDeleteTemplateStage(templateId, stageId);
       setExpandedDetail((prev) => {
         if (!prev) return prev;
-        const removedTasks = (prev.phases?.find((p) => p.id === phaseId)?.tasks ?? []).length;
+        const removedTasks = (prev.stages?.find((p) => p.id === stageId)?.tasks ?? []).length;
         return {
           ...prev,
-          phases: (prev.phases ?? []).filter((p) => p.id !== phaseId),
+          stages: (prev.stages ?? []).filter((p) => p.id !== stageId),
           _removedTasks: removedTasks,
         } as Template & { _removedTasks?: number };
       });
-      setTemplates((prev) => prev.map((t) => t.id === templateId ? { ...t, phase_count: Math.max(0, (t.phase_count ?? 1) - 1) } : t));
-      showToast("Phase removed.", "success");
+      setTemplates((prev) => prev.map((t) => t.id === templateId ? { ...t, stage_count: Math.max(0, (t.stage_count ?? 1) - 1) } : t));
+      showToast("Stage removed.", "success");
     } catch {
-      showToast("Failed to delete phase", "error");
+      showToast("Failed to delete stage", "error");
     }
   }
 
-  async function handleAddTask(templateId: string, phaseId: string | null) {
+  async function handleAddTask(templateId: string, stageId: string | null) {
     if (!newTaskTitle.trim()) return;
     setSavingTask(true);
     try {
       const task = await api.adminAddTemplateTask(templateId, {
         title: newTaskTitle.trim(),
         priority: newTaskPriority,
-        phase_id: phaseId ?? undefined,
+        stage_id: stageId ?? undefined,
         order_index: 0,
       });
       setExpandedDetail((prev) => {
         if (!prev) return prev;
-        if (!phaseId) return prev;
+        if (!stageId) return prev;
         return {
           ...prev,
-          phases: (prev.phases ?? []).map((p) =>
-            p.id === phaseId ? { ...p, tasks: [...p.tasks, task] } : p
+          stages: (prev.stages ?? []).map((p) =>
+            p.id === stageId ? { ...p, tasks: [...p.tasks, task] } : p
           ),
         };
       });
@@ -249,15 +249,15 @@ export default function AdminTemplatesPage() {
     }
   }
 
-  async function handleDeleteTask(templateId: string, phaseId: string, task: TemplateTask) {
+  async function handleDeleteTask(templateId: string, stageId: string, task: TemplateTask) {
     try {
       await api.adminDeleteTemplateTask(templateId, task.id);
       setExpandedDetail((prev) => {
         if (!prev) return prev;
         return {
           ...prev,
-          phases: (prev.phases ?? []).map((p) =>
-            p.id === phaseId ? { ...p, tasks: p.tasks.filter((t) => t.id !== task.id) } : p
+          stages: (prev.stages ?? []).map((p) =>
+            p.id === stageId ? { ...p, tasks: p.tasks.filter((t) => t.id !== task.id) } : p
           ),
         };
       });
@@ -299,7 +299,7 @@ export default function AdminTemplatesPage() {
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 20, flexShrink: 0 }}>
                 <span style={{ fontSize: 12, color: "#64748b" }}>
-                  <strong style={{ color: "#334155" }}>{t.phase_count ?? 0}</strong> phases
+                  <strong style={{ color: "#334155" }}>{t.stage_count ?? 0}</strong> stages
                 </span>
                 <span style={{ fontSize: 12, color: "#64748b" }}>
                   <strong style={{ color: "#334155" }}>{t.task_count ?? 0}</strong> tasks
@@ -332,19 +332,19 @@ export default function AdminTemplatesPage() {
                 {loadingDetail && <div style={{ color: "#94a3b8", fontSize: 13 }}>Loading...</div>}
                 {!loadingDetail && expandedDetail && (
                   <>
-                    {(expandedDetail.phases ?? []).length === 0 && (
-                      <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginBottom: 12 }}>No phases yet.</div>
+                    {(expandedDetail.stages ?? []).length === 0 && (
+                      <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic", marginBottom: 12 }}>No stages yet.</div>
                     )}
-                    {(expandedDetail.phases ?? []).map((phase) => (
-                      <div key={phase.id} style={{ marginBottom: 18 }}>
-                        {/* Phase header */}
+                    {(expandedDetail.stages ?? []).map((stage) => (
+                      <div key={stage.id} style={{ marginBottom: 18 }}>
+                        {/* Stage header */}
                         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: "#334155" }}>{phase.name}</div>
-                          <span style={{ fontSize: 11, color: "#94a3b8" }}>({phase.tasks.length} tasks)</span>
+                          <div style={{ fontWeight: 600, fontSize: 13, color: "#334155" }}>{stage.name}</div>
+                          <span style={{ fontSize: 11, color: "#94a3b8" }}>({stage.tasks.length} tasks)</span>
                           <div style={{ flex: 1 }} />
                           <button
                             onClick={() => {
-                              setAddingTaskState({ templateId: expandedDetail.id, phaseId: phase.id });
+                              setAddingTaskState({ templateId: expandedDetail.id, stageId: stage.id });
                               setNewTaskTitle("");
                               setNewTaskPriority("medium");
                             }}
@@ -355,21 +355,21 @@ export default function AdminTemplatesPage() {
                             + Task
                           </button>
                           <button
-                            onClick={() => handleDeletePhase(expandedDetail.id, phase.id)}
+                            onClick={() => handleDeleteStage(expandedDetail.id, stage.id)}
                             style={{ fontSize: 11, color: "#d13438", background: "none", border: "none", cursor: "pointer", padding: "2px 8px", borderRadius: 4 }}
                             onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(209,52,56,0.08)"; }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
                           >
-                            Remove phase
+                            Remove stage
                           </button>
                         </div>
 
                         {/* Task list */}
                         <div style={{ display: "grid", gap: 4, paddingLeft: 14 }}>
-                          {phase.tasks.length === 0 && (
+                          {stage.tasks.length === 0 && (
                             <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No tasks.</div>
                           )}
-                          {phase.tasks.map((task) => (
+                          {stage.tasks.map((task) => (
                             <div
                               key={task.id}
                               style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "white", borderRadius: 5, border: "1px solid #f1f5f9" }}
@@ -382,7 +382,7 @@ export default function AdminTemplatesPage() {
                                 </span>
                               )}
                               <button
-                                onClick={() => handleDeleteTask(expandedDetail.id, phase.id, task)}
+                                onClick={() => handleDeleteTask(expandedDetail.id, stage.id, task)}
                                 style={{ fontSize: 11, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "2px 6px", borderRadius: 3 }}
                                 onMouseEnter={(e) => { e.currentTarget.style.color = "#d13438"; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.color = "#94a3b8"; }}
@@ -394,7 +394,7 @@ export default function AdminTemplatesPage() {
                           ))}
 
                           {/* Add task inline */}
-                          {addingTaskState?.templateId === expandedDetail.id && addingTaskState?.phaseId === phase.id && (
+                          {addingTaskState?.templateId === expandedDetail.id && addingTaskState?.stageId === stage.id && (
                             <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
                               <input
                                 autoFocus
@@ -403,7 +403,7 @@ export default function AdminTemplatesPage() {
                                 placeholder="Task title"
                                 value={newTaskTitle}
                                 onChange={(e) => setNewTaskTitle(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(expandedDetail.id, phase.id); if (e.key === "Escape") setAddingTaskState(null); }}
+                                onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(expandedDetail.id, stage.id); if (e.key === "Escape") setAddingTaskState(null); }}
                               />
                               <select
                                 className="ms-input"
@@ -418,7 +418,7 @@ export default function AdminTemplatesPage() {
                               <button
                                 className="ms-btn-primary"
                                 style={{ fontSize: 12, padding: "4px 12px" }}
-                                onClick={() => handleAddTask(expandedDetail.id, phase.id)}
+                                onClick={() => handleAddTask(expandedDetail.id, stage.id)}
                                 disabled={savingTask || !newTaskTitle.trim()}
                               >
                                 Add
@@ -436,43 +436,43 @@ export default function AdminTemplatesPage() {
                       </div>
                     ))}
 
-                    {/* Add phase */}
+                    {/* Add stage */}
                     <div style={{ marginTop: 4, paddingBottom: 12 }}>
-                      {addingPhaseToTemplate === expandedDetail.id ? (
+                      {addingStageToTemplate === expandedDetail.id ? (
                         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
                           <input
                             autoFocus
                             className="ms-input"
                             style={{ flex: 1, fontSize: 13, padding: "5px 10px" }}
-                            placeholder="Phase name"
-                            value={newPhaseName}
-                            onChange={(e) => setNewPhaseName(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === "Enter") handleAddPhase(expandedDetail.id); if (e.key === "Escape") setAddingPhaseToTemplate(null); }}
+                            placeholder="Stage name"
+                            value={newStageName}
+                            onChange={(e) => setNewStageName(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") handleAddStage(expandedDetail.id); if (e.key === "Escape") setAddingStageToTemplate(null); }}
                           />
                           <button
                             className="ms-btn-primary"
                             style={{ fontSize: 12, padding: "5px 14px" }}
-                            onClick={() => handleAddPhase(expandedDetail.id)}
-                            disabled={savingPhase || !newPhaseName.trim()}
+                            onClick={() => handleAddStage(expandedDetail.id)}
+                            disabled={savingStage || !newStageName.trim()}
                           >
-                            Add Phase
+                            Add Stage
                           </button>
                           <button
                             className="ms-btn-secondary"
                             style={{ fontSize: 12, padding: "5px 10px" }}
-                            onClick={() => { setAddingPhaseToTemplate(null); setNewPhaseName(""); }}
+                            onClick={() => { setAddingStageToTemplate(null); setNewStageName(""); }}
                           >
                             Cancel
                           </button>
                         </div>
                       ) : (
                         <button
-                          onClick={() => { setAddingPhaseToTemplate(expandedDetail.id); setNewPhaseName(""); }}
+                          onClick={() => { setAddingStageToTemplate(expandedDetail.id); setNewStageName(""); }}
                           style={{ fontSize: 12, color: "#0891b2", background: "none", border: "1px dashed rgba(8,145,178,0.4)", borderRadius: 5, padding: "6px 14px", cursor: "pointer", width: "100%" }}
                           onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(8,145,178,0.05)"; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
                         >
-                          + Add Phase
+                          + Add Stage
                         </button>
                       )}
                     </div>

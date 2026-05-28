@@ -3,7 +3,7 @@
  * for projects with multiple solution_types (UCaaS + CCaaS, UCaaS + CI, etc.).
  *
  * Strategy (per Ryan's spec):
- *   - § 2 phase activities: one unified chain with merged bullets per phase.
+ *   - § 2 stage activities: one unified chain with merged bullets per stage.
  *     Identical bullets across variants are deduped (case-insensitive trim).
  *   - § 1.3 Scope at a Glance: union of all rows, deduped by element name.
  *   - Engagement Snapshot tiles: 4 representative tiles drawn from the
@@ -18,7 +18,7 @@
  *   - E911 footnote: shown if any variant requests it.
  */
 
-import type { SowVariant, SnapshotTile, OptionalService, Deliverable, PhaseSection } from "./types";
+import type { SowVariant, SnapshotTile, OptionalService, Deliverable, StageSection } from "./types";
 
 function dedupeStrings(items: string[]): string[] {
   const seen = new Set<string>();
@@ -32,37 +32,37 @@ function dedupeStrings(items: string[]): string[] {
   return out;
 }
 
-function mergePhases(variants: SowVariant[]): PhaseSection[] {
-  // Pivot by phase number ("2.2", "2.3", …). Use the first variant that
+function mergeStages(variants: SowVariant[]): StageSection[] {
+  // Pivot by stage number ("2.2", "2.3", …). Use the first variant that
   // declares each number as the structural anchor (title, intro come from
   // it); merge bullets / subsections from the others on top.
-  const byNumber = new Map<string, PhaseSection>();
+  const byNumber = new Map<string, StageSection>();
 
   for (const variant of variants) {
-    for (const phase of variant.phases) {
-      const existing = byNumber.get(phase.number);
+    for (const stage of variant.stages) {
+      const existing = byNumber.get(stage.number);
       if (!existing) {
-        // First time we see this phase — clone it (deep-ish, but PhaseSection
+        // First time we see this stage — clone it (deep-ish, but StageSection
         // bullets/subsections are arrays of primitives or shallow objects).
-        byNumber.set(phase.number, {
-          number: phase.number,
-          title: phase.title,
-          intro: phase.intro,
-          bullets: phase.bullets ? [...phase.bullets] : undefined,
-          subsections: phase.subsections ? phase.subsections.map((s) => ({
+        byNumber.set(stage.number, {
+          number: stage.number,
+          title: stage.title,
+          intro: stage.intro,
+          bullets: stage.bullets ? [...stage.bullets] : undefined,
+          subsections: stage.subsections ? stage.subsections.map((s) => ({
             number: s.number, title: s.title, intro: s.intro, bullets: [...s.bullets],
           })) : undefined,
         });
         continue;
       }
       // Merge top-level bullets.
-      if (phase.bullets && phase.bullets.length > 0) {
-        existing.bullets = dedupeStrings([...(existing.bullets ?? []), ...phase.bullets]);
+      if (stage.bullets && stage.bullets.length > 0) {
+        existing.bullets = dedupeStrings([...(existing.bullets ?? []), ...stage.bullets]);
       }
       // Merge subsections.
-      if (phase.subsections && phase.subsections.length > 0) {
+      if (stage.subsections && stage.subsections.length > 0) {
         if (!existing.subsections) existing.subsections = [];
-        for (const sub of phase.subsections) {
+        for (const sub of stage.subsections) {
           // Match by subsection number first, else by title (case-insensitive).
           const matched = existing.subsections.find((s) =>
             (sub.number && s.number === sub.number) ||
@@ -81,7 +81,7 @@ function mergePhases(variants: SowVariant[]): PhaseSection[] {
     }
   }
 
-  // Sort by phase number ("2.2" < "2.3" < … < "2.7").
+  // Sort by stage number ("2.2" < "2.3" < … < "2.7").
   return [...byNumber.values()].sort((a, b) => a.number.localeCompare(b.number, undefined, { numeric: true }));
 }
 
@@ -179,7 +179,7 @@ export function mergeVariants(variants: SowVariant[]): SowVariant {
     projectReferenceTemplate: combinedRefTemplate,
     snapshotTiles: pickSnapshotTiles(variants),
     scopeAtAGlance: mergeScopeAtAGlance(variants),
-    phases: mergePhases(variants),
+    stages: mergeStages(variants),
     trainingIncluded: variants.map((v) => v.trainingIncluded).sort((a, b) => b.length - a.length)[0],
     trainingOptional: variants.map((v) => v.trainingOptional).filter(Boolean).sort((a, b) => (b?.length ?? 0) - (a?.length ?? 0))[0] ?? null,
     engineeringAndIntegration: dedupeStrings(variants.flatMap((v) => v.engineeringAndIntegration)),

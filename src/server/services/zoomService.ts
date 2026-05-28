@@ -505,38 +505,38 @@ export async function getZoomRecordings(
   return allMeetings;
 }
 
-// Phase keyword map — order matters: more specific terms first
-const PHASE_KEYWORDS: Array<{ keywords: RegExp[]; phase_pattern: RegExp }> = [
-  { keywords: [/hypercare/i, /post[\s-]?go[\s-]?live/i], phase_pattern: /hypercare/i },
-  { keywords: [/go[\s-]?live/i, /cutover/i, /migration/i], phase_pattern: /go[\s-]?live/i },
-  { keywords: [/training/i, /train\b/i, /end[\s-]?user/i], phase_pattern: /training/i },
-  { keywords: [/\buat\b/i, /user[\s-]?acceptance/i, /testing/i, /\btest\b/i], phase_pattern: /test/i },
-  { keywords: [/\bbuild\b/i, /config/i, /implementation/i, /install/i, /deploy/i], phase_pattern: /build/i },
-  { keywords: [/\bdesign\b/i, /architect/i, /solution/i], phase_pattern: /design/i },
-  { keywords: [/kick[\s-]?off/i, /discovery/i, /scoping/i, /requirement/i, /onboard/i], phase_pattern: /discovery|kick.?off/i },
+// Stage keyword map — order matters: more specific terms first
+const STAGE_KEYWORDS: Array<{ keywords: RegExp[]; stage_pattern: RegExp }> = [
+  { keywords: [/hypercare/i, /post[\s-]?go[\s-]?live/i], stage_pattern: /hypercare/i },
+  { keywords: [/go[\s-]?live/i, /cutover/i, /migration/i], stage_pattern: /go[\s-]?live/i },
+  { keywords: [/training/i, /train\b/i, /end[\s-]?user/i], stage_pattern: /training/i },
+  { keywords: [/\buat\b/i, /user[\s-]?acceptance/i, /testing/i, /\btest\b/i], stage_pattern: /test/i },
+  { keywords: [/\bbuild\b/i, /config/i, /implementation/i, /install/i, /deploy/i], stage_pattern: /build/i },
+  { keywords: [/\bdesign\b/i, /architect/i, /solution/i], stage_pattern: /design/i },
+  { keywords: [/kick[\s-]?off/i, /discovery/i, /scoping/i, /requirement/i, /onboard/i], stage_pattern: /discovery|kick.?off/i },
 ];
 
-type PhaseRow = { id: string; name: string; planned_start: string | null; planned_end: string | null };
+type StageRow = { id: string; name: string; planned_start: string | null; planned_end: string | null };
 
 export type RecordingMatch = {
   meeting: ZoomMeeting;
-  phase_id: string | null;
+  stage_id: string | null;
   match_reason: string | null;
 };
 
 /**
- * Match Zoom meetings to project phases using four signals (in priority order):
+ * Match Zoom meetings to project stages using four signals (in priority order):
  * 1. Customer name in topic
  * 2. CRM case ID in topic
- * 3. Phase keyword matching on topic
- * 4. Date range — meeting start_time within a phase's planned_start..planned_end
+ * 3. Stage keyword matching on topic
+ * 4. Date range — meeting start_time within a stage's planned_start..planned_end
  *
  * When hasPm is false (no PM assigned), only meetings that match via signal 1 or 2
  * are returned — date/keyword matches across all users would produce too much noise.
  */
-export function matchRecordingsToPhases(
+export function matchRecordingsToStages(
   meetings: ZoomMeeting[],
-  phases: PhaseRow[],
+  stages: StageRow[],
   crmCaseId: string | null,
   customerName: string | null,
   hasPm: boolean,
@@ -555,26 +555,26 @@ export function matchRecordingsToPhases(
 
     // Signal 1: Customer name
     if (customerRe?.test(topic)) {
-      matched.push({ meeting, phase_id: null, match_reason: "customer_name" });
+      matched.push({ meeting, stage_id: null, match_reason: "customer_name" });
       continue;
     }
 
     // Signal 2: CRM case ID
     if (caseRe?.test(topic)) {
-      matched.push({ meeting, phase_id: null, match_reason: "case_number" });
+      matched.push({ meeting, stage_id: null, match_reason: "case_number" });
       continue;
     }
 
     // No PM → skip keyword/date signals (too noisy across all users)
     if (!hasPm) continue;
 
-    // Signal 3: Keyword → phase name match
+    // Signal 3: Keyword → stage name match
     let keywordMatched = false;
-    for (const { keywords, phase_pattern } of PHASE_KEYWORDS) {
+    for (const { keywords, stage_pattern } of STAGE_KEYWORDS) {
       if (!keywords.some((kw) => kw.test(topic))) continue;
-      const phase = phases.find((p) => phase_pattern.test(p.name));
-      if (phase) {
-        matched.push({ meeting, phase_id: phase.id, match_reason: `keyword:${phase.name}` });
+      const stage = stages.find((p) => stage_pattern.test(p.name));
+      if (stage) {
+        matched.push({ meeting, stage_id: stage.id, match_reason: `keyword:${stage.name}` });
         keywordMatched = true;
         break;
       }
@@ -584,17 +584,17 @@ export function matchRecordingsToPhases(
     // Signal 4: Date range
     const meetingDate = meeting.start_time?.slice(0, 10);
     if (meetingDate) {
-      const phaseInRange = phases.find((p) => {
+      const stageInRange = stages.find((p) => {
         if (!p.planned_start || !p.planned_end) return false;
         return meetingDate >= p.planned_start && meetingDate <= p.planned_end;
       });
-      if (phaseInRange) {
-        matched.push({ meeting, phase_id: phaseInRange.id, match_reason: "date_range" });
+      if (stageInRange) {
+        matched.push({ meeting, stage_id: stageInRange.id, match_reason: "date_range" });
         continue;
       }
     }
 
-    matched.push({ meeting, phase_id: null, match_reason: null });
+    matched.push({ meeting, stage_id: null, match_reason: null });
   }
 
   return matched;

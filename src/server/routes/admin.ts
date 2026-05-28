@@ -17,10 +17,10 @@ app.get("/templates-list", requireRole("admin", "pm"), async (c) => {
   const templates = await db
     .prepare(
       `SELECT t.id, t.name, t.solution_type, t.description,
-              COUNT(DISTINCT tp.id) AS phase_count,
+              COUNT(DISTINCT tp.id) AS stage_count,
               COUNT(DISTINCT tt.id) AS task_count
        FROM templates t
-       LEFT JOIN template_phases tp ON tp.template_id = t.id
+       LEFT JOIN template_stages tp ON tp.template_id = t.id
        LEFT JOIN template_tasks tt ON tt.template_id = t.id
        GROUP BY t.id
        ORDER BY t.name ASC`
@@ -399,7 +399,7 @@ app.delete("/projects/:id", requireRole("admin"), async (c) => {
   await db.prepare("DELETE FROM notes WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM risks WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM tasks WHERE project_id = ?").bind(projectId).run();
-  await db.prepare("DELETE FROM phases WHERE project_id = ?").bind(projectId).run();
+  await db.prepare("DELETE FROM stages WHERE project_id = ?").bind(projectId).run();
   await db.prepare("DELETE FROM projects WHERE id = ?").bind(projectId).run();
 
   return c.json({ success: true });

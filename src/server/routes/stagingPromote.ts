@@ -27,7 +27,7 @@
  *   no matching prod row, it's inserted with the same UUID and the FK
  *   reference stays as-is. When a match exists, FK references in
  *   dependent rows are rewritten to the prod ID. Other entities (solutions,
- *   projects, phases, tasks, …) use INSERT OR IGNORE on the primary key —
+ *   projects, stages, tasks, …) use INSERT OR IGNORE on the primary key —
  *   UUID collisions are astronomically rare; if they do happen, the prod
  *   row wins and the staging dependent's FK is rewritten to point at it.
  */
@@ -78,10 +78,10 @@ app.get("/inventory", async (c) => {
        FROM solutions s
        ORDER BY s.created_at DESC`
     ),
-    all<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; phase_count: number; task_count: number; risk_count: number; document_count: number }>(
+    all<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; stage_count: number; task_count: number; risk_count: number; document_count: number }>(
       staging,
       `SELECT p.id, p.name, p.customer_name, p.vendor, p.status, p.created_at,
-              (SELECT COUNT(*) FROM phases    ph WHERE ph.project_id = p.id) AS phase_count,
+              (SELECT COUNT(*) FROM stages    ph WHERE ph.project_id = p.id) AS stage_count,
               (SELECT COUNT(*) FROM tasks     t  WHERE t.project_id  = p.id) AS task_count,
               (SELECT COUNT(*) FROM risks     r  WHERE r.project_id  = p.id) AS risk_count,
               (SELECT COUNT(*) FROM documents d  WHERE d.project_id  = p.id) AS document_count
@@ -141,7 +141,7 @@ app.post("/promote", async (c) => {
     throw new HTTPException(400, { message: "Select at least one item to promote" });
   }
 
-  // ── Phase 1: build user + customer remaps ────────────────────────────
+  // ── Stage 1: build user + customer remaps ────────────────────────────
   // Match staging IDs to existing prod IDs by natural keys (email, crm_account_id).
   // When no match, we'll insert the staging row verbatim later.
   const userIdMap = new Map<string, string>(); // staging_id → prod_id
@@ -174,10 +174,10 @@ app.post("/promote", async (c) => {
     customerIdMap.set(c2.id, byCrm ?? byName ?? c2.id);
   }
 
-  // ── Phase 2: gather full rows for the transitive closure ────────────
+  // ── Stage 2: gather full rows for the transitive closure ────────────
   // Walk down from the selected items and pull all the dependent rows we'll
   // need to insert. Track the set of project_ids we touch — those drive KV
-  // and R2 migration in phase 4.
+  // and R2 migration in stage 4.
   const touchedProjectIds = new Set<string>();
   const touchedCustomerIds = new Set<string>();
   const touchedUserIds = new Set<string>();
@@ -226,14 +226,14 @@ app.post("/promote", async (c) => {
     }
   }
 
-  // ── Phase 3: insert dependents bottom-up ────────────────────────────
+  // ── Stage 3: insert dependents bottom-up ────────────────────────────
   const summary = {
     users_inserted: 0,
     customers_inserted: 0,
     solutions_inserted: 0,
     projects_inserted: 0,
     optimize_accounts_inserted: 0,
-    phases_inserted: 0,
+    stages_inserted: 0,
     tasks_inserted: 0,
     risks_inserted: 0,
     notes_inserted: 0,
@@ -288,10 +288,10 @@ app.post("/promote", async (c) => {
     if (inserted) summary.projects_inserted++;
   }
 
-  // 3d. Phases / tasks / risks / notes / documents per project.
+  // 3d. Stages / tasks / risks / notes / documents per project.
   for (const projectId of touchedProjectIds) {
-    const [phases, tasks, risks, notes, documents, projectContacts, projectStaff, projectAccess] = await Promise.all([
-      all<Row>(staging, "SELECT * FROM phases WHERE project_id = ?", projectId),
+    const [stages, tasks, risks, notes, documents, projectContacts, projectStaff, projectAccess] = await Promise.all([
+      all<Row>(staging, "SELECT * FROM stages WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM tasks  WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM risks  WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM notes  WHERE project_id = ?", projectId),
@@ -300,8 +300,8 @@ app.post("/promote", async (c) => {
       all<Row>(staging, "SELECT * FROM project_staff    WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM project_access   WHERE project_id = ?", projectId),
     ]);
-    for (const row of phases) {
-      if (await insertOrIgnore(prod, "phases", remapFks(row, { users: userIdMap }))) summary.phases_inserted++;
+    for (const row of stages) {
+      if (await insertOrIgnore(prod, "stages", remapFks(row, { users: userIdMap }))) summary.stages_inserted++;
     }
     for (const row of tasks) {
       if (await insertOrIgnore(prod, "tasks", remapFks(row, { users: userIdMap }))) summary.tasks_inserted++;
@@ -399,7 +399,7 @@ app.post("/promote", async (c) => {
     }
   }
 
-  // ── Phase 4: KV credentials (per project_id) ────────────────────────
+  // ── Stage 4: KV credentials (per project_id) ────────────────────────
   // For every project touched (selected projects + projects underlying selected
   // optimize accounts), move zoom + RC creds from staging KV to prod KV.
   // Target's existing creds always win — see PR #203's relink for the same

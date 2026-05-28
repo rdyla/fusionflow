@@ -42,7 +42,7 @@ const CONFIDENCE_COLOR: Record<string, string> = {
   high: "#107c10",
 };
 
-// ── Calculator Inputs (Phase 1: UCaaS only) ────────────────────────────────
+// ── Calculator Inputs (Stage 1: UCaaS only) ────────────────────────────────
 //
 // These are the small set of NA-equivalent fields the calc actually consumes
 // when computing UCaaS hours. When set, the server uses these in place of the

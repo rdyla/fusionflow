@@ -23,7 +23,7 @@
 (function(){
   var CX=300,CY=270,RO=175,RI=108,active=0;
 
-  var phases=[
+  var stages=[
     {n:1,name:'Evaluate',color:'#4d9fd6',s:230,e:310,
      headline:'Clarity before commitment.',
      desc:'We partner with you to understand your business challenges and identify the right technology and service providers — so you move forward with confidence, not guesswork.',
@@ -70,14 +70,14 @@
     h+='<circle cx="'+CX+'" cy="'+CY+'" r="'+(RI-4)+'" fill="#0d1c30"/>';
 
     // Arc segments
-    phases.forEach(function(p,i){
+    stages.forEach(function(p,i){
       var isA=i===active;
       var d=donutPath(RO,RI,p.s,p.e);
       h+='<g class="ff-seg" data-i="'+i+'">';
       h+='<path d="'+d+'" fill="'+p.color+'" opacity="'+(isA?1:0.4)+'"/>';
       if(isA) h+='<path d="'+donutPath(RO+5,RI+0,p.s+1,p.e-1)+'" fill="'+p.color+'" opacity="0.2"/>';
 
-      // Phase number inside arc
+      // Stage number inside arc
       var sm=pt((RO+RI)/2,midDeg(p));
       h+='<text x="'+sm.x+'" y="'+sm.y+'" text-anchor="middle" dominant-baseline="central" font-size="20" font-weight="700" fill="white" opacity="'+(isA?1:0.65)+'">'+p.n+'</text>';
       h+='</g>';
@@ -89,12 +89,12 @@
       h+='<line x1="'+ep.x+'" y1="'+ep.y+'" x2="'+cp.x+'" y2="'+cp.y+'" stroke="'+p.color+'" stroke-width="1" opacity="'+(isA?0.7:0.25)+'"/>';
       h+='<circle cx="'+lp.x+'" cy="'+lp.y+'" r="23" fill="'+rgba(p.color,isA?0.13:0.05)+'"/>';
       h+='<text x="'+lp.x+'" y="'+(lp.y-8)+'" text-anchor="middle" font-size="13" font-weight="700" fill="'+p.color+'" opacity="'+(isA?1:0.55)+'">'+p.name+'</text>';
-      h+='<text x="'+lp.x+'" y="'+(lp.y+8)+'" text-anchor="middle" font-size="10" fill="'+(isA?'#4a6080':'#99b5cc')+'">Phase '+p.n+'</text>';
+      h+='<text x="'+lp.x+'" y="'+(lp.y+8)+'" text-anchor="middle" font-size="10" fill="'+(isA?'#4a6080':'#99b5cc')+'">Stage '+p.n+'</text>';
       h+='</g>';
     });
 
     // Clockwise flow arrows in gaps (deg+180 for clockwise tangent direction)
-    [[315,phases[0].color],[45,phases[1].color],[135,phases[2].color],[225,phases[3].color]].forEach(function(ga){
+    [[315,stages[0].color],[45,stages[1].color],[135,stages[2].color],[225,stages[3].color]].forEach(function(ga){
       var deg=ga[0],col=ga[1];
       var ap=pt(RO+20,deg);
       h+='<g transform="translate('+ap.x+','+ap.y+') rotate('+(deg+180)+')">';
@@ -116,7 +116,7 @@
     h+='<path d="M'+(px+37+4)+','+(py)+' L'+(px+37+11)+','+py+'" stroke="white" stroke-width="1.8" stroke-linecap="round"/>';
     h+='<path d="M'+(px+37+8)+','+(py-4)+' L'+(px+37+14)+','+py+' L'+(px+37+8)+','+(py+4)+'" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>';
 
-    var ap=phases[active];
+    var ap=stages[active];
     h+='<text x="'+CX+'" y="'+(CY+5)+'" text-anchor="middle" font-size="16" font-weight="700" fill="white">'+ap.name+'</text>';
     h+='<text x="'+CX+'" y="'+(CY+22)+'" text-anchor="middle" font-size="8.5" fill="#4ade80" letter-spacing=".12em" font-weight="700">PHASE '+ap.n+' · FUSIONFLOW360</text>';
 
@@ -127,20 +127,20 @@
   }
 
   function detail(){
-    var p=phases[active],col=p.color;
+    var p=stages[active],col=p.color;
     var pills=p.steps.map(function(s){
       return '<span style="display:inline-flex;align-items:center;gap:5px;padding:5px 13px;background:'+rgba(col,.08)+';border:1.5px solid '+rgba(col,.3)+';border-radius:20px;font-size:12px;color:'+col+';font-weight:500;margin:3px 3px 3px 0;white-space:nowrap">'
         +'<span style="width:5px;height:5px;border-radius:50%;background:'+col+';flex-shrink:0;display:inline-block"></span>'+s+'</span>';
     }).join('');
 
-    var nav=phases.map(function(ph,i){
+    var nav=stages.map(function(ph,i){
       return '<span onclick="window._ff360('+i+')" style="cursor:pointer;width:9px;height:9px;border-radius:50%;background:'+(i===active?ph.color:'#cddaeb')+';display:inline-block;margin:0 3px;transition:background .2s"></span>';
     }).join('');
 
     document.getElementById('ff360-detail').innerHTML=
       '<div style="border-top:3px solid '+col+';padding:18px 24px 22px">'
         +'<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px">'
-          +'<span style="font-size:10px;font-weight:700;color:'+col+';letter-spacing:.13em;text-transform:uppercase;background:'+rgba(col,.1)+';padding:3px 10px;border-radius:4px">Phase '+p.n+'</span>'
+          +'<span style="font-size:10px;font-weight:700;color:'+col+';letter-spacing:.13em;text-transform:uppercase;background:'+rgba(col,.1)+';padding:3px 10px;border-radius:4px">Stage '+p.n+'</span>'
           +'<span style="font-size:18px;font-weight:700;color:#0d1c30">'+p.name+'</span>'
           +'<span style="font-size:12.5px;color:'+col+';font-style:italic">'+p.headline+'</span>'
           +'<span style="margin-left:auto;display:flex;align-items:center">'+nav+'</span>'
@@ -149,9 +149,9 @@
         +'<div style="display:flex;flex-wrap:wrap">'+pills+'</div>'
         +'<div style="margin-top:16px;display:flex;align-items:center;gap:8px;font-size:11px;color:#99b5cc">'
           +'<span style="height:1px;width:24px;background:#dde9f5;display:inline-block"></span>'
-          +'Every phase flows into the next — circular, evolving, always in motion'
+          +'Every stage flows into the next — circular, evolving, always in motion'
           +'<span style="height:1px;flex:1;background:#dde9f5;display:inline-block"></span>'
-          +'<span onclick="window._ff360('+(( active+1)%4)+')" style="cursor:pointer;font-size:11px;color:'+phases[(active+1)%4].color+';font-weight:600;white-space:nowrap">Next: '+phases[(active+1)%4].name+' →</span>'
+          +'<span onclick="window._ff360('+(( active+1)%4)+')" style="cursor:pointer;font-size:11px;color:'+stages[(active+1)%4].color+';font-weight:600;white-space:nowrap">Next: '+stages[(active+1)%4].name+' →</span>'
         +'</div>'
       +'</div>';
   }

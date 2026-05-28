@@ -2,12 +2,12 @@
  * Stub variants for ZCC, CI (Conversation Intelligence — Zoom Revenue
  * Accelerator / RingCentral ACE), VA (Zoom AI Virtual Agent / RingCentral
  * AVA), and RingCentral UCaaS. These render a working SOW end-to-end but
- * with placeholder phase/deliverable content — full authoritative content
+ * with placeholder stage/deliverable content — full authoritative content
  * comes in follow-up PRs (one per variant) once Sales/Delivery provides
  * the canonical source material per product, matching what we have for
  * Zoom UCaaS.
  *
- * The stub copies the Zoom UCaaS phase structure but replaces vendor-
+ * The stub copies the Zoom UCaaS stage structure but replaces vendor-
  * specific terms ("Zoom Phone", "ARs", "MAC addresses", etc.) with a
  * generic equivalent or a clearly-marked placeholder line. The SOW
  * renders without errors and the variant interface is exercised, but
@@ -52,10 +52,10 @@ function buildStub(
       { element: "Administrative training",   quantity: "Included",    notes: "Knowledge transfer to Customer system administrators." },
     ],
 
-    phases: [
+    stages: [
       {
         number: "2.2",
-        title: "Phase 1 — Initiation",
+        title: "Stage 1 — Initiation",
         intro: "Packet Fusion assigns a dedicated Project Manager (PM) and Implementation Engineer (IE) and establishes the working environment for the project before the customer-facing kickoff.",
         bullets: [
           "Assign PM as Customer's single point of contact and IE for technical delivery.",
@@ -67,7 +67,7 @@ function buildStub(
       },
       {
         number: "2.3",
-        title: "Phase 2 — Planning",
+        title: "Stage 2 — Planning",
         intro: "Planning produces the inputs required to build the tenant and execute the cutover. Specific work-streams for this product are pending in a follow-up PR.",
         bullets: [
           "Confirm Packet Fusion access to the Customer's tenant.",
@@ -79,7 +79,7 @@ function buildStub(
       },
       {
         number: "2.4",
-        title: "Phase 3 — Executing",
+        title: "Stage 3 — Executing",
         intro: "Tenant build, provisioning, and configuration per the validated design.",
         bullets: [
           "Build the tenant per the validated design (sites, queues, flows, integrations as applicable).",
@@ -90,7 +90,7 @@ function buildStub(
       },
       {
         number: "2.5",
-        title: "Phase 4 — Monitoring / Controlling",
+        title: "Stage 4 — Monitoring / Controlling",
         intro: "User Acceptance Testing is executed and signed off prior to Go-Live.",
         bullets: [
           "Packet Fusion provides UAT test form to Customer.",
@@ -102,7 +102,7 @@ function buildStub(
       },
       {
         number: "2.6",
-        title: "Phase 5 — Go Live / Production",
+        title: "Stage 5 — Go Live / Production",
         intro: "Go/No-Go readiness review, training delivery, Go-Live event, Day 1 support.",
         bullets: [
           "Determine readiness for Go-Live, including Tier 1 Support readiness on the Customer side.",
@@ -114,7 +114,7 @@ function buildStub(
       },
       {
         number: "2.7",
-        title: "Phase 6 — Closing",
+        title: "Stage 6 — Closing",
         intro: "Project closing wraps up legacy decommissioning, captures lessons learned, and transitions to the Customer's CSM.",
         bullets: [
           "Customer requests cancellation of legacy services (if applicable).",

@@ -2,7 +2,7 @@
  * Zoom UCaaS variant — full content ported from the authoritative SOW
  * template (src/client/assets/PacketFusion_SOW_Template (2).docx).
  *
- * Phase activity content (§ 2.2 – 2.7), training, engineering, optional
+ * Stage activity content (§ 2.2 – 2.7), training, engineering, optional
  * services, deliverables, and scope-at-a-glance are all copied verbatim
  * from the docx so the rendered SOW matches what Sales has been issuing.
  *
@@ -39,11 +39,11 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
     { element: "Administrative training",          quantity: "Included",       notes: "Knowledge transfer to Customer system administrators." },
   ],
 
-  phases: [
+  stages: [
     // ── 2.2 Initiation ────────────────────────────────────────────────────────
     {
       number: "2.2",
-      title: "Phase 1 — Initiation",
+      title: "Stage 1 — Initiation",
       intro: "Packet Fusion assigns a dedicated Project Manager (PM) and Implementation Engineer (IE) and establishes the working environment for the project before the customer-facing kickoff.",
       subsections: [
         {
@@ -76,7 +76,7 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
     // ── 2.3 Planning ──────────────────────────────────────────────────────────
     {
       number: "2.3",
-      title: "Phase 2 — Planning",
+      title: "Stage 2 — Planning",
       intro: "Planning typically begins 6–8 weeks before the target Go-Live date and produces the inputs required to build the tenant and submit porting. Planning has five parallel work streams: Assessment & Design, Emergency Services, Porting, Training, and Communications.",
       subsections: [
         {
@@ -152,7 +152,7 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
     // ── 2.4 Executing ─────────────────────────────────────────────────────────
     {
       number: "2.4",
-      title: "Phase 3 — Executing",
+      title: "Stage 3 — Executing",
       intro: "Executing typically begins 4–5 weeks before Go-Live. Porting is submitted, the tenant is built and provisioned, and training is locked into the calendar.",
       subsections: [
         {
@@ -191,7 +191,7 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
     // ── 2.5 Monitoring / Controlling ──────────────────────────────────────────
     {
       number: "2.5",
-      title: "Phase 4 — Monitoring / Controlling",
+      title: "Stage 4 — Monitoring / Controlling",
       intro: "Monitoring/Controlling typically runs 2–3 weeks before Go-Live. Porting is confirmed, hardware is deployed, and User Acceptance Testing (UAT) is executed and signed off.",
       subsections: [
         {
@@ -227,7 +227,7 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
     // ── 2.6 Go-Live / Production ──────────────────────────────────────────────
     {
       number: "2.6",
-      title: "Phase 5 — Go Live / Production",
+      title: "Stage 5 — Go Live / Production",
       intro: "The week of Go-Live includes the Go/No-Go readiness review, delivery of training, the Go-Live event itself, and Day 1 support.",
       subsections: [
         {
@@ -271,7 +271,7 @@ export const ZOOM_UCAAS_VARIANT: SowVariant = {
     // ── 2.7 Closing ───────────────────────────────────────────────────────────
     {
       number: "2.7",
-      title: "Phase 6 — Closing",
+      title: "Stage 6 — Closing",
       intro: "Project Closing wraps up legacy decommissioning, captures lessons learned, and transitions the relationship to the Customer's assigned Customer Success Manager (CSM) for ongoing engagement.",
       bullets: [
         "Customer requests cancellation of old cloud services (if applicable).",

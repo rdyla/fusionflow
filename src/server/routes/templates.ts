@@ -54,10 +54,10 @@ app.get("/templates", requireRole("admin", "pm"), async (c) => {
   const templates = await db
     .prepare(
       `SELECT t.id, t.name, t.solution_type, t.description, t.created_at, t.updated_at,
-              COUNT(DISTINCT tp.id) AS phase_count,
+              COUNT(DISTINCT tp.id) AS stage_count,
               COUNT(DISTINCT tt.id) AS task_count
        FROM templates t
-       LEFT JOIN template_phases tp ON tp.template_id = t.id
+       LEFT JOIN template_stages tp ON tp.template_id = t.id
        LEFT JOIN template_tasks tt ON tt.template_id = t.id
        GROUP BY t.id
        ORDER BY t.name ASC`
@@ -66,7 +66,7 @@ app.get("/templates", requireRole("admin", "pm"), async (c) => {
   return c.json(templates.results ?? []);
 });
 
-// PMs need read access to the full template tree (phases + tasks + working
+// PMs need read access to the full template tree (stages + tasks + working
 // days) to drive the Timeline Builder; the existing admin-only details endpoint
 // is reused by relaxing the gate.
 app.get("/templates/:id", requireRole("admin", "pm"), async (c) => {
@@ -79,9 +79,9 @@ app.get("/templates/:id", requireRole("admin", "pm"), async (c) => {
     .first();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
 
-  const phases = await db
+  const stages = await db
     .prepare(
-      "SELECT * FROM template_phases WHERE template_id = ? ORDER BY order_index ASC"
+      "SELECT * FROM template_stages WHERE template_id = ? ORDER BY order_index ASC"
     )
     .bind(templateId)
     .all();
@@ -93,20 +93,20 @@ app.get("/templates/:id", requireRole("admin", "pm"), async (c) => {
     .bind(templateId)
     .all();
 
-  const tasksByPhase: Record<string, unknown[]> = {};
+  const tasksByStage: Record<string, unknown[]> = {};
   for (const task of tasks.results ?? []) {
-    const t = task as { phase_id: string | null };
-    const key = t.phase_id ?? "__none__";
-    if (!tasksByPhase[key]) tasksByPhase[key] = [];
-    tasksByPhase[key].push(task);
+    const t = task as { stage_id: string | null };
+    const key = t.stage_id ?? "__none__";
+    if (!tasksByStage[key]) tasksByStage[key] = [];
+    tasksByStage[key].push(task);
   }
 
-  const phasesWithTasks = (phases.results ?? []).map((phase) => {
-    const p = phase as { id: string };
-    return { ...phase, tasks: tasksByPhase[p.id] ?? [] };
+  const stagesWithTasks = (stages.results ?? []).map((stage) => {
+    const p = stage as { id: string };
+    return { ...stage, tasks: tasksByStage[p.id] ?? [] };
   });
 
-  return c.json({ ...template, phases: phasesWithTasks });
+  return c.json({ ...template, stages: stagesWithTasks });
 });
 
 const createTemplateSchema = z.object({
@@ -185,47 +185,47 @@ app.delete("/templates/:id", requireRole("admin"), async (c) => {
   return c.json({ success: true });
 });
 
-// ── Phases ────────────────────────────────────────────────────────────────────
+// ── Stages ────────────────────────────────────────────────────────────────────
 
-const addPhaseSchema = z.object({
+const addStageSchema = z.object({
   name: z.string().min(1).max(500),
   order_index: z.number().int().min(0),
 });
 
-app.post("/templates/:id/phases", requireRole("admin"), async (c) => {
+app.post("/templates/:id/stages", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
 
   const existing = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(templateId).first();
   if (!existing) throw new HTTPException(404, { message: "Template not found" });
 
-  const parsed = addPhaseSchema.safeParse(await c.req.json());
+  const parsed = addStageSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { name, order_index } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
-    .prepare("INSERT INTO template_phases (id, template_id, name, order_index) VALUES (?, ?, ?, ?)")
+    .prepare("INSERT INTO template_stages (id, template_id, name, order_index) VALUES (?, ?, ?, ?)")
     .bind(id, templateId, name, order_index)
     .run();
 
-  const created = await db.prepare("SELECT * FROM template_phases WHERE id = ? LIMIT 1").bind(id).first();
+  const created = await db.prepare("SELECT * FROM template_stages WHERE id = ? LIMIT 1").bind(id).first();
   return c.json(created, 201);
 });
 
-app.delete("/templates/:id/phases/:phaseId", requireRole("admin"), async (c) => {
+app.delete("/templates/:id/stages/:stageId", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
-  const phaseId = c.req.param("phaseId");
+  const stageId = c.req.param("stageId");
 
   const existing = await db
-    .prepare("SELECT id FROM template_phases WHERE id = ? AND template_id = ? LIMIT 1")
-    .bind(phaseId, templateId)
+    .prepare("SELECT id FROM template_stages WHERE id = ? AND template_id = ? LIMIT 1")
+    .bind(stageId, templateId)
     .first();
-  if (!existing) throw new HTTPException(404, { message: "Phase not found" });
+  if (!existing) throw new HTTPException(404, { message: "Stage not found" });
 
-  await db.prepare("DELETE FROM template_phases WHERE id = ?").bind(phaseId).run();
+  await db.prepare("DELETE FROM template_stages WHERE id = ?").bind(stageId).run();
   return c.json({ success: true });
 });
 
@@ -234,7 +234,7 @@ app.delete("/templates/:id/phases/:phaseId", requireRole("admin"), async (c) => 
 const addTaskSchema = z.object({
   title: z.string().min(1).max(500),
   priority: z.enum(["low", "medium", "high"]).optional(),
-  phase_id: z.string().nullable().optional(),
+  stage_id: z.string().nullable().optional(),
   order_index: z.number().int().min(0).optional(),
 });
 
@@ -248,14 +248,14 @@ app.post("/templates/:id/tasks", requireRole("admin"), async (c) => {
   const parsed = addTaskSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { title, priority, phase_id, order_index } = parsed.data;
+  const { title, priority, stage_id, order_index } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
     .prepare(
-      "INSERT INTO template_tasks (id, template_id, phase_id, title, priority, order_index) VALUES (?, ?, ?, ?, ?, ?)"
+      "INSERT INTO template_tasks (id, template_id, stage_id, title, priority, order_index) VALUES (?, ?, ?, ?, ?, ?)"
     )
-    .bind(id, templateId, phase_id ?? null, title, priority ?? "medium", order_index ?? 0)
+    .bind(id, templateId, stage_id ?? null, title, priority ?? "medium", order_index ?? 0)
     .run();
 
   const created = await db.prepare("SELECT * FROM template_tasks WHERE id = ? LIMIT 1").bind(id).first();
@@ -290,10 +290,10 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const { template_id, site_id, target_go_live_date } = await c.req.json<{
     template_id: string;
     site_id?: string | null;
-    /** When set, drives phase + task date scheduling via the same workday
+    /** When set, drives stage + task date scheduling via the same workday
      *  math the Timeline Builder uses (anchor = startFromGoLive(date, total
-     *  working days); each phase chained forward with chainForward; every
-     *  new task gets scheduled_start / scheduled_end / due_date = phase's
+     *  working days); each stage chained forward with chainForward; every
+     *  new task gets scheduled_start / scheduled_end / due_date = stage's
      *  computed window). Omit to keep legacy dateless behavior. */
     target_go_live_date?: string | null;
   }>();
@@ -308,10 +308,10 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .first<{ id: string; solution_type: string | null }>();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
 
-  // Optional site scoping: when site_id is set, phase reuse and new-phase
+  // Optional site scoping: when site_id is set, stage reuse and new-stage
   // inserts are scoped to that site. Lets PMs apply (say) the ZCC template
   // under a "Zoom Contact Center" site without colliding with the Zoom Phone
-  // site's phases of the same name (Plan / Execute / Monitor / Go-Live).
+  // site's stages of the same name (Plan / Execute / Monitor / Go-Live).
   const scopedSiteId = site_id ?? null;
   if (scopedSiteId) {
     const siteCheck = await db
@@ -325,74 +325,74 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   // (no tagging, no fuzzy dedupe) so we don't pollute task titles with junk tags.
   const templateSolutionType: SolutionType | null = canonicalizeSolutionType(template.solution_type ?? "");
 
-  const phases = await db
-    .prepare("SELECT * FROM template_phases WHERE template_id = ? ORDER BY order_index ASC")
+  const stages = await db
+    .prepare("SELECT * FROM template_stages WHERE template_id = ? ORDER BY order_index ASC")
     .bind(template_id)
     .all<{ id: string; name: string; order_index: number; working_days: number | null }>();
 
-  // When the caller supplied a go-live, chain phase dates backward from it.
+  // When the caller supplied a go-live, chain stage dates backward from it.
   // Same algorithm Timeline Builder uses (see shared/workdayMath.ts).
-  const phaseDateMap = new Map<string, { start: string; end: string }>(); // template_phase_id -> dates
+  const stageDateMap = new Map<string, { start: string; end: string }>(); // template_stage_id -> dates
   if (target_go_live_date) {
-    const phaseList = phases.results ?? [];
-    const totalWorkdays = phaseList.reduce((sum, p) => sum + (p.working_days ?? 0), 0);
+    const stageList = stages.results ?? [];
+    const totalWorkdays = stageList.reduce((sum, p) => sum + (p.working_days ?? 0), 0);
     if (totalWorkdays > 0) {
       const anchor = startFromGoLive(target_go_live_date, totalWorkdays);
       const chain = chainForward(
         anchor,
-        phaseList.map((p) => ({ id: p.id, working_days: p.working_days ?? 0 }))
+        stageList.map((p) => ({ id: p.id, working_days: p.working_days ?? 0 }))
       );
-      for (const r of chain) phaseDateMap.set(r.id, { start: r.start, end: r.end });
+      for (const r of chain) stageDateMap.set(r.id, { start: r.start, end: r.end });
     }
   }
 
   const tasks = await db
     .prepare("SELECT * FROM template_tasks WHERE template_id = ? ORDER BY order_index ASC")
     .bind(template_id)
-    .all<{ id: string; phase_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
+    .all<{ id: string; stage_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
 
-  // Load existing phases by name so we can reuse them instead of duplicating.
-  // When site-scoped, only consider phases under that same site — a "Plan"
-  // phase on the Zoom Phone site should NOT be reused for the Zoom CC site.
-  const existingPhases = await (
+  // Load existing stages by name so we can reuse them instead of duplicating.
+  // When site-scoped, only consider stages under that same site — a "Plan"
+  // stage on the Zoom Phone site should NOT be reused for the Zoom CC site.
+  const existingStages = await (
     scopedSiteId
       ? db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM phases WHERE project_id = ? AND site_id = ?")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND site_id = ?")
           .bind(projectId, scopedSiteId)
       : db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM phases WHERE project_id = ? AND site_id IS NULL")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND site_id IS NULL")
           .bind(projectId)
   ).all<{ id: string; name: string; sort_order: number; planned_start: string | null; planned_end: string | null }>();
   const existingByName: Record<string, string> = {};
   const existingDatesById = new Map<string, { planned_start: string | null; planned_end: string | null }>();
-  for (const ep of existingPhases.results ?? []) {
+  for (const ep of existingStages.results ?? []) {
     existingByName[ep.name.trim().toLowerCase()] = ep.id;
     existingDatesById.set(ep.id, { planned_start: ep.planned_start, planned_end: ep.planned_end });
   }
 
-  const maxSort = existingPhases.results.reduce((m, p) => Math.max(m, p.sort_order ?? 0), 0);
+  const maxSort = existingStages.results.reduce((m, p) => Math.max(m, p.sort_order ?? 0), 0);
   let sortOffset = maxSort + 1;
 
-  // Map template phase id -> project phase id (existing or newly created)
-  const phaseIdMap: Record<string, string> = {};
-  let phasesCreated = 0;
+  // Map template stage id -> project stage id (existing or newly created)
+  const stageIdMap: Record<string, string> = {};
+  let stagesCreated = 0;
 
-  // Track resolved planned_start/planned_end per destination phase so the task
+  // Track resolved planned_start/planned_end per destination stage so the task
   // insert loop can use them as the task's scheduled window.
-  const phaseDatesByDestId = new Map<string, { planned_start: string | null; planned_end: string | null }>();
+  const stageDatesByDestId = new Map<string, { planned_start: string | null; planned_end: string | null }>();
 
-  for (const phase of phases.results ?? []) {
-    const key = phase.name.trim().toLowerCase();
-    const computed = phaseDateMap.get(phase.id) ?? null;
+  for (const stage of stages.results ?? []) {
+    const key = stage.name.trim().toLowerCase();
+    const computed = stageDateMap.get(stage.id) ?? null;
 
     if (existingByName[key]) {
-      // Reuse existing phase — no new phase created
+      // Reuse existing stage — no new stage created
       const reusedId = existingByName[key];
-      phaseIdMap[phase.id] = reusedId;
+      stageIdMap[stage.id] = reusedId;
       const cur = existingDatesById.get(reusedId) ?? { planned_start: null, planned_end: null };
 
       // Fill in missing dates only when we have computed ones AND the existing
-      // phase has none. Don't trample PM-set dates.
+      // stage has none. Don't trample PM-set dates.
       let updatedStart = cur.planned_start;
       let updatedEnd   = cur.planned_end;
       if (computed) {
@@ -402,25 +402,25 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
         if (!cur.planned_end)   { fields.push("planned_end = ?");   values.push(computed.end);   updatedEnd   = computed.end; }
         if (fields.length > 0) {
           await db
-            .prepare(`UPDATE phases SET ${fields.join(", ")} WHERE id = ?`)
+            .prepare(`UPDATE stages SET ${fields.join(", ")} WHERE id = ?`)
             .bind(...values, reusedId)
             .run();
         }
       }
-      phaseDatesByDestId.set(reusedId, { planned_start: updatedStart, planned_end: updatedEnd });
+      stageDatesByDestId.set(reusedId, { planned_start: updatedStart, planned_end: updatedEnd });
     } else {
-      const newPhaseId = crypto.randomUUID();
-      phaseIdMap[phase.id] = newPhaseId;
+      const newStageId = crypto.randomUUID();
+      stageIdMap[stage.id] = newStageId;
       await db
         .prepare(
-          "INSERT INTO phases (id, project_id, site_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started')"
+          "INSERT INTO stages (id, project_id, site_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started')"
         )
-        .bind(newPhaseId, projectId, scopedSiteId, phase.name, sortOffset, computed?.start ?? null, computed?.end ?? null)
+        .bind(newStageId, projectId, scopedSiteId, stage.name, sortOffset, computed?.start ?? null, computed?.end ?? null)
         .run();
-      existingByName[key] = newPhaseId;
-      phaseDatesByDestId.set(newPhaseId, { planned_start: computed?.start ?? null, planned_end: computed?.end ?? null });
+      existingByName[key] = newStageId;
+      stageDatesByDestId.set(newStageId, { planned_start: computed?.start ?? null, planned_end: computed?.end ?? null });
       sortOffset++;
-      phasesCreated++;
+      stagesCreated++;
     }
   }
 
@@ -479,20 +479,20 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     };
   };
 
-  // Preload existing tasks per destination phase so we can fuzzy-match new
+  // Preload existing tasks per destination stage so we can fuzzy-match new
   // template tasks and either upgrade an existing tag or insert a fresh task.
-  // Mutated as we insert so multiple template tasks in the same phase compete
+  // Mutated as we insert so multiple template tasks in the same stage compete
   // against each other too (rare but possible if a template has near-duplicates).
-  const destPhaseIds = [...new Set(Object.values(phaseIdMap))];
+  const destStageIds = [...new Set(Object.values(stageIdMap))];
   type ExistingTask = { id: string; title: string; tokens: Set<string> };
-  const tasksByPhase = new Map<string, ExistingTask[]>();
-  for (const phaseId of destPhaseIds) {
+  const tasksByStage = new Map<string, ExistingTask[]>();
+  for (const stageId of destStageIds) {
     const rows = await db
-      .prepare("SELECT id, title FROM tasks WHERE project_id = ? AND phase_id = ?")
-      .bind(projectId, phaseId)
+      .prepare("SELECT id, title FROM tasks WHERE project_id = ? AND stage_id = ?")
+      .bind(projectId, stageId)
       .all<{ id: string; title: string }>();
-    tasksByPhase.set(
-      phaseId,
+    tasksByStage.set(
+      stageId,
       (rows.results ?? []).map((r) => ({ id: r.id, title: r.title, tokens: normalizeTitleTokens(r.title) }))
     );
   }
@@ -501,17 +501,17 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   let tasksMerged = 0;
 
   for (const task of tasks.results ?? []) {
-    const mappedPhaseId = task.phase_id ? (phaseIdMap[task.phase_id] ?? null) : null;
+    const mappedStageId = task.stage_id ? (stageIdMap[task.stage_id] ?? null) : null;
     const { userId, contactId } = resolveAssignee(task.default_assignee_role);
 
     // Normalize the source title to Title Case so every applied task reads
     // consistently regardless of how the template author cased it.
     const normalizedTitle = toTitleCase(task.title);
 
-    // Try to fuzzy-match against an existing task in the same destination phase.
+    // Try to fuzzy-match against an existing task in the same destination stage.
     let matched: ExistingTask | null = null;
-    if (mappedPhaseId && templateSolutionType) {
-      const existing = tasksByPhase.get(mappedPhaseId) ?? [];
+    if (mappedStageId && templateSolutionType) {
+      const existing = tasksByStage.get(mappedStageId) ?? [];
       const newTokens = normalizeTitleTokens(normalizedTitle);
       let bestScore = 0;
       for (const e of existing) {
@@ -543,42 +543,42 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // type when known. If templateSolutionType is null (legacy template) we
     // fall back to the untagged title.
     //
-    // When the phase has computed dates (target_go_live_date was supplied),
-    // every task in that phase gets scheduled_start = phase.start and
-    // scheduled_end/due_date = phase.end. Matches Timeline Builder's
-    // "every task spans its phase window" convention — PMs stagger
+    // When the stage has computed dates (target_go_live_date was supplied),
+    // every task in that stage gets scheduled_start = stage.start and
+    // scheduled_end/due_date = stage.end. Matches Timeline Builder's
+    // "every task spans its stage window" convention — PMs stagger
     // individual tasks afterward via the Tasks tab.
     const newTaskId = crypto.randomUUID();
     const insertedTitle = templateSolutionType
       ? buildTaggedTitle([templateSolutionType], normalizedTitle)
       : normalizedTitle;
-    const phaseDates = mappedPhaseId ? phaseDatesByDestId.get(mappedPhaseId) : undefined;
-    const taskStart = phaseDates?.planned_start ?? null;
-    const taskEnd   = phaseDates?.planned_end ?? null;
+    const stageDates = mappedStageId ? stageDatesByDestId.get(mappedStageId) : undefined;
+    const taskStart = stageDates?.planned_start ?? null;
+    const taskEnd   = stageDates?.planned_end ?? null;
     await db
       .prepare(
-        "INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)"
+        "INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedPhaseId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd)
+      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd)
       .run();
-    if (mappedPhaseId) {
-      const phaseTasks = tasksByPhase.get(mappedPhaseId);
-      if (phaseTasks) {
-        phaseTasks.push({ id: newTaskId, title: insertedTitle, tokens: normalizeTitleTokens(insertedTitle) });
+    if (mappedStageId) {
+      const stageTasks = tasksByStage.get(mappedStageId);
+      if (stageTasks) {
+        stageTasks.push({ id: newTaskId, title: insertedTitle, tokens: normalizeTitleTokens(insertedTitle) });
       }
     }
     tasksCreated++;
   }
 
-  return c.json({ phases_created: phasesCreated, tasks_created: tasksCreated, tasks_merged: tasksMerged });
+  return c.json({ stages_created: stagesCreated, tasks_created: tasksCreated, tasks_merged: tasksMerged });
 });
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Timeline Builder apply — wipes the project's existing phases + tasks, then
+// Timeline Builder apply — wipes the project's existing stages + tasks, then
 // rebuilds them from a client-computed structure.
 //
 // The Timeline Builder supports multi-template selection (e.g., UCaaS + CCaaS
-// for combo projects). The client loads each selected template, merges phases
+// for combo projects). The client loads each selected template, merges stages
 // by canonical name (Initiation / Planning / Executing / etc.), takes the MAX
 // working_days across templates, and unions tasks (each tagged with its source
 // solution_type via buildTaggedTitle). The fully resolved structure is sent
@@ -587,7 +587,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
 // ──────────────────────────────────────────────────────────────────────────────
 
 const applyTimelineSchema = z.object({
-  phases: z.array(z.object({
+  stages: z.array(z.object({
     name: z.string().min(1),
     start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     end:   z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -613,11 +613,11 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
 
   const parsed = applyTimelineSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
-  const { phases: phasePayload } = parsed.data;
+  const { stages: stagePayload } = parsed.data;
 
-  // Generate project-phase ids up front so tasks can reference them.
-  type NewPhase = { id: string; name: string; sort_order: number; start: string; end: string };
-  const newPhases: NewPhase[] = phasePayload.map((p, i) => ({
+  // Generate project-stage ids up front so tasks can reference them.
+  type NewStage = { id: string; name: string; sort_order: number; start: string; end: string };
+  const newStages: NewStage[] = stagePayload.map((p, i) => ({
     id: crypto.randomUUID(),
     name: p.name,
     sort_order: i + 1,
@@ -649,18 +649,18 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
   const roleToContactId: Record<string, string | null> = { zoom_porting: portingContactId };
 
   // Build all the task inserts so the wipe + rebuild runs in a single atomic batch.
-  type NewTask = { id: string; phase_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string };
+  type NewTask = { id: string; stage_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string };
   const newTasks: NewTask[] = [];
-  for (let phaseIdx = 0; phaseIdx < phasePayload.length; phaseIdx++) {
-    const phasePayloadEntry = phasePayload[phaseIdx];
-    const phaseId = newPhases[phaseIdx].id;
-    for (const t of phasePayloadEntry.tasks) {
+  for (let stageIdx = 0; stageIdx < stagePayload.length; stageIdx++) {
+    const stagePayloadEntry = stagePayload[stageIdx];
+    const stageId = newStages[stageIdx].id;
+    for (const t of stagePayloadEntry.tasks) {
       const role = t.role?.toLowerCase() ?? "";
       const userId    = roleToUserId[role]    ?? null;
       const contactId = roleToContactId[role] ?? null;
       newTasks.push({
         id: crypto.randomUUID(),
-        phase_id: phaseId,
+        stage_id: stageId,
         title: t.title,
         priority: t.priority ?? "medium",
         assignee_user_id: userId,
@@ -673,24 +673,24 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
   }
 
   // Atomic batch: wipe-then-rebuild. Non-CASCADE FK refs (risks.task_id,
-  // documents.task_id, documents.phase_id) get nulled first so the DELETEs
+  // documents.task_id, documents.stage_id) get nulled first so the DELETEs
   // succeed.
   const stmts = [
     db.prepare("UPDATE risks SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId),
     db.prepare("UPDATE documents SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId),
-    db.prepare("UPDATE documents SET phase_id = NULL WHERE phase_id IN (SELECT id FROM phases WHERE project_id = ?)").bind(projectId),
+    db.prepare("UPDATE documents SET stage_id = NULL WHERE stage_id IN (SELECT id FROM stages WHERE project_id = ?)").bind(projectId),
     db.prepare("DELETE FROM tasks  WHERE project_id = ?").bind(projectId),
-    db.prepare("DELETE FROM phases WHERE project_id = ?").bind(projectId),
-    ...newPhases.map((p) => db
-      .prepare("INSERT INTO phases (id, project_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, 'not_started')")
+    db.prepare("DELETE FROM stages WHERE project_id = ?").bind(projectId),
+    ...newStages.map((p) => db
+      .prepare("INSERT INTO stages (id, project_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, 'not_started')")
       .bind(p.id, projectId, p.name, p.sort_order, p.start, p.end)),
     ...newTasks.map((t) => db
-      .prepare("INSERT INTO tasks (id, project_id, phase_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)")
-      .bind(t.id, projectId, t.phase_id, t.title, t.priority, t.assignee_user_id, t.assignee_contact_id, t.scheduled_start, t.scheduled_end, t.due_date)),
+      .prepare("INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?)")
+      .bind(t.id, projectId, t.stage_id, t.title, t.priority, t.assignee_user_id, t.assignee_contact_id, t.scheduled_start, t.scheduled_end, t.due_date)),
   ];
   await db.batch(stmts);
 
-  return c.json({ phases_created: newPhases.length, tasks_created: newTasks.length });
+  return c.json({ stages_created: newStages.length, tasks_created: newTasks.length });
 });
 
 export default app;

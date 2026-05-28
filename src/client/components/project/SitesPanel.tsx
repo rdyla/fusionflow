@@ -3,9 +3,9 @@
  *
  * Lets PMs add / rename / re-order / delete deployment sites for multi-site
  * projects. The first site added to a project moves the project's existing
- * post-Initiate phases under it; subsequent sites clone the first site's
- * phase chain (without tasks). See `src/server/routes/sites.ts` for the
- * server-side phase-wiring rules.
+ * post-Initiate stages under it; subsequent sites clone the first site's
+ * stage chain (without tasks). See `src/server/routes/sites.ts` for the
+ * server-side stage-wiring rules.
  *
  * For single-site projects (the default), this panel simply shows
  * "No sites yet — Add deployment site" and stays out of the way.
@@ -36,11 +36,11 @@ export default function SitesPanel({ projectId, canEdit, onChange }: { projectId
 
   async function handleDelete(site: Site) {
     if (!window.confirm(
-      `Delete "${site.name}" and all of its phases + tasks?\n\nThis cascades — phases and tasks belonging only to this site are removed. The project's shared Initiate phase is unaffected.`
+      `Delete "${site.name}" and all of its stages + tasks?\n\nThis cascades — stages and tasks belonging only to this site are removed. The project's shared Initiate stage is unaffected.`
     )) return;
     try {
       const res = await api.deleteSite(projectId, site.id);
-      showToast(`Deleted ${site.name} (${res.deleted_phase_count} phase${res.deleted_phase_count === 1 ? "" : "s"} removed).`, "success");
+      showToast(`Deleted ${site.name} (${res.deleted_stage_count} stage${res.deleted_stage_count === 1 ? "" : "s"} removed).`, "success");
       await load();
       onChange?.();
     } catch (err) {
@@ -204,8 +204,8 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
     try {
       await api.createSite(projectId, { name: name.trim(), target_go_live_date: target || null });
       showToast(existingSiteCount === 0
-        ? `Added ${name.trim()}. Existing non-Initiate phases have been moved under this site.`
-        : `Added ${name.trim()}. Cloned phase chain from your first site (no tasks copied).`,
+        ? `Added ${name.trim()}. Existing non-Initiate stages have been moved under this site.`
+        : `Added ${name.trim()}. Cloned stage chain from your first site (no tasks copied).`,
         "success");
       onCreated();
     } catch (err) {
@@ -238,11 +238,11 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
         }}>
           {existingSiteCount === 0 ? (
             <>
-              <strong>First site for this project.</strong> Existing non-Initiate phases (Plan / Execute / Monitor / Go-Live / Hypercare etc.) will be moved under this site. Tasks come along automatically. Any phase named "Initiate" stays shared.
+              <strong>First site for this project.</strong> Existing non-Initiate stages (Plan / Execute / Monitor / Go-Live / Hypercare etc.) will be moved under this site. Tasks come along automatically. Any stage named "Initiate" stays shared.
             </>
           ) : (
             <>
-              <strong>Cloning from your first site.</strong> The phase chain from your earliest site is copied (phase rows only — tasks are not duplicated, since downstream sites typically have their own task list).
+              <strong>Cloning from your first site.</strong> The stage chain from your earliest site is copied (stage rows only — tasks are not duplicated, since downstream sites typically have their own task list).
             </>
           )}
         </div>
@@ -283,10 +283,10 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
 
 /**
  * Apply a template scoped to a specific site. The same machinery as the
- * project-level apply-template (phase reuse by name, fuzzy task dedupe,
- * solution-type tagging) but new phases are inserted with site_id = this
- * site, and the reuse lookup only sees phases under this site. Lets a
- * Zoom Phone + Zoom CC combo project carry two distinct sets of phases
+ * project-level apply-template (stage reuse by name, fuzzy task dedupe,
+ * solution-type tagging) but new stages are inserted with site_id = this
+ * site, and the reuse lookup only sees stages under this site. Lets a
+ * Zoom Phone + Zoom CC combo project carry two distinct sets of stages
  * with the same names (Plan, Execute, ...) on each side.
  */
 function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId: string; site: Site; onClose: () => void; onApplied: () => void }) {
@@ -318,7 +318,7 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
     try {
       const res = await api.applyTemplate(projectId, selectedId, site.id, goLive || null);
       const parts: string[] = [];
-      parts.push(`${res.phases_created} phase${res.phases_created !== 1 ? "s" : ""}`);
+      parts.push(`${res.stages_created} stage${res.stages_created !== 1 ? "s" : ""}`);
       parts.push(`${res.tasks_created} task${res.tasks_created !== 1 ? "s" : ""}`);
       if (res.tasks_merged > 0) parts.push(`${res.tasks_merged} merged`);
       const tail = goLive ? ` (dated from ${fmtDate(goLive)} go-live)` : "";
@@ -352,7 +352,7 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
           background: "#eff6ff", border: "1px solid #bfdbfe",
           borderRadius: 6, fontSize: 12, color: "#1e40af",
         }}>
-          New phases land under <strong>{site.name}</strong>. Existing same-named phases under this site are reused; phases on other sites are not touched.
+          New stages land under <strong>{site.name}</strong>. Existing same-named stages under this site are reused; stages on other sites are not touched.
         </div>
 
         <label style={{ display: "block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#334155" }}>
@@ -386,8 +386,8 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
           />
           <span style={{ fontSize: 11, fontWeight: 400, color: "#64748b", marginTop: 4, display: "block" }}>
             {goLive
-              ? "Phase dates chain backward from this date using each phase's working_days. Tasks inherit their phase's window. Existing same-named phases keep their dates if already set."
-              : "Leave blank to skip date scheduling (phases + tasks land without dates)."}
+              ? "Stage dates chain backward from this date using each stage's working_days. Tasks inherit their stage's window. Existing same-named stages keep their dates if already set."
+              : "Leave blank to skip date scheduling (stages + tasks land without dates)."}
           </span>
         </label>
 
