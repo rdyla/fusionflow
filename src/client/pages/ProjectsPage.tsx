@@ -7,50 +7,18 @@ import type { SolutionType } from "../../shared/solutionTypes";
 import { VENDOR_OPTIONS } from "../../shared/vendors";
 import { useDemoMode } from "../lib/demoMode";
 import { resolveVendorBadge } from "../lib/vendorBadge";
+import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { humanize } from "../lib/format";
 
-const PHASE_STATUS_COLOR: Record<string, string> = {
-  completed: "#059669",
-  in_progress: "#0891b2",
-  not_started: "#475569",
-  blocked: "#d13438",
-};
-
-function StageFlowIndicator({ stages }: { stages: Stage[] | undefined }) {
-  if (!stages || stages.length === 0) {
-    return <span style={{ color: "#64748b", fontSize: 11 }}>—</span>;
-  }
-  const sorted = [...stages].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  return (
-    <div style={{ display: "flex", alignItems: "center" }}>
-      {sorted.map((stage, i) => {
-        const status = stage.status || "not_started";
-        const color = PHASE_STATUS_COLOR[status] ?? "#475569";
-        const isActive = status === "in_progress";
-        const prevDone = i > 0 && sorted[i - 1].status === "completed";
-        return (
-          <div key={stage.id} style={{ display: "flex", alignItems: "center" }}>
-            {i > 0 && (
-              <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#475569", flexShrink: 0 }} />
-            )}
-            <div
-              title={`${stage.name} — ${status.replace(/_/g, " ")}`}
-              style={{
-                width: isActive ? 13 : 10,
-                height: isActive ? 13 : 10,
-                borderRadius: "50%",
-                background: status === "not_started" ? "#475569" : color,
-                border: `1.5px solid ${status === "not_started" ? "#64748b" : color}`,
-                boxShadow: isActive ? `0 0 0 2.5px ${color}55` : "none",
-                flexShrink: 0,
-                cursor: "default",
-              }}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+/** Latest in_progress stage name — what the project is "currently doing".
+ *  Multi-phase projects may have the same stage repeated per phase; using
+ *  max sort_order picks the latest position when phases are out of sync. */
+function currentStageName(stages: Stage[] | undefined): string {
+  if (!stages || stages.length === 0) return "—";
+  const inProgress = stages.filter((s) => s.status === "in_progress");
+  if (inProgress.length === 0) return "—";
+  const latest = inProgress.reduce((a, b) => ((a.sort_order ?? 0) >= (b.sort_order ?? 0) ? a : b));
+  return latest.name;
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -307,27 +275,28 @@ export default function ProjectsPage() {
         <table className="ms-table">
           <thead>
             <tr>
-              <th>Name</th>
+              <th>Project</th>
               <th>Customer</th>
-              <th>Vendor</th>
+              <th>Provider / Tech</th>
               <th>Status</th>
+              <th>Current Stage</th>
               <th>Health</th>
-              <th>Go-Live</th>
-              <th>Optimize</th>
-              <th>Stage Flow</th>
             </tr>
           </thead>
           <tbody>
             {filteredProjects.length === 0 ? (
               <tr>
-                <td colSpan={8} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
+                <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
                   {healthFilter
                     ? `No projects with health "${healthFilter.replace("_", " ")}".`
                     : "No projects yet."}
                 </td>
               </tr>
             ) : (
-              filteredProjects.map((project) => (
+              filteredProjects.map((project) => {
+                const hasTypes = (project.solution_types?.length ?? 0) > 0;
+                const v = resolveVendorBadge(project.vendor);
+                return (
                 <tr key={project.id}>
                   <td>
                     <Link
@@ -336,19 +305,24 @@ export default function ProjectsPage() {
                     >
                       {project.name}
                     </Link>
+                    {project.target_go_live_date && (
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                        Target Go-Live: {project.target_go_live_date}
+                      </div>
+                    )}
                   </td>
                   <td style={{ color: "#64748b" }}>{project.customer_name ?? "—"}</td>
-                  <td style={{ color: "#64748b" }}>
-                    {(() => {
-                      const v = resolveVendorBadge(project.vendor);
-                      if (!v) return "—";
-                      return (
-                        <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: v.color, flexShrink: 0 }} />
-                          <span style={{ color: "#1e293b" }}>{v.label}</span>
-                        </span>
-                      );
-                    })()}
+                  <td>
+                    {v || hasTypes ? (
+                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", alignItems: "center" }}>
+                        {v && (
+                          <span className="ms-badge" style={{ background: `${v.color}1a`, color: v.color, border: `1px solid ${v.color}40`, fontSize: 11 }}>
+                            {v.label}
+                          </span>
+                        )}
+                        <SolutionTypePills types={project.solution_types} emptyFallback={null} />
+                      </div>
+                    ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
                   </td>
                   <td>
                     {project.status ? (
@@ -359,6 +333,9 @@ export default function ProjectsPage() {
                       />
                     ) : "—"}
                   </td>
+                  <td style={{ fontSize: 13, color: "#334155" }}>
+                    {currentStageName(projectStages[project.id])}
+                  </td>
                   <td>
                     {project.health ? (
                       <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -367,21 +344,9 @@ export default function ProjectsPage() {
                       </span>
                     ) : "—"}
                   </td>
-                  <td style={{ color: "#64748b" }}>{project.target_go_live_date ?? "—"}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                      {project.has_optimization ? (
-                        <span className="ms-badge" style={{ background: "rgba(8,145,178,0.1)", color: "#0891b2", border: "1px solid rgba(8,145,178,0.3)", fontSize: 11 }}>
-                          Optimize →
-                        </span>
-                      ) : (
-                        <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>
-                      )}
-                    </div>
-                  </td>
-                  <td><StageFlowIndicator stages={projectStages[project.id]} /></td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
