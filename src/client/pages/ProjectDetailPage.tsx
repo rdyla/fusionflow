@@ -668,13 +668,17 @@ export default function ProjectDetailPage() {
     setSavingNote(true);
     setNoteMessage(null);
     try {
-      // Partner AEs always post at partner visibility (server also enforces this)
-      const visibility = currentUserRole === "partner_ae" ? "partner" : newNoteVisibility;
+      // Partner AEs always post at partner visibility, clients always at public
+      // (server also enforces both)
+      const visibility = currentUserRole === "partner_ae" ? "partner"
+        : currentUserRole === "client" ? "public"
+        : newNoteVisibility;
       const created = await api.createNote(project.id, { body: newNoteBody.trim(), visibility });
       setNotes((prev) => [created, ...prev]);
       setNewNoteBody("");
       setNewNoteVisibility("internal");
-      showToast(currentUserRole === "partner_ae" ? "Comment posted." : "Note added.", "success");
+      const externalPoster = currentUserRole === "partner_ae" || currentUserRole === "client";
+      showToast(externalPoster ? "Comment posted." : "Note added.", "success");
     } catch (err) {
       setNoteMessage(err instanceof Error ? err.message : "Failed to add note");
     } finally {
@@ -881,16 +885,18 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        // External viewers (customers logged in as `client`, Zoom/RC AEs as
-        // `partner_ae`) see Dashboard + SharePoint — the SP tab is where they
-        // upload discovery workbooks, phone bills, CSRs, etc. into the
-        // project's SharePoint folder. Other internal tabs would be confusing
-        // for them. Internal staff see everything, with Dashboard first as
-        // the default landing.
-        const externalOnly = currentUserRole === "client" || currentUserRole === "partner_ae";
+        // Partner AEs (Zoom/RC) see Dashboard + SharePoint only — they use the SP
+        // tab to upload discovery workbooks, phone bills, CSRs, etc. Customer
+        // clients see read-only Timeline/Tasks/Blockers plus an Activity tab
+        // filtered to public-visibility notes, so they can track progress and
+        // post public comments. Internal staff see everything.
+        const isPartnerAe = currentUserRole === "partner_ae";
+        const isClient = currentUserRole === "client";
         const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
-        const visibleTabs: DetailTab[] = externalOnly
+        const visibleTabs: DetailTab[] = isPartnerAe
           ? ["dashboard", ...externalSPTab]
+          : isClient
+          ? ["dashboard", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
           : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
@@ -929,7 +935,9 @@ export default function ProjectDetailPage() {
         <ProjectTimeline
           phases={phases}
           tasks={tasks}
-          recordings={recordings}
+          // Hide recording markers for clients — meeting topics on the Gantt could
+          // surface internal discussion names. Matches the Activity-tab gating.
+          recordings={currentUserRole === "client" ? [] : recordings}
           projectId={project.id}
           availableTypes={availableTypes}
           selectedTypes={selectedTypes}
@@ -1858,14 +1866,16 @@ export default function ProjectDetailPage() {
       {tab === "activity" && (() => {
         const isPartnerAe = currentUserRole === "partner_ae";
         const isPfAe = currentUserRole === "pf_ae";
-        const canComment = canEdit || isPartnerAe || isPfAe;
+        const isClient = currentUserRole === "client";
+        const canComment = canEdit || isPartnerAe || isPfAe || isClient;
+        const externalPoster = isPartnerAe || isClient;
         return (
           <div style={{ display: "grid", gap: 16 }}>
             {canComment && (
               <div className="ms-section-card">
-                <div className="ms-section-title">{isPartnerAe ? "Add Comment" : "Add Note"}</div>
+                <div className="ms-section-title">{externalPoster ? "Add Comment" : "Add Note"}</div>
                 <div style={{ display: "grid", gap: 12 }}>
-                  {!isPartnerAe && (
+                  {!externalPoster && (
                     <label className="ms-label">
                       <span>Visibility</span>
                       <select className="ms-input" value={newNoteVisibility} onChange={(e) => setNewNoteVisibility(e.target.value as "internal" | "partner" | "public")}>
@@ -1876,19 +1886,19 @@ export default function ProjectDetailPage() {
                     </label>
                   )}
                   <label className="ms-label">
-                    <span>{isPartnerAe ? "Comment" : "Note"}</span>
+                    <span>{externalPoster ? "Comment" : "Note"}</span>
                     <textarea
                       className="ms-input"
                       value={newNoteBody}
                       onChange={(e) => setNewNoteBody(e.target.value)}
                       rows={4}
                       style={{ resize: "vertical", minHeight: 90 }}
-                      placeholder={isPartnerAe ? "Share an update with the project team..." : "Add a project update..."}
+                      placeholder={externalPoster ? "Share an update with the project team..." : "Add a project update..."}
                     />
                   </label>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <button className="ms-btn-primary" onClick={handleAddNote} disabled={savingNote}>
-                      {savingNote ? "Posting..." : isPartnerAe ? "Post Comment" : "Add Note"}
+                      {savingNote ? "Posting..." : externalPoster ? "Post Comment" : "Add Note"}
                     </button>
                     {noteMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{noteMessage}</span>}
                   </div>
@@ -1896,8 +1906,8 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            {/* ── Zoom Recordings ─────────────────────────────────────── */}
-            {detectPlatform(project.vendor) === "zoom" && (
+            {/* ── Zoom Recordings — hidden for clients ─────────────────────── */}
+            {!isClient && detectPlatform(project.vendor) === "zoom" && (
               <div className="ms-section-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: recordings.length > 0 ? 14 : 0 }}>
                   <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Zoom Recordings</div>
