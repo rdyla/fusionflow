@@ -1505,21 +1505,25 @@ export default function ProjectDetailPage() {
                                       </div>
                                     </td>
                                     <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
-                                      <button
-                                        className="ms-btn-secondary"
-                                        style={{ fontSize: 11, padding: "3px 8px", marginRight: 4 }}
-                                        title="Log time"
-                                        onClick={() => {
-                                          const today = new Date().toISOString().slice(0, 10);
-                                          setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
-                                          setTimeEntrySetup(null);
-                                          setTimeEntryTask(task);
-                                          setTimeEntryLoadingSetup(true);
-                                          api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
-                                        }}
-                                      >
-                                        ⏱
-                                      </button>
+                                      {/* Log-time button is PFI-only — server enforces this too via
+                                          canEditProject + pf_engineer-on-own-task on POST /time-entries. */}
+                                      {currentUserRole !== "client" && currentUserRole !== "partner_ae" && (
+                                        <button
+                                          className="ms-btn-secondary"
+                                          style={{ fontSize: 11, padding: "3px 8px", marginRight: 4 }}
+                                          title="Log time"
+                                          onClick={() => {
+                                            const today = new Date().toISOString().slice(0, 10);
+                                            setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
+                                            setTimeEntrySetup(null);
+                                            setTimeEntryTask(task);
+                                            setTimeEntryLoadingSetup(true);
+                                            api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                                          }}
+                                        >
+                                          ⏱
+                                        </button>
+                                      )}
                                       {canEdit && task.due_date && (
                                         <button
                                           title="Cascade dates downstream from this task"
