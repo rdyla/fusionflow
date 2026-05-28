@@ -1212,6 +1212,8 @@ export type StakeholderSummary = {
       name: string;
       sort_order: number | null;
       status: string | null;
+      planned_start: string | null;
+      planned_end: string | null;
       total_tasks: number;
       done_tasks: number;
       pct: number;

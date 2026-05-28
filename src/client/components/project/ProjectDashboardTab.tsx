@@ -459,10 +459,11 @@ function PhaseBar({ name, pct }: { name: string; pct: number }) {
 
 // ── Stage slider (matrix row) ────────────────────────────────────────────────
 
-function StageSlider({ stage }: { stage: { name: string; status: string | null; total_tasks: number; done_tasks: number; pct: number } }) {
+function StageSlider({ stage }: { stage: { name: string; status: string | null; planned_start: string | null; planned_end: string | null; total_tasks: number; done_tasks: number; pct: number } }) {
   const isComplete = stage.pct >= 100;
   const isNotStarted = stage.total_tasks === 0 || (stage.done_tasks === 0 && stage.status !== "in_progress");
   const fill = isComplete ? PF_GREEN : isNotStarted ? "#cbd5e1" : PF_BLUE;
+  const dateRange = fmtStageDateRange(stage.planned_start, stage.planned_end);
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4, gap: 8 }}>
@@ -478,6 +479,11 @@ function StageSlider({ stage }: { stage: { name: string; status: string | null; 
       <div style={{ background: "#f1f5f9", borderRadius: 4, height: 6, overflow: "hidden" }}>
         <div style={{ background: fill, height: "100%", width: `${stage.pct}%`, transition: "width 0.3s ease" }} />
       </div>
+      {dateRange && (
+        <div style={{ fontSize: 10, color: TEXT_FAINT, marginTop: 4, letterSpacing: "0.02em" }}>
+          {dateRange}
+        </div>
+      )}
     </div>
   );
 }
@@ -501,4 +507,28 @@ function fmtDate(iso: string | null): string {
   try {
     return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch { return iso; }
+}
+
+/** Compact stage date range, e.g. "Jan 15 – Feb 3" or "Jan 15 – Feb 3, 2027"
+ *  when the range crosses years. Renders one side if only one is set, or
+ *  returns null if neither is set. */
+function fmtStageDateRange(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null;
+  const fmtShort = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    } catch { return iso; }
+  };
+  const yearOf = (iso: string) => {
+    try { return new Date(iso).getFullYear(); } catch { return null; }
+  };
+  if (start && end) {
+    const sameYear = yearOf(start) === yearOf(end);
+    const endStr = sameYear
+      ? fmtShort(end)
+      : `${fmtShort(end)}, ${yearOf(end)}`;
+    return `${fmtShort(start)} – ${endStr}`;
+  }
+  if (start) return `Starts ${fmtShort(start)}`;
+  return `Due ${fmtShort(end!)}`;
 }
