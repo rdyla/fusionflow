@@ -657,6 +657,7 @@ export type Risk = {
   severity: string | null;
   status: string | null;
   owner_user_id: string | null;
+  owner_contact_id: string | null;
   task_id: string | null;
 };
 
@@ -1354,6 +1355,7 @@ export const api = {
       severity?: "low" | "medium" | "high" | "critical";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
+      owner_contact_id?: string | null;
       task_id?: string | null;
     }
   ) =>
@@ -1371,6 +1373,7 @@ export const api = {
       severity?: "low" | "medium" | "high" | "critical";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
+      owner_contact_id?: string | null;
       task_id?: string | null;
     }
   ) =>

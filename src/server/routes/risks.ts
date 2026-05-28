@@ -10,6 +10,8 @@ import { syncProjectBlockedStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+const RISK_COLUMNS = "id, project_id, title, description, severity, status, owner_user_id, owner_contact_id, task_id";
+
 app.get("/:id/risks", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
@@ -20,7 +22,7 @@ app.get("/:id/risks", async (c) => {
 
   const rows = await db
     .prepare(
-      `SELECT id, project_id, title, description, severity, status, owner_user_id, task_id
+      `SELECT ${RISK_COLUMNS}
        FROM risks
        WHERE project_id = ?
        ORDER BY title ASC`
@@ -37,6 +39,7 @@ const riskSchema = z.object({
   severity: z.enum(["low", "medium", "high", "critical"]).optional(),
   status: z.enum(["open", "mitigated", "closed"]).optional(),
   owner_user_id: z.string().nullable().optional(),
+  owner_contact_id: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
 });
 
@@ -51,18 +54,18 @@ app.post("/:id/risks", async (c) => {
   const parsed = riskSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { title, description, severity, status, owner_user_id, task_id } = parsed.data;
+  const { title, description, severity, status, owner_user_id, owner_contact_id, task_id } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
     .prepare(
-      `INSERT INTO risks (id, project_id, title, description, severity, status, owner_user_id, task_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO risks (id, project_id, title, description, severity, status, owner_user_id, owner_contact_id, task_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null, task_id ?? null)
+    .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null, owner_contact_id ?? null, task_id ?? null)
     .run();
 
-  const created = await db.prepare("SELECT id, project_id, title, description, severity, status, owner_user_id, task_id FROM risks WHERE id = ? LIMIT 1").bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null; task_id: string | null }>();
+  const created = await db.prepare(`SELECT ${RISK_COLUMNS} FROM risks WHERE id = ? LIMIT 1`).bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null; owner_contact_id: string | null; task_id: string | null }>();
 
   // Auto-block the project when an open blocker is added
   await syncProjectBlockedStatus(db, projectId);
@@ -71,7 +74,7 @@ app.post("/:id/risks", async (c) => {
     const appUrl = c.env.APP_URL ?? "";
     const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
 
-    // Notify risk owner if assigned
+    // Notify risk owner if assigned to a PF user
     if (created.owner_user_id) {
       const owner = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(created.owner_user_id).first<{ email: string; name: string }>();
       if (owner) {
@@ -125,8 +128,14 @@ const updateRiskSchema = z.object({
   severity: z.enum(["low", "medium", "high", "critical"]).optional(),
   status: z.enum(["open", "mitigated", "closed"]).optional(),
   owner_user_id: z.string().nullable().optional(),
+  owner_contact_id: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
 });
+
+// Fields a client (customer portal user) is allowed to change on a blocker
+// where they are the assigned contact. Title/severity/owner/task are PM-only
+// concerns; clients can update progress (status) and add detail (description).
+const CLIENT_EDITABLE_FIELDS = new Set(["status", "description"]);
 
 app.patch("/:id/risks/:riskId", async (c) => {
   const auth = c.get("auth");
@@ -134,24 +143,38 @@ app.patch("/:id/risks/:riskId", async (c) => {
   const projectId = c.req.param("id");
   const riskId = c.req.param("riskId");
 
-  const allowed = await canEditProject(db, auth.user, projectId);
-  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+  const existing = await db
+    .prepare(`SELECT id, owner_contact_id FROM risks WHERE id = ? AND project_id = ? LIMIT 1`)
+    .bind(riskId, projectId)
+    .first<{ id: string; owner_contact_id: string | null }>();
+  if (!existing) throw new HTTPException(404, { message: "Risk not found" });
+
+  // Authz: PMs/admins can edit anything; clients can edit a blocker if the
+  // assigned project_contact is them (matched via dynamics_contact_id).
+  const pmAllowed = await canEditProject(db, auth.user, projectId);
+  let clientAllowed = false;
+  if (!pmAllowed && auth.role === "client" && existing.owner_contact_id) {
+    const contact = await db
+      .prepare("SELECT dynamics_contact_id FROM project_contacts WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(existing.owner_contact_id, projectId)
+      .first<{ dynamics_contact_id: string | null }>();
+    clientAllowed = !!contact?.dynamics_contact_id && contact.dynamics_contact_id === auth.user.id;
+  }
+  if (!pmAllowed && !clientAllowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const parsed = updateRiskSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
-
-  const existing = await db.prepare("SELECT id FROM risks WHERE id = ? AND project_id = ? LIMIT 1").bind(riskId, projectId).first();
-  if (!existing) throw new HTTPException(404, { message: "Risk not found" });
 
   const updates = parsed.data;
   const fields: string[] = [];
   const values: unknown[] = [];
 
   for (const [key, value] of Object.entries(updates)) {
-    if (value !== undefined) {
-      fields.push(`${key} = ?`);
-      values.push(value);
-    }
+    if (value === undefined) continue;
+    // Clients are limited to status + description regardless of payload.
+    if (clientAllowed && !pmAllowed && !CLIENT_EDITABLE_FIELDS.has(key)) continue;
+    fields.push(`${key} = ?`);
+    values.push(value);
   }
 
   if (!fields.length) throw new HTTPException(400, { message: "No valid fields to update" });
@@ -161,7 +184,7 @@ app.patch("/:id/risks/:riskId", async (c) => {
     .bind(...values, riskId)
     .run();
 
-  const updated = await db.prepare("SELECT id, project_id, title, description, severity, status, owner_user_id, task_id FROM risks WHERE id = ? LIMIT 1").bind(riskId).first<{ id: string; title: string; description: string | null; severity: string | null; status: string | null; task_id: string | null }>();
+  const updated = await db.prepare(`SELECT ${RISK_COLUMNS} FROM risks WHERE id = ? LIMIT 1`).bind(riskId).first<{ id: string; title: string; description: string | null; severity: string | null; status: string | null; task_id: string | null }>();
 
   // Sync project blocked status after blocker update
   await syncProjectBlockedStatus(db, projectId);
