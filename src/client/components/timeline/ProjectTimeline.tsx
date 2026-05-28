@@ -497,9 +497,11 @@ export default function ProjectTimeline({ stages, tasks = [], recordings = [], p
 
   function startEdit(stage: Stage) {
     setEditingStageId(stage.id);
+    // Stage status is now auto-derived from tasks — see
+    // teamUtils.syncStageStatus on the server. PMs no longer set it
+    // manually, so it isn't tracked in this form.
     setStageForm({
       _id: stage.id,
-      status: (stage.status as StageUpdate["status"]) ?? "not_started",
       planned_start: stage.planned_start ?? "",
       planned_end:   stage.planned_end ?? "",
       actual_start:  stage.actual_start ?? "",
@@ -511,7 +513,6 @@ export default function ProjectTimeline({ stages, tasks = [], recordings = [], p
     setSaving(true);
     try {
       await onUpdateStage(stage.id, {
-        status:        stageForm.status,
         planned_start: stageForm.planned_start || null,
         planned_end:   stageForm.planned_end || null,
         actual_start:  stageForm.actual_start || null,
@@ -544,18 +545,6 @@ export default function ProjectTimeline({ stages, tasks = [], recordings = [], p
                   <div style={{ flex: 1, display: "grid", gap: 12 }}>
                     <div style={{ fontWeight: 700, color: "#1e293b", fontSize: 14 }}>{stage.name}</div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
-                      <label className="ms-label">
-                        <span>Status</span>
-                        <select
-                          className="ms-input"
-                          value={stageForm.status ?? ""}
-                          onChange={(e) => setStageForm({ ...stageForm, status: e.target.value as StageUpdate["status"] })}
-                        >
-                          <option value="not_started">Not Started</option>
-                          <option value="in_progress">In Progress</option>
-                          <option value="completed">Completed</option>
-                        </select>
-                      </label>
                       <label className="ms-label">
                         <span>Planned Start</span>
                         <input type="date" className="ms-input" value={stageForm.planned_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_start: e.target.value })} />

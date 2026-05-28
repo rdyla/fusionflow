@@ -1253,23 +1253,9 @@ export default function ProjectDetailPage() {
                         }}
                       />
                     </label>
-                    <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
-                      Status
-                      <select
-                        value={stage.status ?? "not_started"}
-                        disabled={!canEdit}
-                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
-                        onChange={async (e) => {
-                          if (!project) return;
-                          const updated = await api.updateStage(project.id, stage.id, { status: e.target.value as "not_started" | "in_progress" | "completed" });
-                          setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-                        }}
-                      >
-                        <option value="not_started">Not Started</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </label>
+                    {/* Stage status is now auto-derived from task statuses on
+                        the server; PMs don't toggle it directly. Badge stays
+                        for at-a-glance read. */}
                     <Badge label={humanize(stage.status ?? "not_started")} color={STATUS_COLOR[stage.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
                     {canEdit && (
                       <button
