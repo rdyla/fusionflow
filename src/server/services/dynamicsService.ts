@@ -400,11 +400,21 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
   return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email, address_city, address_state };
 }
 
-export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {
+export async function getAccountOpportunities(
+  env: Env,
+  accountId: string,
+  opts: { openOnly?: boolean } = {},
+): Promise<DynamicsOpportunity[]> {
   if (!isConfigured(env)) return [];
 
   const select = "opportunityid,name,estimatedclosedate,statecode";
-  const filter = `_parentaccountid_value eq ${accountId}`;
+  // D365 opportunity statecode: 0 = Open, 1 = Won, 2 = Lost. The solution
+  // creation flow needs Open only (no point binding a new solution to a
+  // won/lost opportunity); the projects page wants all states so it can
+  // display a pinned opportunity's name even after it's been won.
+  const filterParts = [`_parentaccountid_value eq ${accountId}`];
+  if (opts.openOnly) filterParts.push("statecode eq 0");
+  const filter = filterParts.join(" and ");
   const path = `/opportunities?$select=${select}&$filter=${filter}&$top=50&$orderby=name asc`;
 
   const data = await dynamicsGet<{ value: DynamicsOpportunity[] }>(env, path);

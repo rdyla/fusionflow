@@ -5,6 +5,7 @@ import {
   type Customer,
   type CustomerContact,
   type CustomerProviderAe,
+  type DynamicsOpportunity,
   type Solution,
   type Project,
   type User,
@@ -117,8 +118,12 @@ export default function CustomerDetailPage() {
 
   // New Solution modal
   const [showNewSolution, setShowNewSolution] = useState(false);
-  const [newSolutionForm, setNewSolutionForm] = useState<{ journeys: string[]; ucaas_vendor: "" | "zoom" | "ringcentral" | "agnostic" }>({ journeys: [], ucaas_vendor: "" });
+  const [newSolutionForm, setNewSolutionForm] = useState<{ journeys: string[]; ucaas_vendor: "" | "zoom" | "ringcentral" | "agnostic"; crm_opportunity_id: string }>({ journeys: [], ucaas_vendor: "", crm_opportunity_id: "" });
   const [creatingSolution, setCreatingSolution] = useState(false);
+  // Open opportunities (statecode=0) for the customer's CRM account. Loaded
+  // when the New Solution modal opens; cleared on close.
+  const [solutionOpportunities, setSolutionOpportunities] = useState<DynamicsOpportunity[]>([]);
+  const [solutionOpportunitiesLoading, setSolutionOpportunitiesLoading] = useState(false);
 
   // New Implementation modal
   const [showNewProject, setShowNewProject] = useState(false);
@@ -272,12 +277,16 @@ export default function CustomerDetailPage() {
   async function handleCreateSolution(e: React.FormEvent) {
     e.preventDefault();
     if (!customer) return;
+    if (!customer.crm_account_id) { showToast("Customer is missing a CRM account link.", "error"); return; }
+    if (!newSolutionForm.crm_opportunity_id) { showToast("Pick an opportunity from CRM.", "error"); return; }
     if (!newSolutionForm.journeys.length) { showToast("Select at least one journey.", "error"); return; }
     setCreatingSolution(true);
     try {
       const sol = await api.createSolution({
         customer_name: customer.name,
         customer_id: customer.id,
+        dynamics_account_id: customer.crm_account_id,
+        crm_opportunity_id: newSolutionForm.crm_opportunity_id,
         journeys: newSolutionForm.journeys,
         pf_ae_user_id: customer.pf_ae_user_id ?? undefined,
         pf_sa_user_id: customer.pf_sa_user_id ?? undefined,
@@ -545,7 +554,19 @@ export default function CustomerDetailPage() {
       {tab === "solutions" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
-            <button className="ms-btn ms-btn-primary" onClick={() => setShowNewSolution(true)}>+ New Solution</button>
+            <button className="ms-btn ms-btn-primary" onClick={() => {
+              setShowNewSolution(true);
+              // Fetch open opportunities up-front so the picker is populated
+              // by the time the SA scrolls down to it.
+              setSolutionOpportunities([]);
+              if (customer?.crm_account_id) {
+                setSolutionOpportunitiesLoading(true);
+                api.getDynamicsOpportunities(customer.crm_account_id, "open")
+                  .then(setSolutionOpportunities)
+                  .catch(() => setSolutionOpportunities([]))
+                  .finally(() => setSolutionOpportunitiesLoading(false));
+              }
+            }}>+ New Solution</button>
           </div>
         <div className="ms-card" style={{ overflow: "hidden" }}>
           <table className="ms-table">
@@ -792,13 +813,40 @@ export default function CustomerDetailPage() {
 
       {/* New Solution Modal */}
       {showNewSolution && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowNewSolution(false); }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowNewSolution(false); setSolutionOpportunities([]); setNewSolutionForm({ journeys: [], ucaas_vendor: "", crm_opportunity_id: "" }); } }}>
           <div className="ms-modal" style={{ maxWidth: 440 }}>
             <h2>New Solution</h2>
             <p style={{ fontSize: 13, color: "#64748b", marginTop: 4, marginBottom: 16 }}>
               Starting a solution for <strong>{customer.name}</strong>. The PF team will be pre-populated from the customer record.
             </p>
             <form onSubmit={handleCreateSolution} style={{ display: "grid", gap: 14 }}>
+              {/* ── Opportunity (scoped to this customer's CRM account) ── */}
+              <label className="ms-label">
+                <span>Opportunity *</span>
+                {solutionOpportunitiesLoading ? (
+                  <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading opportunities…</div>
+                ) : solutionOpportunities.length === 0 ? (
+                  <div style={{ fontSize: 12, color: "#b45309", padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
+                    No open opportunities found on this account. Create one in CRM, then re-open this dialog.
+                  </div>
+                ) : (
+                  <select
+                    className="ms-input"
+                    value={newSolutionForm.crm_opportunity_id}
+                    onChange={(e) => setNewSolutionForm((f) => ({ ...f, crm_opportunity_id: e.target.value }))}
+                    required
+                  >
+                    <option value="">— Select an opportunity —</option>
+                    {solutionOpportunities.map((o) => (
+                      <option key={o.opportunityid} value={o.opportunityid}>
+                        {o.name}
+                        {o.estimatedclosedate ? ` · est. close ${o.estimatedclosedate.slice(0, 10)}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </label>
+
               <div className="ms-label">
                 <span>Core Journey *</span>
                 {/* UCaaS / CCaaS */}
@@ -874,8 +922,19 @@ export default function CustomerDetailPage() {
                 )}
               </div>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn ms-btn-primary" disabled={creatingSolution || !newSolutionForm.journeys.length}>{creatingSolution ? "Creating…" : "Start Solution"}</button>
-                <button type="button" className="ms-btn" onClick={() => { setShowNewSolution(false); setNewSolutionForm({ journeys: [], ucaas_vendor: "" }); }}>Cancel</button>
+                <button
+                  type="submit"
+                  className="ms-btn ms-btn-primary"
+                  disabled={creatingSolution || !newSolutionForm.journeys.length || !newSolutionForm.crm_opportunity_id}
+                  title={
+                    !newSolutionForm.crm_opportunity_id ? "Pick an opportunity from CRM" :
+                    !newSolutionForm.journeys.length ? "Select at least one journey" :
+                    undefined
+                  }
+                >
+                  {creatingSolution ? "Creating…" : "Start Solution"}
+                </button>
+                <button type="button" className="ms-btn" onClick={() => { setShowNewSolution(false); setNewSolutionForm({ journeys: [], ucaas_vendor: "", crm_opportunity_id: "" }); setSolutionOpportunities([]); }}>Cancel</button>
               </div>
             </form>
           </div>

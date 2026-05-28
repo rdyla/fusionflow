@@ -126,6 +126,9 @@ export type Solution = {
   name: string;
   customer_name: string;
   dynamics_account_id: string | null;
+  /** D365 opportunity id (statecode=0 at creation time). Required on new
+   *  solutions; nullable here to keep legacy pre-migration rows representable. */
+  crm_opportunity_id: string | null;
   vendor: SolutionVendor;
   solution_types: SolutionType[];
   other_technologies: OtherTechnology[];
@@ -1302,8 +1305,11 @@ export const api = {
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
 
-  getDynamicsOpportunities: (accountId: string) =>
-    request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities`),
+  /** `state` defaults to "open" (statecode=0) — solution creation flow only.
+   *  Pass "all" to include won/lost opportunities (e.g. the projects page
+   *  displaying a pinned opp's name after it's been won). */
+  getDynamicsOpportunities: (accountId: string, state: "open" | "all" = "open") =>
+    request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities?state=${state}`),
 
   searchDynamicsCases: (params: { accountId?: string; q?: string }) => {
     const qs = new URLSearchParams();
@@ -1746,7 +1752,10 @@ export const api = {
   createSolution: (payload: {
     customer_name: string;
     customer_id?: string;
-    dynamics_account_id?: string;
+    /** D365 account id — now required server-side. */
+    dynamics_account_id: string;
+    /** D365 opportunity id scoped to dynamics_account_id — now required. */
+    crm_opportunity_id: string;
     vendor?: SolutionVendor;
     solution_types?: SolutionType[];
     other_technologies?: OtherTechnology[];
@@ -1769,6 +1778,7 @@ export const api = {
       name: string;
       customer_name: string;
       dynamics_account_id: string | null;
+      crm_opportunity_id: string | null;
       vendor: SolutionVendor;
       solution_types: SolutionType[];
       other_technologies: OtherTechnology[];

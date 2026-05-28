@@ -192,7 +192,15 @@ app.get("/", async (c) => {
 const createSolutionSchema = z.object({
   customer_name: z.string().min(1).max(500),
   customer_id: z.string().optional(),
-  dynamics_account_id: z.string().optional(),
+  /** D365 account id. Required: a solution must bind to a real CRM account
+   *  so account-team / opportunity / hours-compliance lookups resolve. The
+   *  client now provides a "Create new account in CRM" affordance when none
+   *  exists yet (handled in a follow-up PR). */
+  dynamics_account_id: z.string().min(1),
+  /** D365 opportunity id, scoped to dynamics_account_id. Required for the
+   *  same reason — pre-sales work without an opportunity has nowhere to
+   *  attach SOW hours, quotes, or won/lost outcomes. */
+  crm_opportunity_id: z.string().min(1),
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
@@ -210,7 +218,7 @@ app.post("/", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const {
-    customer_name, customer_id, dynamics_account_id,
+    customer_name, customer_id, dynamics_account_id, crm_opportunity_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email,
   } = parsed.data;
 
@@ -286,12 +294,12 @@ app.post("/", async (c) => {
   await db
     .prepare(
       `INSERT INTO solutions
-         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_types, other_technologies, journeys,
+         (id, name, customer_name, customer_id, dynamics_account_id, crm_opportunity_id, vendor, solution_types, other_technologies, journeys,
           partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor,
+      id, name, customer_name, resolvedCustomerId, dynamics_account_id, crm_opportunity_id, vendor,
       serializeSolutionTypes(solution_types), serializeOtherTechnologies(other_technologies), journeysJson,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
     )
@@ -342,6 +350,9 @@ const updateSolutionSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   customer_name: z.string().min(1).max(500).optional(),
   dynamics_account_id: z.string().nullable().optional(),
+  /** Allow PATCH to re-bind the linked opportunity (e.g. an SA picked the
+   *  wrong one). Nullable for legacy rows that pre-date the requirement. */
+  crm_opportunity_id: z.string().nullable().optional(),
   vendor: z.string().optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
