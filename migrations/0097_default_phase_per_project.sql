@@ -20,10 +20,14 @@ SELECT
 FROM projects p
 WHERE NOT EXISTS (SELECT 1 FROM phases WHERE project_id = p.id);
 
+-- Move ALL shared stages (including Initiate) under the new Main phase
+-- when the project only ever has one phase — "shared with a single phase"
+-- is semantically meaningless and shows up as a confusing extra column in
+-- the Dashboard's Stage Progress matrix. Initiate stays shared (phase_id
+-- = NULL) only for projects that already had multiple phases.
 UPDATE stages
 SET phase_id = 'phase-' || stages.project_id
 WHERE phase_id IS NULL
-  AND lower(trim(name)) NOT IN ('initiate', 'initiation')
   AND EXISTS (
     SELECT 1 FROM phases
     WHERE id = 'phase-' || stages.project_id
