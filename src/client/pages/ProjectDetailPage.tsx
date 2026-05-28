@@ -1085,16 +1085,11 @@ export default function ProjectDetailPage() {
               {renderSection({
                 title: "Project Team",
                 accent: ACCENT_BLUE,
-                rows: [...(pmRow ? [pmRow] : []), ...internalStaffRows, ...partnerAeRows],
+                rows: [...(pmRow ? [pmRow] : []), ...internalStaffRows],
                 empty: "No project team assigned yet.",
                 action: canEdit ? (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
-                    {(() => {
-                      const partnerStaff = projectStaff.filter((s) => s.staff_role === "partner_ae");
-                      const assignablePartners = users.filter((u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id));
-                      return <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner</button>;
-                    })()}
                     {project.dynamics_account_id && (
                       <button className="ms-btn-ghost" style={ghostBtn} disabled={crmSyncing} onClick={handleCrmSync}>{crmSyncing ? "Syncing…" : "Sync CRM"}</button>
                     )}
@@ -1103,7 +1098,11 @@ export default function ProjectDetailPage() {
               })}
             </div>
 
-            {/* ── Customer Contacts │ Partner/Provider Contacts (2-column) ──── */}
+            {/* ── Customer Contacts │ Partner/Provider (2-column) ───────────
+                Partner/Provider panel groups Partner AE rows (project_staff)
+                with partner-side project_contacts under one "non-PF external
+                partners" header. Partner AE rows keep their green accent;
+                contact rows use the section amber. */}
             <div style={twoCol}>
               {renderSection({
                 title: "Customer Contacts",
@@ -1115,12 +1114,19 @@ export default function ProjectDetailPage() {
                 ) : undefined,
               })}
               {renderSection({
-                title: "Partner / Provider Contacts",
+                title: "Partner / Provider",
                 accent: ACCENT_AMBER,
-                rows: partnerContactRows,
-                empty: "No partner/provider contacts yet (e.g. porting coordinator).",
+                rows: [...partnerAeRows, ...partnerContactRows],
+                empty: "No partner AEs or partner/provider contacts yet.",
                 action: canEdit ? (
-                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("partner")}>+ Add Contact</button>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {(() => {
+                      const partnerStaff = projectStaff.filter((s) => s.staff_role === "partner_ae");
+                      const assignablePartners = users.filter((u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id));
+                      return <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner AE</button>;
+                    })()}
+                    <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("partner")}>+ Add Contact</button>
+                  </div>
                 ) : undefined,
               })}
             </div>
