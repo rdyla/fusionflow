@@ -6,11 +6,14 @@
 -- (The migration file 0085 is called *project_sites* but the table
 -- it creates is named `sites`.)
 --
--- Dependent FK columns: stages.site_id, tasks.site_id, and
--- meeting_prep_sends.site_id all become phase_id.
+-- Dependent FK columns: stages.site_id (from 0085) and
+-- meeting_prep_sends.site_id (from 0086) become phase_id.
+--
+-- NOTE: tasks does NOT have a site_id column — task-to-phase mapping
+-- is derived via stages.phase_id (join through the stages table).
+-- An earlier scope pass mistakenly listed tasks.site_id as an FK.
 
 ALTER TABLE sites RENAME TO phases;
 
 ALTER TABLE stages             RENAME COLUMN site_id TO phase_id;
-ALTER TABLE tasks              RENAME COLUMN site_id TO phase_id;
 ALTER TABLE meeting_prep_sends RENAME COLUMN site_id TO phase_id;
