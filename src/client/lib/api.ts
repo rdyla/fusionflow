@@ -86,7 +86,7 @@ export type MyProfile = {
   has_custom_avatar: boolean;
 };
 
-// Re-exported from the shared canonical source so every call site lines up
+// Re-exported from the shared canonical source so every call phase lines up
 // with the same enum used across the app.
 import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
 import type { AddOn } from "../../shared/sowAddOns";
@@ -1081,8 +1081,8 @@ export type FeatureRequest = {
   updated_at: string;
 };
 
-// ── Multi-site model ─────────────────────────────────────────────────────────
-export type Site = {
+// ── Multi-phase model ─────────────────────────────────────────────────────────
+export type Phase = {
   id: string;
   project_id: string;
   name: string;
@@ -1128,10 +1128,10 @@ export type StakeholderSummary = {
     } | null;
     site_count: number;
   };
-  /** Deployment sites inside the project (Libraries / Treatment / HQ-style).
-   *  Empty array means this project is single-site and the UI hides the
-   *  Sites row entirely. */
-  sites: Array<{
+  /** Deployment phases inside the project (Libraries / Treatment / HQ-style).
+   *  Empty array means this project is single-phase and the UI hides the
+   *  Phases row entirely. */
+  phases: Array<{
     id: string;
     name: string;
     target_go_live_date: string | null;
@@ -1146,7 +1146,7 @@ export type StakeholderSummary = {
     title: string;
     due_date: string | null;
     priority: string | null;
-    site_id: string | null;
+    phase_id: string | null;
     site_name: string | null;
     assignee_name: string | null;
     is_meeting: boolean;
@@ -1154,16 +1154,16 @@ export type StakeholderSummary = {
   assignee_breakdown: Array<{
     user_id: string;
     name: string;
-    /** Open-task counts keyed by site_id. Shared-stage tasks (Initiate)
-     *  surface separately under `shared`. Single-site projects use only
+    /** Open-task counts keyed by phase_id. Shared-stage tasks (Initiate)
+     *  surface separately under `shared`. Single-phase projects use only
      *  `total`. */
     counts: Record<string, number>;
     shared: number;
     total: number;
   }>;
   /** Per-assignee × stage-name pivot for the "By assignee" table on the
-   *  Open Tasks panel. Stage names are rolled up across sites so multi-
-   *  site projects show one "Plan" column instead of one per site. */
+   *  Open Tasks panel. Stage names are rolled up across phases so multi-
+   *  phase projects show one "Plan" column instead of one per phase. */
   assignee_stage_breakdown: {
     stage_columns: string[];
     rows: Array<{
@@ -1201,11 +1201,11 @@ export type StakeholderSummary = {
     next_call_join_url: string | null;
   };
   /** Stage-progress sliders shown on the dashboard. One entry per
-   *  "column" — shared first (Initiate on multi-site projects), then one
-   *  per site in display order. Single-site projects have one entry with
-   *  `site_id = null` containing all stages. */
+   *  "column" — shared first (Initiate on multi-phase projects), then one
+   *  per phase in display order. Single-phase projects have one entry with
+   *  `phase_id = null` containing all stages. */
   stage_progress: Array<{
-    site_id: string | null;
+    phase_id: string | null;
     site_name: string | null;
     stages: Array<{
       id: string;
@@ -1642,15 +1642,15 @@ export const api = {
   stakeholderSummary: (projectId: string) =>
     request<StakeholderSummary>(`/projects/${projectId}/stakeholder-summary`),
 
-  // Multi-site CRUD (Libraries / Treatment / HQ-style deployment targets)
-  sites: (projectId: string) =>
-    request<Site[]>(`/projects/${projectId}/sites`),
-  createSite: (projectId: string, payload: { name: string; target_go_live_date?: string | null }) =>
-    request<Site>(`/projects/${projectId}/sites`, { method: "POST", body: JSON.stringify(payload) }),
-  updateSite: (projectId: string, siteId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number }) =>
-    request<Site>(`/projects/${projectId}/sites/${siteId}`, { method: "PATCH", body: JSON.stringify(payload) }),
-  deleteSite: (projectId: string, siteId: string) =>
-    request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/sites/${siteId}`, { method: "DELETE" }),
+  // Multi-phase CRUD (Libraries / Treatment / HQ-style deployment targets)
+  phases: (projectId: string) =>
+    request<Phase[]>(`/projects/${projectId}/phases`),
+  createPhase: (projectId: string, payload: { name: string; target_go_live_date?: string | null }) =>
+    request<Phase>(`/projects/${projectId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
+  updatePhase: (projectId: string, phaseId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number }) =>
+    request<Phase>(`/projects/${projectId}/phases/${phaseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deletePhase: (projectId: string, phaseId: string) =>
+    request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
 
   // Staging → Prod promotion (prod-only; staging worker returns 503)
   adminStagingInventory: () =>
@@ -2093,21 +2093,21 @@ export const api = {
   adminDeleteTemplateTask: (templateId: string, taskId: string) =>
     request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
   /**
-   * Apply a template to a project, optionally scoped to a specific site
-   * (so e.g. the ZCC template can land under the "Zoom Contact Center" site
-   * without colliding with the "Zoom Phone" site's same-named stages).
+   * Apply a template to a project, optionally scoped to a specific phase
+   * (so e.g. the ZCC template can land under the "Zoom Contact Center" phase
+   * without colliding with the "Zoom Phone" phase's same-named stages).
    *
    * When `targetGoLiveDate` (YYYY-MM-DD) is provided, the server uses the
    * same workday math the Timeline Builder uses to chain stage dates
    * backward from the go-live and stamp each new task with its stage's
    * window for scheduled_start / scheduled_end / due_date.
    */
-  applyTemplate: (projectId: string, templateId: string, siteId?: string | null, targetGoLiveDate?: string | null) =>
+  applyTemplate: (projectId: string, templateId: string, phaseId?: string | null, targetGoLiveDate?: string | null) =>
     request<{ stages_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({
         template_id: templateId,
-        site_id: siteId ?? null,
+        phase_id: phaseId ?? null,
         target_go_live_date: targetGoLiveDate ?? null,
       }),
     }),
@@ -2283,10 +2283,10 @@ export type MeetingPrepSendRecord = {
   /** True if the rendered HTML body was persisted (sends from before the
    *  body_html column was added will be false). */
   hasBody?: boolean;
-  /** For per-site sends (UAT / go_live on multi-site projects). NULL on
-   *  project-wide sends and on single-site projects. */
-  siteId?: string | null;
-  siteName?: string | null;
+  /** For per-phase sends (UAT / go_live on multi-phase projects). NULL on
+   *  project-wide sends and on single-phase projects. */
+  phaseId?: string | null;
+  phaseName?: string | null;
 };
 
 export type MeetingPrepOptions = {
@@ -2313,10 +2313,10 @@ export type MeetingPrepOptions = {
   };
   /** Past sends of this meeting type for this project, newest first. */
   history: MeetingPrepSendRecord[];
-  /** Deployment sites for this project. Empty on single-site projects.
+  /** Deployment phases for this project. Empty on single-phase projects.
    *  Only meaningful for UAT / go-live meeting types — the UI shows a
-   *  required site picker for those types when this array has entries. */
-  sites: Array<{ id: string; name: string }>;
+   *  required phase picker for those types when this array has entries. */
+  phases: Array<{ id: string; name: string }>;
 };
 
 export type MeetingPrepDraft = {
@@ -2324,9 +2324,9 @@ export type MeetingPrepDraft = {
   /** Optional per-send label distinguishing multiple sends of the same type
    *  (e.g. "Network Architecture" / "Call Flows" for split discoveries). */
   label?: string | null;
-  /** For UAT / go-live on multi-site projects: scope this send to a site.
-   *  Server folds the site name into the subject's label suffix. */
-  siteId?: string | null;
+  /** For UAT / go-live on multi-phase projects: scope this send to a phase.
+   *  Server folds the phase name into the subject's label suffix. */
+  phaseId?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */
   kickoffMeetingUrl?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */

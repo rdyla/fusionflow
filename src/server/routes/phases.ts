@@ -1,21 +1,21 @@
 /**
- * Sites CRUD for multi-site projects (e.g. City of Thousand Oaks rolling
+ * Phases CRUD for multi-phase projects (e.g. City of Thousand Oaks rolling
  * out Libraries → Treatment → HQ on staggered timelines).
  *
- * Schema lives at migration 0085: `sites` table + `stages.site_id` (nullable).
- * site_id IS NULL on a stage means "shared" — the project's Initiate stage
- * is shared across all sites. Non-null means the stage belongs to that
- * site's per-site PMI chain (Plan / Execute / Monitor / Go-Live / Hypercare).
+ * Schema lives at migration 0085: `phases` table + `stages.phase_id` (nullable).
+ * phase_id IS NULL on a stage means "shared" — the project's Initiate stage
+ * is shared across all phases. Non-null means the stage belongs to that
+ * phase's per-phase PMI chain (Plan / Execute / Monitor / Go-Live / Hypercare).
  *
  * Create-time stage wiring (the part that earns its keep):
- *   - First site on a project that already has post-Initiate stages:
- *     MOVE those stages under the new site (set site_id). Tasks come along
+ *   - First phase on a project that already has post-Initiate stages:
+ *     MOVE those stages under the new phase (set phase_id). Tasks come along
  *     for free since they reference stage_id. "Initiate"-like stages stay
  *     shared (detected by name match — case-insensitive 'initiat').
- *   - Subsequent sites: CLONE the first site's stage shape (new stage
+ *   - Subsequent phases: CLONE the first phase's stage shape (new stage
  *     rows, same names/dates/sort_order). Tasks are NOT cloned —
- *     downstream sites typically have their own task lists, and copying
- *     N tasks × M sites quickly becomes a mess to clean up.
+ *     downstream phases typically have their own task lists, and copying
+ *     N tasks × M phases quickly becomes a mess to clean up.
  */
 
 import { Hono } from "hono";
@@ -26,7 +26,7 @@ import { canViewProject, canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-type SiteRow = {
+type PhaseRow = {
   id: string;
   project_id: string;
   name: string;
@@ -40,7 +40,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ── List ─────────────────────────────────────────────────────────────────────
 
-app.get("/:id/sites", async (c) => {
+app.get("/:id/phases", async (c) => {
   const projectId = c.req.param("id");
   const auth = c.get("auth");
   if (!(await canViewProject(c.env.DB, auth.user, projectId))) {
@@ -49,11 +49,11 @@ app.get("/:id/sites", async (c) => {
   const rows = await c.env.DB
     .prepare(
       `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
-       FROM sites WHERE project_id = ?
+       FROM phases WHERE project_id = ?
        ORDER BY display_order ASC, COALESCE(target_go_live_date, '9999-12-31') ASC, name ASC`
     )
     .bind(projectId)
-    .all<SiteRow>();
+    .all<PhaseRow>();
   return c.json(rows.results ?? []);
 });
 
@@ -64,7 +64,7 @@ const createSchema = z.object({
   target_go_live_date: z.string().regex(ISO_DATE).nullable().optional(),
 });
 
-app.post("/:id/sites", async (c) => {
+app.post("/:id/phases", async (c) => {
   const projectId = c.req.param("id");
   const auth = c.get("auth");
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
@@ -76,70 +76,70 @@ app.post("/:id/sites", async (c) => {
   const { name, target_go_live_date } = parsed.data;
 
   const db = c.env.DB;
-  const siteId = crypto.randomUUID();
+  const phaseId = crypto.randomUUID();
 
-  // Pick the next display_order slot (1-based, after any existing site).
+  // Pick the next display_order slot (1-based, after any existing phase).
   const maxRow = await db
-    .prepare("SELECT COALESCE(MAX(display_order), 0) AS m FROM sites WHERE project_id = ?")
+    .prepare("SELECT COALESCE(MAX(display_order), 0) AS m FROM phases WHERE project_id = ?")
     .bind(projectId)
     .first<{ m: number }>();
   const displayOrder = (maxRow?.m ?? 0) + 1;
 
   await db
     .prepare(
-      `INSERT INTO sites (id, project_id, name, target_go_live_date, display_order)
+      `INSERT INTO phases (id, project_id, name, target_go_live_date, display_order)
        VALUES (?, ?, ?, ?, ?)`
     )
-    .bind(siteId, projectId, name, target_go_live_date ?? null, displayOrder)
+    .bind(phaseId, projectId, name, target_go_live_date ?? null, displayOrder)
     .run();
 
   // ── Stage wiring ─────────────────────────────────────────────────────────
-  // How many sites existed BEFORE this one?
-  const otherSitesRow = await db
-    .prepare("SELECT COUNT(*) AS c FROM sites WHERE project_id = ? AND id != ?")
-    .bind(projectId, siteId)
+  // How many phases existed BEFORE this one?
+  const otherPhasesRow = await db
+    .prepare("SELECT COUNT(*) AS c FROM phases WHERE project_id = ? AND id != ?")
+    .bind(projectId, phaseId)
     .first<{ c: number }>();
-  const isFirstSite = (otherSitesRow?.c ?? 0) === 0;
+  const isFirstPhase = (otherPhasesRow?.c ?? 0) === 0;
 
-  if (isFirstSite) {
-    // Move all non-Initiate, currently-shared stages to this site.
+  if (isFirstPhase) {
+    // Move all non-Initiate, currently-shared stages to this phase.
     // "Initiate" detection: stage name contains 'initiat' (case-insensitive).
     await db
       .prepare(
-        `UPDATE stages SET site_id = ?
-         WHERE project_id = ? AND site_id IS NULL
+        `UPDATE stages SET phase_id = ?
+         WHERE project_id = ? AND phase_id IS NULL
            AND LOWER(name) NOT LIKE '%initiat%'`
       )
-      .bind(siteId, projectId)
+      .bind(phaseId, projectId)
       .run();
   } else {
-    // Clone the FIRST site's stage shape under this new site. Pull the first
-    // site's stages (by display_order on sites) and re-insert with new IDs
-    // and site_id = the new site. Tasks intentionally NOT cloned.
-    const firstSiteRow = await db
+    // Clone the FIRST phase's stage shape under this new phase. Pull the first
+    // phase's stages (by display_order on phases) and re-insert with new IDs
+    // and phase_id = the new phase. Tasks intentionally NOT cloned.
+    const firstPhaseRow = await db
       .prepare(
-        `SELECT id FROM sites
+        `SELECT id FROM phases
          WHERE project_id = ? AND id != ?
          ORDER BY display_order ASC LIMIT 1`
       )
-      .bind(projectId, siteId)
+      .bind(projectId, phaseId)
       .first<{ id: string }>();
-    if (firstSiteRow) {
+    if (firstPhaseRow) {
       const sourceStages = await db
         .prepare(
           `SELECT name, sort_order, planned_start, planned_end, status
-           FROM stages WHERE project_id = ? AND site_id = ?
+           FROM stages WHERE project_id = ? AND phase_id = ?
            ORDER BY COALESCE(sort_order, 0) ASC`
         )
-        .bind(projectId, firstSiteRow.id)
+        .bind(projectId, firstPhaseRow.id)
         .all<{ name: string; sort_order: number | null; planned_start: string | null; planned_end: string | null; status: string | null }>();
       for (const ph of (sourceStages.results ?? [])) {
         await db
           .prepare(
-            `INSERT INTO stages (id, project_id, site_id, name, sort_order, planned_start, planned_end, status)
+            `INSERT INTO stages (id, project_id, phase_id, name, sort_order, planned_start, planned_end, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
           )
-          .bind(crypto.randomUUID(), projectId, siteId, ph.name, ph.sort_order, ph.planned_start, ph.planned_end, ph.status)
+          .bind(crypto.randomUUID(), projectId, phaseId, ph.name, ph.sort_order, ph.planned_start, ph.planned_end, ph.status)
           .run();
       }
     }
@@ -148,10 +148,10 @@ app.post("/:id/sites", async (c) => {
   const created = await db
     .prepare(
       `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
-       FROM sites WHERE id = ?`
+       FROM phases WHERE id = ?`
     )
-    .bind(siteId)
-    .first<SiteRow>();
+    .bind(phaseId)
+    .first<PhaseRow>();
 
   return c.json(created, 201);
 });
@@ -164,9 +164,9 @@ const updateSchema = z.object({
   display_order: z.number().int().min(0).optional(),
 });
 
-app.patch("/:id/sites/:siteId", async (c) => {
+app.patch("/:id/phases/:phaseId", async (c) => {
   const projectId = c.req.param("id");
-  const siteId = c.req.param("siteId");
+  const phaseId = c.req.param("phaseId");
   const auth = c.get("auth");
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
@@ -186,38 +186,38 @@ app.patch("/:id/sites/:siteId", async (c) => {
   fields.push("updated_at = CURRENT_TIMESTAMP");
 
   await c.env.DB
-    .prepare(`UPDATE sites SET ${fields.join(", ")} WHERE id = ? AND project_id = ?`)
-    .bind(...values, siteId, projectId)
+    .prepare(`UPDATE phases SET ${fields.join(", ")} WHERE id = ? AND project_id = ?`)
+    .bind(...values, phaseId, projectId)
     .run();
 
   const updated = await c.env.DB
     .prepare(
       `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
-       FROM sites WHERE id = ?`
+       FROM phases WHERE id = ?`
     )
-    .bind(siteId)
-    .first<SiteRow>();
+    .bind(phaseId)
+    .first<PhaseRow>();
 
-  if (!updated) throw new HTTPException(404, { message: "Site not found" });
+  if (!updated) throw new HTTPException(404, { message: "Phase not found" });
   return c.json(updated);
 });
 
 // ── Delete ───────────────────────────────────────────────────────────────────
 
-app.delete("/:id/sites/:siteId", async (c) => {
+app.delete("/:id/phases/:phaseId", async (c) => {
   const projectId = c.req.param("id");
-  const siteId = c.req.param("siteId");
+  const phaseId = c.req.param("phaseId");
   const auth = c.get("auth");
   if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
-  // Verify the site belongs to this project before deleting.
+  // Verify the phase belongs to this project before deleting.
   const exists = await c.env.DB
-    .prepare("SELECT id FROM sites WHERE id = ? AND project_id = ?")
-    .bind(siteId, projectId)
+    .prepare("SELECT id FROM phases WHERE id = ? AND project_id = ?")
+    .bind(phaseId, projectId)
     .first();
-  if (!exists) throw new HTTPException(404, { message: "Site not found" });
+  if (!exists) throw new HTTPException(404, { message: "Phase not found" });
 
   // Stages (and their tasks) cascade via the FK ON DELETE CASCADE established
   // in migration 0085. Tasks reference stage_id, so deleting stages cleans
@@ -226,8 +226,8 @@ app.delete("/:id/sites/:siteId", async (c) => {
   // dangling references. We also delete the orphaned tasks (only the ones
   // that belong to a stage being removed).
   const stageRows = await c.env.DB
-    .prepare("SELECT id FROM stages WHERE site_id = ?")
-    .bind(siteId)
+    .prepare("SELECT id FROM stages WHERE phase_id = ?")
+    .bind(phaseId)
     .all<{ id: string }>();
   const stageIds = (stageRows.results ?? []).map((p) => p.id);
   if (stageIds.length > 0) {
@@ -238,8 +238,8 @@ app.delete("/:id/sites/:siteId", async (c) => {
       .bind(...stageIds)
       .run();
   }
-  // Then drop the site — stages cascade via FK.
-  await c.env.DB.prepare("DELETE FROM sites WHERE id = ?").bind(siteId).run();
+  // Then drop the phase — stages cascade via FK.
+  await c.env.DB.prepare("DELETE FROM phases WHERE id = ?").bind(phaseId).run();
 
   return c.json({ success: true, deleted_stage_count: stageIds.length });
 });

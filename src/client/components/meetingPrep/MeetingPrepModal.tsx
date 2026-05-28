@@ -48,7 +48,7 @@ const MEETING_TYPE_LABEL_PLACEHOLDERS: Record<MeetingType, string> = {
   discovery:     "(optional) e.g. Network Architecture",
   design_review: "(optional) e.g. Call Flow Design",
   uat:           "(optional) e.g. Stage 2 UAT",
-  go_live:       "(optional) e.g. Site B Cutover",
+  go_live:       "(optional) e.g. Phase B Cutover",
 };
 
 function fmtKb(n: number | null): string {
@@ -62,11 +62,11 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
   const { showToast } = useToast();
   const [pmCustomNote, setPmCustomNote] = useState("");
   const [label, setLabel] = useState("");
-  // Per-site picker for UAT / go-live on multi-site projects. Default to the
-  // first site so the modal isn't immediately invalid when it opens.
-  const isPerSiteType = meetingType === "uat" || meetingType === "go_live";
-  const requiresSite = isPerSiteType && options.sites.length > 0;
-  const [siteId, setSiteId] = useState<string>(requiresSite ? options.sites[0]!.id : "");
+  // Per-phase picker for UAT / go-live on multi-phase projects. Default to the
+  // first phase so the modal isn't immediately invalid when it opens.
+  const isPerPhaseType = meetingType === "uat" || meetingType === "go_live";
+  const requiresPhase = isPerPhaseType && options.phases.length > 0;
+  const [phaseId, setPhaseId] = useState<string>(requiresPhase ? options.phases[0]!.id : "");
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
   const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
   const [distributionListEmail, setDistributionListEmail] = useState(options.project.suggestedDistributionListEmail ?? "");
@@ -125,7 +125,7 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
   const buildDraft = (): MeetingPrepDraft => ({
     pmCustomNote,
     label: label.trim() || null,
-    siteId: requiresSite ? (siteId || null) : null,
+    phaseId: requiresPhase ? (phaseId || null) : null,
     kickoffMeetingUrl: kickoffMeetingUrl.trim() || null,
     kickoffWhen: kickoffWhen.trim() || null,
     distributionListEmail: distributionListEmail.trim() || null,
@@ -269,25 +269,25 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
               <input className="ms-input" placeholder="comma or space separated" value={extraEmailsText} onChange={(e) => setExtraEmailsText(e.target.value)} />
             </div>
 
-            {/* Per-site picker — only for UAT / go-live on multi-site projects.
-                Required: server returns 400 if a multi-site project sends UAT
-                or go-live without a site_id. */}
-            {requiresSite && (
+            {/* Per-phase picker — only for UAT / go-live on multi-phase projects.
+                Required: server returns 400 if a multi-phase project sends UAT
+                or go-live without a phase_id. */}
+            {requiresPhase && (
               <div style={{ marginBottom: 18 }}>
                 <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>
-                  Site
+                  Phase
                 </div>
                 <select
                   className="ms-input"
-                  value={siteId}
-                  onChange={(e) => setSiteId(e.target.value)}
+                  value={phaseId}
+                  onChange={(e) => setPhaseId(e.target.value)}
                 >
-                  {options.sites.map((s) => (
+                  {options.phases.map((s) => (
                     <option key={s.id} value={s.id}>{s.name}</option>
                   ))}
                 </select>
                 <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>
-                  This {meetingType === "uat" ? "UAT" : "Go-Live"} prep is scoped to one deployment site. The site name folds into the subject + history label.
+                  This {meetingType === "uat" ? "UAT" : "Go-Live"} prep is scoped to one deployment phase. The phase name folds into the subject + history label.
                 </div>
               </div>
             )}

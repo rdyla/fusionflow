@@ -22,7 +22,7 @@ import {
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
-import SitesPanel from "../components/project/SitesPanel";
+import PhasesPanel from "../components/project/PhasesPanel";
 import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
@@ -1135,8 +1135,8 @@ export default function ProjectDetailPage() {
               })}
             </div>
 
-            {/* ── Sites (multi-site projects) — full width ─────────────────── */}
-            <SitesPanel
+            {/* ── Phases (multi-phase projects) — full width ─────────────────── */}
+            <PhasesPanel
               projectId={project.id}
               canEdit={canEdit}
               onChange={async () => {
