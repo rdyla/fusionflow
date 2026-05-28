@@ -153,6 +153,99 @@ export async function maybeGraduateProject(db: D1Database, projectId: string, gr
 }
 
 /**
+ * Auto-derive a solution's pipeline stage from the artifacts attached to
+ * it. Mirrors the project-status auto-derivation pattern (May-2026): SAs
+ * no longer click "Advance" — the stage follows the work.
+ *
+ * Inputs scanned:
+ *   - needs_assessments rows (one per solution_type)
+ *   - labor_estimates rows (one per solution_type)
+ *   - sow_data + sow_metadata on the solution row
+ *
+ * Rules (terminal won/lost skipped — manual only):
+ *   - no NA row              → 'draft'
+ *   - NA started, not complete → 'assessment'
+ *   - NA complete, LE/SOW started → 'scope'   (legacy 'requirements' collapses in)
+ *   - NA + LE + SOW all complete → 'handoff'
+ *
+ * "Complete" definitions:
+ *   - NA complete: ≥ 1 NA row per declared solution_type AND every row's
+ *                  derived readiness `status === 'ready'`
+ *   - LE complete: ≥ 1 LE row per declared solution_type AND total_expected > 0
+ *   - SOW complete: sow_data non-null AND ≥ 1 entry in sow_metadata.revisions
+ *
+ * Skip-if-terminal short-circuit so manual won/lost stay sticky until an SA
+ * explicitly reopens to draft.
+ */
+export async function syncSolutionStatus(db: D1Database, solutionId: string): Promise<string | null> {
+  const sol = await db
+    .prepare("SELECT id, status, solution_types, sow_data, sow_metadata FROM solutions WHERE id = ? LIMIT 1")
+    .bind(solutionId)
+    .first<{ id: string; status: string | null; solution_types: string | null; sow_data: string | null; sow_metadata: string | null }>();
+  if (!sol) return null;
+  if (sol.status === "won" || sol.status === "lost") return sol.status;
+
+  // Parse solution_types — tolerate both JSON array and CSV legacy formats.
+  let solutionTypes: string[] = [];
+  if (sol.solution_types) {
+    try {
+      const parsed = JSON.parse(sol.solution_types);
+      if (Array.isArray(parsed)) solutionTypes = parsed;
+    } catch {
+      solutionTypes = sol.solution_types.split(",").map((s) => s.trim()).filter(Boolean);
+    }
+  }
+  const declaredCount = solutionTypes.length;
+
+  // Needs Assessments — load rows; readiness is recomputed inside
+  // routes/needsAssessments.ts but the persisted answers blob is enough
+  // to detect "ready" status mirroring the GET response shape.
+  const naRows = await db
+    .prepare("SELECT solution_type, answers, readiness_status FROM needs_assessments WHERE solution_id = ?")
+    .bind(solutionId)
+    .all<{ solution_type: string; answers: string | null; readiness_status: string | null }>();
+  const naCount = naRows.results?.length ?? 0;
+  const naReadyCount = (naRows.results ?? []).filter((r) => r.readiness_status === "ready").length;
+  const naStarted = naCount > 0;
+  const naComplete = declaredCount > 0 && naCount >= declaredCount && naReadyCount >= declaredCount;
+
+  // Labor estimates
+  const leRows = await db
+    .prepare("SELECT solution_type, total_expected FROM labor_estimates WHERE solution_id = ?")
+    .bind(solutionId)
+    .all<{ solution_type: string; total_expected: number | null }>();
+  const leCount = leRows.results?.length ?? 0;
+  const leWithValueCount = (leRows.results ?? []).filter((r) => (r.total_expected ?? 0) > 0).length;
+  const leStarted = leCount > 0;
+  const leComplete = declaredCount > 0 && leWithValueCount >= declaredCount;
+
+  // SOW — sow_data non-null is "started"; ≥ 1 revision is "complete"
+  const sowStarted = !!sol.sow_data;
+  let sowRevisionCount = 0;
+  if (sol.sow_metadata) {
+    try {
+      const meta = JSON.parse(sol.sow_metadata);
+      if (Array.isArray(meta?.revisions)) sowRevisionCount = meta.revisions.length;
+    } catch { /* ignore parse errors */ }
+  }
+  const sowComplete = sowStarted && sowRevisionCount > 0;
+
+  const derived = !naStarted ? "draft"
+    : !naComplete ? "assessment"
+    : (naComplete && leComplete && sowComplete) ? "handoff"
+    : (leStarted || sowStarted) ? "scope"
+    : "assessment";
+
+  if (derived !== sol.status) {
+    await db
+      .prepare("UPDATE solutions SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(derived, solutionId)
+      .run();
+  }
+  return derived;
+}
+
+/**
  * Sync a project's target_go_live_date from the canonical go-live event
  * task(s) (tasks.is_go_live_event = 1). On multi-phase projects there can
  * be multiple flagged tasks (one per rollout phase); the project's target
