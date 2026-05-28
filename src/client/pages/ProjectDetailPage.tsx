@@ -274,7 +274,6 @@ export default function ProjectDetailPage() {
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
-  const [crmSyncing, setCrmSyncing] = useState(false);
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
   const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
 
@@ -432,6 +431,28 @@ export default function ProjectDetailPage() {
         api.phases(id).then(setPhases).catch(() => {});
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
+        // Auto-sync from CRM in the background so the Account Team chips
+        // are populated on first paint instead of waiting for a manual
+        // "Sync CRM" click. Fire-and-forget — failures are silent (the
+        // page still works with stored data) and the page renders
+        // immediately with what's already cached on the project row.
+        if (projectData.dynamics_account_id) {
+          api.projectCrmSync(id)
+            .then(({ staff: freshStaff, project: updatedProject }) => {
+              setProjectStaff(freshStaff);
+              if (updatedProject) setProject((p) => p ? { ...p, ...updatedProject } : updatedProject);
+              // If CRM filled in new customer-team emails, fetch their photos too.
+              const refreshedEmails = [
+                updatedProject?.customer_pf_ae_email,
+                updatedProject?.customer_pf_sa_email,
+                updatedProject?.customer_pf_csm_email,
+              ].filter(Boolean) as string[];
+              if (refreshedEmails.length > 0) {
+                api.staffPhotos(refreshedEmails).then(setCustomerTeamPhotoMap).catch(() => {});
+              }
+            })
+            .catch(() => { /* CRM unreachable / token expired — keep stored values */ });
+        }
         if (staffData.length > 0) {
           const emails = staffData.map((s: { email: string }) => s.email);
           api.staffPhotos(emails).then(setStaffPhotoMap).catch(() => {});
@@ -609,25 +630,9 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleCrmSync() {
-    if (!project) return;
-    setCrmSyncing(true);
-    try {
-      const { staff, crm, project: updatedProject } = await api.projectCrmSync(project.id);
-      setProjectStaff(staff);
-      if (updatedProject) setProject(p => p ? { ...p, ...updatedProject } : updatedProject);
-      const matched = [
-        crm.ae_name  ? `AE: ${crm.ae_name}`  : null,
-        crm.sa_name  ? `SA: ${crm.sa_name}`  : null,
-        crm.csm_name ? `CSM: ${crm.csm_name}` : null,
-      ].filter(Boolean);
-      showToast(matched.length ? `Synced from CRM — ${matched.join(", ")}` : "Synced from CRM (no team found)", "success");
-    } catch {
-      showToast("CRM sync failed", "error");
-    } finally {
-      setCrmSyncing(false);
-    }
-  }
+  // handleCrmSync retired — the project load useEffect now fires
+  // api.projectCrmSync in the background so the Account Team chips
+  // are populated without a manual click.
 
   async function handleRemoveStaff(staffId: string) {
     if (!project) return;
@@ -1189,12 +1194,7 @@ export default function ProjectDetailPage() {
                 rows: [...(pmRow ? [pmRow] : []), ...internalStaffRows],
                 empty: "No project team assigned yet.",
                 action: canEdit ? (
-                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
-                    {project.dynamics_account_id && (
-                      <button className="ms-btn-ghost" style={ghostBtn} disabled={crmSyncing} onClick={handleCrmSync}>{crmSyncing ? "Syncing…" : "Sync CRM"}</button>
-                    )}
-                  </div>
+                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
                 ) : undefined,
               })}
             </div>
