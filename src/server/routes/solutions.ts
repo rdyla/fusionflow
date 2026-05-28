@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
-import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { getTeamUserIds, inPlaceholders, syncSolutionStatus } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
@@ -346,6 +346,11 @@ const updateSolutionSchema = z.object({
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
   journeys: z.array(z.string()).nullable().optional(),
+  // Solution status is auto-derived from NA / LE / SOW artifacts (May-2026)
+  // via teamUtils.syncSolutionStatus, run after every artifact write. SAs
+  // can still manually move the solution to terminal states (Mark Lost /
+  // Reopen-to-draft via the existing buttons), so the enum stays open;
+  // syncSolutionStatus short-circuits when status is 'won' or 'lost'.
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   partner_ae_user_id: z.string().nullable().optional(),
   partner_ae_name: z.string().nullable().optional(),
@@ -507,6 +512,11 @@ app.patch("/:id", async (c) => {
     await recomputeSowTotal(db, solutionId);
   }
 
+  // Pipeline stage auto-derives from the artifacts (NA / LE / SOW).
+  // The PATCH may have touched sow_data, solution_types, or simply nudged
+  // fields that change derivation inputs; safe to re-sync every time.
+  await syncSolutionStatus(db, solutionId);
+
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
   const normalizedUpdated = updated ? normalizeSolutionRow(updated) : null;
 
@@ -616,6 +626,10 @@ app.post("/:id/sow-version", async (c) => {
     .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .bind(JSON.stringify(meta), solutionId)
     .run();
+
+  // A new SOW revision can flip the solution from "scope" to "handoff" once
+  // NA + LE are also complete. Cheap to re-sync; safe to run unconditionally.
+  await syncSolutionStatus(db, solutionId);
 
   return c.json({ sow_metadata: meta, new_revision: newRev });
 });
