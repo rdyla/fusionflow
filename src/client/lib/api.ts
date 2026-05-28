@@ -214,10 +214,10 @@ export type DashboardSummaryResponse = {
     openBlockers: number;
   };
   projects: Project[];
-  projectPhases: { project_id: string; name: string; status: string; sort_order: number }[];
+  projectStages: { project_id: string; name: string; status: string; sort_order: number }[];
   openTasks: DashboardTask[];
   openBlockers: DashboardRisk[];
-  phaseDistribution: { phase_name: string; count: number }[];
+  stageDistribution: { stage_name: string; count: number }[];
   vendorDistribution: { label: string; count: number }[];
   typeDistribution: { label: string; count: number }[];
   aeDistribution: { id: string | null; label: string; count: number }[];
@@ -302,8 +302,8 @@ export type ZoomRecordingFile = {
 export type ZoomRecording = {
   id: string;
   project_id: string;
-  phase_id: string | null;
-  phase_name: string | null;
+  stage_id: string | null;
+  stage_name: string | null;
   task_id: string | null;
   task_name: string | null;
   meeting_id: string;
@@ -328,8 +328,8 @@ export type ZoomRecordingSuggestion = {
   recording_files: ZoomRecordingFile[];
   recording_password: string | null;
   share_url: string | null;
-  suggested_phase_id: string | null;
-  suggested_phase_name: string | null;
+  suggested_stage_id: string | null;
+  suggested_stage_name: string | null;
   match_reason: string | null;
 };
 
@@ -568,7 +568,7 @@ export type SolutionContact = {
   added_at: string;
 };
 
-export type Phase = {
+export type Stage = {
   id: string;
   project_id: string;
   name: string;
@@ -583,7 +583,7 @@ export type Phase = {
 /** Preview shape returned by GET /projects/:id/cascade/preview. */
 export type CascadeAffectedTask = {
   id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   due_date: string | null;
   scheduled_start: string | null;
@@ -605,7 +605,7 @@ export type CascadePreview = {
 export type Task = {
   id: string;
   project_id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   assignee_user_id: string | null;
   /** Optional non-user assignee (currently the porting coordinator for
@@ -664,7 +664,7 @@ export type Risk = {
 export type Document = {
   id: string;
   project_id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   task_id: string | null;
   name: string;
   content_type: string | null;
@@ -1024,7 +1024,7 @@ export type UtilizationSnapshot = {
 export type TemplateTask = {
   id: string;
   template_id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   priority: string | null;
   order_index: number;
@@ -1038,12 +1038,12 @@ export type TemplateTask = {
   is_go_live_event?: number;
 };
 
-export type TemplatePhase = {
+export type TemplateStage = {
   id: string;
   template_id: string;
   name: string;
   order_index: number;
-  /** Workdays the phase takes; drives the Timeline Builder date math. */
+  /** Workdays the stage takes; drives the Timeline Builder date math. */
   working_days: number;
   tasks: TemplateTask[];
 };
@@ -1053,9 +1053,9 @@ export type Template = {
   name: string;
   solution_type: string | null;
   description: string | null;
-  phase_count?: number;
+  stage_count?: number;
   task_count?: number;
-  phases?: TemplatePhase[];
+  stages?: TemplateStage[];
   created_at: string;
   updated_at: string;
 };
@@ -1154,18 +1154,18 @@ export type StakeholderSummary = {
   assignee_breakdown: Array<{
     user_id: string;
     name: string;
-    /** Open-task counts keyed by site_id. Shared-phase tasks (Initiate)
+    /** Open-task counts keyed by site_id. Shared-stage tasks (Initiate)
      *  surface separately under `shared`. Single-site projects use only
      *  `total`. */
     counts: Record<string, number>;
     shared: number;
     total: number;
   }>;
-  /** Per-assignee × phase-name pivot for the "By assignee" table on the
-   *  Open Tasks panel. Phase names are rolled up across sites so multi-
+  /** Per-assignee × stage-name pivot for the "By assignee" table on the
+   *  Open Tasks panel. Stage names are rolled up across sites so multi-
    *  site projects show one "Plan" column instead of one per site. */
-  assignee_phase_breakdown: {
-    phase_columns: string[];
+  assignee_stage_breakdown: {
+    stage_columns: string[];
     rows: Array<{
       user_id: string;
       name: string;
@@ -1200,14 +1200,14 @@ export type StakeholderSummary = {
     timeline_url: string;
     next_call_join_url: string | null;
   };
-  /** Phase-progress sliders shown on the dashboard. One entry per
+  /** Stage-progress sliders shown on the dashboard. One entry per
    *  "column" — shared first (Initiate on multi-site projects), then one
    *  per site in display order. Single-site projects have one entry with
-   *  `site_id = null` containing all phases. */
-  phase_progress: Array<{
+   *  `site_id = null` containing all stages. */
+  stage_progress: Array<{
     site_id: string | null;
     site_name: string | null;
-    phases: Array<{
+    stages: Array<{
       id: string;
       name: string;
       sort_order: number | null;
@@ -1232,7 +1232,7 @@ export const api = {
     if (params.priority) q.set("priority", params.priority);
     if (params.search)   q.set("search",   params.search);
     if (params.page)     q.set("page",     String(params.page));
-    return request<{ items: (Task & { project_name: string; phase_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
+    return request<{ items: (Task & { project_name: string; stage_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
   },
   projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string }) => {
     const qs = new URLSearchParams();
@@ -1243,14 +1243,14 @@ export const api = {
   },
   project: (id: string) => request<Project>(`/projects/${id}`),
 
-  phases: (projectId: string) => request<Phase[]>(`/projects/${projectId}/phases`),
+  stages: (projectId: string) => request<Stage[]>(`/projects/${projectId}/stages`),
   tasks: (projectId: string) => request<Task[]>(`/projects/${projectId}/tasks`),
   risks: (projectId: string) => request<Risk[]>(`/projects/${projectId}/risks`),
   notes: (projectId: string) => request<Note[]>(`/projects/${projectId}/notes`),
 
-  updatePhase: (
+  updateStage: (
     projectId: string,
-    phaseId: string,
+    stageId: string,
     payload: {
       status?: "not_started" | "in_progress" | "completed";
       planned_start?: string | null;
@@ -1259,12 +1259,12 @@ export const api = {
       actual_end?: string | null;
     }
   ) =>
-    request<Phase>(`/projects/${projectId}/phases/${phaseId}`, {
+    request<Stage>(`/projects/${projectId}/stages/${stageId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
 
-  createPhase: (
+  createStage: (
     projectId: string,
     payload: {
       name: string;
@@ -1273,18 +1273,18 @@ export const api = {
       status?: "not_started" | "in_progress" | "completed";
     }
   ) =>
-    request<Phase>(`/projects/${projectId}/phases`, {
+    request<Stage>(`/projects/${projectId}/stages`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  /** Delete a phase and its dependents:
-   *   - tasks within the phase: DELETED
-   *   - milestones within the phase: DELETED
-   *   - documents tied to the phase: orphaned to project level (phase_id = NULL)
-   *   - zoom_recordings: phase_id set to NULL via FK */
-  deletePhase: (projectId: string, phaseId: string) =>
-    request<{ success: boolean }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
+  /** Delete a stage and its dependents:
+   *   - tasks within the stage: DELETED
+   *   - milestones within the stage: DELETED
+   *   - documents tied to the stage: orphaned to project level (stage_id = NULL)
+   *   - zoom_recordings: stage_id set to NULL via FK */
+  deleteStage: (projectId: string, stageId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/stages/${stageId}`, { method: "DELETE" }),
 
   searchDynamicsAccounts: (q: string) =>
     request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
@@ -1418,7 +1418,7 @@ export const api = {
     projectId: string,
     payload: {
       title: string;
-      phase_id?: string | null;
+      stage_id?: string | null;
       assignee_user_id?: string | null;
       due_date?: string | null;
       scheduled_start?: string | null;
@@ -1437,7 +1437,7 @@ export const api = {
     taskId: string,
     payload: {
       title?: string;
-      phase_id?: string | null;
+      stage_id?: string | null;
       assignee_user_id?: string | null;
       assignee_contact_id?: string | null;
       due_date?: string | null;
@@ -1466,7 +1466,7 @@ export const api = {
     ),
 
   cascadeApply: (projectId: string, payload: { from_task_id: string; slip_days: number; exclude_task_ids?: string[] }) =>
-    request<{ tasks_shifted: number; phases_shifted: number; new_target_go_live: string | null; recipients_notified: number }>(
+    request<{ tasks_shifted: number; stages_shifted: number; new_target_go_live: string | null; recipients_notified: number }>(
       `/projects/${projectId}/cascade/apply`,
       { method: "POST", body: JSON.stringify(payload) }
     ),
@@ -1526,14 +1526,14 @@ export const api = {
     payload: {
       file: File;
       category: string;
-      phase_id?: string | null;
+      stage_id?: string | null;
       task_id?: string | null;
     }
   ): Promise<Document> => {
     const form = new FormData();
     form.append("file", payload.file);
     form.append("category", payload.category);
-    if (payload.phase_id) form.append("phase_id", payload.phase_id);
+    if (payload.stage_id) form.append("stage_id", payload.stage_id);
     if (payload.task_id) form.append("task_id", payload.task_id);
 
     const res = await fetch(`${API_BASE}/projects/${projectId}/documents`, {
@@ -1650,13 +1650,13 @@ export const api = {
   updateSite: (projectId: string, siteId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number }) =>
     request<Site>(`/projects/${projectId}/sites/${siteId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteSite: (projectId: string, siteId: string) =>
-    request<{ success: boolean; deleted_phase_count: number }>(`/projects/${projectId}/sites/${siteId}`, { method: "DELETE" }),
+    request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/sites/${siteId}`, { method: "DELETE" }),
 
   // Staging → Prod promotion (prod-only; staging worker returns 503)
   adminStagingInventory: () =>
     request<{
       solutions: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; needs_assessment_count: number; labor_estimate_count: number; contact_count: number; already_on_prod: boolean }>;
-      projects: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; phase_count: number; task_count: number; risk_count: number; document_count: number; already_on_prod: boolean }>;
+      projects: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; stage_count: number; task_count: number; risk_count: number; document_count: number; already_on_prod: boolean }>;
       optimize_accounts: Array<{ id: string; project_id: string; project_name: string; customer_name: string | null; graduated_at: string; impact_assessment_count: number; tech_stack_count: number; roadmap_count: number; utilization_count: number; already_on_prod: boolean }>;
     }>("/admin/staging/inventory"),
 
@@ -2019,15 +2019,15 @@ export const api = {
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings`),
   zoomSyncRecordings: (projectId: string) =>
     request<{ suggestions: ZoomRecordingSuggestion[]; already_linked: ZoomRecording[] }>(`/projects/${projectId}/zoom/recordings/sync`, { method: "POST" }),
-  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; recording_password?: string | null; share_url?: string | null; match_reason: string | null }[]) =>
+  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; stage_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; recording_password?: string | null; share_url?: string | null; match_reason: string | null }[]) =>
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings/confirm`, {
       method: "POST",
       body: JSON.stringify({ confirmations }),
     }),
-  zoomReassignRecording: (projectId: string, recordingId: string, phase_id: string | null, task_id?: string | null) =>
+  zoomReassignRecording: (projectId: string, recordingId: string, stage_id: string | null, task_id?: string | null) =>
     request<ZoomRecording>(`/projects/${projectId}/zoom/recordings/${recordingId}`, {
       method: "PATCH",
-      body: JSON.stringify({ phase_id, task_id }),
+      body: JSON.stringify({ stage_id, task_id }),
     }),
   zoomDeleteRecording: (projectId: string, recordingId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/recordings/${recordingId}`, { method: "DELETE" }),
@@ -2074,7 +2074,7 @@ export const api = {
 
   // ── Templates ────────────────────────────────────────────────────────────────
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
-  /** Fetch one template with its phases + tasks. PM-accessible (for Timeline Builder). */
+  /** Fetch one template with its stages + tasks. PM-accessible (for Timeline Builder). */
   template: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminTemplates: () => request<Template[]>("/admin/templates"),
   adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
@@ -2084,26 +2084,26 @@ export const api = {
     request<Template>(`/admin/templates/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   adminDeleteTemplate: (id: string) =>
     request<{ success: boolean }>(`/admin/templates/${id}`, { method: "DELETE" }),
-  adminAddTemplatePhase: (templateId: string, payload: { name: string; order_index: number }) =>
-    request<TemplatePhase>(`/admin/templates/${templateId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
-  adminDeleteTemplatePhase: (templateId: string, phaseId: string) =>
-    request<{ success: boolean }>(`/admin/templates/${templateId}/phases/${phaseId}`, { method: "DELETE" }),
-  adminAddTemplateTask: (templateId: string, payload: { title: string; priority?: string; phase_id?: string; order_index?: number }) =>
+  adminAddTemplateStage: (templateId: string, payload: { name: string; order_index: number }) =>
+    request<TemplateStage>(`/admin/templates/${templateId}/stages`, { method: "POST", body: JSON.stringify(payload) }),
+  adminDeleteTemplateStage: (templateId: string, stageId: string) =>
+    request<{ success: boolean }>(`/admin/templates/${templateId}/stages/${stageId}`, { method: "DELETE" }),
+  adminAddTemplateTask: (templateId: string, payload: { title: string; priority?: string; stage_id?: string; order_index?: number }) =>
     request<TemplateTask>(`/admin/templates/${templateId}/tasks`, { method: "POST", body: JSON.stringify(payload) }),
   adminDeleteTemplateTask: (templateId: string, taskId: string) =>
     request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
   /**
    * Apply a template to a project, optionally scoped to a specific site
    * (so e.g. the ZCC template can land under the "Zoom Contact Center" site
-   * without colliding with the "Zoom Phone" site's same-named phases).
+   * without colliding with the "Zoom Phone" site's same-named stages).
    *
    * When `targetGoLiveDate` (YYYY-MM-DD) is provided, the server uses the
-   * same workday math the Timeline Builder uses to chain phase dates
-   * backward from the go-live and stamp each new task with its phase's
+   * same workday math the Timeline Builder uses to chain stage dates
+   * backward from the go-live and stamp each new task with its stage's
    * window for scheduled_start / scheduled_end / due_date.
    */
   applyTemplate: (projectId: string, templateId: string, siteId?: string | null, targetGoLiveDate?: string | null) =>
-    request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
+    request<{ stages_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({
         template_id: templateId,
@@ -2111,8 +2111,8 @@ export const api = {
         target_go_live_date: targetGoLiveDate ?? null,
       }),
     }),
-  applyTimeline: (projectId: string, payload: { phases: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
-    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
+  applyTimeline: (projectId: string, payload: { stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
+    request<{ stages_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),

@@ -1007,10 +1007,10 @@ export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: Op
         ["02 \u00b7 Stabilization", "Baseline", "Days 31\u201360", ["First health check completed and documented","Open issues resolved or actively managed","Call flow and configuration audit delivered","Initial MACD backlog addressed","First monthly report delivered","Vendor escalation paths validated"]],
         ["03 \u00b7 Optimization", "Enhancement", "Days 61\u201390", ["First optimization session with engineer","Usage and adoption analysis presented","Roadmap planning session scheduled","Cost and licensing review completed","QBR cadence established with leadership","Success metrics and KPIs agreed"]],
         ["04 \u00b7 Ongoing", "Engagement", "Post Day 90", ["Monthly reporting on all agreed KPIs","Quarterly Business Reviews with leadership","Proactive health checks every cycle","Continuous MACD management","Annual roadmap and renewal alignment","Ongoing vendor relationship oversight"]],
-      ].map(([phase, title, days, items]) => `
+      ].map(([stage, title, days, items]) => `
       <div style="border-radius:8px;overflow:hidden;break-inside:avoid;page-break-inside:avoid;">
         <div style="background:#0d1b2e;padding:14px 14px 10px;color:#fff;">
-          <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#00b8a0;margin-bottom:4px;">${phase}</div>
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#00b8a0;margin-bottom:4px;">${stage}</div>
           <div style="font-size:14px;font-weight:700;line-height:1.2;">${title}</div>
           <div style="font-size:10.5px;color:rgba(255,255,255,0.5);margin-top:4px;">${days}</div>
         </div>

@@ -7,7 +7,7 @@
  * Terms, Signature — and live in src/shared/sowTemplate/sections.ts
  * verbatim.
  *
- * Variant-specific content (full title, snapshot tiles, phase activities in
+ * Variant-specific content (full title, snapshot tiles, stage activities in
  * § 2, deliverables, optional services, pricing labels) is supplied by each
  * SowVariant. The renderer picks the variant by the solution's primary
  * solution_type (or vendor, for vendor-tied variants). Combo solutions
@@ -89,30 +89,30 @@ export type SnapshotTile = {
   value: (ctx: SowBuildContext) => string | number;
 };
 
-/** A bullet-point activity within a phase (Section 2.2 – 2.7). */
-export type PhaseBullet = string;
+/** A bullet-point activity within a stage (Section 2.2 – 2.7). */
+export type StageBullet = string;
 
-/** A subsection within a phase ("2.3.1 Assessment & Design"). */
-export type PhaseSubsection = {
+/** A subsection within a stage ("2.3.1 Assessment & Design"). */
+export type StageSubsection = {
   /** "2.3.1" — manually authored; the renderer doesn't re-number. */
   number?: string;
   title?: string;
   intro?: string;
   /** Activities — rendered as a bulleted list. */
-  bullets: PhaseBullet[];
+  bullets: StageBullet[];
 };
 
-export type PhaseSection = {
+export type StageSection = {
   /** "2.2", "2.3" … etc. */
   number: string;
-  /** "Phase 1 — Initiation" */
+  /** "Stage 1 — Initiation" */
   title: string;
-  /** Optional intro paragraph at the top of the phase. */
+  /** Optional intro paragraph at the top of the stage. */
   intro?: string;
-  /** Top-level bullets at the phase level (used by Initiation, Closing — short phases). */
-  bullets?: PhaseBullet[];
-  /** Sub-sections if the phase has them (Planning, Executing, etc. — long phases). */
-  subsections?: PhaseSubsection[];
+  /** Top-level bullets at the stage level (used by Initiation, Closing — short stages). */
+  bullets?: StageBullet[];
+  /** Sub-sections if the stage has them (Planning, Executing, etc. — long stages). */
+  subsections?: StageSubsection[];
 };
 
 export type OptionalService = {
@@ -142,8 +142,8 @@ export type SowVariant = {
   projectReferenceTemplate: string;  // "Zoom UCaaS Migration – {customer}"
   /** Engagement Snapshot tiles — exactly 4. */
   snapshotTiles: [SnapshotTile, SnapshotTile, SnapshotTile, SnapshotTile];
-  /** Section 2 phases (2.2 through 2.7). */
-  phases: PhaseSection[];
+  /** Section 2 stages (2.2 through 2.7). */
+  stages: StageSection[];
   /** Section 2.8 Training Services — included paragraph + optional. */
   trainingIncluded: string;
   trainingOptional?: string | null;

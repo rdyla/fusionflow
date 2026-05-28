@@ -1,11 +1,11 @@
 import { useRef, useState } from "react";
-import { api, DOCUMENT_CATEGORIES, type Document, type Phase, type Task } from "../../lib/api";
+import { api, DOCUMENT_CATEGORIES, type Document, type Stage, type Task } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 type Props = {
   projectId: string;
   documents: Document[];
-  phases: Phase[];
+  stages: Stage[];
   tasks: Task[];
   onDocumentsChange: (docs: Document[]) => void;
 };
@@ -45,16 +45,16 @@ const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
   "Other":      { bg: "#f1f5f9", color: "#64748b" },
 };
 
-export default function ProjectDocuments({ projectId, documents, phases, tasks, onDocumentsChange }: Props) {
+export default function ProjectDocuments({ projectId, documents, stages, tasks, onDocumentsChange }: Props) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [uploading, setUploading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadForm, setUploadForm] = useState({ category: "Other", phase_id: "", task_id: "" });
+  const [uploadForm, setUploadForm] = useState({ category: "Other", stage_id: "", task_id: "" });
 
-  const filteredTasks = uploadForm.phase_id
-    ? tasks.filter((t) => t.phase_id === uploadForm.phase_id)
+  const filteredTasks = uploadForm.stage_id
+    ? tasks.filter((t) => t.stage_id === uploadForm.stage_id)
     : tasks;
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -69,12 +69,12 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
       const created = await api.uploadDocument(projectId, {
         file: selectedFile,
         category: uploadForm.category,
-        phase_id: uploadForm.phase_id || null,
+        stage_id: uploadForm.stage_id || null,
         task_id: uploadForm.task_id || null,
       });
       onDocumentsChange([created, ...documents]);
       setSelectedFile(null);
-      setUploadForm({ category: "Other", phase_id: "", task_id: "" });
+      setUploadForm({ category: "Other", stage_id: "", task_id: "" });
       if (fileInputRef.current) fileInputRef.current.value = "";
       showToast("Document uploaded.", "success");
     } catch (err) {
@@ -158,10 +158,10 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
               </select>
             </label>
             <label className="ms-label">
-              <span>Phase (optional)</span>
-              <select className="ms-input" value={uploadForm.phase_id} onChange={(e) => setUploadForm({ ...uploadForm, phase_id: e.target.value, task_id: "" })}>
-                <option value="">No phase</option>
-                {phases.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              <span>Stage (optional)</span>
+              <select className="ms-input" value={uploadForm.stage_id} onChange={(e) => setUploadForm({ ...uploadForm, stage_id: e.target.value, task_id: "" })}>
+                <option value="">No stage</option>
+                {stages.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </label>
             <label className="ms-label">
@@ -198,7 +198,7 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
                   </div>
                   <div style={{ display: "grid", gap: 6 }}>
                     {docs.map((doc) => {
-                      const phase = phases.find((p) => p.id === doc.phase_id);
+                      const stage = stages.find((p) => p.id === doc.stage_id);
                       const task = tasks.find((t) => t.id === doc.task_id);
                       return (
                         <div key={doc.id} className="ms-row-item">
@@ -210,7 +210,7 @@ export default function ProjectDocuments({ projectId, documents, phases, tasks, 
                             </div>
                             <div style={{ color: "#64748b", fontSize: 12, marginTop: 3, display: "flex", gap: 10, flexWrap: "wrap" }}>
                               <span>{formatBytes(doc.size_bytes)}</span>
-                              {phase && <span>· {phase.name}</span>}
+                              {stage && <span>· {stage.name}</span>}
                               {task && <span>· {task.title}</span>}
                               <span>· {doc.uploader_name ?? "Unknown"}</span>
                               <span>· {doc.created_at.slice(0, 10)}</span>

@@ -14,7 +14,7 @@ import { syncProjectBlockedStatus } from "../lib/teamUtils";
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
-  SELECT id, project_id, phase_id, title, assignee_user_id, assignee_contact_id, due_date,
+  SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
          completed_at, status, priority, meeting_join_url,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
@@ -40,7 +40,7 @@ app.get("/:id/tasks", async (c) => {
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(500),
-  phase_id: z.string().nullable().optional(),
+  stage_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
   due_date: z.string().nullable().optional(),
   scheduled_start: z.string().nullable().optional(),
@@ -66,17 +66,17 @@ app.post("/:id/tasks", async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { title, phase_id, assignee_user_id, due_date, scheduled_start, scheduled_end, priority, status } = parsed.data;
+  const { title, stage_id, assignee_user_id, due_date, scheduled_start, scheduled_end, priority, status } = parsed.data;
   const taskId = crypto.randomUUID();
 
   await db
     .prepare(
       `
-      INSERT INTO tasks (id, project_id, phase_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority)
+      INSERT INTO tasks (id, project_id, stage_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(taskId, projectId, phase_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
+    .bind(taskId, projectId, stage_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
     .run();
 
   const created = await db
@@ -115,7 +115,7 @@ app.post("/:id/tasks", async (c) => {
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(500).optional(),
-  phase_id: z.string().nullable().optional(),
+  stage_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
   /** Optional non-user contact tied to the task — currently used for the
    *  porting coordinator (project_contact with contact_role='Porting

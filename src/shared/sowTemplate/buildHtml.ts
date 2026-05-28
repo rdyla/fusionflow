@@ -7,7 +7,7 @@
  * key dates → numbered sections 1-13 → signature.
  */
 
-import type { SowVariant, SowBuildContext, PhaseSection, OptionalService, Deliverable } from "./types";
+import type { SowVariant, SowBuildContext, StageSection, OptionalService, Deliverable } from "./types";
 import {
   SHARED_OUT_OF_SCOPE,
   SHARED_ASSUMPTIONS,
@@ -345,18 +345,18 @@ function section1(variant: SowVariant, ctx: SowBuildContext): string {
   `;
 }
 
-function phaseBlock(p: PhaseSection): string {
+function stageBlock(p: StageSection): string {
   const intro = p.intro ? `<p>${p.intro}</p>` : "";
   const directBullets = p.bullets ? bullets(p.bullets) : "";
   const subs = (p.subsections ?? []).map((s) => `
-    <div class="phase-sub">
+    <div class="stage-sub">
       ${s.number || s.title ? `<h4>${esc(s.number ? s.number + "  " : "")}${esc(s.title ?? "")}</h4>` : ""}
       ${s.intro ? `<p>${s.intro}</p>` : ""}
       ${bullets(s.bullets)}
     </div>
   `).join("");
   return `
-    <div class="phase">
+    <div class="stage">
       <h3>${esc(p.number)}  ${esc(p.title)}</h3>
       ${intro}
       ${directBullets}
@@ -380,14 +380,14 @@ function section2(variant: SowVariant): string {
     <section class="page-section">
       <h1>2.  Scope of Services</h1>
       <h3>2.1  Delivery Methodology</h3>
-      <p>Packet Fusion delivers cloud migrations using a PMI-aligned phased methodology. Each phase has defined activities, owners, and exit criteria; the project does not advance from one phase to the next until exit criteria are met and confirmed in writing (email is acceptable). A typical engagement runs approximately 10–12 calendar weeks from project initiation through closure, with variation based on site count, number of DIDs in porting, and Customer readiness.</p>
+      <p>Packet Fusion delivers cloud migrations using a PMI-aligned phased methodology. Each stage has defined activities, owners, and exit criteria; the project does not advance from one stage to the next until exit criteria are met and confirmed in writing (email is acceptable). A typical engagement runs approximately 10–12 calendar weeks from project initiation through closure, with variation based on site count, number of DIDs in porting, and Customer readiness.</p>
       <table class="data-table">
-        <thead><tr><th>Phase</th><th>Name</th><th>When (relative to Go Live)</th><th>Purpose</th></tr></thead>
+        <thead><tr><th>Stage</th><th>Name</th><th>When (relative to Go Live)</th><th>Purpose</th></tr></thead>
         <tbody>
           ${methodologyRows.map((r) => `<tr><td>${esc(r.num)}</td><td>${esc(r.name)}</td><td>${esc(r.when)}</td><td>${esc(r.purpose)}</td></tr>`).join("")}
         </tbody>
       </table>
-      ${variant.phases.map(phaseBlock).join("")}
+      ${variant.stages.map(stageBlock).join("")}
       <h3>2.8  Training Services</h3>
       <p><strong>Included.</strong> ${esc(variant.trainingIncluded)}</p>
       ${variant.trainingOptional ? `<p><strong>Optional.</strong> ${esc(variant.trainingOptional)}</p>` : ""}
@@ -453,7 +453,7 @@ function section6(): string {
 
 /**
  * Total project weeks derived from the duration band. Used by Section 7
- * (Timeline & Milestones) to render week-based phase ranges. The bands map
+ * (Timeline & Milestones) to render week-based stage ranges. The bands map
  * to the upper end of the range so the customer sees a conservative
  * estimate; "custom" uses the explicit week count when supplied.
  */
@@ -469,13 +469,13 @@ function totalProjectWeeks(ctx: SowBuildContext): number {
  * Section 7 — Timeline & Milestones. Replaces the previously-rendered
  * Section 7 (Governance/RACI/Cadence/Escalation, now archived) and the old
  * dated-milestone table (T+N weeks). Per the May-2026 content review the
- * SOW commits only to a target go-live; phase week-ranges are illustrative
+ * SOW commits only to a target go-live; stage week-ranges are illustrative
  * and tied to the proposed project duration so we don't promise specific
  * dated milestones contractually.
  */
 function section7Timeline(ctx: SowBuildContext): string {
   const weeks = totalProjectWeeks(ctx);
-  // Phase distribution: Initiation = wk 1, Planning ~40%, Executing overlaps
+  // Stage distribution: Initiation = wk 1, Planning ~40%, Executing overlaps
   // through ~70%, Monitoring/Controlling through ~85%, Go-Live + Closure at
   // the tail. Ranges are inclusive and rounded to whole weeks.
   const planEnd  = Math.max(2, Math.round(weeks * 0.4));
@@ -484,13 +484,13 @@ function section7Timeline(ctx: SowBuildContext): string {
   const goLive   = Math.max(monEnd + 1, weeks - 1);
   const closing  = Math.max(goLive + 1, weeks);
 
-  const rows: Array<{ phase: string; weeks: string }> = [
-    { phase: "Initiation & Kickoff",                        weeks: "Week 1" },
-    { phase: "Planning — Assessment, Design, Porting Prep", weeks: `Weeks 1–${planEnd}` },
-    { phase: "Executing — Tenant Build & Porting Submission", weeks: `Weeks ${planEnd}–${execEnd}` },
-    { phase: "Monitoring / Controlling — UAT & Hardware",   weeks: `Weeks ${execEnd}–${monEnd}` },
-    { phase: "Go-Live & Day 1 Support",                     weeks: `Week ${goLive}` },
-    { phase: "Closure & CSM Transition",                    weeks: `Week ${closing}` },
+  const rows: Array<{ stage: string; weeks: string }> = [
+    { stage: "Initiation & Kickoff",                        weeks: "Week 1" },
+    { stage: "Planning — Assessment, Design, Porting Prep", weeks: `Weeks 1–${planEnd}` },
+    { stage: "Executing — Tenant Build & Porting Submission", weeks: `Weeks ${planEnd}–${execEnd}` },
+    { stage: "Monitoring / Controlling — UAT & Hardware",   weeks: `Weeks ${execEnd}–${monEnd}` },
+    { stage: "Go-Live & Day 1 Support",                     weeks: `Week ${goLive}` },
+    { stage: "Closure & CSM Transition",                    weeks: `Week ${closing}` },
   ];
 
   const goLiveLine = ctx.targetGoLiveDate
@@ -501,10 +501,10 @@ function section7Timeline(ctx: SowBuildContext): string {
     <section class="page-section">
       <h1>7.  Timeline &amp; Milestones</h1>
       ${goLiveLine}
-      <p>This engagement is sized for approximately <strong>${weeks} weeks</strong> from project initiation to closure. The week ranges below are typical phase distribution; specific dates are finalized in the project plan produced during Planning, based on porting Firm Order Commitments (FOCs) and Customer site readiness.</p>
+      <p>This engagement is sized for approximately <strong>${weeks} weeks</strong> from project initiation to closure. The week ranges below are typical stage distribution; specific dates are finalized in the project plan produced during Planning, based on porting Firm Order Commitments (FOCs) and Customer site readiness.</p>
       <table class="data-table">
-        <thead><tr><th>Phase</th><th>Relative Weeks</th></tr></thead>
-        <tbody>${rows.map((r) => `<tr><td>${esc(r.phase)}</td><td>${esc(r.weeks)}</td></tr>`).join("")}</tbody>
+        <thead><tr><th>Stage</th><th>Relative Weeks</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr><td>${esc(r.stage)}</td><td>${esc(r.weeks)}</td></tr>`).join("")}</tbody>
       </table>
       <p class="muted">Week 1 begins at SOW execution. Durations are working weeks and exclude federal holidays and Customer-declared blackout windows.</p>
     </section>
@@ -732,9 +732,9 @@ function styles(): string {
     .confidentiality { font-size: 9pt; color: #555; border-top: 1px solid #ccc; padding-top: 10px; margin-top: 14px; }
     /* Budgetary watermark */
     .budgetary-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 96pt; font-weight: 900; color: rgba(0, 59, 92, 0.08); letter-spacing: 0.05em; pointer-events: none; z-index: 0; }
-    /* Phase */
-    .phase { margin-top: 14px; }
-    .phase-sub { margin: 10px 0 4px 6px; }
+    /* Stage */
+    .stage { margin-top: 14px; }
+    .stage-sub { margin: 10px 0 4px 6px; }
   `;
 }
 

@@ -17,7 +17,7 @@ app.get("/:id/documents", async (c) => {
 
   const rows = await db
     .prepare(
-      `SELECT d.id, d.project_id, d.phase_id, d.task_id, d.name, d.content_type,
+      `SELECT d.id, d.project_id, d.stage_id, d.task_id, d.name, d.content_type,
               d.size_bytes, d.category, d.uploaded_by, d.created_at,
               u.name AS uploader_name
        FROM documents d
@@ -63,13 +63,13 @@ app.post("/:id/documents", async (c) => {
   }
 
   const category = (formData.get("category") as string | null) ?? "Other";
-  const phase_id = (formData.get("phase_id") as string | null) || null;
+  const stage_id = (formData.get("stage_id") as string | null) || null;
   const task_id = (formData.get("task_id") as string | null) || null;
 
-  // Validate phase/task belong to this project
-  if (phase_id) {
-    const ph = await db.prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1").bind(phase_id, projectId).first();
-    if (!ph) throw new HTTPException(400, { message: "Phase not found in this project" });
+  // Validate stage/task belong to this project
+  if (stage_id) {
+    const ph = await db.prepare("SELECT id FROM stages WHERE id = ? AND project_id = ? LIMIT 1").bind(stage_id, projectId).first();
+    if (!ph) throw new HTTPException(400, { message: "Stage not found in this project" });
   }
   if (task_id) {
     const tk = await db.prepare("SELECT id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1").bind(task_id, projectId).first();
@@ -87,15 +87,15 @@ app.post("/:id/documents", async (c) => {
 
   await db
     .prepare(
-      `INSERT INTO documents (id, project_id, phase_id, task_id, name, r2_key, content_type, size_bytes, category, uploaded_by)
+      `INSERT INTO documents (id, project_id, stage_id, task_id, name, r2_key, content_type, size_bytes, category, uploaded_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(docId, projectId, phase_id, task_id, file.name, r2Key, file.type || null, file.size, category, auth.user.id)
+    .bind(docId, projectId, stage_id, task_id, file.name, r2Key, file.type || null, file.size, category, auth.user.id)
     .run();
 
   const created = await db
     .prepare(
-      `SELECT d.id, d.project_id, d.phase_id, d.task_id, d.name, d.content_type,
+      `SELECT d.id, d.project_id, d.stage_id, d.task_id, d.name, d.content_type,
               d.size_bytes, d.category, d.uploaded_by, d.created_at,
               u.name AS uploader_name
        FROM documents d

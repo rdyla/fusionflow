@@ -11,7 +11,7 @@ type Solution = {
 type Project = {
   id: string; name: string; customer_name: string | null; vendor: string | null;
   status: string | null; created_at: string;
-  phase_count: number; task_count: number; risk_count: number; document_count: number;
+  stage_count: number; task_count: number; risk_count: number; document_count: number;
   already_on_prod: boolean;
 };
 type OptimizeAccount = {
@@ -307,7 +307,7 @@ function ProjectsTable({ rows, selected, setSelected }: { rows: Project[]; selec
             <Td>{r.vendor ?? "—"}</Td>
             <Td>{r.status ?? "—"}</Td>
             <Td style={{ fontSize: 11, color: "#64748b" }}>
-              Phases:{r.phase_count} · Tasks:{r.task_count} · Risks:{r.risk_count} · Docs:{r.document_count}
+              Stages:{r.stage_count} · Tasks:{r.task_count} · Risks:{r.risk_count} · Docs:{r.document_count}
             </Td>
             <Td>{fmtDate(r.created_at)}</Td>
             <Td>{r.already_on_prod ? <Badge tone="muted">on prod</Badge> : <Badge tone="ok">staging only</Badge>}</Td>

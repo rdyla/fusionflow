@@ -36,7 +36,7 @@ app.get("/summary", async (c) => {
     filterBindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) {
-      return c.json({ user: auth.user, summary: { activeProjects: 0, atRiskProjects: 0, openTasks: 0, openRisks: 0 }, projects: [], openTasks: [], openRisks: [], phaseDistribution: [], vendorDistribution: [], typeDistribution: [] });
+      return c.json({ user: auth.user, summary: { activeProjects: 0, atRiskProjects: 0, openTasks: 0, openRisks: 0 }, projects: [], openTasks: [], openRisks: [], stageDistribution: [], vendorDistribution: [], typeDistribution: [] });
     }
     projectFilter = "WHERE dynamics_account_id = ?";
     filterBindings = [auth.user.dynamics_account_id];
@@ -99,10 +99,10 @@ app.get("/summary", async (c) => {
     openTasksCount,
     openBlockersCount,
     projects,
-    projectPhases,
+    projectStages,
     openTasks,
     openBlockers,
-    phaseDistribution,
+    stageDistribution,
     vendorDistribution,
     aeRes,
     typeDistribution,
@@ -141,12 +141,12 @@ app.get("/summary", async (c) => {
       .bind(...filterBindings)
       .all(),
 
-    // Per-project phase summary for the phase-flow indicator
+    // Per-project stage summary for the stage-flow indicator
     db.prepare(
         `SELECT ph.project_id, ph.name, ph.status, ph.sort_order
          FROM (
            SELECT project_id, name, status, sort_order
-           FROM phases
+           FROM stages
            WHERE project_id IN (${projectSubquery})
            ORDER BY sort_order
          ) ph`
@@ -156,7 +156,7 @@ app.get("/summary", async (c) => {
 
     // Open tasks (not completed) with project name, most urgent first
     db.prepare(
-        `SELECT t.id, t.project_id, t.phase_id, t.title, t.assignee_user_id,
+        `SELECT t.id, t.project_id, t.stage_id, t.title, t.assignee_user_id,
                 t.due_date, t.status, t.priority,
                 p.name as project_name
          FROM tasks t
@@ -186,30 +186,30 @@ app.get("/summary", async (c) => {
       .bind(...filterBindings)
       .all(),
 
-    // Projects grouped by current phase (in_progress > last completed > Not Started)
+    // Projects grouped by current stage (in_progress > last completed > Not Started)
     db.prepare(
-        `WITH current_phases AS (
+        `WITH current_stages AS (
            SELECT
              proj.id AS project_id,
              COALESCE(
-               (SELECT ph.name FROM phases ph
+               (SELECT ph.name FROM stages ph
                 WHERE ph.project_id = proj.id AND ph.status = 'in_progress'
                 ORDER BY ph.sort_order DESC LIMIT 1),
-               (SELECT ph.name FROM phases ph
+               (SELECT ph.name FROM stages ph
                 WHERE ph.project_id = proj.id AND ph.status = 'completed'
                 ORDER BY ph.sort_order DESC LIMIT 1),
                'Not Started'
-             ) AS phase_name
+             ) AS stage_name
            FROM projects proj
            WHERE proj.id IN (${projectSubquery})
          )
-         SELECT phase_name, COUNT(*) AS count
-         FROM current_phases
-         GROUP BY phase_name
+         SELECT stage_name, COUNT(*) AS count
+         FROM current_stages
+         GROUP BY stage_name
          ORDER BY count DESC`
       )
       .bind(...filterBindings)
-      .all<{ phase_name: string; count: number }>(),
+      .all<{ stage_name: string; count: number }>(),
 
     db.prepare(
         `SELECT COALESCE(vendor, 'Unknown') AS label, COUNT(*) AS count
@@ -256,10 +256,10 @@ app.get("/summary", async (c) => {
       openBlockers: openBlockersCount?.count ?? 0,
     },
     projects: (projects.results ?? []).map(normalizeSolutionTypesField),
-    projectPhases: projectPhases.results ?? [],
+    projectStages: projectStages.results ?? [],
     openTasks: openTasks.results ?? [],
     openBlockers: openBlockers.results ?? [],
-    phaseDistribution: phaseDistribution.results ?? [],
+    stageDistribution: stageDistribution.results ?? [],
     vendorDistribution: vendorDistribution.results ?? [],
     typeDistribution: typeDistribution.results ?? [],
     aeDistribution,

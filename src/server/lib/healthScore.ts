@@ -105,7 +105,7 @@ export async function computeProjectHealth(
 
 /**
  * Per-site health for multi-site projects (Libraries/Treatment/HQ-style).
- * Scores against the site's own slice of tasks (via the phases joined to
+ * Scores against the site's own slice of tasks (via the stages joined to
  * this site) and the site's go-live date. Risks stay project-level and
  * are intentionally excluded — the project banner still surfaces them.
  */
@@ -119,14 +119,14 @@ export async function computeSiteHealth(
   // Schedule against the site's own go-live (±25)
   score += scheduleDelta(site.target_go_live_date, today);
 
-  // Task completion within the site's phases (±15)
+  // Task completion within the site's stages (±15)
   const row = await db
     .prepare(
       `SELECT
          COUNT(*) AS total,
          SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done
        FROM tasks t
-       JOIN phases p ON p.id = t.phase_id
+       JOIN stages p ON p.id = t.stage_id
        WHERE p.site_id = ?`
     )
     .bind(site.id)

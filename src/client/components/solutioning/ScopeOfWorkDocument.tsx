@@ -127,7 +127,7 @@ function pickCounts(
 ): { locations: number; users: number; dids: number; meetings: number; goLives: number } {
   // Advanced-mode source: the SOW Sizing Form blob (sow_data).
   const sdLocations = num(sd?.shared?.sites_count);
-  const sdPhases    = num(sd?.shared?.phases_count);
+  const sdStages    = num(sd?.shared?.phases_count);
   const sdUsers     = num(sd?.ucaas?.basic_users) + num(sd?.ucaas?.advanced_users)
                     + num(sd?.ucaas?.common_area) + num(sd?.ucaas?.conference_rooms);
   const sdDids      = num(sd?.shared?.porting_did_count);
@@ -148,8 +148,8 @@ function pickCounts(
   const meetingsCount = num((a as Record<string, unknown>)["zoom_meetings_count"]);
   const meetings = meetingsCount > 0 ? meetingsCount : 0;
   // Go-live count: phases (advanced) → basic.go_lives → locations.
-  const goLives = sdPhases > 0
-    ? sdPhases
+  const goLives = sdStages > 0
+    ? sdStages
     : (basic && num(basic.go_lives) > 0 ? num(basic.go_lives) : locations);
   return { locations, users, dids, meetings, goLives };
 }

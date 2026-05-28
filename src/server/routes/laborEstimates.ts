@@ -60,7 +60,7 @@ const GLOBAL_DRIVERS: DriverDef[] = [
     mapping: { yes: 6, unknown: 4, no: 0 },
   },
   {
-    id: "phased_scope", field: "future_phase_scope_summary",
+    id: "phased_scope", field: "future_stage_scope_summary",
     workstreams: ["solution_design", "project_management"] as Workstream[],
     nonEmptyAdds: 4,
   },
@@ -406,18 +406,18 @@ function computeComplexityScore(category: string, answers: Record<string, unknow
     add(Math.min(epCount * 5, 20), "Endpoint type variety", `${epCount} endpoint type${epCount !== 1 ? "s" : ""}`);
   } else if (category === "ccaas") {
     const chanCount = asCount(answers["channels_required_phase_1"]);
-    add(Math.min(chanCount * 10, 40), "Channels in scope (phase 1)", `${chanCount} channel${chanCount !== 1 ? "s" : ""}`);
+    add(Math.min(chanCount * 10, 40), "Channels in scope (stage 1)", `${chanCount} channel${chanCount !== 1 ? "s" : ""}`);
     const routeCount = asCount(answers["routing_capabilities_required"]);
     add(Math.min(routeCount * 8, 32), "Routing capabilities required", `${routeCount} capability type${routeCount !== 1 ? "s" : ""}`);
-    if (answers["wfm_required"] === "yes_phase_1") add(15, "WFM included in phase 1", "In scope");
-    if (answers["qm_required"] === "yes_phase_1") add(15, "QM included in phase 1", "In scope");
+    if (answers["wfm_required"] === "yes_phase_1") add(15, "WFM included in stage 1", "In scope");
+    if (answers["qm_required"] === "yes_phase_1") add(15, "QM included in stage 1", "In scope");
   } else if (category === "ci") {
     const methCount = asCount(answers["methodology_elements_to_track"]);
     add(Math.min(methCount * 5, 30), "Methodology elements tracked", `${methCount} element${methCount !== 1 ? "s" : ""}`);
-    if (answers["custom_trackers_required"] === "yes_phase_1") add(15, "Custom trackers in phase 1", "In scope");
-    if (answers["custom_scorecards_required"] === "yes_phase_1") add(15, "Custom scorecards in phase 1", "In scope");
+    if (answers["custom_trackers_required"] === "yes_phase_1") add(15, "Custom trackers in stage 1", "In scope");
+    if (answers["custom_scorecards_required"] === "yes_phase_1") add(15, "Custom scorecards in stage 1", "In scope");
     const crmPts = { yes: 25, future_phase: 10, no: 0 }[answers["crm_integration_required_phase_1"] as string] ?? 0;
-    add(crmPts, "CRM integration", answers["crm_integration_required_phase_1"] === "future_phase" ? "Planned for future phase" : "Phase 1");
+    add(crmPts, "CRM integration", answers["crm_integration_required_phase_1"] === "future_phase" ? "Planned for future stage" : "Stage 1");
   } else if (category === "virtual_agent") {
     const intentPts = ({ "1_10": 5, "1_5": 5, "6_15": 15, "11_25": 20, "16_30": 30, "26_50": 40, "31_60": 45, "51_plus": 55, "60_plus": 60 } as Record<string, number>)[answers["estimated_intent_count"] as string] ?? 0;
     add(intentPts, "Intent count", String(answers["estimated_intent_count"] ?? "").replace(/_/g, "–"));
@@ -451,7 +451,7 @@ function computeConfidence(category: string, answers: Record<string, unknown>): 
 function computeRiskFlags(category: string, answers: Record<string, unknown>): string[] {
   const flags: string[] = [];
   if (!isNonEmpty(answers["phase_1_scope_summary"])) {
-    flags.push("Phase 1 scope is not clearly defined.");
+    flags.push("Stage 1 scope is not clearly defined.");
   }
   if (!isNonEmpty(answers["customer_prerequisites_before_design"])) {
     flags.push("Customer prerequisites have not been identified.");

@@ -6,7 +6,7 @@ import {
   type Document,
   type DynamicsContact,
   type Note,
-  type Phase,
+  type Stage,
   type Project,
   type ProjectContact,
   type ProjectStaffMember,
@@ -143,7 +143,7 @@ export default function ProjectDetailPage() {
   const [searchParams] = useSearchParams();
 
   const [project, setProject] = useState<Project | null>(null);
-  const [phases, setPhases] = useState<Phase[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [risks, setRisks] = useState<Risk[]>([]);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
@@ -159,7 +159,7 @@ export default function ProjectDetailPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [tab, setTab] = useState<DetailTab>("dashboard");
-  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState("");
@@ -187,8 +187,8 @@ export default function ProjectDetailPage() {
   // Stored as an array of canonical types; persisted per project id.
   const [selectedTypes, setSelectedTypes] = useState<Set<SolutionType>>(() => new Set(SOLUTION_TYPES));
 
-  // Inline-create state for the Tasks table — phaseId currently being added to + the typed title
-  const [newTaskPhaseId, setNewTaskPhaseId] = useState<string | null>(null);
+  // Inline-create state for the Tasks table — stageId currently being added to + the typed title
+  const [newTaskStageId, setNewTaskStageId] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
 
@@ -214,7 +214,7 @@ export default function ProjectDetailPage() {
   const [syncingSuggestions, setSyncingSuggestions] = useState(false);
   const [syncSuggestions, setSyncSuggestions] = useState<ZoomRecordingSuggestion[] | null>(null);
   const [confirmingRecordings, setConfirmingRecordings] = useState(false);
-  const [suggestionPhaseOverrides, setSuggestionPhaseOverrides] = useState<Record<number, string | null>>({});
+  const [suggestionStageOverrides, setSuggestionStageOverrides] = useState<Record<number, string | null>>({});
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
   const [suggestionTaskOverrides, setSuggestionTaskOverrides] = useState<Record<number, string | null>>({});
 
@@ -234,16 +234,16 @@ export default function ProjectDetailPage() {
   const [savingCaseLink, setSavingCaseLink] = useState(false);
 
   // Apply template
-  const [templateList, setTemplateList] = useState<{ id: string; name: string; phase_count?: number; task_count?: number }[]>([]);
+  const [templateList, setTemplateList] = useState<{ id: string; name: string; stage_count?: number; task_count?: number }[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [applyingTemplate, setApplyingTemplate] = useState(false);
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number; tasks_merged: number } | null>(null);
+  const [applyResult, setApplyResult] = useState<{ stages_created: number; tasks_created: number; tasks_merged: number } | null>(null);
 
-  // Manual phase creation
-  const [newPhaseName, setNewPhaseName] = useState("");
-  const [creatingPhase, setCreatingPhase] = useState(false);
-  const [showNewPhaseInput, setShowNewPhaseInput] = useState(false);
+  // Manual stage creation
+  const [newStageName, setNewStageName] = useState("");
+  const [creatingStage, setCreatingStage] = useState(false);
+  const [showNewStageInput, setShowNewStageInput] = useState(false);
 
   const { showToast } = useToast();
 
@@ -310,8 +310,8 @@ export default function ProjectDetailPage() {
   }
 
   const groupedTasks = useMemo(
-    () => phases.map((phase) => ({ phase, tasks: filteredTasks.filter((t) => t.phase_id === phase.id) })),
-    [phases, filteredTasks]
+    () => stages.map((stage) => ({ stage, tasks: filteredTasks.filter((t) => t.stage_id === stage.id) })),
+    [stages, filteredTasks]
   );
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   function userName(id: string | null) {
@@ -324,9 +324,9 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, taskData, riskData, noteData, userData, docData, staffData, meData] =
+        const [projectData, stageData, taskData, riskData, noteData, userData, docData, staffData, meData] =
           await Promise.all([
-            api.project(id), api.phases(id), api.tasks(id),
+            api.project(id), api.stages(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users().catch(() => [] as User[]), api.documents(id),
             api.projectStaff(id),
             api.me(),
@@ -346,7 +346,7 @@ export default function ProjectDetailPage() {
         if (customerEmails.length > 0) {
           api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
         }
-        setPhases(phaseData);
+        setStages(stageData);
         setTasks(taskData);
         // Load time entries for all tasks
         if (taskData.length > 0) {
@@ -463,13 +463,13 @@ export default function ProjectDetailPage() {
       const result = await api.applyTemplate(project.id, selectedTemplateId);
       setApplyResult(result);
       setShowApplyConfirm(false);
-      // Reload phases and tasks
-      const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
-      setPhases(newPhases);
+      // Reload stages and tasks
+      const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);
+      setStages(newStages);
       setTasks(newTasks);
       {
         const parts: string[] = [];
-        parts.push(`${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""}`);
+        parts.push(`${result.stages_created} new stage${result.stages_created !== 1 ? "s" : ""}`);
         parts.push(`${result.tasks_created} task${result.tasks_created !== 1 ? "s" : ""} added`);
         if (result.tasks_merged > 0) {
           parts.push(`${result.tasks_merged} merged into existing tasks`);
@@ -590,13 +590,13 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function commitInlineNewTask(phaseId: string) {
+  async function commitInlineNewTask(stageId: string) {
     if (!project) return;
     const title = newTaskTitle.trim();
     if (!title) return;
     setCreatingTask(true);
     try {
-      const created = await api.createTask(project.id, { title, phase_id: phaseId, status: "not_started" });
+      const created = await api.createTask(project.id, { title, stage_id: stageId, status: "not_started" });
       setTasks((prev) => [...prev, created]);
       setNewTaskTitle("");
       // Leave the row open + focused for rapid entry
@@ -781,9 +781,9 @@ export default function ProjectDetailPage() {
         <TimelineBuilder
           project={project}
           onApplied={async () => {
-            // Reload phases + tasks after a rebuild
-            const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
-            setPhases(newPhases);
+            // Reload stages + tasks after a rebuild
+            const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);
+            setStages(newStages);
             setTasks(newTasks);
             setTab("timeline");
           }}
@@ -796,7 +796,7 @@ export default function ProjectDetailPage() {
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (
         <ProjectTimeline
-          phases={phases}
+          stages={stages}
           tasks={tasks}
           // Hide recording markers for clients — meeting topics on the Gantt could
           // surface internal discussion names. Matches the Activity-tab gating.
@@ -806,17 +806,17 @@ export default function ProjectDetailPage() {
           selectedTypes={selectedTypes}
           onToggleType={toggleSolutionType}
           ganttOnly
-          onUpdatePhase={async (phaseId, updates) => {
+          onUpdateStage={async (stageId, updates) => {
             if (!project) return;
-            const updated = await api.updatePhase(project.id, phaseId, updates);
-            setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+            const updated = await api.updateStage(project.id, stageId, updates);
+            setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
           }}
-          onClickPhase={(phaseId) => {
-            setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
+          onClickStage={(stageId) => {
+            setCollapsedStages((prev) => { const next = new Set(prev); next.delete(stageId); return next; });
             setTab("tasks");
           }}
-          onClickTask={(taskId, phaseId) => {
-            if (phaseId) setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
+          onClickTask={(taskId, stageId) => {
+            if (stageId) setCollapsedStages((prev) => { const next = new Set(prev); next.delete(stageId); return next; });
             setTab("tasks");
             // Scroll the row into view after the tab mounts
             setTimeout(() => {
@@ -1028,7 +1028,7 @@ export default function ProjectDetailPage() {
                       <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
                       {applyResult && (
                         <span style={{ fontSize: 12, color: "#059669" }}>
-                          {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added
+                          {applyResult.stages_created} stages, {applyResult.tasks_created} tasks added
                           {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
                         </span>
                       )}
@@ -1140,8 +1140,8 @@ export default function ProjectDetailPage() {
               projectId={project.id}
               canEdit={canEdit}
               onChange={async () => {
-                const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
-                setPhases(newPhases);
+                const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);
+                setStages(newStages);
                 setTasks(newTasks);
               }}
             />
@@ -1175,7 +1175,7 @@ export default function ProjectDetailPage() {
         <>
         <div className="ms-section-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
-            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Phase</div>
+            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Stage</div>
             <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
           </div>
           {tasks.length > 0 && filteredTasks.length === 0 && (
@@ -1196,46 +1196,46 @@ export default function ProjectDetailPage() {
             </div>
           )}
           <div style={{ display: "grid", gap: 24 }}>
-            {phases.length === 0 && (
+            {stages.length === 0 && (
               <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
-                No phases yet. Apply a template above, or add phases manually below.
+                No stages yet. Apply a template above, or add stages manually below.
               </div>
             )}
-            {groupedTasks.map(({ phase, tasks: phaseTasks }) => {
-              const isCollapsed = collapsedPhases.has(phase.id);
-              const toggleCollapse = () => setCollapsedPhases((prev) => {
+            {groupedTasks.map(({ stage, tasks: stageTasks }) => {
+              const isCollapsed = collapsedStages.has(stage.id);
+              const toggleCollapse = () => setCollapsedStages((prev) => {
                 const next = new Set(prev);
-                next.has(phase.id) ? next.delete(phase.id) : next.add(phase.id);
+                next.has(stage.id) ? next.delete(stage.id) : next.add(stage.id);
                 return next;
               });
-              const isAddingHere = newTaskPhaseId === phase.id;
+              const isAddingHere = newTaskStageId === stage.id;
               const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
               const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
               const cellInputStyle: React.CSSProperties = canEdit ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
               return (
-              <div key={phase.id}>
-                {/* Phase header with inline editing — unchanged */}
+              <div key={stage.id}>
+                {/* Stage header with inline editing — unchanged */}
                 <div style={{ marginBottom: isCollapsed ? 0 : 10, paddingBottom: 8, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
                   <div
                     style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}
                     onClick={toggleCollapse}
                   >
                     <span style={{ fontSize: 10, color: "#94a3b8", transition: "transform 0.15s", display: "inline-block", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▼</span>
-                    {phase.name}
-                    <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", textTransform: "none", letterSpacing: 0 }}>({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})</span>
+                    {stage.name}
+                    <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", textTransform: "none", letterSpacing: 0 }}>({stageTasks.length} task{stageTasks.length !== 1 ? "s" : ""})</span>
                   </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                     <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                       Start
                       <input
                         type="date"
-                        value={phase.planned_start ?? ""}
+                        value={stage.planned_start ?? ""}
                         disabled={!canEdit}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
-                          const updated = await api.updatePhase(project.id, phase.id, { planned_start: e.target.value || null });
-                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                          const updated = await api.updateStage(project.id, stage.id, { planned_start: e.target.value || null });
+                          setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                         }}
                       />
                     </label>
@@ -1243,26 +1243,26 @@ export default function ProjectDetailPage() {
                       End
                       <input
                         type="date"
-                        value={phase.planned_end ?? ""}
+                        value={stage.planned_end ?? ""}
                         disabled={!canEdit}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
-                          const updated = await api.updatePhase(project.id, phase.id, { planned_end: e.target.value || null });
-                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                          const updated = await api.updateStage(project.id, stage.id, { planned_end: e.target.value || null });
+                          setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                         }}
                       />
                     </label>
                     <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                       Status
                       <select
-                        value={phase.status ?? "not_started"}
+                        value={stage.status ?? "not_started"}
                         disabled={!canEdit}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
-                          const updated = await api.updatePhase(project.id, phase.id, { status: e.target.value as "not_started" | "in_progress" | "completed" });
-                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                          const updated = await api.updateStage(project.id, stage.id, { status: e.target.value as "not_started" | "in_progress" | "completed" });
+                          setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                         }}
                       >
                         <option value="not_started">Not Started</option>
@@ -1270,24 +1270,24 @@ export default function ProjectDetailPage() {
                         <option value="completed">Completed</option>
                       </select>
                     </label>
-                    <Badge label={humanize(phase.status ?? "not_started")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
+                    <Badge label={humanize(stage.status ?? "not_started")} color={STATUS_COLOR[stage.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
                     {canEdit && (
                       <button
                         type="button"
-                        title="Delete phase"
+                        title="Delete stage"
                         onClick={async () => {
                           if (!project) return;
-                          const taskCount = phaseTasks.length;
+                          const taskCount = stageTasks.length;
                           const msg = taskCount === 0
-                            ? `Delete phase "${phase.name}"?`
-                            : `Delete phase "${phase.name}" and its ${taskCount} task${taskCount === 1 ? "" : "s"}? Documents tied to this phase will move to the project level; other data stays put.`;
+                            ? `Delete stage "${stage.name}"?`
+                            : `Delete stage "${stage.name}" and its ${taskCount} task${taskCount === 1 ? "" : "s"}? Documents tied to this stage will move to the project level; other data stays put.`;
                           if (!confirm(msg)) return;
                           try {
-                            await api.deletePhase(project.id, phase.id);
-                            setPhases((prev) => prev.filter((p) => p.id !== phase.id));
-                            setTasks((prev) => prev.filter((t) => t.phase_id !== phase.id));
+                            await api.deleteStage(project.id, stage.id);
+                            setStages((prev) => prev.filter((p) => p.id !== stage.id));
+                            setTasks((prev) => prev.filter((t) => t.stage_id !== stage.id));
                           } catch {
-                            showToast("Failed to delete phase", "error");
+                            showToast("Failed to delete stage", "error");
                           }
                         }}
                         style={{ marginLeft: "auto", background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "2px 8px", fontSize: 11, cursor: "pointer", lineHeight: 1.4 }}
@@ -1301,11 +1301,11 @@ export default function ProjectDetailPage() {
                 {/* Inline CRUD table */}
                 {!isCollapsed && (
                   <div>
-                    {phaseTasks.length === 0 && !isAddingHere && (
+                    {stageTasks.length === 0 && !isAddingHere && (
                       <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
                     )}
 
-                    {(phaseTasks.length > 0 || isAddingHere) && (
+                    {(stageTasks.length > 0 || isAddingHere) && (
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
@@ -1329,7 +1329,7 @@ export default function ProjectDetailPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {phaseTasks.map((task) => {
+                            {stageTasks.map((task) => {
                               const taskRecordings = recordings.filter((r) => r.task_id === task.id);
                               const taskEntries = taskTimeEntries[task.id] ?? [];
                               const isDone = task.status === "completed";
@@ -1632,7 +1632,7 @@ export default function ProjectDetailPage() {
                               <tr>
                                 <td colSpan={7} style={{ padding: "6px 8px" }}>
                                   <form
-                                    onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(phase.id); }}
+                                    onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(stage.id); }}
                                     style={{ display: "flex", gap: 8, alignItems: "center" }}
                                   >
                                     <input
@@ -1642,14 +1642,14 @@ export default function ProjectDetailPage() {
                                       value={newTaskTitle}
                                       onChange={(e) => setNewTaskTitle(e.target.value)}
                                       onKeyDown={(e) => {
-                                        if (e.key === "Escape") { setNewTaskTitle(""); setNewTaskPhaseId(null); }
+                                        if (e.key === "Escape") { setNewTaskTitle(""); setNewTaskStageId(null); }
                                       }}
                                       disabled={creatingTask}
                                       style={{ flex: 1, padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 4, fontSize: 13, background: "#fff", color: "#1e293b" }}
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => { setNewTaskTitle(""); setNewTaskPhaseId(null); }}
+                                      onClick={() => { setNewTaskTitle(""); setNewTaskStageId(null); }}
                                       style={{ fontSize: 11, padding: "4px 10px", background: "none", border: "1px solid #cbd5e1", color: "#64748b", borderRadius: 4, cursor: "pointer" }}
                                     >
                                       Done
@@ -1666,7 +1666,7 @@ export default function ProjectDetailPage() {
                     {canEdit && !isAddingHere && (
                       <button
                         className="ms-btn-ghost"
-                        onClick={() => { setNewTaskTitle(""); setNewTaskPhaseId(phase.id); }}
+                        onClick={() => { setNewTaskTitle(""); setNewTaskStageId(stage.id); }}
                         style={{ marginTop: 8, fontSize: 12, border: "1px dashed #cbd5e1", color: "#64748b" }}
                       >
                         + Add Task
@@ -1679,58 +1679,58 @@ export default function ProjectDetailPage() {
             })}
 
             {canEdit && (
-              showNewPhaseInput ? (
-                <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, borderTop: phases.length > 0 ? "1px dashed #e2e8f0" : "none" }}>
+              showNewStageInput ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, borderTop: stages.length > 0 ? "1px dashed #e2e8f0" : "none" }}>
                   <input
                     type="text"
                     autoFocus
-                    placeholder="Phase name"
-                    value={newPhaseName}
-                    onChange={(e) => setNewPhaseName(e.target.value)}
+                    placeholder="Stage name"
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
                     onKeyDown={async (e) => {
-                      if (e.key === "Enter" && newPhaseName.trim() && !creatingPhase && project) {
-                        setCreatingPhase(true);
+                      if (e.key === "Enter" && newStageName.trim() && !creatingStage && project) {
+                        setCreatingStage(true);
                         try {
-                          const created = await api.createPhase(project.id, { name: newPhaseName.trim() });
-                          setPhases((prev) => [...prev, created]);
-                          setNewPhaseName("");
-                          setShowNewPhaseInput(false);
+                          const created = await api.createStage(project.id, { name: newStageName.trim() });
+                          setStages((prev) => [...prev, created]);
+                          setNewStageName("");
+                          setShowNewStageInput(false);
                         } catch {
-                          showToast("Failed to create phase", "error");
+                          showToast("Failed to create stage", "error");
                         } finally {
-                          setCreatingPhase(false);
+                          setCreatingStage(false);
                         }
                       } else if (e.key === "Escape") {
-                        setNewPhaseName("");
-                        setShowNewPhaseInput(false);
+                        setNewStageName("");
+                        setShowNewStageInput(false);
                       }
                     }}
                     style={{ flex: 1, fontSize: 13, padding: "6px 10px", border: "1px solid #d1d5db", borderRadius: 4, background: "#fff", color: "#1e293b" }}
                   />
                   <button
                     className="ms-btn-primary"
-                    disabled={!newPhaseName.trim() || creatingPhase}
+                    disabled={!newStageName.trim() || creatingStage}
                     onClick={async () => {
                       if (!project) return;
-                      setCreatingPhase(true);
+                      setCreatingStage(true);
                       try {
-                        const created = await api.createPhase(project.id, { name: newPhaseName.trim() });
-                        setPhases((prev) => [...prev, created]);
-                        setNewPhaseName("");
-                        setShowNewPhaseInput(false);
+                        const created = await api.createStage(project.id, { name: newStageName.trim() });
+                        setStages((prev) => [...prev, created]);
+                        setNewStageName("");
+                        setShowNewStageInput(false);
                       } catch {
-                        showToast("Failed to create phase", "error");
+                        showToast("Failed to create stage", "error");
                       } finally {
-                        setCreatingPhase(false);
+                        setCreatingStage(false);
                       }
                     }}
                     style={{ fontSize: 12, padding: "5px 14px" }}
                   >
-                    {creatingPhase ? "Creating…" : "Create"}
+                    {creatingStage ? "Creating…" : "Create"}
                   </button>
                   <button
                     className="ms-btn-ghost"
-                    onClick={() => { setNewPhaseName(""); setShowNewPhaseInput(false); }}
+                    onClick={() => { setNewStageName(""); setShowNewStageInput(false); }}
                     style={{ fontSize: 12, padding: "5px 12px" }}
                   >
                     Cancel
@@ -1739,10 +1739,10 @@ export default function ProjectDetailPage() {
               ) : (
                 <button
                   className="ms-btn-ghost"
-                  onClick={() => setShowNewPhaseInput(true)}
-                  style={{ alignSelf: "start", border: "1px dashed #cbd5e1", color: "#64748b", marginTop: phases.length > 0 ? 8 : 0 }}
+                  onClick={() => setShowNewStageInput(true)}
+                  style={{ alignSelf: "start", border: "1px dashed #cbd5e1", color: "#64748b", marginTop: stages.length > 0 ? 8 : 0 }}
                 >
-                  + Add Phase
+                  + Add Stage
                 </button>
               )
             )}
@@ -1804,7 +1804,7 @@ export default function ProjectDetailPage() {
         <ProjectDocuments
           projectId={project.id}
           documents={documents}
-          phases={phases}
+          stages={stages}
           tasks={tasks}
           onDocumentsChange={setDocuments}
         />
@@ -1879,7 +1879,7 @@ export default function ProjectDetailPage() {
                       onClick={async () => {
                         setSyncingSuggestions(true);
                         setSyncSuggestions(null);
-                        setSuggestionPhaseOverrides({});
+                        setSuggestionStageOverrides({});
                         setSuggestionTaskOverrides({});
                         setSelectedSuggestions(new Set());
                         try {
@@ -1953,11 +1953,11 @@ export default function ProjectDetailPage() {
                               <select
                                 className="ms-input"
                                 style={{ fontSize: 12, padding: "2px 6px", height: "auto", width: "auto" }}
-                                value={rec.phase_id ?? ""}
+                                value={rec.stage_id ?? ""}
                                 onChange={async (e) => {
-                                  const newPhaseId = e.target.value || null;
+                                  const newStageId = e.target.value || null;
                                   try {
-                                    const updated = await api.zoomReassignRecording(project.id, rec.id, newPhaseId);
+                                    const updated = await api.zoomReassignRecording(project.id, rec.id, newStageId);
                                     setRecordings((prev) => prev.map((r) => r.id === updated.id ? updated : r));
                                     showToast("Recording reassigned.", "success");
                                   } catch {
@@ -1966,7 +1966,7 @@ export default function ProjectDetailPage() {
                                 }}
                               >
                                 <option value="">— unassigned —</option>
-                                {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                {stages.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
                               </select>
                             )}
                             {canEdit && (
@@ -1983,8 +1983,8 @@ export default function ProjectDetailPage() {
                               </button>
                             )}
                           </div>
-                          {rec.phase_name && (
-                            <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Phase: {rec.phase_name}</div>
+                          {rec.stage_name && (
+                            <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Stage: {rec.stage_name}</div>
                           )}
                         </div>
                       </div>
@@ -2031,7 +2031,7 @@ export default function ProjectDetailPage() {
                       <div style={{ display: "grid", gap: 10, maxHeight: 420, overflowY: "auto" }}>
                         {syncSuggestions.map((s, idx) => {
                           const isSelected = selectedSuggestions.has(idx);
-                          const overridePhaseId = idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id;
+                          const overrideStageId = idx in suggestionStageOverrides ? suggestionStageOverrides[idx] : s.suggested_stage_id;
                           return (
                             <div
                               key={s.meeting_id}
@@ -2075,22 +2075,22 @@ export default function ProjectDetailPage() {
                                   {isSelected && (
                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                        <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Phase:</span>
+                                        <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Stage:</span>
                                         <select
                                           className="ms-input"
                                           style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
-                                          value={overridePhaseId ?? ""}
+                                          value={overrideStageId ?? ""}
                                           onChange={(e) => {
-                                            setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }));
-                                            // Clear task when phase changes
+                                            setSuggestionStageOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }));
+                                            // Clear task when stage changes
                                             setSuggestionTaskOverrides((prev) => ({ ...prev, [idx]: null }));
                                           }}
                                         >
                                           <option value="">— Unassigned —</option>
-                                          {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                          {stages.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
                                         </select>
                                       </div>
-                                      {overridePhaseId && (
+                                      {overrideStageId && (
                                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                           <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Task:</span>
                                           <select
@@ -2101,7 +2101,7 @@ export default function ProjectDetailPage() {
                                           >
                                             <option value="">— None —</option>
                                             {tasks
-                                              .filter((t) => t.phase_id === overridePhaseId)
+                                              .filter((t) => t.stage_id === overrideStageId)
                                               .map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
                                           </select>
                                         </div>
@@ -2127,12 +2127,12 @@ export default function ProjectDetailPage() {
                             try {
                               const confirmations = [...selectedSuggestions].map((idx) => {
                                 const s = syncSuggestions[idx];
-                                const phaseId = (idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id) ?? null;
+                                const stageId = (idx in suggestionStageOverrides ? suggestionStageOverrides[idx] : s.suggested_stage_id) ?? null;
                                 const taskId = suggestionTaskOverrides[idx] ?? null;
-                                const isManual = (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) || !!taskId;
+                                const isManual = (idx in suggestionStageOverrides && suggestionStageOverrides[idx] !== s.suggested_stage_id) || !!taskId;
                                 return {
                                   meeting_id: s.meeting_id,
-                                  phase_id: phaseId,
+                                  stage_id: stageId,
                                   task_id: taskId,
                                   topic: s.topic,
                                   start_time: s.start_time,
@@ -3074,7 +3074,7 @@ export default function ProjectDetailPage() {
             <div className="ms-modal" style={{ maxWidth: 440 }}>
               <h2>Apply Template</h2>
               <p style={{ color: "#475569", margin: "12px 0 20px" }}>
-                This will add <strong>{tmpl?.phase_count ?? "?"} phases</strong> and{" "}
+                This will add <strong>{tmpl?.stage_count ?? "?"} stages</strong> and{" "}
                 <strong>{tmpl?.task_count ?? "?"} tasks</strong> from{" "}
                 <strong style={{ color: "#1e293b" }}>{tmpl?.name}</strong> to this project. Continue?
               </p>

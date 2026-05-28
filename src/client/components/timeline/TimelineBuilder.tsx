@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type Project, type Template } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
-import { chainForward, parseISODate, startFromGoLive, workday, workdaysBetween, type PhaseInput } from "../../../shared/workdayMath";
+import { chainForward, parseISODate, startFromGoLive, workday, workdaysBetween, type StageInput } from "../../../shared/workdayMath";
 import { buildTaggedTitle, canonicalizeSolutionType, type SolutionType } from "../../../shared/solutionTypes";
 import { toTitleCase } from "../../../shared/titleCase";
 
@@ -20,15 +20,15 @@ type Task = {
   start: string;
   end: string;
   pinned: boolean;
-  /** Canonical go-live event for its source template. Its phase becomes the
-   *  anchor: the project's target go-live date = end of this task's phase,
-   *  with earlier phases chained backward and later phases (Closing,
+  /** Canonical go-live event for its source template. Its stage becomes the
+   *  anchor: the project's target go-live date = end of this task's stage,
+   *  with earlier stages chained backward and later stages (Closing,
    *  Hypercare) chained forward. */
   isGoLiveEvent: boolean;
 };
 
 type Row = {
-  /** Canonical phase name (e.g. "Initiation"). Used as merge key + table key. */
+  /** Canonical stage name (e.g. "Initiation"). Used as merge key + table key. */
   name: string;
   working_days: number;
   start: string;
@@ -51,16 +51,16 @@ function formatDateForDisplay(iso: string): string {
 }
 
 /**
- * Merge phases across one or more templates by canonical name. For each
+ * Merge stages across one or more templates by canonical name. For each
  * canonical name:
  *  - working_days = MAX(working_days) across contributing templates (since
- *    UCaaS + CCaaS teams work the same phase window in parallel; longest
+ *    UCaaS + CCaaS teams work the same stage window in parallel; longest
  *    governs)
  *  - tasks = union from every contributing template, each tagged with its
  *    source solution_type via buildTaggedTitle()
  *
- * Phase order preserves the order_index of the first template that introduces
- * each phase.
+ * Stage order preserves the order_index of the first template that introduces
+ * each stage.
  */
 function mergeTemplates(templates: Template[]): Omit<Row, "start" | "end" | "pinned">[] {
   const orderedNames: string[] = [];
@@ -68,7 +68,7 @@ function mergeTemplates(templates: Template[]): Omit<Row, "start" | "end" | "pin
 
   for (const t of templates) {
     const solutionType: SolutionType | null = canonicalizeSolutionType(t.solution_type ?? "");
-    for (const p of t.phases ?? []) {
+    for (const p of t.stages ?? []) {
       if (!byName.has(p.name)) {
         orderedNames.push(p.name);
         byName.set(p.name, { working_days: 0, tasks: [] });
@@ -101,14 +101,14 @@ function mergeTemplates(templates: Template[]): Omit<Row, "start" | "end" | "pin
 }
 
 /**
- * Index of the merged phase that holds the go-live event anchor (any task with
- * isGoLiveEvent). Returns the LAST such phase so combo projects whose
- * templates disagree on go-live phase still treat the later phase as "the"
+ * Index of the merged stage that holds the go-live event anchor (any task with
+ * isGoLiveEvent). Returns the LAST such stage so combo projects whose
+ * templates disagree on go-live stage still treat the later stage as "the"
  * go-live (everything before chains back, everything after chains forward).
  * Returns -1 when no template in the selection has a flagged task — caller
- * falls back to anchoring on the very last phase's end (legacy behaviour).
+ * falls back to anchoring on the very last stage's end (legacy behaviour).
  */
-function findGoLivePhaseIdx(merged: { tasks: { isGoLiveEvent: boolean }[] }[]): number {
+function findGoLiveStageIdx(merged: { tasks: { isGoLiveEvent: boolean }[] }[]): number {
   for (let i = merged.length - 1; i >= 0; i--) {
     if (merged[i].tasks.some((t) => t.isGoLiveEvent)) return i;
   }
@@ -116,13 +116,13 @@ function findGoLivePhaseIdx(merged: { tasks: { isGoLiveEvent: boolean }[] }[]): 
 }
 
 /**
- * Total workdays from project start through the end of the go-live phase.
+ * Total workdays from project start through the end of the go-live stage.
  * Used to back-compute the anchor start date from the target go-live so the
- * go-live phase's END lands on the target date — phases after (Closing,
+ * go-live stage's END lands on the target date — stages after (Closing,
  * Hypercare) then chain forward past it.
  */
 function workdaysThroughGoLive(merged: { working_days: number; tasks: { isGoLiveEvent: boolean }[] }[]): number {
-  const goLiveIdx = findGoLivePhaseIdx(merged);
+  const goLiveIdx = findGoLiveStageIdx(merged);
   const upto = goLiveIdx >= 0 ? goLiveIdx : merged.length - 1;
   let sum = 0;
   for (let i = 0; i <= upto; i++) sum += merged[i].working_days;
@@ -131,7 +131,7 @@ function workdaysThroughGoLive(merged: { working_days: number; tasks: { isGoLive
 
 function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
   const merged = mergeTemplates(templates);
-  const inputs: PhaseInput[] = merged.map((m) => ({ id: m.name, working_days: m.working_days }));
+  const inputs: StageInput[] = merged.map((m) => ({ id: m.name, working_days: m.working_days }));
   const computed = chainForward(anchorStart, inputs);
   return merged.map((m, i) => ({
     name: m.name,
@@ -144,17 +144,17 @@ function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
 }
 
 function recomputeChain(rows: Row[], anchorStart: string): Row[] {
-  const inputs: PhaseInput[] = rows.map((r) => {
+  const inputs: StageInput[] = rows.map((r) => {
     const latestTaskEnd = r.tasks.reduce((acc, t) => {
       if (!t.pinned) return acc;
       return acc === null || t.end > acc ? t.end : acc;
     }, null as string | null);
-    const phasePinnedEnd = r.pinned ? r.end : null;
+    const stagePinnedEnd = r.pinned ? r.end : null;
     let effectivePinnedEnd: string | null = null;
-    if (phasePinnedEnd && latestTaskEnd) {
-      effectivePinnedEnd = phasePinnedEnd > latestTaskEnd ? phasePinnedEnd : latestTaskEnd;
+    if (stagePinnedEnd && latestTaskEnd) {
+      effectivePinnedEnd = stagePinnedEnd > latestTaskEnd ? stagePinnedEnd : latestTaskEnd;
     } else {
-      effectivePinnedEnd = phasePinnedEnd ?? latestTaskEnd;
+      effectivePinnedEnd = stagePinnedEnd ?? latestTaskEnd;
     }
     return {
       id: r.name,
@@ -167,12 +167,12 @@ function recomputeChain(rows: Row[], anchorStart: string): Row[] {
   const computed = chainForward(anchorStart, inputs);
 
   return rows.map((r, i) => {
-    const newPhase = { ...r, start: computed[i].start, end: computed[i].end };
-    newPhase.tasks = r.tasks.map((t) => {
-      if (!t.pinned) return { ...t, start: newPhase.start, end: newPhase.end };
+    const newStage = { ...r, start: computed[i].start, end: computed[i].end };
+    newStage.tasks = r.tasks.map((t) => {
+      if (!t.pinned) return { ...t, start: newStage.start, end: newStage.end };
       return t;
     });
-    return newPhase;
+    return newStage;
   });
 }
 
@@ -191,7 +191,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   const [templates, setTemplates] = useState<Template[]>([]);
   /** Selected template ids — multi-select. */
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  /** Fully-loaded templates with phases + tasks, keyed by id. */
+  /** Fully-loaded templates with stages + tasks, keyed by id. */
   const [loadedTemplates, setLoadedTemplates] = useState<Record<string, Template>>({});
   const [goLive, setGoLive] = useState<string>(project.target_go_live_date ?? "");
   const [rows, setRows] = useState<Row[]>([]);
@@ -240,20 +240,20 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goLive]);
 
-  const goLivePhaseIdx = useMemo(() => findGoLivePhaseIdx(rows), [rows]);
+  const goLiveStageIdx = useMemo(() => findGoLiveStageIdx(rows), [rows]);
   const computedGoLive = useMemo(() => {
     if (!rows.length) return "";
-    // Prefer the flagged go-live phase's end; fall back to last phase end
+    // Prefer the flagged go-live stage's end; fall back to last stage end
     // (legacy behaviour when no template in the selection is flagged).
-    const idx = goLivePhaseIdx >= 0 ? goLivePhaseIdx : rows.length - 1;
+    const idx = goLiveStageIdx >= 0 ? goLiveStageIdx : rows.length - 1;
     return rows[idx].end;
-  }, [rows, goLivePhaseIdx]);
+  }, [rows, goLiveStageIdx]);
 
   function toggleTemplate(id: string) {
     setSelectedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   }
 
-  function setPhaseField(idx: number, patch: Partial<Row>) {
+  function setStageField(idx: number, patch: Partial<Row>) {
     setRows((prev) => {
       const next = [...prev];
       const merged = { ...next[idx], ...patch, pinned: true };
@@ -266,16 +266,16 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
     });
   }
 
-  function setTaskDate(phaseIdx: number, taskIdx: number, field: "start" | "end", newDate: string) {
+  function setTaskDate(stageIdx: number, taskIdx: number, field: "start" | "end", newDate: string) {
     setRows((prev) => {
       const next = prev.map((r) => ({ ...r, tasks: r.tasks.map((t) => ({ ...t })) }));
-      const phase = next[phaseIdx];
-      const task = phase.tasks[taskIdx];
+      const stage = next[stageIdx];
+      const task = stage.tasks[taskIdx];
       const oldVal = task[field];
       const deltaWd = workdaysBetween(oldVal, newDate) || -workdaysBetween(newDate, oldVal);
       task[field] = newDate;
       task.pinned = true;
-      phase.tasks = applyTaskShift(phase.tasks, taskIdx, deltaWd);
+      stage.tasks = applyTaskShift(stage.tasks, taskIdx, deltaWd);
       const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
       return recomputeChain(next, anchor);
     });
@@ -294,7 +294,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
     setApplying(true);
     try {
       const result = await api.applyTimeline(project.id, {
-        phases: rows.map((r) => ({
+        stages: rows.map((r) => ({
           name: r.name,
           start: r.start,
           end: r.end,
@@ -307,7 +307,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
           })),
         })),
       });
-      showToast(`Timeline applied: ${result.phases_created} phases, ${result.tasks_created} tasks.`, "success");
+      showToast(`Timeline applied: ${result.stages_created} stages, ${result.tasks_created} tasks.`, "success");
       setConfirmingApply(false);
       onApplied();
     } catch (err) {
@@ -340,7 +340,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
             </div>
             {selectedIds.length > 1 && (
               <div style={{ marginTop: 6, fontSize: 11, color: "#0369a1" }}>
-                {selectedIds.length} templates selected — phases merged by name, longest workdays governs.
+                {selectedIds.length} templates selected — stages merged by name, longest workdays governs.
               </div>
             )}
           </div>
@@ -362,7 +362,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
         </div>
         {rows.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-            Computed go-live ({goLivePhaseIdx >= 0 ? `${rows[goLivePhaseIdx].name} phase end` : "last phase end"}): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
+            Computed go-live ({goLiveStageIdx >= 0 ? `${rows[goLiveStageIdx].name} stage end` : "last stage end"}): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
             {computedGoLive && goLive && computedGoLive !== goLive && (
               <span style={{ marginLeft: 8, color: "#d97706" }}>
                 (differs from target — likely due to manual overrides)
@@ -377,7 +377,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
             <thead>
               <tr style={{ background: "#f8fafc", textAlign: "left", borderBottom: "1px solid #e2e8f0" }}>
-                <th style={{ padding: "10px 14px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11 }}>Phase / Task</th>
+                <th style={{ padding: "10px 14px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11 }}>Stage / Task</th>
                 <th style={{ padding: "10px 14px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11, width: 100 }}>Role</th>
                 <th style={{ padding: "10px 14px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11, width: 110 }}>Workdays</th>
                 <th style={{ padding: "10px 14px", fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", fontSize: 11, width: 150 }}>Start</th>
@@ -386,11 +386,11 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
             </thead>
             <tbody>
               {rows.map((row, idx) => (
-                <PhaseRows
+                <StageRows
                   key={row.name}
                   row={row}
                   idx={idx}
-                  onPhaseChange={(patch) => setPhaseField(idx, patch)}
+                  onStageChange={(patch) => setStageField(idx, patch)}
                   onTaskDate={(taskIdx, field, val) => setTaskDate(idx, taskIdx, field, val)}
                   disabled={applying}
                 />
@@ -409,7 +409,7 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
           ) : (
             <>
               <div style={{ fontSize: 13, color: "#b91c1c", alignSelf: "center", marginRight: 12 }}>
-                This wipes existing phases + tasks on the project and rebuilds them. Continue?
+                This wipes existing stages + tasks on the project and rebuilds them. Continue?
               </div>
               <button className="ms-btn-ghost" onClick={() => setConfirmingApply(false)} disabled={applying}>Cancel</button>
               <button className="ms-btn-primary" onClick={handleApply} disabled={applying}>
@@ -423,14 +423,14 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   );
 }
 
-// ── Row sub-component (phase header row + indented task rows) ────────────────
+// ── Row sub-component (stage header row + indented task rows) ────────────────
 
-function PhaseRows({
-  row, idx, onPhaseChange, onTaskDate, disabled,
+function StageRows({
+  row, idx, onStageChange, onTaskDate, disabled,
 }: {
   row: Row;
   idx: number;
-  onPhaseChange: (patch: Partial<Row>) => void;
+  onStageChange: (patch: Partial<Row>) => void;
   onTaskDate: (taskIdx: number, field: "start" | "end", val: string) => void;
   disabled: boolean;
 }) {
@@ -446,7 +446,7 @@ function PhaseRows({
             type="number"
             min={0}
             value={row.working_days}
-            onChange={(e) => onPhaseChange({ working_days: Math.max(0, parseInt(e.target.value || "0", 10)) })}
+            onChange={(e) => onStageChange({ working_days: Math.max(0, parseInt(e.target.value || "0", 10)) })}
             disabled={disabled}
             style={{ width: 60, padding: "4px 6px", border: "1px solid #cbd5e1", borderRadius: 4 }}
           />
@@ -455,7 +455,7 @@ function PhaseRows({
           <input
             type="date"
             value={row.start}
-            onChange={(e) => onPhaseChange({ start: e.target.value })}
+            onChange={(e) => onStageChange({ start: e.target.value })}
             disabled={disabled}
             style={{ padding: "4px 6px", border: "1px solid #cbd5e1", borderRadius: 4 }}
           />
@@ -464,7 +464,7 @@ function PhaseRows({
           <input
             type="date"
             value={row.end}
-            onChange={(e) => onPhaseChange({ end: e.target.value })}
+            onChange={(e) => onStageChange({ end: e.target.value })}
             disabled={disabled}
             style={{ padding: "4px 6px", border: "1px solid #cbd5e1", borderRadius: 4 }}
           />

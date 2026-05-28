@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Phase } from "../lib/api";
+import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Stage } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
@@ -16,25 +16,25 @@ const PHASE_STATUS_COLOR: Record<string, string> = {
   blocked: "#d13438",
 };
 
-function PhaseFlowIndicator({ phases }: { phases: Phase[] | undefined }) {
-  if (!phases || phases.length === 0) {
+function StageFlowIndicator({ stages }: { stages: Stage[] | undefined }) {
+  if (!stages || stages.length === 0) {
     return <span style={{ color: "#64748b", fontSize: 11 }}>—</span>;
   }
-  const sorted = [...phases].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const sorted = [...stages].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   return (
     <div style={{ display: "flex", alignItems: "center" }}>
-      {sorted.map((phase, i) => {
-        const status = phase.status || "not_started";
+      {sorted.map((stage, i) => {
+        const status = stage.status || "not_started";
         const color = PHASE_STATUS_COLOR[status] ?? "#475569";
         const isActive = status === "in_progress";
         const prevDone = i > 0 && sorted[i - 1].status === "completed";
         return (
-          <div key={phase.id} style={{ display: "flex", alignItems: "center" }}>
+          <div key={stage.id} style={{ display: "flex", alignItems: "center" }}>
             {i > 0 && (
               <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#475569", flexShrink: 0 }} />
             )}
             <div
-              title={`${phase.name} — ${status.replace(/_/g, " ")}`}
+              title={`${stage.name} — ${status.replace(/_/g, " ")}`}
               style={{
                 width: isActive ? 13 : 10,
                 height: isActive ? 13 : 10,
@@ -117,7 +117,7 @@ const EMPTY_FORM: {
 
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [projectPhases, setProjectPhases] = useState<Record<string, Phase[]>>({});
+  const [projectStages, setProjectStages] = useState<Record<string, Stage[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
@@ -169,13 +169,13 @@ export default function ProjectsPage() {
     if (projects.length === 0) return;
     Promise.allSettled(
       projects.map(async (p) => {
-        const phases = await api.phases(p.id);
-        return { id: p.id, phases };
+        const stages = await api.stages(p.id);
+        return { id: p.id, stages };
       })
     ).then((results) => {
-      const map: Record<string, Phase[]> = {};
-      results.forEach((r) => { if (r.status === "fulfilled") map[r.value.id] = r.value.phases; });
-      setProjectPhases(map);
+      const map: Record<string, Stage[]> = {};
+      results.forEach((r) => { if (r.status === "fulfilled") map[r.value.id] = r.value.stages; });
+      setProjectStages(map);
     });
   }, [projects]);
 
@@ -314,7 +314,7 @@ export default function ProjectsPage() {
               <th>Health</th>
               <th>Go-Live</th>
               <th>Optimize</th>
-              <th>Phase Flow</th>
+              <th>Stage Flow</th>
             </tr>
           </thead>
           <tbody>
@@ -379,7 +379,7 @@ export default function ProjectsPage() {
                       )}
                     </div>
                   </td>
-                  <td><PhaseFlowIndicator phases={projectPhases[project.id]} /></td>
+                  <td><StageFlowIndicator stages={projectStages[project.id]} /></td>
                 </tr>
               ))
             )}
