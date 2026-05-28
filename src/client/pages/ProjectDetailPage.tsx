@@ -908,6 +908,9 @@ export default function ProjectDetailPage() {
       {tab === "builder" && canEdit && (
         <TimelineBuilder
           project={project}
+          phases={phases}
+          stages={stages}
+          tasks={tasks}
           onApplied={async () => {
             // Reload stages + tasks after a rebuild
             const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);

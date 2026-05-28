@@ -615,6 +615,11 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
 // ──────────────────────────────────────────────────────────────────────────────
 
 const applyTimelineSchema = z.object({
+  /** Target phase. Optional when the project has a single phase (we resolve
+   *  it server-side); required when the project has 2+ phases so the wipe
+   *  only touches that phase's stages. Multi-phase projects keep their
+   *  shared Initiate stage at phase_id=NULL untouched. */
+  phase_id: z.string().min(1).nullable().optional(),
   stages: z.array(z.object({
     name: z.string().min(1),
     start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -644,11 +649,50 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
 
   const parsed = applyTimelineSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
-  const { stages: stagePayload } = parsed.data;
+  const { stages: stagePayload, phase_id: payloadPhaseId } = parsed.data;
+
+  // ── Resolve target phase ──────────────────────────────────────────────────
+  // A timeline always applies into exactly one phase. We wipe + rebuild only
+  // that phase's stages so multi-phase projects can re-build (say) the
+  // Zoom Phone phase without nuking Zoom Contact Center work already in
+  // flight on another phase. The shared Initiate stage (phase_id=NULL on
+  // multi-phase projects) is intentionally left untouched.
+  const projectPhases = await db
+    .prepare("SELECT id, name FROM phases WHERE project_id = ? ORDER BY display_order ASC")
+    .bind(projectId)
+    .all<{ id: string; name: string }>();
+  const allPhases = projectPhases.results ?? [];
+  if (allPhases.length === 0) {
+    // Projects post-PR #267 always seed a Main phase on create, but defend
+    // against legacy data — without a phase we can't scope the wipe.
+    throw new HTTPException(400, { message: "Project has no phases — cannot apply timeline" });
+  }
+  let targetPhaseId: string;
+  if (payloadPhaseId) {
+    const match = allPhases.find((p) => p.id === payloadPhaseId);
+    if (!match) throw new HTTPException(400, { message: "phase_id does not belong to this project" });
+    targetPhaseId = match.id;
+  } else if (allPhases.length === 1) {
+    targetPhaseId = allPhases[0].id;
+  } else {
+    throw new HTTPException(400, { message: "phase_id is required for multi-phase projects" });
+  }
+  const isMultiPhase = allPhases.length > 1;
+
+  // On multi-phase projects, Initiate lives at phase_id=NULL and is shared
+  // across all phases. Filter any Initiate-named stage out of the payload so
+  // we don't accidentally create a duplicate per-phase Initiate next to the
+  // shared one (mirrors the LIKE '%initiat%' guard in routes/phases.ts).
+  const stagePayloadFiltered = isMultiPhase
+    ? stagePayload.filter((p) => !/initiat/i.test(p.name))
+    : stagePayload;
+  if (stagePayloadFiltered.length === 0) {
+    throw new HTTPException(400, { message: "No stages to apply after filtering shared Initiate" });
+  }
 
   // Generate project-stage ids up front so tasks can reference them.
   type NewStage = { id: string; name: string; sort_order: number; start: string; end: string };
-  const newStages: NewStage[] = stagePayload.map((p, i) => ({
+  const newStages: NewStage[] = stagePayloadFiltered.map((p, i) => ({
     id: crypto.randomUUID(),
     name: p.name,
     sort_order: i + 1,
@@ -682,8 +726,8 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
   // Build all the task inserts so the wipe + rebuild runs in a single atomic batch.
   type NewTask = { id: string; stage_id: string; title: string; priority: string; assignee_user_id: string | null; assignee_contact_id: string | null; scheduled_start: string; scheduled_end: string; due_date: string; is_go_live_event: number };
   const newTasks: NewTask[] = [];
-  for (let stageIdx = 0; stageIdx < stagePayload.length; stageIdx++) {
-    const stagePayloadEntry = stagePayload[stageIdx];
+  for (let stageIdx = 0; stageIdx < stagePayloadFiltered.length; stageIdx++) {
+    const stagePayloadEntry = stagePayloadFiltered[stageIdx];
     const stageId = newStages[stageIdx].id;
     for (const t of stagePayloadEntry.tasks) {
       const role = t.role?.toLowerCase() ?? "";
@@ -704,18 +748,20 @@ app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => 
     }
   }
 
-  // Atomic batch: wipe-then-rebuild. Non-CASCADE FK refs (risks.task_id,
-  // documents.task_id, documents.stage_id) get nulled first so the DELETEs
-  // succeed.
+  // Atomic batch: wipe-then-rebuild, scoped to the target phase. Non-CASCADE
+  // FK refs (risks.task_id, documents.task_id, documents.stage_id) get nulled
+  // first so the DELETEs succeed. Stages with phase_id=NULL (the shared
+  // Initiate on multi-phase projects) survive — only this phase's chain
+  // gets replaced.
   const stmts = [
-    db.prepare("UPDATE risks SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId),
-    db.prepare("UPDATE documents SET task_id = NULL WHERE task_id IN (SELECT id FROM tasks WHERE project_id = ?)").bind(projectId),
-    db.prepare("UPDATE documents SET stage_id = NULL WHERE stage_id IN (SELECT id FROM stages WHERE project_id = ?)").bind(projectId),
-    db.prepare("DELETE FROM tasks  WHERE project_id = ?").bind(projectId),
-    db.prepare("DELETE FROM stages WHERE project_id = ?").bind(projectId),
+    db.prepare("UPDATE risks     SET task_id  = NULL WHERE task_id  IN (SELECT id FROM tasks  WHERE project_id = ? AND stage_id IN (SELECT id FROM stages WHERE project_id = ? AND phase_id = ?))").bind(projectId, projectId, targetPhaseId),
+    db.prepare("UPDATE documents SET task_id  = NULL WHERE task_id  IN (SELECT id FROM tasks  WHERE project_id = ? AND stage_id IN (SELECT id FROM stages WHERE project_id = ? AND phase_id = ?))").bind(projectId, projectId, targetPhaseId),
+    db.prepare("UPDATE documents SET stage_id = NULL WHERE stage_id IN (SELECT id FROM stages WHERE project_id = ? AND phase_id = ?)").bind(projectId, targetPhaseId),
+    db.prepare("DELETE FROM tasks  WHERE project_id = ? AND stage_id IN (SELECT id FROM stages WHERE project_id = ? AND phase_id = ?)").bind(projectId, projectId, targetPhaseId),
+    db.prepare("DELETE FROM stages WHERE project_id = ? AND phase_id = ?").bind(projectId, targetPhaseId),
     ...newStages.map((p) => db
-      .prepare("INSERT INTO stages (id, project_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, 'not_started')")
-      .bind(p.id, projectId, p.name, p.sort_order, p.start, p.end)),
+      .prepare("INSERT INTO stages (id, project_id, phase_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started')")
+      .bind(p.id, projectId, targetPhaseId, p.name, p.sort_order, p.start, p.end)),
     ...newTasks.map((t) => db
       .prepare("INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date, is_go_live_event) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?, ?)")
       .bind(t.id, projectId, t.stage_id, t.title, t.priority, t.assignee_user_id, t.assignee_contact_id, t.scheduled_start, t.scheduled_end, t.due_date, t.is_go_live_event)),
