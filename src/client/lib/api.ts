@@ -2124,7 +2124,7 @@ export const api = {
         target_go_live_date: targetGoLiveDate ?? null,
       }),
     }),
-  applyTimeline: (projectId: string, payload: { stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string; isGoLiveEvent?: boolean }> }> }) =>
+  applyTimeline: (projectId: string, payload: { phase_id?: string | null; stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string; isGoLiveEvent?: boolean }> }> }) =>
     request<{ stages_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
       method: "POST",
       body: JSON.stringify(payload),

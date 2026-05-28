@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type Project, type Template } from "../../lib/api";
+import { api, type Phase, type Project, type Stage, type Task as ProjectTask, type Template } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import { chainForward, parseISODate, startFromGoLive, workday, workdaysBetween, type StageInput } from "../../../shared/workdayMath";
 import { buildTaggedTitle, canonicalizeSolutionType, type SolutionType } from "../../../shared/solutionTypes";
@@ -39,6 +39,16 @@ type Row = {
 
 type Props = {
   project: Project;
+  /** Project's phases. Drives the per-phase picker on multi-phase projects;
+   *  single-phase projects auto-target their sole phase with no picker. */
+  phases: Phase[];
+  /** Project's current stages — used to map existing tasks back to a phase
+   *  so the apply warning can show "this will overwrite N tasks under
+   *  <phase>", not project-wide. */
+  stages: Stage[];
+  /** Project's current tasks — same purpose as stages, used to count the
+   *  tasks that will be wiped when applying to the selected phase. */
+  tasks: ProjectTask[];
   onApplied: () => void;
 };
 
@@ -186,7 +196,7 @@ function applyTaskShift(tasks: Task[], editedIdx: number, deltaWd: number): Task
 
 // ── Component ────────────────────────────────────────────────────────────────
 
-export default function TimelineBuilder({ project, onApplied }: Props) {
+export default function TimelineBuilder({ project, phases, stages, tasks, onApplied }: Props) {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   /** Selected template ids — multi-select. */
@@ -198,6 +208,32 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
   const [loading, setLoading] = useState(false);
   const [applying, setApplying] = useState(false);
   const [confirmingApply, setConfirmingApply] = useState(false);
+  const isMultiPhase = phases.length > 1;
+  /** Which phase the wipe + rebuild will target. Defaults to the first phase
+   *  (display_order ASC, set by parent before sort). Single-phase projects
+   *  never show the picker — it's just `phases[0]`. */
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string>(phases[0]?.id ?? "");
+
+  // Keep selectedPhaseId valid as phases load asynchronously / change.
+  useEffect(() => {
+    if (phases.length === 0) { setSelectedPhaseId(""); return; }
+    if (!phases.some((p) => p.id === selectedPhaseId)) {
+      setSelectedPhaseId(phases[0].id);
+    }
+  }, [phases, selectedPhaseId]);
+
+  // Stages + tasks that would be replaced if the PM clicks "Apply". On
+  // multi-phase projects this is scoped to the selected phase so the warning
+  // accurately reflects what gets wiped — the shared Initiate stage at
+  // phase_id=NULL is intentionally not counted (it's preserved server-side).
+  const { existingStageCount, existingTaskCount } = useMemo(() => {
+    if (!selectedPhaseId) return { existingStageCount: 0, existingTaskCount: 0 };
+    const stageIdsInPhase = new Set(stages.filter((s) => s.phase_id === selectedPhaseId).map((s) => s.id));
+    const taskCount = tasks.reduce((n, t) => (t.stage_id && stageIdsInPhase.has(t.stage_id) ? n + 1 : n), 0);
+    return { existingStageCount: stageIdsInPhase.size, existingTaskCount: taskCount };
+  }, [selectedPhaseId, stages, tasks]);
+
+  const selectedPhaseName = useMemo(() => phases.find((p) => p.id === selectedPhaseId)?.name ?? "", [phases, selectedPhaseId]);
 
   useEffect(() => {
     api.templatesList().then(setTemplates).catch(() => setTemplates([]));
@@ -291,9 +327,14 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
 
   async function handleApply() {
     if (!rows.length) return;
+    if (!selectedPhaseId) {
+      showToast("Pick a phase to apply this timeline to", "error");
+      return;
+    }
     setApplying(true);
     try {
       const result = await api.applyTimeline(project.id, {
+        phase_id: selectedPhaseId,
         stages: rows.map((r) => ({
           name: r.name,
           start: r.start,
@@ -320,6 +361,36 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
+      {isMultiPhase && (
+        <div className="ms-card" style={{ padding: "12px 16px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em" }}>Apply to phase</span>
+          {phases.map((p) => {
+            const active = p.id === selectedPhaseId;
+            return (
+              <button
+                key={p.id}
+                onClick={() => setSelectedPhaseId(p.id)}
+                disabled={applying}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: 999,
+                  border: active ? "1px solid #0369a1" : "1px solid #cbd5e1",
+                  background: active ? "#e0f2fe" : "#ffffff",
+                  color: active ? "#0c4a6e" : "#334155",
+                  fontSize: 12,
+                  fontWeight: active ? 700 : 500,
+                  cursor: applying ? "not-allowed" : "pointer",
+                }}
+              >
+                {p.name}
+              </button>
+            );
+          })}
+          <span style={{ marginLeft: "auto", fontSize: 11, color: "#64748b" }}>
+            Shared Initiate stage is preserved.
+          </span>
+        </div>
+      )}
       <div className="ms-card" style={{ padding: "16px 20px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 12, alignItems: "start" }}>
           <div className="ms-label">
@@ -402,19 +473,27 @@ export default function TimelineBuilder({ project, onApplied }: Props) {
       )}
 
       {rows.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
           {!confirmingApply ? (
-            <button className="ms-btn-primary" onClick={() => setConfirmingApply(true)} disabled={applying}>
+            <button className="ms-btn-primary" onClick={() => setConfirmingApply(true)} disabled={applying || !selectedPhaseId}>
               Apply Timeline
             </button>
           ) : (
             <>
-              <div style={{ fontSize: 13, color: "#b91c1c", alignSelf: "center", marginRight: 12 }}>
-                This wipes existing stages + tasks on the project and rebuilds them. Continue?
+              <div style={{ fontSize: 13, color: "#b91c1c", alignSelf: "center", marginRight: 12, maxWidth: 520, textAlign: "right" }}>
+                {existingTaskCount > 0 ? (
+                  <>
+                    This will <strong>delete {existingStageCount} stage{existingStageCount === 1 ? "" : "s"} and {existingTaskCount} task{existingTaskCount === 1 ? "" : "s"}</strong>
+                    {isMultiPhase && selectedPhaseName ? <> under the <strong>{selectedPhaseName}</strong> phase</> : null}
+                    {isMultiPhase ? ", then rebuild from the timeline above. The shared Initiate stage is left alone. Continue?" : ", then rebuild from the timeline above. Continue?"}
+                  </>
+                ) : (
+                  <>Rebuild {isMultiPhase && selectedPhaseName ? <>the <strong>{selectedPhaseName}</strong> phase</> : "this project"} from the timeline above? No existing tasks will be lost.</>
+                )}
               </div>
               <button className="ms-btn-ghost" onClick={() => setConfirmingApply(false)} disabled={applying}>Cancel</button>
               <button className="ms-btn-primary" onClick={handleApply} disabled={applying}>
-                {applying ? "Applying…" : "Yes, replace timeline"}
+                {applying ? "Applying…" : existingTaskCount > 0 ? "Yes, replace timeline" : "Apply timeline"}
               </button>
             </>
           )}
