@@ -258,6 +258,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     db
       .prepare(
         `SELECT p.id, p.name, p.sort_order, p.status, p.phase_id,
+                p.planned_start, p.planned_end,
                 COUNT(t.id) AS total_tasks,
                 SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done_tasks
          FROM stages p
@@ -266,7 +267,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
          GROUP BY p.id`
       )
       .bind(projectId)
-      .all<{ id: string; name: string; sort_order: number | null; status: string | null; phase_id: string | null; total_tasks: number; done_tasks: number }>(),
+      .all<{ id: string; name: string; sort_order: number | null; status: string | null; phase_id: string | null; planned_start: string | null; planned_end: string | null; total_tasks: number; done_tasks: number }>(),
   ]);
 
   const phases = phasesRows.results ?? [];
@@ -474,9 +475,9 @@ app.get("/:id/stakeholder-summary", async (c) => {
  * PMs see the placeholder.
  */
 function buildStageProgress(
-  rows: Array<{ id: string; name: string; sort_order: number | null; status: string | null; phase_id: string | null; total_tasks: number; done_tasks: number }>,
+  rows: Array<{ id: string; name: string; sort_order: number | null; status: string | null; phase_id: string | null; planned_start: string | null; planned_end: string | null; total_tasks: number; done_tasks: number }>,
   phases: Array<{ id: string; name: string }>,
-): Array<{ phase_id: string | null; phase_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
+): Array<{ phase_id: string | null; phase_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; planned_start: string | null; planned_end: string | null; total_tasks: number; done_tasks: number; pct: number }> }> {
   const groups = new Map<string | "shared", Array<typeof rows[number] & { pct: number }>>();
   for (const r of rows) {
     const key = r.phase_id ?? "shared";
@@ -490,15 +491,20 @@ function buildStageProgress(
   for (const arr of groups.values()) {
     arr.sort((a, b) => (a.sort_order ?? 9999) - (b.sort_order ?? 9999));
   }
-  const out: Array<{ phase_id: string | null; phase_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
+  const project = (p: typeof rows[number] & { pct: number }) => ({
+    id: p.id, name: p.name, sort_order: p.sort_order, status: p.status,
+    planned_start: p.planned_start, planned_end: p.planned_end,
+    total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct,
+  });
+  const out: Array<{ phase_id: string | null; phase_name: string | null; stages: Array<{ id: string; name: string; sort_order: number | null; status: string | null; planned_start: string | null; planned_end: string | null; total_tasks: number; done_tasks: number; pct: number }> }> = [];
   const sharedStages = groups.get("shared");
   if (sharedStages && sharedStages.length > 0) {
-    out.push({ phase_id: null, phase_name: null, stages: sharedStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+    out.push({ phase_id: null, phase_name: null, stages: sharedStages.map(project) });
   }
   for (const s of phases) {
     const phaseStages = groups.get(s.id);
     if (phaseStages && phaseStages.length > 0) {
-      out.push({ phase_id: s.id, phase_name: s.name, stages: phaseStages.map((p) => ({ id: p.id, name: p.name, sort_order: p.sort_order, status: p.status, total_tasks: p.total_tasks, done_tasks: p.done_tasks, pct: p.pct })) });
+      out.push({ phase_id: s.id, phase_name: s.name, stages: phaseStages.map(project) });
     }
   }
   return out;
