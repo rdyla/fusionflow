@@ -9,7 +9,7 @@ import { createNotification } from "../lib/notifications";
 import {
   getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry,
 } from "../services/dynamicsService";
-import { syncProjectBlockedStatus } from "../lib/teamUtils";
+import { syncProjectBlockedStatus, syncStageStatus, maybeGraduateProject } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -79,6 +79,9 @@ app.post("/:id/tasks", async (c) => {
     .bind(taskId, projectId, stage_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
     .run();
 
+  // Re-derive the parent stage's status now that a new task lives under it.
+  await syncStageStatus(db, stage_id ?? null);
+
   const created = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
@@ -144,7 +147,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const existing = await db
     .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -210,7 +213,15 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const updated = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
-    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+
+  // Auto-derive stage status from the new task state. Sync both the old and
+  // new stage when a task moved between stages.
+  await syncStageStatus(db, existing.stage_id);
+  if (updated && updated.stage_id !== existing.stage_id) {
+    await syncStageStatus(db, updated.stage_id);
+  }
+  await maybeGraduateProject(db, projectId, auth.user.id);
 
   const appUrl = c.env.APP_URL ?? "";
   const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
@@ -561,9 +572,9 @@ app.delete("/:id/tasks/:taskId", async (c) => {
   }
 
   const existing = await db
-    .prepare(`SELECT id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
+    .prepare(`SELECT id, stage_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first();
+    .first<{ id: string; stage_id: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -573,6 +584,11 @@ app.delete("/:id/tasks/:taskId", async (c) => {
     .prepare(`DELETE FROM tasks WHERE id = ? AND project_id = ?`)
     .bind(taskId, projectId)
     .run();
+
+  // Removing a task may flip the parent stage's status (e.g. it was the
+  // only un-completed task → stage is now fully done).
+  await syncStageStatus(db, existing.stage_id);
+  await maybeGraduateProject(db, projectId, auth.user.id);
 
   return c.json({ success: true });
 });

@@ -67,8 +67,12 @@ app.post("/:id/stages", async (c) => {
   return c.json(created, 201);
 });
 
+// Stage status is auto-derived from the stage's tasks — see
+// teamUtils.syncStageStatus, called from routes/tasks.ts on task POST /
+// PATCH / DELETE. PMs can't set it manually anymore (May-2026), so it's
+// not in this schema. Clients that still send `status` get it silently
+// dropped by zod.
 const updateStageSchema = z.object({
-  status: z.enum(["not_started", "in_progress", "completed"]).optional(),
   planned_start: z.string().nullable().optional(),
   planned_end: z.string().nullable().optional(),
   actual_start: z.string().nullable().optional(),
@@ -113,30 +117,8 @@ app.patch("/:id/stages/:stageId", async (c) => {
 
   const updated = await db.prepare("SELECT * FROM stages WHERE id = ? LIMIT 1").bind(stageId).first();
 
-  // Auto-graduation: if all stages are now completed, graduate to Optimize
-  if (updates.status === "completed") {
-    const incomplete = await db
-      .prepare("SELECT COUNT(*) as cnt FROM stages WHERE project_id = ? AND status != 'completed'")
-      .bind(projectId)
-      .first<{ cnt: number }>();
-
-    if ((incomplete?.cnt ?? 1) === 0) {
-      const existing = await db
-        .prepare("SELECT id FROM optimize_accounts WHERE project_id = ? LIMIT 1")
-        .bind(projectId)
-        .first();
-
-      if (!existing) {
-        await db
-          .prepare(
-            `INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method)
-             VALUES (?, ?, ?, 'auto')`
-          )
-          .bind(crypto.randomUUID(), projectId, auth.user.id)
-          .run();
-      }
-    }
-  }
+  // Auto-graduation moved to teamUtils.maybeGraduateProject and is fired
+  // from routes/tasks.ts when a task update flips a stage to completed.
 
   return c.json(updated);
 });
