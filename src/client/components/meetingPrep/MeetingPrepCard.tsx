@@ -45,16 +45,16 @@ function SendRow({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {/* Per-site sends carry siteName even when label is blank — show
-                the site name as the primary line so the history reads as
+            {/* Per-phase sends carry phaseName even when label is blank — show
+                the phase name as the primary line so the history reads as
                 "UAT · Libraries", "UAT · Treatment", etc. */}
             {record.label
               ? record.label
-              : record.siteName
-                ? `${sectionLabel} · ${record.siteName}`
+              : record.phaseName
+                ? `${sectionLabel} · ${record.phaseName}`
                 : sectionLabel}
           </div>
-          {(record.label || record.siteName) && (
+          {(record.label || record.phaseName) && (
             <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {record.subject}
             </div>

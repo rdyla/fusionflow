@@ -77,7 +77,7 @@ type SendHistoryRow = {
   sent_by_user_id: string | null;
   sent_at: string;
   has_body: number;
-  site_id: string | null;
+  phase_id: string | null;
   site_name: string | null;
 };
 
@@ -87,9 +87,9 @@ async function loadSendHistory(db: D1Database, projectId: string, meetingType: M
       `SELECT m.id, m.meeting_type, m.label, m.subject, m.recipient_emails,
               m.sent_by_user_id, m.sent_at,
               CASE WHEN m.body_html IS NOT NULL AND m.body_html != '' THEN 1 ELSE 0 END AS has_body,
-              m.site_id, s.name AS site_name
+              m.phase_id, s.name AS site_name
        FROM meeting_prep_sends m
-       LEFT JOIN sites s ON s.id = m.site_id
+       LEFT JOIN phases s ON s.id = m.phase_id
        WHERE m.project_id = ? AND m.meeting_type = ?
        ORDER BY m.sent_at DESC`
     )
@@ -98,8 +98,8 @@ async function loadSendHistory(db: D1Database, projectId: string, meetingType: M
   return (rows.results ?? []).map((r) => ({
     id: r.id,
     label: r.label,
-    siteId: r.site_id,
-    siteName: r.site_name,
+    phaseId: r.phase_id,
+    phaseName: r.site_name,
     subject: r.subject,
     sentBy: r.sent_by_user_id,
     sentAt: r.sent_at,
@@ -202,13 +202,13 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
   const { contacts, staff } = await loadRecipientCandidates(c.env.DB, project);
   const history = await loadSendHistory(c.env.DB, projectId, meetingType);
 
-  // Sites — only meaningful for uat / go_live meeting types, but always loaded
-  // so the client can decide. Empty array for single-site projects.
-  const sitesRows = await c.env.DB
-    .prepare("SELECT id, name FROM sites WHERE project_id = ? ORDER BY display_order ASC, name ASC")
+  // Phases — only meaningful for uat / go_live meeting types, but always loaded
+  // so the client can decide. Empty array for single-phase projects.
+  const phasesRows = await c.env.DB
+    .prepare("SELECT id, name FROM phases WHERE project_id = ? ORDER BY display_order ASC, name ASC")
     .bind(projectId)
     .all<{ id: string; name: string }>();
-  const sites = sitesRows.results ?? [];
+  const phases = phasesRows.results ?? [];
 
   // SharePoint listing is only used by the send modal, which non-editors
   // can't open. Skip the network call for read-only viewers.
@@ -258,7 +258,7 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
     },
     sharepoint: { folderUrl: sharepointUrl, files: sharepointFiles },
     history,
-    sites,
+    phases,
   });
 });
 
@@ -269,11 +269,11 @@ const draftSchema = z.object({
   // Free-form per-send label distinguishing multiple sends of the same type
   // (e.g. "Network Architecture" / "Call Flows" for split discovery sessions).
   label: z.string().max(200).nullable().optional(),
-  // For UAT + go_live on multi-site projects: scope this send to a specific
-  // site (Libraries UAT vs Treatment UAT etc.). The server silently ignores
-  // siteId for meeting types other than uat/go_live so the client doesn't
+  // For UAT + go_live on multi-phase projects: scope this send to a specific
+  // phase (Libraries UAT vs Treatment UAT etc.). The server silently ignores
+  // phaseId for meeting types other than uat/go_live so the client doesn't
   // have to clear it on type switch.
-  siteId: z.string().nullable().optional(),
+  phaseId: z.string().nullable().optional(),
   // Allow any string for the kickoff URL — PMs often paste shortened or
   // scheme-less Zoom links and we don't want strict URL validation to 400.
   // Kickoff-only fields; other meeting types ignore.
@@ -378,21 +378,21 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
     sections: resolvedSections,
   };
 
-  // For per-site UAT / go-live sends, fold the site name into the label so the
-  // subject + history line carry site context (e.g. "UAT prep (Libraries) — …"
+  // For per-phase UAT / go-live sends, fold the phase name into the label so the
+  // subject + history line carry phase context (e.g. "UAT prep (Libraries) — …"
   // or "UAT prep (Libraries · Stage 1 readiness) — …" if PM also typed a label).
   let resolvedLabel = draft.label?.trim() || null;
-  if ((meetingType === "uat" || meetingType === "go_live") && draft.siteId) {
+  if ((meetingType === "uat" || meetingType === "go_live") && draft.phaseId) {
     // `c` is typed `any` here (legacy), so the .first() generic isn't valid —
     // cast the result instead.
-    const siteRow = (await c.env.DB
-      .prepare("SELECT name FROM sites WHERE id = ? AND project_id = ? LIMIT 1")
-      .bind(draft.siteId, project.id)
+    const phaseRow = (await c.env.DB
+      .prepare("SELECT name FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(draft.phaseId, project.id)
       .first()) as { name: string } | null;
-    if (siteRow?.name) {
+    if (phaseRow?.name) {
       resolvedLabel = resolvedLabel
-        ? `${siteRow.name} · ${resolvedLabel}`
-        : siteRow.name;
+        ? `${phaseRow.name} · ${resolvedLabel}`
+        : phaseRow.name;
     }
   }
 
@@ -527,26 +527,26 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
     return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
   }
 
-  // On multi-site projects, UAT + go-live sends must specify which site they
+  // On multi-phase projects, UAT + go-live sends must specify which phase they
   // belong to so the history row is meaningfully scoped (Libraries UAT vs
   // Treatment UAT etc.). Other meeting types are project-wide.
   if (meetingType === "uat" || meetingType === "go_live") {
-    const siteCountRow = await c.env.DB
-      .prepare("SELECT COUNT(*) AS c FROM sites WHERE project_id = ?")
+    const phaseCountRow = await c.env.DB
+      .prepare("SELECT COUNT(*) AS c FROM phases WHERE project_id = ?")
       .bind(projectId)
       .first<{ c: number }>();
-    const hasSites = (siteCountRow?.c ?? 0) > 0;
-    if (hasSites && !parsed.data.siteId) {
+    const hasPhases = (phaseCountRow?.c ?? 0) > 0;
+    if (hasPhases && !parsed.data.phaseId) {
       throw new HTTPException(400, {
-        message: `${meetingType === "uat" ? "UAT" : "Go-Live"} prep on a multi-site project requires a site selection.`,
+        message: `${meetingType === "uat" ? "UAT" : "Go-Live"} prep on a multi-phase project requires a phase selection.`,
       });
     }
-    if (parsed.data.siteId) {
-      const siteCheck = await c.env.DB
-        .prepare("SELECT id FROM sites WHERE id = ? AND project_id = ? LIMIT 1")
-        .bind(parsed.data.siteId, projectId)
+    if (parsed.data.phaseId) {
+      const phaseCheck = await c.env.DB
+        .prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+        .bind(parsed.data.phaseId, projectId)
         .first();
-      if (!siteCheck) throw new HTTPException(400, { message: "Selected site does not belong to this project." });
+      if (!phaseCheck) throw new HTTPException(400, { message: "Selected phase does not belong to this project." });
     }
   }
 
@@ -573,16 +573,16 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
   const sendId = crypto.randomUUID();
   const label = parsed.data.label?.trim() || null;
 
-  // site_id only applies to per-site meeting types (uat / go_live). For
+  // phase_id only applies to per-phase meeting types (uat / go_live). For
   // kickoff / discovery / design_review we drop it to NULL so the column is
   // strictly meaningful where it matters.
-  const siteIdForSend = (meetingType === "uat" || meetingType === "go_live")
-    ? (parsed.data.siteId || null)
+  const phaseIdForSend = (meetingType === "uat" || meetingType === "go_live")
+    ? (parsed.data.phaseId || null)
     : null;
 
   await c.env.DB
     .prepare(
-      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, site_id, subject, recipient_emails, sent_by_user_id, sent_at, body_html)
+      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, phase_id, subject, recipient_emails, sent_by_user_id, sent_at, body_html)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
@@ -590,7 +590,7 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
       projectId,
       meetingType,
       label,
-      siteIdForSend,
+      phaseIdForSend,
       subject,
       JSON.stringify(recipientEmails),
       auth.user.id,

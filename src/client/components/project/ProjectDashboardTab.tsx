@@ -1,11 +1,11 @@
 /**
  * Project Dashboard tab — stakeholder-facing read view.
  *
- * Anchored on a single project. Stats are scoped to that project. Multi-site
- * behavior lives INSIDE the project via the `sites` table: City of Thousand
- * Oaks is one project containing Libraries / Treatment / HQ sites, each with
- * its own per-site PMI stage chain and go-live. The Sites row only renders
- * when the project has 1+ sites; single-site projects get a clean two-row
+ * Anchored on a single project. Stats are scoped to that project. Multi-phase
+ * behavior lives INSIDE the project via the `phases` table: City of Thousand
+ * Oaks is one project containing Libraries / Treatment / HQ phases, each with
+ * its own per-phase PMI stage chain and go-live. The Phases row only renders
+ * when the project has 1+ phases; single-phase projects get a clean two-row
  * layout (stat tiles + three detail panels).
  *
  * Styled to match the rest of the app (light theme on a white surface with
@@ -21,7 +21,7 @@ import { useEffect, useState } from "react";
 import { api, type StakeholderSummary } from "../../lib/api";
 
 // PF brand palette (mirrored from index.css). Avoiding ad-hoc dark slate
-// tokens — site is light-themed throughout.
+// tokens — phase is light-themed throughout.
 const PF_BLUE = "#03395f";
 const PF_GREEN = "#17C662";
 const PF_BORDER = "#dde4ef";
@@ -67,9 +67,9 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
   if (error) return <Center error>{error}</Center>;
   if (!data) return <Center>No data.</Center>;
 
-  const { stats, sites, open_tasks, assignee_stage_breakdown, blockers, key_updates, team, links, stage_progress } = data;
-  const multiSite = sites.length > 0;
-  const rollupLabel = multiSite ? `Across ${sites.length} site${sites.length === 1 ? "" : "s"}` : "Across this project";
+  const { stats, phases, open_tasks, assignee_stage_breakdown, blockers, key_updates, team, links, stage_progress } = data;
+  const multiPhase = phases.length > 0;
+  const rollupLabel = multiPhase ? `Across ${phases.length} phase${phases.length === 1 ? "" : "s"}` : "Across this project";
 
   return (
     <div style={{ maxWidth: 1280, margin: "0 auto" }}>
@@ -88,7 +88,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
           danger={stats.blockers.critical > 0}
         />
         <Tile
-          label={multiSite ? "Days to final go-live" : "Days to go-live"}
+          label={multiPhase ? "Days to final go-live" : "Days to go-live"}
           value={stats.days_to_final_go_live !== null ? `${stats.days_to_final_go_live}` : "—"}
           sublabel={stats.target_go_live_date ? `${fmtDate(stats.target_go_live_date)} target` : "Not set"}
         />
@@ -99,22 +99,22 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
         />
       </div>
 
-      {/* Sites row — hidden for single-site projects */}
-      {multiSite && (
+      {/* Phases row — hidden for single-phase projects */}
+      {multiPhase && (
         <>
-          <SectionLabel>Sites</SectionLabel>
+          <SectionLabel>Phases</SectionLabel>
           <div style={{
             display: "grid",
-            gridTemplateColumns: sites.length <= 3 ? `repeat(${sites.length}, 1fr)` : "repeat(3, 1fr)",
+            gridTemplateColumns: phases.length <= 3 ? `repeat(${phases.length}, 1fr)` : "repeat(3, 1fr)",
             gap: 12, marginBottom: 18,
           }}>
-            {sites.map((s) => <SiteCard key={s.id} site={s} />)}
+            {phases.map((s) => <PhaseCard key={s.id} phase={s} />)}
           </div>
         </>
       )}
 
-      {/* Stage progress — one column per site (plus shared if multi-site).
-          Single-site projects collapse to a single full-width column. */}
+      {/* Stage progress — one column per phase (plus shared if multi-phase).
+          Single-phase projects collapse to a single full-width column. */}
       {stage_progress.length > 0 && (
         <>
           <SectionLabel>Stage progress</SectionLabel>
@@ -128,7 +128,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
               gap: 18,
             }}>
               {stage_progress.map((col) => (
-                <div key={col.site_id ?? "shared"} style={{ minWidth: 0 }}>
+                <div key={col.phase_id ?? "shared"} style={{ minWidth: 0 }}>
                   {stage_progress.length > 1 && (
                     <div style={{
                       fontSize: 10, fontWeight: 700, color: PF_BLUE,
@@ -162,7 +162,7 @@ export default function ProjectDashboardTab({ projectId, currentUserRole, onChan
                   <PriorityDot priority={t.priority} />
                   <span style={{ flex: 1, marginLeft: 8, color: TEXT_PRIMARY }}>
                     {t.title}
-                    {multiSite && t.site_name && (
+                    {multiPhase && t.site_name && (
                       <span style={{ color: TEXT_FAINT, fontSize: 11, fontWeight: 400, marginLeft: 6 }}>· {t.site_name}</span>
                     )}
                   </span>
@@ -324,12 +324,12 @@ function Tile({ label, value, sublabel, danger }: { label: string; value: string
   );
 }
 
-function SiteCard({ site }: { site: StakeholderSummary["sites"][number] }) {
-  const tone = HEALTH_TONE[site.health];
+function PhaseCard({ phase }: { phase: StakeholderSummary["phases"][number] }) {
+  const tone = HEALTH_TONE[phase.health];
   return (
     <div style={{ background: "#fff", border: `1px solid ${PF_BORDER}`, borderRadius: 12, padding: "14px 16px" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 10, gap: 8 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1.3 }}>{site.name}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: TEXT_PRIMARY, lineHeight: 1.3 }}>{phase.name}</div>
         <span style={{
           fontSize: 10, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
           background: tone.bg, color: tone.fg, border: `1px solid ${tone.border}`,
@@ -339,11 +339,11 @@ function SiteCard({ site }: { site: StakeholderSummary["sites"][number] }) {
         </span>
       </div>
       <div style={{ background: "#f1f5f9", borderRadius: 4, height: 6, overflow: "hidden" }}>
-        <div style={{ background: PF_GREEN, height: "100%", width: `${site.completion_pct}%` }} />
+        <div style={{ background: PF_GREEN, height: "100%", width: `${phase.completion_pct}%` }} />
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 11, color: TEXT_MUTED }}>
-        <span>{site.target_go_live_date ? `Go-live: ${fmtDate(site.target_go_live_date)}` : "No date set"}</span>
-        <span>{site.days_left !== null ? `${site.days_left} days left` : "—"}</span>
+        <span>{phase.target_go_live_date ? `Go-live: ${fmtDate(phase.target_go_live_date)}` : "No date set"}</span>
+        <span>{phase.days_left !== null ? `${phase.days_left} days left` : "—"}</span>
       </div>
     </div>
   );

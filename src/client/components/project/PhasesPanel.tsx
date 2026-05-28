@@ -1,23 +1,23 @@
 /**
- * Sites management panel — lives on the project Overview tab.
+ * Phases management panel — lives on the project Overview tab.
  *
- * Lets PMs add / rename / re-order / delete deployment sites for multi-site
- * projects. The first site added to a project moves the project's existing
- * post-Initiate stages under it; subsequent sites clone the first site's
- * stage chain (without tasks). See `src/server/routes/sites.ts` for the
+ * Lets PMs add / rename / re-order / delete deployment phases for multi-phase
+ * projects. The first phase added to a project moves the project's existing
+ * post-Initiate stages under it; subsequent phases clone the first phase's
+ * stage chain (without tasks). See `src/server/routes/phases.ts` for the
  * server-side stage-wiring rules.
  *
- * For single-site projects (the default), this panel simply shows
- * "No sites yet — Add deployment site" and stays out of the way.
+ * For single-phase projects (the default), this panel simply shows
+ * "No phases yet — Add deployment phase" and stays out of the way.
  */
 
 import { useEffect, useState } from "react";
-import { api, type Site, type Template } from "../../lib/api";
+import { api, type Phase, type Template } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
-export default function SitesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
+export default function PhasesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
   const { showToast } = useToast();
-  const [sites, setSites] = useState<Site[]>([]);
+  const [phases, setPhases] = useState<Phase[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
 
@@ -26,25 +26,25 @@ export default function SitesPanel({ projectId, canEdit, onChange }: { projectId
   async function load() {
     try {
       setLoading(true);
-      setSites(await api.sites(projectId));
+      setPhases(await api.phases(projectId));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load sites", "error");
+      showToast(err instanceof Error ? err.message : "Failed to load phases", "error");
     } finally {
       setLoading(false);
     }
   }
 
-  async function handleDelete(site: Site) {
+  async function handleDelete(phase: Phase) {
     if (!window.confirm(
-      `Delete "${site.name}" and all of its stages + tasks?\n\nThis cascades — stages and tasks belonging only to this site are removed. The project's shared Initiate stage is unaffected.`
+      `Delete "${phase.name}" and all of its stages + tasks?\n\nThis cascades — stages and tasks belonging only to this phase are removed. The project's shared Initiate stage is unaffected.`
     )) return;
     try {
-      const res = await api.deleteSite(projectId, site.id);
-      showToast(`Deleted ${site.name} (${res.deleted_stage_count} stage${res.deleted_stage_count === 1 ? "" : "s"} removed).`, "success");
+      const res = await api.deletePhase(projectId, phase.id);
+      showToast(`Deleted ${phase.name} (${res.deleted_stage_count} stage${res.deleted_stage_count === 1 ? "" : "s"} removed).`, "success");
       await load();
       onChange?.();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to delete site", "error");
+      showToast(err instanceof Error ? err.message : "Failed to delete phase", "error");
     }
   }
 
@@ -52,8 +52,8 @@ export default function SitesPanel({ projectId, canEdit, onChange }: { projectId
     <div className="ms-section-card" style={{ padding: "12px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>
-          Deployment sites
-          {sites.length > 0 && <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({sites.length})</span>}
+          Deployment phases
+          {phases.length > 0 && <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>({phases.length})</span>}
         </div>
         {canEdit && (
           <button
@@ -62,31 +62,31 @@ export default function SitesPanel({ projectId, canEdit, onChange }: { projectId
             onClick={() => setAddOpen(true)}
             style={{ fontSize: 12 }}
           >
-            + Add deployment site
+            + Add deployment phase
           </button>
         )}
       </div>
 
-      <div style={{ fontSize: 12, color: "#64748b", marginBottom: sites.length > 0 ? 10 : 0 }}>
-        Use sites for any project that ships in staggered cutovers — multi-location rollouts (HQ → Remote site 1 → Remote site 2) or multi-product deployments where one tech goes live before the other (Zoom Phone first, then Zoom Contact Center a few months later). Single-site projects can ignore this section.
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: phases.length > 0 ? 10 : 0 }}>
+        Use phases for any project that ships in staggered cutovers — multi-location rollouts (HQ → Remote phase 1 → Remote phase 2) or multi-product deployments where one tech goes live before the other (Zoom Phone first, then Zoom Contact Center a few months later). Single-phase projects can ignore this section.
       </div>
 
       {loading ? (
         <div style={{ color: "#94a3b8", fontSize: 13, fontStyle: "italic" }}>Loading…</div>
-      ) : sites.length === 0 ? (
+      ) : phases.length === 0 ? (
         null
       ) : (
         <div style={{ display: "grid", gap: 6 }}>
-          {sites.map((s) => (
-            <SiteRow key={s.id} site={s} canEdit={canEdit} projectId={projectId} onChanged={() => { void load(); onChange?.(); }} onDelete={() => handleDelete(s)} />
+          {phases.map((s) => (
+            <PhaseRow key={s.id} phase={s} canEdit={canEdit} projectId={projectId} onChanged={() => { void load(); onChange?.(); }} onDelete={() => handleDelete(s)} />
           ))}
         </div>
       )}
 
       {addOpen && (
-        <AddSiteModal
+        <AddPhaseModal
           projectId={projectId}
-          existingSiteCount={sites.length}
+          existingPhaseCount={phases.length}
           onClose={() => setAddOpen(false)}
           onCreated={() => {
             setAddOpen(false);
@@ -99,22 +99,22 @@ export default function SitesPanel({ projectId, canEdit, onChange }: { projectId
   );
 }
 
-function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site; canEdit: boolean; projectId: string; onChanged: () => void; onDelete: () => void }) {
+function PhaseRow({ phase, canEdit, projectId, onChanged, onDelete }: { phase: Phase; canEdit: boolean; projectId: string; onChanged: () => void; onDelete: () => void }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(site.name);
-  const [target, setTarget] = useState(site.target_go_live_date ?? "");
+  const [name, setName] = useState(phase.name);
+  const [target, setTarget] = useState(phase.target_go_live_date ?? "");
   const [saving, setSaving] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
 
   async function save() {
     if (!name.trim()) {
-      showToast("Site name is required.", "error");
+      showToast("Phase name is required.", "error");
       return;
     }
     setSaving(true);
     try {
-      await api.updateSite(projectId, site.id, {
+      await api.updatePhase(projectId, phase.id, {
         name: name.trim(),
         target_go_live_date: target || null,
       });
@@ -139,7 +139,7 @@ function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site
             className="ms-input"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Site name"
+            placeholder="Phase name"
             style={{ flex: 1, padding: "4px 8px", fontSize: 13 }}
           />
           <input
@@ -152,19 +152,19 @@ function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site
           <button className="ms-btn-primary" onClick={save} disabled={saving} style={{ fontSize: 12, padding: "4px 12px" }}>
             {saving ? "…" : "Save"}
           </button>
-          <button className="ms-btn-secondary" onClick={() => { setEditing(false); setName(site.name); setTarget(site.target_go_live_date ?? ""); }} style={{ fontSize: 12, padding: "4px 12px" }}>
+          <button className="ms-btn-secondary" onClick={() => { setEditing(false); setName(phase.name); setTarget(phase.target_go_live_date ?? ""); }} style={{ fontSize: 12, padding: "4px 12px" }}>
             Cancel
           </button>
         </>
       ) : (
         <>
-          <span style={{ flex: 1, fontWeight: 600, color: "#1e293b" }}>{site.name}</span>
+          <span style={{ flex: 1, fontWeight: 600, color: "#1e293b" }}>{phase.name}</span>
           <span style={{ color: "#64748b", fontSize: 12, minWidth: 110, textAlign: "right" }}>
-            {site.target_go_live_date ? `Go-live ${fmtDate(site.target_go_live_date)}` : "No date"}
+            {phase.target_go_live_date ? `Go-live ${fmtDate(phase.target_go_live_date)}` : "No date"}
           </span>
           {canEdit && (
             <>
-              <button onClick={() => setApplyOpen(true)} style={{ ...iconBtn, padding: "2px 10px" }} title="Apply template to this site">
+              <button onClick={() => setApplyOpen(true)} style={{ ...iconBtn, padding: "2px 10px" }} title="Apply template to this phase">
                 + Template
               </button>
               <button onClick={() => setEditing(true)} style={iconBtn} title="Edit">✎</button>
@@ -177,7 +177,7 @@ function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site
       {applyOpen && (
         <ApplyTemplateModal
           projectId={projectId}
-          site={site}
+          phase={phase}
           onClose={() => setApplyOpen(false)}
           onApplied={() => {
             setApplyOpen(false);
@@ -189,7 +189,7 @@ function SiteRow({ site, canEdit, projectId, onChanged, onDelete }: { site: Site
   );
 }
 
-function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { projectId: string; existingSiteCount: number; onClose: () => void; onCreated: () => void }) {
+function AddPhaseModal({ projectId, existingPhaseCount, onClose, onCreated }: { projectId: string; existingPhaseCount: number; onClose: () => void; onCreated: () => void }) {
   const { showToast } = useToast();
   const [name, setName] = useState("");
   const [target, setTarget] = useState("");
@@ -197,19 +197,19 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
 
   async function save() {
     if (!name.trim()) {
-      showToast("Site name is required.", "error");
+      showToast("Phase name is required.", "error");
       return;
     }
     setSaving(true);
     try {
-      await api.createSite(projectId, { name: name.trim(), target_go_live_date: target || null });
-      showToast(existingSiteCount === 0
-        ? `Added ${name.trim()}. Existing non-Initiate stages have been moved under this site.`
-        : `Added ${name.trim()}. Cloned stage chain from your first site (no tasks copied).`,
+      await api.createPhase(projectId, { name: name.trim(), target_go_live_date: target || null });
+      showToast(existingPhaseCount === 0
+        ? `Added ${name.trim()}. Existing non-Initiate stages have been moved under this phase.`
+        : `Added ${name.trim()}. Cloned stage chain from your first phase (no tasks copied).`,
         "success");
       onCreated();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to add site", "error");
+      showToast(err instanceof Error ? err.message : "Failed to add phase", "error");
     } finally {
       setSaving(false);
     }
@@ -228,27 +228,27 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
         onClick={(e) => e.stopPropagation()}
         style={{ background: "#fff", borderRadius: 10, padding: 24, width: 480, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
       >
-        <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0f172a" }}>Add deployment site</h3>
+        <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0f172a" }}>Add deployment phase</h3>
 
         <div style={{
           marginTop: 10, padding: "10px 12px",
-          background: existingSiteCount === 0 ? "#fef3c7" : "#dbeafe",
-          border: `1px solid ${existingSiteCount === 0 ? "#fde68a" : "#93c5fd"}`,
-          borderRadius: 6, fontSize: 12, color: existingSiteCount === 0 ? "#854d0e" : "#1e40af",
+          background: existingPhaseCount === 0 ? "#fef3c7" : "#dbeafe",
+          border: `1px solid ${existingPhaseCount === 0 ? "#fde68a" : "#93c5fd"}`,
+          borderRadius: 6, fontSize: 12, color: existingPhaseCount === 0 ? "#854d0e" : "#1e40af",
         }}>
-          {existingSiteCount === 0 ? (
+          {existingPhaseCount === 0 ? (
             <>
-              <strong>First site for this project.</strong> Existing non-Initiate stages (Plan / Execute / Monitor / Go-Live / Hypercare etc.) will be moved under this site. Tasks come along automatically. Any stage named "Initiate" stays shared.
+              <strong>First phase for this project.</strong> Existing non-Initiate stages (Plan / Execute / Monitor / Go-Live / Hypercare etc.) will be moved under this phase. Tasks come along automatically. Any stage named "Initiate" stays shared.
             </>
           ) : (
             <>
-              <strong>Cloning from your first site.</strong> The stage chain from your earliest site is copied (stage rows only — tasks are not duplicated, since downstream sites typically have their own task list).
+              <strong>Cloning from your first phase.</strong> The stage chain from your earliest phase is copied (stage rows only — tasks are not duplicated, since downstream phases typically have their own task list).
             </>
           )}
         </div>
 
         <label style={{ display: "block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#334155" }}>
-          Site name
+          Phase name
           <input
             className="ms-input"
             autoFocus
@@ -273,7 +273,7 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
         <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button type="button" className="ms-btn-secondary" onClick={onClose} disabled={saving}>Cancel</button>
           <button type="button" className="ms-btn-primary" onClick={save} disabled={saving || !name.trim()}>
-            {saving ? "Adding…" : "Add site"}
+            {saving ? "Adding…" : "Add phase"}
           </button>
         </div>
       </div>
@@ -282,22 +282,22 @@ function AddSiteModal({ projectId, existingSiteCount, onClose, onCreated }: { pr
 }
 
 /**
- * Apply a template scoped to a specific site. The same machinery as the
+ * Apply a template scoped to a specific phase. The same machinery as the
  * project-level apply-template (stage reuse by name, fuzzy task dedupe,
- * solution-type tagging) but new stages are inserted with site_id = this
- * site, and the reuse lookup only sees stages under this site. Lets a
+ * solution-type tagging) but new stages are inserted with phase_id = this
+ * phase, and the reuse lookup only sees stages under this phase. Lets a
  * Zoom Phone + Zoom CC combo project carry two distinct sets of stages
  * with the same names (Plan, Execute, ...) on each side.
  */
-function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId: string; site: Site; onClose: () => void; onApplied: () => void }) {
+function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectId: string; phase: Phase; onClose: () => void; onApplied: () => void }) {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState("");
   const [applying, setApplying] = useState(false);
-  // Default the go-live to the site's target — that's the natural anchor.
+  // Default the go-live to the phase's target — that's the natural anchor.
   // PM can clear it to skip date scheduling and get the old dateless behavior.
-  const [goLive, setGoLive] = useState<string>(site.target_go_live_date ?? "");
+  const [goLive, setGoLive] = useState<string>(phase.target_go_live_date ?? "");
 
   useEffect(() => {
     void (async () => {
@@ -316,13 +316,13 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
     if (!selectedId) return;
     setApplying(true);
     try {
-      const res = await api.applyTemplate(projectId, selectedId, site.id, goLive || null);
+      const res = await api.applyTemplate(projectId, selectedId, phase.id, goLive || null);
       const parts: string[] = [];
       parts.push(`${res.stages_created} stage${res.stages_created !== 1 ? "s" : ""}`);
       parts.push(`${res.tasks_created} task${res.tasks_created !== 1 ? "s" : ""}`);
       if (res.tasks_merged > 0) parts.push(`${res.tasks_merged} merged`);
       const tail = goLive ? ` (dated from ${fmtDate(goLive)} go-live)` : "";
-      showToast(`Applied to ${site.name}: ${parts.join(" · ")}${tail}.`, "success");
+      showToast(`Applied to ${phase.name}: ${parts.join(" · ")}${tail}.`, "success");
       onApplied();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to apply template", "error");
@@ -345,14 +345,14 @@ function ApplyTemplateModal({ projectId, site, onClose, onApplied }: { projectId
         style={{ background: "#fff", borderRadius: 10, padding: 24, width: 480, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
       >
         <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0f172a" }}>
-          Apply template to {site.name}
+          Apply template to {phase.name}
         </h3>
         <div style={{
           marginTop: 10, padding: "10px 12px",
           background: "#eff6ff", border: "1px solid #bfdbfe",
           borderRadius: 6, fontSize: 12, color: "#1e40af",
         }}>
-          New stages land under <strong>{site.name}</strong>. Existing same-named stages under this site are reused; stages on other sites are not touched.
+          New stages land under <strong>{phase.name}</strong>. Existing same-named stages under this phase are reused; stages on other phases are not touched.
         </div>
 
         <label style={{ display: "block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#334155" }}>

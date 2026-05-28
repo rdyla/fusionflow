@@ -287,9 +287,9 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
   const allowed = await canEditProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { template_id, site_id, target_go_live_date } = await c.req.json<{
+  const { template_id, phase_id, target_go_live_date } = await c.req.json<{
     template_id: string;
-    site_id?: string | null;
+    phase_id?: string | null;
     /** When set, drives stage + task date scheduling via the same workday
      *  math the Timeline Builder uses (anchor = startFromGoLive(date, total
      *  working days); each stage chained forward with chainForward; every
@@ -308,17 +308,17 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .first<{ id: string; solution_type: string | null }>();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
 
-  // Optional site scoping: when site_id is set, stage reuse and new-stage
-  // inserts are scoped to that site. Lets PMs apply (say) the ZCC template
-  // under a "Zoom Contact Center" site without colliding with the Zoom Phone
-  // site's stages of the same name (Plan / Execute / Monitor / Go-Live).
-  const scopedSiteId = site_id ?? null;
-  if (scopedSiteId) {
-    const siteCheck = await db
-      .prepare("SELECT id FROM sites WHERE id = ? AND project_id = ? LIMIT 1")
-      .bind(scopedSiteId, projectId)
+  // Optional phase scoping: when phase_id is set, stage reuse and new-stage
+  // inserts are scoped to that phase. Lets PMs apply (say) the ZCC template
+  // under a "Zoom Contact Center" phase without colliding with the Zoom Phone
+  // phase's stages of the same name (Plan / Execute / Monitor / Go-Live).
+  const scopedPhaseId = phase_id ?? null;
+  if (scopedPhaseId) {
+    const phaseCheck = await db
+      .prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(scopedPhaseId, projectId)
       .first();
-    if (!siteCheck) throw new HTTPException(400, { message: "site_id does not belong to this project" });
+    if (!phaseCheck) throw new HTTPException(400, { message: "phase_id does not belong to this project" });
   }
 
   // Templates without a canonical solution_type fall back to legacy behaviour
@@ -352,15 +352,15 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     .all<{ id: string; stage_id: string | null; title: string; priority: string | null; order_index: number; default_assignee_role: string | null }>();
 
   // Load existing stages by name so we can reuse them instead of duplicating.
-  // When site-scoped, only consider stages under that same site — a "Plan"
-  // stage on the Zoom Phone site should NOT be reused for the Zoom CC site.
+  // When phase-scoped, only consider stages under that same phase — a "Plan"
+  // stage on the Zoom Phone phase should NOT be reused for the Zoom CC phase.
   const existingStages = await (
-    scopedSiteId
+    scopedPhaseId
       ? db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND site_id = ?")
-          .bind(projectId, scopedSiteId)
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND phase_id = ?")
+          .bind(projectId, scopedPhaseId)
       : db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND site_id IS NULL")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND phase_id IS NULL")
           .bind(projectId)
   ).all<{ id: string; name: string; sort_order: number; planned_start: string | null; planned_end: string | null }>();
   const existingByName: Record<string, string> = {};
@@ -413,9 +413,9 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
       stageIdMap[stage.id] = newStageId;
       await db
         .prepare(
-          "INSERT INTO stages (id, project_id, site_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started')"
+          "INSERT INTO stages (id, project_id, phase_id, name, sort_order, planned_start, planned_end, status) VALUES (?, ?, ?, ?, ?, ?, ?, 'not_started')"
         )
-        .bind(newStageId, projectId, scopedSiteId, stage.name, sortOffset, computed?.start ?? null, computed?.end ?? null)
+        .bind(newStageId, projectId, scopedPhaseId, stage.name, sortOffset, computed?.start ?? null, computed?.end ?? null)
         .run();
       existingByName[key] = newStageId;
       stageDatesByDestId.set(newStageId, { planned_start: computed?.start ?? null, planned_end: computed?.end ?? null });

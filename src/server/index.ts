@@ -35,7 +35,7 @@ import settingsRoutes from "./routes/settings";
 import cascadeRoutes from "./routes/cascade";
 import stagingPromoteRoutes from "./routes/stagingPromote";
 import stakeholderRoutes from "./routes/stakeholder";
-import sitesRoutes from "./routes/sites";
+import phasesRoutes from "./routes/phases";
 import meRoutes from "./routes/me";
 import sowExportRoutes from "./routes/sowExport";
 import { sendEmail } from "./services/emailService";
@@ -96,7 +96,7 @@ app.route("/api/projects", meetingPrepRoutes);
 app.route("/api/settings", settingsRoutes);
 app.route("/api/admin/staging", stagingPromoteRoutes);
 app.route("/api/projects", stakeholderRoutes);
-app.route("/api/projects", sitesRoutes);
+app.route("/api/projects", phasesRoutes);
 app.route("/api/me", meRoutes);
 app.route("/api/sow", sowExportRoutes);
 
