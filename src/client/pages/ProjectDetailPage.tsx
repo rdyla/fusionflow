@@ -198,10 +198,11 @@ export default function ProjectDetailPage() {
 
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
-  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
+  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "" });
   const [savingRisk, setSavingRisk] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
+  const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
@@ -357,6 +358,7 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
+        setCurrentUserId(meData.user.id);
 
         const tabParam = searchParams.get("tab") as DetailTab | null;
         if (tabParam) setTab(tabParam);
@@ -607,7 +609,7 @@ export default function ProjectDetailPage() {
 
   function openNewRisk() {
     setEditingRisk(null);
-    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
+    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "" });
     setShowRiskModal(true);
   }
   function openEditRisk(risk: Risk) {
@@ -618,6 +620,7 @@ export default function ProjectDetailPage() {
       severity: risk.severity ?? "medium",
       status: risk.status ?? "open",
       owner_user_id: risk.owner_user_id ?? "",
+      owner_contact_id: risk.owner_contact_id ?? "",
       task_id: risk.task_id ?? "",
     });
     setShowRiskModal(true);
@@ -633,6 +636,7 @@ export default function ProjectDetailPage() {
         severity: riskForm.severity as "low" | "medium" | "high" | "critical",
         status: riskForm.status as "open" | "mitigated" | "closed",
         owner_user_id: riskForm.owner_user_id || null,
+        owner_contact_id: riskForm.owner_contact_id || null,
         task_id: riskForm.task_id || null,
       };
       if (editingRisk) {
@@ -1752,26 +1756,38 @@ export default function ProjectDetailPage() {
             <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No blockers recorded.</div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {risks.map((risk) => (
-                <div key={risk.id} className="ms-row-item">
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
-                    {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Severity: {risk.severity ?? "—"} · Owner: {userName(risk.owner_user_id)}
-                      {risk.task_id && (() => {
-                        const t = tasks.find((t) => t.id === risk.task_id);
-                        return t ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{t.title}</span></> : null;
-                      })()}
+              {risks.map((risk) => {
+                const ownerContact = risk.owner_contact_id ? contacts.find((c) => c.id === risk.owner_contact_id) : null;
+                const ownerLabel = ownerContact
+                  ? ownerContact.name
+                  : risk.owner_user_id ? userName(risk.owner_user_id) : "Unassigned";
+                // A client who is the assigned project_contact (matched via
+                // dynamics_contact_id == their auth id) can edit this blocker.
+                const isAssignedToCurrentClient = currentUserRole === "client"
+                  && !!ownerContact?.dynamics_contact_id
+                  && ownerContact.dynamics_contact_id === currentUserId;
+                const canEditThisRisk = canEdit || isAssignedToCurrentClient;
+                return (
+                  <div key={risk.id} className="ms-row-item">
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
+                      {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
+                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                        Severity: {risk.severity ?? "—"} · Owner: {ownerLabel}
+                        {risk.task_id && (() => {
+                          const t = tasks.find((t) => t.id === risk.task_id);
+                          return t ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{t.title}</span></> : null;
+                        })()}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                      <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
+                      {canEditThisRisk && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
+                      {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
-                    {canEdit && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
-                    {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -2553,64 +2569,109 @@ export default function ProjectDetailPage() {
       })()}
 
       {/* ── Blocker Modal ─────────────────────────────────────────────────── */}
-      {showRiskModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
-          <div className="ms-modal">
-            <h2>{editingRisk ? "Edit Blocker" : "Add Blocker"}</h2>
-            <form onSubmit={handleSaveRisk} style={{ display: "grid", gap: 14 }}>
-              <label className="ms-label">
-                <span>Title *</span>
-                <input autoFocus required className="ms-input" value={riskForm.title} onChange={(e) => setRiskForm({ ...riskForm, title: e.target.value })} />
-              </label>
-              <label className="ms-label">
-                <span>Description</span>
-                <textarea className="ms-input" value={riskForm.description} onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })} rows={3} style={{ resize: "vertical" }} />
-              </label>
-              <label className="ms-label">
-                <span>Blocking Task</span>
-                <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
-                  <option value="">— Not task-specific —</option>
-                  {tasks.filter((t) => t.status !== "completed").map((t) => (
-                    <option key={t.id} value={t.id}>{t.title}</option>
-                  ))}
-                </select>
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      {showRiskModal && (() => {
+        // Client edit mode: customer is editing a blocker assigned to them.
+        // They can only change status + description; everything else is locked.
+        const clientEditMode = !canEdit && currentUserRole === "client" && !!editingRisk;
+        // Owner dropdown encodes the picked value as "user:<id>" or
+        // "contact:<id>" so a single select can switch between the two owner
+        // dimensions. handleOwnerChange writes back to the matching field.
+        const ownerValue = riskForm.owner_user_id
+          ? `user:${riskForm.owner_user_id}`
+          : riskForm.owner_contact_id ? `contact:${riskForm.owner_contact_id}` : "";
+        const handleOwnerChange = (raw: string) => {
+          if (raw.startsWith("user:"))    setRiskForm({ ...riskForm, owner_user_id: raw.slice(5), owner_contact_id: "" });
+          else if (raw.startsWith("contact:")) setRiskForm({ ...riskForm, owner_user_id: "", owner_contact_id: raw.slice(8) });
+          else                              setRiskForm({ ...riskForm, owner_user_id: "", owner_contact_id: "" });
+        };
+        const customerSideContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
+        const partnerSideContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
+
+        return (
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
+            <div className="ms-modal">
+              <h2>{editingRisk ? "Edit Blocker" : "Add Blocker"}</h2>
+              <form onSubmit={handleSaveRisk} style={{ display: "grid", gap: 14 }}>
+                {clientEditMode ? (
+                  // Customer view: title shown read-only for context, plus the
+                  // two fields they can change.
+                  <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9", fontSize: 13, color: "#475569" }}>
+                    {riskForm.title}
+                  </div>
+                ) : (
+                  <label className="ms-label">
+                    <span>Title *</span>
+                    <input autoFocus required className="ms-input" value={riskForm.title} onChange={(e) => setRiskForm({ ...riskForm, title: e.target.value })} />
+                  </label>
+                )}
                 <label className="ms-label">
-                  <span>Severity</span>
-                  <select className="ms-input" value={riskForm.severity} onChange={(e) => setRiskForm({ ...riskForm, severity: e.target.value })}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="critical">Critical</option>
-                  </select>
+                  <span>Description</span>
+                  <textarea className="ms-input" value={riskForm.description} onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })} rows={3} style={{ resize: "vertical" }} />
                 </label>
-                <label className="ms-label">
-                  <span>Status</span>
-                  <select className="ms-input" value={riskForm.status} onChange={(e) => setRiskForm({ ...riskForm, status: e.target.value })}>
-                    <option value="open">Open</option>
-                    <option value="mitigated">Mitigated</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Owner</span>
-                  <select className="ms-input" value={riskForm.owner_user_id} onChange={(e) => setRiskForm({ ...riskForm, owner_user_id: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn-primary" disabled={savingRisk || !riskForm.title.trim()}>
-                  {savingRisk ? "Saving..." : editingRisk ? "Save Changes" : "Add Blocker"}
-                </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => setShowRiskModal(false)}>Cancel</button>
-              </div>
-            </form>
+                {!clientEditMode && (
+                  <label className="ms-label">
+                    <span>Blocking Task</span>
+                    <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
+                      <option value="">— Not task-specific —</option>
+                      {tasks.filter((t) => t.status !== "completed").map((t) => (
+                        <option key={t.id} value={t.id}>{t.title}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: clientEditMode ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>
+                  {!clientEditMode && (
+                    <label className="ms-label">
+                      <span>Severity</span>
+                      <select className="ms-input" value={riskForm.severity} onChange={(e) => setRiskForm({ ...riskForm, severity: e.target.value })}>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </label>
+                  )}
+                  <label className="ms-label">
+                    <span>Status</span>
+                    <select className="ms-input" value={riskForm.status} onChange={(e) => setRiskForm({ ...riskForm, status: e.target.value })}>
+                      <option value="open">Open</option>
+                      <option value="mitigated">Mitigated</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+                  {!clientEditMode && (
+                    <label className="ms-label">
+                      <span>Owner</span>
+                      <select className="ms-input" value={ownerValue} onChange={(e) => handleOwnerChange(e.target.value)}>
+                        <option value="">Unassigned</option>
+                        <optgroup label="PF Staff">
+                          {users.map((u) => <option key={u.id} value={`user:${u.id}`}>{u.name ?? u.email}</option>)}
+                        </optgroup>
+                        {customerSideContacts.length > 0 && (
+                          <optgroup label="Customer Contacts">
+                            {customerSideContacts.map((c) => <option key={c.id} value={`contact:${c.id}`}>{c.name}</option>)}
+                          </optgroup>
+                        )}
+                        {partnerSideContacts.length > 0 && (
+                          <optgroup label="Partner / Provider Contacts">
+                            {partnerSideContacts.map((c) => <option key={c.id} value={`contact:${c.id}`}>{c.name}</option>)}
+                          </optgroup>
+                        )}
+                      </select>
+                    </label>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                  <button type="submit" className="ms-btn-primary" disabled={savingRisk || !riskForm.title.trim()}>
+                    {savingRisk ? "Saving..." : editingRisk ? "Save Changes" : "Add Blocker"}
+                  </button>
+                  <button type="button" className="ms-btn-secondary" onClick={() => setShowRiskModal(false)}>Cancel</button>
+                </div>
+              </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Cascade Modal ─────────────────────────────────────────────────── */}
       {cascadeFromTask && project && (
