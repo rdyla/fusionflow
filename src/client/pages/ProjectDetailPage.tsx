@@ -2910,9 +2910,16 @@ export default function ProjectDetailPage() {
                       if (!project || !timeEntryTask || !timeEntrySetup?.case_id || !timeEntrySetup?.job_id) return;
                       setSubmittingTimeEntry(true);
                       try {
-                        // Build ISO datetimes from local date + time (treat as UTC for submission)
-                        const start = `${timeEntryForm.date}T${timeEntryForm.startTime}:00Z`;
-                        const end = `${timeEntryForm.date}T${timeEntryForm.endTime}:00Z`;
+                        // The <input type="time"> value is wall-clock time in
+                        // the SA's local zone ("08:00" means 8am local). Build
+                        // the Date by appending the local time without a `Z`
+                        // suffix — JS then parses it as LOCAL time — and call
+                        // toISOString() to convert to UTC for the wire. The
+                        // previous version stamped `Z` directly onto the local
+                        // string, which sent "8am UTC" instead of "8am PT" and
+                        // showed up in D365 as 1am during DST.
+                        const start = new Date(`${timeEntryForm.date}T${timeEntryForm.startTime}:00`).toISOString();
+                        const end   = new Date(`${timeEntryForm.date}T${timeEntryForm.endTime}:00`).toISOString();
                         const entry = await api.logTaskTime(project.id, timeEntryTask.id, {
                           scheduled_start: start,
                           scheduled_end: end,
