@@ -32,18 +32,34 @@ app.get("/accounts", async (c) => {
 const createAccountSchema = z.object({
   name: z.string().min(1).max(160),
   emailaddress1: z.string().email().max(100),
-  websiteurl: z.string().url().max(200).optional().or(z.literal("")),
+  // D365 stores websiteurl as plain text up to 200 chars — no URL-shape
+  // enforcement on their end. We deliberately don't run z.url() here either
+  // because the client auto-prepends https:// for bare hostnames, and any
+  // stricter check would just bounce legitimate input ("acme.co/contact"
+  // etc.). Length cap is the only guard.
+  websiteurl: z.string().max(200).optional().or(z.literal("")),
+  /** D365 systemuserid of the PF AE who will own this account. Required —
+   *  without it the account ends up owned by the app-reg service principal
+   *  and disappears from AE pipelines. */
+  owner_systemuserid: z.string().min(1),
 });
 app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
   const parsed = createAccountSchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
-  const { name, emailaddress1, websiteurl } = parsed.data;
+  if (!parsed.success) {
+    // Surface Zod issues to the client so future field-level bugs show
+    // up in the UI toast instead of just "Invalid request body".
+    const firstIssue = parsed.error.issues[0];
+    const detail = firstIssue ? `${firstIssue.path.join(".")}: ${firstIssue.message}` : "Invalid request body";
+    throw new HTTPException(400, { message: detail });
+  }
+  const { name, emailaddress1, websiteurl, owner_systemuserid } = parsed.data;
 
   try {
     const account = await createAccount(c.env, {
       name,
       emailaddress1,
       websiteurl: websiteurl || null,
+      ownerSystemUserId: owner_systemuserid,
     });
     return c.json(account, 201);
   } catch (err) {

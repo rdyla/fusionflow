@@ -228,13 +228,18 @@ export async function searchAccounts(env: Env, query: string): Promise<DynamicsA
 // to D365. statecode is omitted; D365 defaults new accounts to 0=Active.
 // Prefer: return=representation makes D365 echo the created row back so we
 // can hand it straight to the picker (no follow-up GET needed).
+// ownerSystemUserId is required — accounts created without an owner default
+// to the app-reg's service-principal user, which leaves the account unowned
+// from a sales-pipeline perspective. The SA picks the PF AE who'll own the
+// account from a D365-sourced AE list in the UI.
 export async function createAccount(
   env: Env,
-  payload: { name: string; emailaddress1: string; websiteurl?: string | null },
+  payload: { name: string; emailaddress1: string; websiteurl?: string | null; ownerSystemUserId: string },
 ): Promise<DynamicsAccount> {
   const body: Record<string, unknown> = {
     name: payload.name,
     emailaddress1: payload.emailaddress1,
+    "ownerid@odata.bind": `/systemusers(${payload.ownerSystemUserId})`,
   };
   if (payload.websiteurl) body.websiteurl = payload.websiteurl;
   const raw = await dynamicsPost<DynamicsAccount>(env, "/accounts", body, { prefer: "return=representation" });

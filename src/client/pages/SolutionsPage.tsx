@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api, type Solution, type SolutionStatus, type User, type CrmAccountTeam,
-  type DynamicsOpportunity,
+  type DynamicsOpportunity, type DynamicsUser,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { useDemoMode } from "../lib/demoMode";
@@ -162,7 +162,13 @@ export default function SolutionsPage() {
   // the picker so the rest of the New Solution flow proceeds normally.
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
-  const [newAccountForm, setNewAccountForm] = useState({ name: "", emailaddress1: "", websiteurl: "" });
+  const [newAccountForm, setNewAccountForm] = useState({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" });
+  // D365-sourced AE list for the create-account owner dropdown. Loaded the
+  // first time the SA opens the inline form and cached after that — the
+  // list rarely changes within a session and re-fetching on every reopen
+  // would add a noticeable delay to a flow that's already CRM-bound.
+  const [dynamicsAes, setDynamicsAes] = useState<DynamicsUser[]>([]);
+  const [dynamicsAesLoading, setDynamicsAesLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -225,29 +231,50 @@ export default function SolutionsPage() {
   }
 
   // Open the inline "Create new account" form. We seed the name from
-  // whatever the SA was searching for so they don't have to retype it.
+  // whatever the SA was searching for so they don't have to retype it,
+  // and kick off a one-time fetch of the D365 AE list for the owner picker.
   function openCreateAccountForm() {
-    setNewAccountForm({ name: crmSearch.trim(), emailaddress1: "", websiteurl: "" });
+    setNewAccountForm({ name: crmSearch.trim(), emailaddress1: "", websiteurl: "", owner_systemuserid: "" });
     setShowCreateAccount(true);
     setCrmResults([]);
+    if (dynamicsAes.length === 0 && !dynamicsAesLoading) {
+      setDynamicsAesLoading(true);
+      api.getDynamicsAEs()
+        .then(setDynamicsAes)
+        .catch(() => setDynamicsAes([]))
+        .finally(() => setDynamicsAesLoading(false));
+    }
   }
 
   async function handleCreateAccount(e: React.FormEvent) {
     e.preventDefault();
     if (!newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim()) return;
+    if (!newAccountForm.owner_systemuserid) {
+      showToast("Pick the PF AE who will own this account.", "error");
+      return;
+    }
+    // Auto-prepend https:// when the SA enters a bare hostname so the URL
+    // lands in D365 as a clickable link. We only touch the value if it's
+    // non-empty AND missing a scheme — leaves `http://` and `https://`
+    // inputs untouched.
+    const rawWebsite = newAccountForm.websiteurl.trim();
+    const websiteurl = rawWebsite && !/^https?:\/\//i.test(rawWebsite)
+      ? `https://${rawWebsite}`
+      : rawWebsite;
     setCreatingAccount(true);
     try {
       const created = await api.createDynamicsAccount({
         name: newAccountForm.name.trim(),
         emailaddress1: newAccountForm.emailaddress1.trim(),
-        websiteurl: newAccountForm.websiteurl.trim() || undefined,
+        websiteurl: websiteurl || undefined,
+        owner_systemuserid: newAccountForm.owner_systemuserid,
       });
       // Drop the new account straight into the picker as if it had been
       // selected from search — kicks off the same team + opportunities
       // fetches so the SA continues with the normal flow.
       selectCrmAccount({ id: created.accountid, name: created.name });
       setShowCreateAccount(false);
-      setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" });
+      setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" });
       showToast(`Created ${created.name} in CRM.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create account in CRM", "error");
@@ -425,7 +452,7 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" }); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" }); } }}>
           <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
@@ -520,26 +547,50 @@ export default function SolutionsPage() {
                     <span>Website</span>
                     <input
                       className="ms-input"
-                      type="url"
-                      placeholder="https://acmehealth.com"
+                      // type="text" not "url" — the browser's url validator
+                      // is over-aggressive about scheme; we auto-prepend
+                      // https:// on submit and let bare hostnames through.
+                      type="text"
+                      placeholder="acmehealth.com"
                       value={newAccountForm.websiteurl}
                       onChange={(e) => setNewAccountForm((f) => ({ ...f, websiteurl: e.target.value }))}
                       disabled={creatingAccount}
                     />
+                  </label>
+                  <label className="ms-label">
+                    <span>Owner (PF AE) *</span>
+                    {dynamicsAesLoading ? (
+                      <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading AEs…</div>
+                    ) : (
+                      <select
+                        className="ms-input"
+                        value={newAccountForm.owner_systemuserid}
+                        onChange={(e) => setNewAccountForm((f) => ({ ...f, owner_systemuserid: e.target.value }))}
+                        disabled={creatingAccount}
+                      >
+                        <option value="">— Select AE —</option>
+                        {dynamicsAes.map((u) => {
+                          const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ") || u.internalemailaddress || "(unnamed AE)";
+                          return (
+                            <option key={u.systemuserid} value={u.systemuserid}>{fullName}</option>
+                          );
+                        })}
+                      </select>
+                    )}
                   </label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
                       className="ms-btn-primary"
                       onClick={handleCreateAccount}
-                      disabled={creatingAccount || !newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim()}
+                      disabled={creatingAccount || !newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim() || !newAccountForm.owner_systemuserid}
                     >
                       {creatingAccount ? "Creating…" : "Create account"}
                     </button>
                     <button
                       type="button"
                       className="ms-btn-ghost"
-                      onClick={() => { setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" }); }}
+                      onClick={() => { setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" }); }}
                       disabled={creatingAccount}
                     >
                       Cancel
@@ -801,7 +852,7 @@ export default function SolutionsPage() {
                 >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" }); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" }); }}>
                   Cancel
                 </button>
               </div>
