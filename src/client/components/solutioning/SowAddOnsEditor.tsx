@@ -118,11 +118,50 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
     const hasTotal = breakdown.total > 0;
     const hasAddOns = addOns.length > 0;
     if (!hasTotal && !hasAddOns) return null;
+
+    // Build a "based on" line-item list that explains where the total
+    // came from — users / sites / go-lives / training / on-site work
+    // for basic mode, seat tier for tiered, total labor hours for
+    // advanced. Customer-facing, so keep labels in plain English.
+    type SummaryRow = { label: string; value: string };
+    const summaryRows: SummaryRow[] = [];
+    if (isBasic && solution.basic_inputs) {
+      const bi = solution.basic_inputs;
+      if (bi.users > 0)             summaryRows.push({ label: "Users",              value: bi.users.toLocaleString() });
+      if (bi.sites > 0)             summaryRows.push({ label: "Sites",              value: bi.sites.toLocaleString() });
+      if (bi.go_lives > 0)          summaryRows.push({ label: "Go-live events",     value: bi.go_lives.toLocaleString() });
+      if (bi.training_sessions > 0) summaryRows.push({ label: "Training sessions",  value: bi.training_sessions.toLocaleString() });
+      if (bi.onsite_sites > 0)      summaryRows.push({ label: "On-site visits",     value: bi.onsite_sites.toLocaleString() });
+      if (bi.onsite_devices > 0)    summaryRows.push({ label: "On-site devices",    value: bi.onsite_devices.toLocaleString() });
+    } else if (isTiered && tieredTier) {
+      summaryRows.push({ label: "Plan",  value: tieredTier.label });
+      if (solution.basic_seat_count != null) {
+        summaryRows.push({ label: "Seats", value: solution.basic_seat_count.toLocaleString() });
+      }
+    } else if (!isFlat && laborHoursTotal > 0) {
+      summaryRows.push({ label: "Implementation hours", value: `${laborHoursTotal.toLocaleString()}h` });
+    }
+
     return (
       <div className="ms-card">
         <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           SOW Pricing{hasAddOns ? " & Add-Ons" : ""}
         </h3>
+        {summaryRows.length > 0 && (
+          <div style={{ marginBottom: hasAddOns ? 16 : 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>
+              Based on
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+              {summaryRows.map((r) => (
+                <div key={r.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 12px" }}>
+                  <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>{r.label}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>{r.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {hasAddOns && (
           <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
             {addOns.map((line, i) => {
