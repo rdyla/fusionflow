@@ -1307,7 +1307,16 @@ export const api = {
    *  drop it straight into the customer picker. owner_systemuserid is the
    *  D365 systemuserid of the PF AE who owns the new account (required — D365
    *  defaults the owner to our app-reg's service principal otherwise). */
-  createDynamicsAccount: (payload: { name: string; emailaddress1: string; websiteurl?: string; owner_systemuserid: string }) =>
+  createDynamicsAccount: (payload: {
+    name: string;
+    emailaddress1: string;
+    websiteurl?: string;
+    owner_systemuserid: string;
+    /** Provider (partner) AE name + email — land in cr495_provideraename /
+     *  cr495_provideraeemail on the D365 account. Optional. */
+    provider_ae_name?: string;
+    provider_ae_email?: string;
+  }) =>
     request<DynamicsAccount>("/dynamics/accounts", {
       method: "POST",
       body: JSON.stringify(payload),

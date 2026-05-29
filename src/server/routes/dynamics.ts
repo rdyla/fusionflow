@@ -42,6 +42,12 @@ const createAccountSchema = z.object({
    *  without it the account ends up owned by the app-reg service principal
    *  and disappears from AE pipelines. */
   owner_systemuserid: z.string().min(1),
+  /** Provider (partner) AE name + email — land in cr495_provideraename /
+   *  cr495_provideraeemail on the D365 account. Optional but typically set:
+   *  the inline form makes the SA pick an existing partner_ae user or invite
+   *  a new one, and the resolved name/email flows through. */
+  provider_ae_name:  z.string().max(160).optional().or(z.literal("")),
+  provider_ae_email: z.string().email().max(100).optional().or(z.literal("")),
 });
 app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
   const parsed = createAccountSchema.safeParse(await c.req.json().catch(() => ({})));
@@ -52,7 +58,7 @@ app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
     const detail = firstIssue ? `${firstIssue.path.join(".")}: ${firstIssue.message}` : "Invalid request body";
     throw new HTTPException(400, { message: detail });
   }
-  const { name, emailaddress1, websiteurl, owner_systemuserid } = parsed.data;
+  const { name, emailaddress1, websiteurl, owner_systemuserid, provider_ae_name, provider_ae_email } = parsed.data;
 
   try {
     const account = await createAccount(c.env, {
@@ -60,6 +66,8 @@ app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
       emailaddress1,
       websiteurl: websiteurl || null,
       ownerSystemUserId: owner_systemuserid,
+      providerAeName:  provider_ae_name  || null,
+      providerAeEmail: provider_ae_email || null,
     });
     return c.json(account, 201);
   } catch (err) {
