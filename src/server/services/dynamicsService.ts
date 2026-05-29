@@ -436,6 +436,28 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
   return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email, address_city, address_state };
 }
 
+// Create a D365 Opportunity tied to an account. Used by the New Solution
+// flow when the SA can't find an existing opportunity to bind the solution
+// to — they create one inline and we hand the new row back to the picker.
+// statecode is omitted; D365 defaults new opportunities to 0=Open.
+// parentaccountid is what our getAccountOpportunities() filters on, so the
+// new opp is immediately visible to subsequent picker fetches; we also set
+// customerid_account because some D365 configs require it on create.
+// pfi_sowhours / pfi_solutionarchitect intentionally left blank — those get
+// populated downstream as the solution progresses (per product direction).
+export async function createOpportunity(
+  env: Env,
+  payload: { name: string; parentAccountId: string },
+): Promise<DynamicsOpportunity> {
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    "parentaccountid@odata.bind":    `/accounts(${payload.parentAccountId})`,
+    "customerid_account@odata.bind": `/accounts(${payload.parentAccountId})`,
+  };
+  const raw = await dynamicsPost<DynamicsOpportunity>(env, "/opportunities", body, { prefer: "return=representation" });
+  return raw;
+}
+
 export async function getAccountOpportunities(
   env: Env,
   accountId: string,

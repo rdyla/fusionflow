@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
-import { createAccount, searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
+import { createAccount, createOpportunity, searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -73,6 +73,32 @@ app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
   } catch (err) {
     console.error("Dynamics account create error:", err);
     throw new HTTPException(502, { message: "Failed to create account in CRM" });
+  }
+});
+
+// POST /api/dynamics/opportunities — create a new D365 opportunity bound
+// to an account. SA + admin only. Minimal surface area on purpose: name +
+// parentaccountid only. pfi_sowhours / pfi_solutionarchitect get populated
+// downstream as the solution progresses, not here.
+const createOpportunitySchema = z.object({
+  name: z.string().min(1).max(300),
+  parent_account_id: z.string().min(1),
+});
+app.post("/opportunities", requireRole("admin", "pf_sa"), async (c) => {
+  const parsed = createOpportunitySchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const detail = firstIssue ? `${firstIssue.path.join(".")}: ${firstIssue.message}` : "Invalid request body";
+    throw new HTTPException(400, { message: detail });
+  }
+  const { name, parent_account_id } = parsed.data;
+
+  try {
+    const opp = await createOpportunity(c.env, { name, parentAccountId: parent_account_id });
+    return c.json(opp, 201);
+  } catch (err) {
+    console.error("Dynamics opportunity create error:", err);
+    throw new HTTPException(502, { message: "Failed to create opportunity in CRM" });
   }
 });
 

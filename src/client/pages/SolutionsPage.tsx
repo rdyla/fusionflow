@@ -182,6 +182,13 @@ export default function SolutionsPage() {
   // would add a noticeable delay to a flow that's already CRM-bound.
   const [dynamicsAes, setDynamicsAes] = useState<DynamicsUser[]>([]);
   const [dynamicsAesLoading, setDynamicsAesLoading] = useState(false);
+  // Inline "Create new opportunity" form — appears under the opportunity
+  // picker. Minimal: just a name input. The new opp is bound to the
+  // picked account's id via parentaccountid server-side. pfi_sowhours and
+  // pfi_solutionarchitect get filled in D365 later as the deal progresses.
+  const [showCreateOpportunity, setShowCreateOpportunity] = useState(false);
+  const [creatingOpportunity, setCreatingOpportunity] = useState(false);
+  const [newOpportunityName, setNewOpportunityName] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -225,6 +232,10 @@ export default function SolutionsPage() {
     setCrmTeamLoading(true);
     setOpportunities([]);
     setOpportunitiesLoading(true);
+    // Hide a stale create-opportunity form if the SA had it open while
+    // re-binding accounts — the new opp would point at the old account.
+    setShowCreateOpportunity(false);
+    setNewOpportunityName("");
     api.optimizeCrmAccountTeam(account.id)
       .then((team) => {
         setCrmTeam(team);
@@ -355,6 +366,32 @@ export default function SolutionsPage() {
       showToast(err instanceof Error ? err.message : "Failed to create account in CRM", "error");
     } finally {
       setCreatingAccount(false);
+    }
+  }
+
+  async function handleCreateOpportunity() {
+    if (!form.dynamics_account_id) {
+      showToast("Pick a CRM account first.", "error");
+      return;
+    }
+    if (!newOpportunityName.trim()) return;
+    setCreatingOpportunity(true);
+    try {
+      const created = await api.createDynamicsOpportunity({
+        name: newOpportunityName.trim(),
+        parent_account_id: form.dynamics_account_id,
+      });
+      // Push the new opp into the picker list AND auto-select it so the
+      // SA doesn't have to scroll the dropdown for the row they just made.
+      setOpportunities((prev) => [created, ...prev]);
+      setForm((f) => ({ ...f, crm_opportunity_id: created.opportunityid }));
+      setShowCreateOpportunity(false);
+      setNewOpportunityName("");
+      showToast(`Created opportunity "${created.name}" in CRM.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create opportunity in CRM", "error");
+    } finally {
+      setCreatingOpportunity(false);
     }
   }
 
@@ -527,7 +564,7 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); } }}>
           <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
@@ -595,7 +632,21 @@ export default function SolutionsPage() {
 
               {/* ── Inline "Create new account in CRM" form ── */}
               {showCreateAccount && (
-                <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}>
+                <div
+                  // The inline form sits INSIDE the outer New Solution
+                  // <form>; without this, pressing Enter in any field
+                  // submits the outer form (which then trips its own
+                  // validation: "Pick an opportunity from CRM"). Intercept
+                  // Enter at the wrapper level so it routes to the inline
+                  // create handler instead.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateAccount(e as unknown as React.FormEvent);
+                    }
+                  }}
+                  style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}
+                >
                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new account in CRM</div>
                   <label className="ms-label">
                     <span>Account name *</span>
@@ -743,10 +794,12 @@ export default function SolutionsPage() {
               )}
 
               {/* ── Opportunity (scoped to the picked account) ── */}
-              {/* Only meaningful once an account is bound. D365 statecode=0
-                  (Open) only — won/lost opps have nowhere to attach new
-                  pre-sales work. PR 3 will add a "Create new opportunity"
-                  affordance here for accounts with no open opportunities. */}
+              {/* Only meaningful once an account is bound. statecode in
+                  (0, 1) — Open + Won — since implementation work often
+                  kicks off right after Won. The "Create new" affordance
+                  below lets the SA spin one up inline if they can't find
+                  it; new opps stamp parentaccountid only (pfi_sowhours +
+                  pfi_solutionarchitect get filled in D365 later). */}
               {form.dynamics_account_id && (
                 <label className="ms-label">
                   <span>Opportunity *</span>
@@ -754,7 +807,7 @@ export default function SolutionsPage() {
                     <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading opportunities…</div>
                   ) : opportunities.length === 0 ? (
                     <div style={{ fontSize: 12, color: "#b45309", padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
-                      No open or recently-won opportunities found on this account. Create one in CRM, then re-select the account.
+                      No open or recently-won opportunities found on this account. Create one below.
                     </div>
                   ) : (
                     <select
@@ -773,7 +826,69 @@ export default function SolutionsPage() {
                       ))}
                     </select>
                   )}
+                  {!showCreateOpportunity && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowCreateOpportunity(true); setNewOpportunityName(""); }}
+                      disabled={opportunitiesLoading}
+                      style={{ marginTop: 6, background: "none", border: "none", color: "#63c1ea", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0, alignSelf: "flex-start" }}
+                    >
+                      + Can't find it? Create a new opportunity in CRM
+                    </button>
+                  )}
                 </label>
+              )}
+
+              {/* ── Inline "Create new opportunity in CRM" form ── */}
+              {showCreateOpportunity && form.dynamics_account_id && (
+                <div
+                  // Same Enter-intercept as the create-account inline form
+                  // above — this sub-form lives inside the outer New
+                  // Solution <form>, so without this Enter on the name
+                  // input submits the outer form and short-circuits with
+                  // "Pick an opportunity from CRM" before the opp is ever
+                  // created.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateOpportunity();
+                    }
+                  }}
+                  style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new opportunity in CRM</div>
+                  <label className="ms-label">
+                    <span>Opportunity name *</span>
+                    <input
+                      className="ms-input"
+                      placeholder="e.g. Acme Health — Zoom UCaaS 2026"
+                      value={newOpportunityName}
+                      onChange={(e) => setNewOpportunityName(e.target.value)}
+                      disabled={creatingOpportunity}
+                    />
+                  </label>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                    Bound to <strong>{form.customer_name}</strong>. SOW hours and Solution Architect populate later as the solution progresses.
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="ms-btn-primary"
+                      onClick={handleCreateOpportunity}
+                      disabled={creatingOpportunity || !newOpportunityName.trim()}
+                    >
+                      {creatingOpportunity ? "Creating…" : "Create opportunity"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ms-btn-ghost"
+                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); }}
+                      disabled={creatingOpportunity}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* ── CRM team suggestion ── */}
@@ -995,7 +1110,7 @@ export default function SolutionsPage() {
                 >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); }}>
                   Cancel
                 </button>
               </div>
