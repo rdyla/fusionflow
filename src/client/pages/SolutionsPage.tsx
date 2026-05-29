@@ -275,6 +275,18 @@ export default function SolutionsPage() {
       showToast("Pick the PF AE who will own this account.", "error");
       return;
     }
+    // "Add New" mode without both name AND email would otherwise create the
+    // CRM account with a partially-stamped or empty provider AE pair AND
+    // silently skip seeding the main form's partner_ae_* state. The button
+    // disabled predicate also enforces this; the runtime check is the
+    // safety net (and gives a useful toast over a no-op click).
+    if (
+      newAccountForm.provider_ae_mode === "new" &&
+      (!newAccountForm.provider_ae_name.trim() || !newAccountForm.provider_ae_email.trim())
+    ) {
+      showToast("Enter both name and email for the new provider AE, or switch to Select Existing.", "error");
+      return;
+    }
     // Auto-prepend https:// when the SA enters a bare hostname so the URL
     // lands in D365 as a clickable link. We only touch the value if it's
     // non-empty AND missing a scheme — leaves `http://` and `https://`
@@ -705,7 +717,16 @@ export default function SolutionsPage() {
                       type="button"
                       className="ms-btn-primary"
                       onClick={handleCreateAccount}
-                      disabled={creatingAccount || !newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim() || !newAccountForm.owner_systemuserid}
+                      disabled={
+                        creatingAccount
+                        || !newAccountForm.name.trim()
+                        || !newAccountForm.emailaddress1.trim()
+                        || !newAccountForm.owner_systemuserid
+                        || (
+                          newAccountForm.provider_ae_mode === "new" &&
+                          (!newAccountForm.provider_ae_name.trim() || !newAccountForm.provider_ae_email.trim())
+                        )
+                      }
                     >
                       {creatingAccount ? "Creating…" : "Create account"}
                     </button>
