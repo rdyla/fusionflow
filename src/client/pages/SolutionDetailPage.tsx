@@ -837,10 +837,14 @@ export default function SolutionDetailPage() {
           })()}
 
           {/* ── Customer Contacts ── */}
+          {/* Clients can add + remove customer contacts on their own
+              solution — same CRM-picker + manual-entry affordances as
+              staff. Server endpoint at POST /:id/contacts has no role
+              gate; canEdit alone was over-tight. */}
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
-              {canEdit && (
+              {(canEdit || isClient) && (
                 <button
                   className="ms-btn-secondary"
                   onClick={() => {
@@ -880,7 +884,7 @@ export default function SolutionDetailPage() {
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
                       </div>
                     </div>
-                    {canEdit && (
+                    {(canEdit || isClient) && (
                       <button
                         className="ms-btn-ghost"
                         style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
