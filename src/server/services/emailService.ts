@@ -24,6 +24,11 @@ type EmailPayload = {
 };
 
 const PF_DOMAIN = "@packetfusion.com";
+// Temporary staging-only allowlist for customer-POV testing — +alias gmail
+// accounts mapped to D365 portal contacts, plus dyla.net (Ryan's personal
+// domain wired up as a fake customer in CRM). MUST be stripped before the
+// next staging→main promotion (see project_customer_pov_testing memory).
+const STAGING_TEST_DOMAINS = ["@gmail.com", "@dyla.net"];
 
 /**
  * Fire-and-forget email via Microsoft Graph sendMail. Never throws —
@@ -31,7 +36,7 @@ const PF_DOMAIN = "@packetfusion.com";
  *
  * Routing rules:
  *   DEV_EMAIL set   → all mail diverted to that address (local dev only)
- *   APP_URL staging → only @packetfusion.com recipients receive mail
+ *   APP_URL staging → only @packetfusion.com + STAGING_TEST_DOMAINS recipients receive mail
  *   otherwise       → normal production delivery
  */
 export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> {
@@ -51,7 +56,7 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
     finalRecipients = [env.DEV_EMAIL];
     subject = `[DEV → ${validRecipients.join(", ")}] ${subject}`;
   } else if (env.APP_URL?.includes("staging")) {
-    const allowedSuffixes = [PF_DOMAIN];
+    const allowedSuffixes = [PF_DOMAIN, ...STAGING_TEST_DOMAINS];
     finalRecipients = validRecipients.filter(r => {
       const lower = r.toLowerCase();
       return allowedSuffixes.some(s => lower.endsWith(s));
