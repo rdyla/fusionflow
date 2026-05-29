@@ -313,6 +313,14 @@ export function assembleSowFromCatalog(
   const allowed = new Set<SowSolutionTypeKey>(["ucaas", "ccaas", "ci", "va", "rc_air"]);
   const types = solutionTypes
     .map((t) => (t ?? "").toLowerCase())
+    // Both Zoom AI Virtual Agent (zoom_zva) and RingCentral AI Receptionist
+    // (rc_air) collapse to the canonical `va` solution_type in the data
+    // layer (routes/solutions.ts::deriveSolutionTypesFromJourneys). The
+    // catalog models them as separate products since their stage content +
+    // scope items diverge (bot persona vs. receptionist greeting flow).
+    // Bridge: when vendor=RingCentral and `va` is present, swap it for
+    // `rc_air` so the AIR-tagged catalog entries fire. Zoom-side stays `va`.
+    .map((t) => (v === "ringcentral" && t === "va" ? "rc_air" : t))
     .filter((t): t is SowSolutionTypeKey => allowed.has(t as SowSolutionTypeKey));
 
   const meta = pickVariantMeta(types, v);
