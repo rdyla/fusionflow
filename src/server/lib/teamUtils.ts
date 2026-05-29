@@ -183,22 +183,39 @@ export async function syncProjectGoLiveDate(db: D1Database, projectId: string): 
 }
 
 // ── D365 opportunity sync ────────────────────────────────────────────────────
-// PATCHes the bound D365 opportunity with the four fields the sales side
-// cares about, derived from the solution row:
+// PATCHes the bound D365 opportunity with everything sales ops would
+// otherwise have to fill in by hand, derived from the solution row:
 //
-//   am_opportunitytype       — always 930680038 (PFI - CloudPro). The PS
-//                              labor PacketFusion quotes for implementation
-//                              work, regardless of the underlying tech type.
-//   am_revenuesource         — 930680001 (New Logo) when the CRM account was
-//                              created via the inline form during New Solution
-//                              (is_new_logo=1), else 930680000 (Installed Base).
-//   am_OpportunityVendors    — lookup to am_vendoraccount. Resolved from
-//                              solution.vendor + is_zoom_reseller:
-//                                ringcentral          → Ring Central
-//                                zoom + reseller=1    → Zoom Resell
-//                                zoom + reseller=0    → Zoom
-//                                tbd                  → field unset
-//   cr495_dealregistrationid — passthrough text from solution.deal_registration_id.
+//   am_opportunitytype        — constant 930680038 (PFI - CloudPro). The
+//                               professional-services labor we quote for
+//                               implementation work, regardless of tech type.
+//   am_revenuesource          — 930680001 (New Logo) when the CRM account
+//                               was created inline during this solution's
+//                               flow (is_new_logo=1), else 930680000
+//                               (Installed Base).
+//   am_OpportunityVendors     — lookup to am_vendoraccount. Resolved from
+//                               solution.vendor + is_zoom_reseller:
+//                                 ringcentral         → Ring Central
+//                                 zoom + reseller=1   → Zoom Resell
+//                                 zoom + reseller=0   → Zoom
+//                                 tbd                 → field unset
+//   am_opportunitysalesstage  — mapped from solution.status:
+//                                 draft                       → Prospecting
+//                                 assessment + requirements   → Scoping / NA
+//                                 scope                       → Quote
+//                                 handoff                     → Verbal
+//                                 won + lost                  → Closed
+//   am_mrr / cr495_crr        — recurring revenue. PF doesn't quote MRR/CRR
+//                               on cloud implementations, so both fixed at 0.
+//   am_spiff                  — sales spiff. Not modeled on our side; 0.
+//   actualvalue +
+//   am_combinedrevenue        — total SOW value. Read from solution
+//                               .sow_total_amount; nulls coerced to 0 so
+//                               D365's currency fields land on a number.
+//   am_cloudcontractexpiration — passthrough date from the SA-entered
+//                               solution.cloud_contract_expiration_date.
+//   cr495_dealregistrationid  — passthrough text from
+//                               solution.deal_registration_id.
 //
 // Best-effort: D365 failures are logged but never block the solution write
 // path. Caller is solutions POST + PATCH after the DB row is in place.
@@ -226,6 +243,28 @@ const OPP_TYPE_CLOUDPRO = 930680038;
 const REV_SRC_INSTALLED_BASE = 930680000;
 const REV_SRC_NEW_LOGO       = 930680001;
 
+const SALES_STAGE = {
+  prospecting: 930680000,
+  scoping:     930680001,
+  // demos:    930680002 — not used; we don't model demos on the solution side
+  quote:       930680003,
+  verbal:      930680004,
+  closed:      100000001,
+} as const;
+
+function salesStageForSolutionStatus(status: string | null): number {
+  switch (status) {
+    case "draft":         return SALES_STAGE.prospecting;
+    case "assessment":    return SALES_STAGE.scoping;
+    case "requirements":  return SALES_STAGE.scoping;
+    case "scope":         return SALES_STAGE.quote;
+    case "handoff":       return SALES_STAGE.verbal;
+    case "won":           return SALES_STAGE.closed;
+    case "lost":          return SALES_STAGE.closed;
+    default:              return SALES_STAGE.prospecting;
+  }
+}
+
 export async function syncOpportunityFromSolution(
   env: SyncOpportunityEnv,
   db: D1Database,
@@ -233,7 +272,9 @@ export async function syncOpportunityFromSolution(
 ): Promise<void> {
   const row = await db
     .prepare(
-      `SELECT crm_opportunity_id, vendor, is_zoom_reseller, is_new_logo, deal_registration_id
+      `SELECT crm_opportunity_id, vendor, is_zoom_reseller, is_new_logo,
+              deal_registration_id, status, sow_total_amount,
+              cloud_contract_expiration_date
        FROM solutions WHERE id = ? LIMIT 1`
     )
     .bind(solutionId)
@@ -243,6 +284,9 @@ export async function syncOpportunityFromSolution(
       is_zoom_reseller: number | null;
       is_new_logo: number | null;
       deal_registration_id: string | null;
+      status: string | null;
+      sow_total_amount: number | null;
+      cloud_contract_expiration_date: string | null;
     }>();
   if (!row?.crm_opportunity_id) return;
 
@@ -256,9 +300,18 @@ export async function syncOpportunityFromSolution(
     vendorGuid = row.is_zoom_reseller === 1 ? VENDOR_GUIDS.zoom_resell : VENDOR_GUIDS.zoom;
   }
 
+  const sowTotal = row.sow_total_amount ?? 0;
+
   const patch: Record<string, unknown> = {
-    am_opportunitytype: OPP_TYPE_CLOUDPRO,
-    am_revenuesource:   row.is_new_logo === 1 ? REV_SRC_NEW_LOGO : REV_SRC_INSTALLED_BASE,
+    am_opportunitytype:       OPP_TYPE_CLOUDPRO,
+    am_revenuesource:         row.is_new_logo === 1 ? REV_SRC_NEW_LOGO : REV_SRC_INSTALLED_BASE,
+    am_opportunitysalesstage: salesStageForSolutionStatus(row.status),
+    am_mrr:                   0,
+    cr495_crr:                0,
+    am_spiff:                 0,
+    actualvalue:              sowTotal,
+    am_combinedrevenue:       sowTotal,
+    am_cloudcontractexpiration: row.cloud_contract_expiration_date ?? null,
     cr495_dealregistrationid: row.deal_registration_id ?? null,
   };
   if (vendorGuid) {

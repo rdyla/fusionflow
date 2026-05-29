@@ -168,6 +168,10 @@ export type Solution = {
    *  always editable on the solution detail page. Synced to D365 opportunity
    *  field cr495_dealregistrationid on every PATCH. */
   deal_registration_id: string | null;
+  /** When the customer's existing cloud contract expires (drives the
+   *  renewal-window conversation). ISO YYYY-MM-DD. Maps to
+   *  am_cloudcontractexpiration on the bound D365 opportunity. */
+  cloud_contract_expiration_date: string | null;
   // SOW pricing
   add_ons: AddOn[];
   blended_rate: number;
@@ -1853,6 +1857,8 @@ export const api = {
       is_zoom_reseller: number;
       /** Partner deal-registration id — synced to D365 cr495_dealregistrationid. */
       deal_registration_id: string | null;
+      /** Cloud contract expiration — synced to D365 am_cloudcontractexpiration. */
+      cloud_contract_expiration_date: string | null;
       /** If a solution_types update would orphan needs_assessments / labor_estimates rows
        *  for removed types, the server returns 409 unless this flag is set. The client
        *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */

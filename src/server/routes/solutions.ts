@@ -382,6 +382,10 @@ const updateSolutionSchema = z.object({
   /** Partner deal-reg id (Zoom/RC vendor portal). Free text. Maps to
    *  cr495_dealregistrationid on the bound D365 opportunity. */
   deal_registration_id: z.string().nullable().optional(),
+  /** Cloud contract expiration date (when customer's existing cloud
+   *  contract ends — drives renewal-window planning). ISO YYYY-MM-DD.
+   *  Maps to am_cloudcontractexpiration on the bound D365 opportunity. */
+  cloud_contract_expiration_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
   pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
@@ -531,17 +535,19 @@ app.patch("/:id", async (c) => {
     await recomputeSowTotal(db, solutionId);
   }
 
-  // Resync the bound D365 opportunity whenever ANY of the synced fields
-  // touched here might have changed (vendor / is_zoom_reseller for vendor
-  // lookup, deal_registration_id for cr495_dealregistrationid,
-  // crm_opportunity_id if re-bound). Cheap enough to just always-run on
-  // PATCH — the helper short-circuits when no opportunity is bound and
-  // PATCHing the same values is a no-op on D365's side.
+  // Resync the bound D365 opportunity whenever any field that maps onto
+  // the D365 opp could have changed. Includes the pricing path because
+  // recomputeSowTotal() above can change sow_total_amount → actualvalue
+  // + am_combinedrevenue. Helper short-circuits when no opportunity is
+  // bound and PATCHing the same values is a no-op on D365's side.
   const synced =
     "vendor" in updates ||
     "is_zoom_reseller" in updates ||
     "deal_registration_id" in updates ||
-    "crm_opportunity_id" in updates;
+    "cloud_contract_expiration_date" in updates ||
+    "crm_opportunity_id" in updates ||
+    "status" in updates ||
+    pricingTouched;
   if (synced) {
     c.executionCtx.waitUntil(syncOpportunityFromSolution(c.env, db, solutionId));
   }
