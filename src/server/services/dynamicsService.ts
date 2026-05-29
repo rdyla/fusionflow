@@ -223,6 +223,24 @@ export async function searchAccounts(env: Env, query: string): Promise<DynamicsA
   return data.value ?? [];
 }
 
+// Create a D365 Account. Used by the New Solution flow when the SA can't
+// find the customer in CRM — they create one inline rather than tabbing out
+// to D365. statecode is omitted; D365 defaults new accounts to 0=Active.
+// Prefer: return=representation makes D365 echo the created row back so we
+// can hand it straight to the picker (no follow-up GET needed).
+export async function createAccount(
+  env: Env,
+  payload: { name: string; emailaddress1: string; websiteurl?: string | null },
+): Promise<DynamicsAccount> {
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    emailaddress1: payload.emailaddress1,
+  };
+  if (payload.websiteurl) body.websiteurl = payload.websiteurl;
+  const raw = await dynamicsPost<DynamicsAccount>(env, "/accounts", body, { prefer: "return=representation" });
+  return raw;
+}
+
 export async function getAccountContacts(env: Env, accountId: string): Promise<DynamicsContact[]> {
   if (!isConfigured(env)) return [];
 

@@ -156,6 +156,13 @@ export default function SolutionsPage() {
   // user needs the "Create new opportunity" affordance (added in PR 3).
   const [opportunities, setOpportunities] = useState<DynamicsOpportunity[]>([]);
   const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
+  // "+ Create new account in CRM" inline form. Used when the SA can't find
+  // an existing account in D365 — they fill name + email (+ optional site)
+  // and we POST to D365, then immediately bind the returned account into
+  // the picker so the rest of the New Solution flow proceeds normally.
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [newAccountForm, setNewAccountForm] = useState({ name: "", emailaddress1: "", websiteurl: "" });
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -215,6 +222,38 @@ export default function SolutionsPage() {
       .then(setOpportunities)
       .catch(() => setOpportunities([]))
       .finally(() => setOpportunitiesLoading(false));
+  }
+
+  // Open the inline "Create new account" form. We seed the name from
+  // whatever the SA was searching for so they don't have to retype it.
+  function openCreateAccountForm() {
+    setNewAccountForm({ name: crmSearch.trim(), emailaddress1: "", websiteurl: "" });
+    setShowCreateAccount(true);
+    setCrmResults([]);
+  }
+
+  async function handleCreateAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim()) return;
+    setCreatingAccount(true);
+    try {
+      const created = await api.createDynamicsAccount({
+        name: newAccountForm.name.trim(),
+        emailaddress1: newAccountForm.emailaddress1.trim(),
+        websiteurl: newAccountForm.websiteurl.trim() || undefined,
+      });
+      // Drop the new account straight into the picker as if it had been
+      // selected from search — kicks off the same team + opportunities
+      // fetches so the SA continues with the normal flow.
+      selectCrmAccount({ id: created.accountid, name: created.name });
+      setShowCreateAccount(false);
+      setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" });
+      showToast(`Created ${created.name} in CRM.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create account in CRM", "error");
+    } finally {
+      setCreatingAccount(false);
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -386,7 +425,7 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" }); } }}>
           <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
@@ -437,7 +476,77 @@ export default function SolutionsPage() {
                 {form.dynamics_account_id && (
                   <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
                 )}
+                {/* "Create new account" affordance — only when no account is
+                    bound yet AND the inline form isn't already showing. We
+                    hide it once a customer is picked so the UI doesn't tempt
+                    the SA into creating a duplicate. */}
+                {!form.dynamics_account_id && !showCreateAccount && (
+                  <button
+                    type="button"
+                    onClick={openCreateAccountForm}
+                    style={{ marginTop: 6, background: "none", border: "none", color: "#63c1ea", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0, alignSelf: "flex-start" }}
+                  >
+                    + Can't find them? Create a new account in CRM
+                  </button>
+                )}
               </label>
+
+              {/* ── Inline "Create new account in CRM" form ── */}
+              {showCreateAccount && (
+                <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new account in CRM</div>
+                  <label className="ms-label">
+                    <span>Account name *</span>
+                    <input
+                      className="ms-input"
+                      placeholder="e.g. Acme Health Systems"
+                      value={newAccountForm.name}
+                      onChange={(e) => setNewAccountForm((f) => ({ ...f, name: e.target.value }))}
+                      disabled={creatingAccount}
+                    />
+                  </label>
+                  <label className="ms-label">
+                    <span>Primary contact email *</span>
+                    <input
+                      className="ms-input"
+                      type="email"
+                      placeholder="contact@acmehealth.com"
+                      value={newAccountForm.emailaddress1}
+                      onChange={(e) => setNewAccountForm((f) => ({ ...f, emailaddress1: e.target.value }))}
+                      disabled={creatingAccount}
+                    />
+                  </label>
+                  <label className="ms-label">
+                    <span>Website</span>
+                    <input
+                      className="ms-input"
+                      type="url"
+                      placeholder="https://acmehealth.com"
+                      value={newAccountForm.websiteurl}
+                      onChange={(e) => setNewAccountForm((f) => ({ ...f, websiteurl: e.target.value }))}
+                      disabled={creatingAccount}
+                    />
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="ms-btn-primary"
+                      onClick={handleCreateAccount}
+                      disabled={creatingAccount || !newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim()}
+                    >
+                      {creatingAccount ? "Creating…" : "Create account"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ms-btn-ghost"
+                      onClick={() => { setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" }); }}
+                      disabled={creatingAccount}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* ── Opportunity (scoped to the picked account) ── */}
               {/* Only meaningful once an account is bound. D365 statecode=0
@@ -692,7 +801,7 @@ export default function SolutionsPage() {
                 >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "" }); }}>
                   Cancel
                 </button>
               </div>
