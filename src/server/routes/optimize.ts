@@ -56,7 +56,7 @@ app.get("/accounts", async (c) => {
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
-// ── Eligible projects (all phases complete, not yet graduated) ─────────────────
+// ── Eligible projects (all stages complete, not yet graduated) ─────────────────
 
 app.get("/eligible", async (c) => {
   assertOptimizeAccess(c.get("auth").role);
@@ -771,12 +771,12 @@ app.post("/accounts/:projectId/relink", async (c) => {
   }
 
   // Determine whether the old (shell) project is safe to delete after the
-  // relink. "Safe" = no tasks, phases, risks, notes, or documents tied to it.
+  // relink. "Safe" = no tasks, stages, risks, notes, or documents tied to it.
   // We check before the batch so the DELETE only fires when the shell is
   // truly empty.
   const counts = await db.batch([
     db.prepare("SELECT COUNT(*) AS n FROM tasks      WHERE project_id = ?").bind(oldProjectId),
-    db.prepare("SELECT COUNT(*) AS n FROM phases     WHERE project_id = ?").bind(oldProjectId),
+    db.prepare("SELECT COUNT(*) AS n FROM stages     WHERE project_id = ?").bind(oldProjectId),
     db.prepare("SELECT COUNT(*) AS n FROM risks      WHERE project_id = ?").bind(oldProjectId),
     db.prepare("SELECT COUNT(*) AS n FROM notes      WHERE project_id = ?").bind(oldProjectId),
     db.prepare("SELECT COUNT(*) AS n FROM documents  WHERE project_id = ?").bind(oldProjectId),

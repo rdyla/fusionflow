@@ -27,6 +27,17 @@ export type SPFile = {
   downloadUrl: string | null;
   isFolder: boolean;
   mimeType: string | null;
+  /** SP driveItem `description` — used to capture PM-supplied context like
+   *  "phone bill — March 2026" or "discovery workbook v2". Stored on SP
+   *  itself (not in our DB), so it's also visible from the SharePoint web UI. */
+  description: string | null;
+  /** Author / uploader identity from Graph. SP populates these from the
+   *  app's authenticating principal — since we use app-only auth, the
+   *  display name is typically the app's name. Better than nothing as a
+   *  "last touched by" hint; PMs can correlate to the upload timestamp. */
+  createdAt: string | null;
+  createdByName: string | null;
+  modifiedByName: string | null;
 };
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
@@ -90,6 +101,19 @@ async function graphPut<T>(token: string, path: string, body: ArrayBuffer, conte
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`Graph PUT ${res.status} ${path}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function graphPostJson<T>(token: string, path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${GRAPH_API_BASE}${path}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Graph POST ${res.status} ${path}: ${text}`);
   }
   return res.json() as Promise<T>;
 }
@@ -245,16 +269,30 @@ export async function getSharePointLocations(env: GraphEnv, recordId: string): P
 
 // ── File operations via Microsoft Graph ────────────────────────────────────────
 
+type GraphIdentitySet = {
+  user?: { displayName?: string; email?: string };
+  application?: { displayName?: string };
+};
+
 type GraphDriveItem = {
   id: string;
   name: string;
   size?: number;
+  description?: string;
+  createdDateTime?: string;
   lastModifiedDateTime?: string;
   webUrl?: string;
   "@microsoft.graph.downloadUrl"?: string;
   folder?: object;
   file?: { mimeType?: string };
+  createdBy?: GraphIdentitySet;
+  lastModifiedBy?: GraphIdentitySet;
 };
+
+function identityName(set: GraphIdentitySet | undefined): string | null {
+  if (!set) return null;
+  return set.user?.displayName ?? set.user?.email ?? set.application?.displayName ?? null;
+}
 
 function mapDriveItem(item: GraphDriveItem): SPFile {
   return {
@@ -266,6 +304,10 @@ function mapDriveItem(item: GraphDriveItem): SPFile {
     downloadUrl: item["@microsoft.graph.downloadUrl"] ?? null,
     isFolder: !!item.folder,
     mimeType: item.file?.mimeType ?? null,
+    description: item.description ?? null,
+    createdAt: item.createdDateTime ?? null,
+    createdByName: identityName(item.createdBy),
+    modifiedByName: identityName(item.lastModifiedBy),
   };
 }
 
@@ -282,12 +324,26 @@ export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: stri
   return res.value.map(mapDriveItem);
 }
 
+async function graphPatchJson<T>(token: string, path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${GRAPH_API_BASE}${path}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Graph PATCH ${res.status} ${path}: ${text}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 export async function uploadToSharePoint(
   env: GraphEnv,
   folderAbsoluteUrl: string,
   filename: string,
   content: ArrayBuffer,
-  mimeType: string
+  mimeType: string,
+  description?: string | null
 ): Promise<SPFile> {
   const token = await getGraphToken(env);
   const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);
@@ -297,7 +353,44 @@ export async function uploadToSharePoint(
     ? `/drives/${driveId}/root:/${encodedPath}/${encodeURIComponent(filename)}:/content`
     : `/drives/${driveId}/root:/${encodeURIComponent(filename)}:/content`;
 
-  const item = await graphPut<GraphDriveItem>(token, uploadPath, content, mimeType);
+  let item = await graphPut<GraphDriveItem>(token, uploadPath, content, mimeType);
+
+  // Description is set in a second PATCH because PUT-content endpoint doesn't
+  // accept metadata. Best-effort: if PATCH fails, the file is still uploaded.
+  const trimmed = description?.trim();
+  if (trimmed) {
+    try {
+      item = await graphPatchJson<GraphDriveItem>(token, `/drives/${driveId}/items/${item.id}`, {
+        description: trimmed,
+      });
+    } catch (err) {
+      console.warn(`[uploadToSharePoint] description PATCH failed for ${item.id}:`, err instanceof Error ? err.message : err);
+    }
+  }
+  return mapDriveItem(item);
+}
+
+/**
+ * Update the description on an existing SharePoint file. Used by the
+ * PATCH /api/sharepoint/file/description endpoint so PMs can backfill
+ * context on files uploaded via the SharePoint web UI directly (no
+ * description) or correct mistakes.
+ *
+ * Pass an empty string (or null) to clear the description.
+ */
+export async function updateSharePointFileDescription(
+  env: GraphEnv,
+  fileWebUrl: string,
+  description: string | null
+): Promise<SPFile> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, fileWebUrl);
+  const encodedPath = graphPath(segments);
+  const lookup = await graphGet<{ id: string }>(token, `/drives/${driveId}/root:/${encodedPath}`);
+  const trimmed = description?.trim() ?? "";
+  const item = await graphPatchJson<GraphDriveItem>(token, `/drives/${driveId}/items/${lookup.id}`, {
+    description: trimmed, // Graph treats empty string as "clear"
+  });
   return mapDriveItem(item);
 }
 
@@ -318,6 +411,74 @@ export async function downloadSharePointFile(
     mimeType: item.file?.mimeType ?? "application/octet-stream",
     content: await res.arrayBuffer(),
   };
+}
+
+/**
+ * Create (or reuse) a child folder under a SharePoint parent.
+ *
+ * Returns the absolute URL of the resulting folder — usable directly as a
+ * folderAbsoluteUrl by the other helpers in this file.
+ *
+ * Reuse semantics: when a folder with the same name already exists under
+ * the parent (case-insensitive match), its existing URL is returned instead
+ * of creating a duplicate. This is Ryan's preference for handling name
+ * collisions on project creation — customers occasionally pre-create
+ * project folders, and we'd rather adopt them than create "Project 1".
+ *
+ * If the parent itself doesn't exist or isn't a folder, Graph returns 404
+ * here and the error bubbles up. Callers should treat folder creation as
+ * best-effort and not block the calling business action on failure.
+ */
+/**
+ * Sanitize a folder name for SharePoint Online. SP rejects names containing
+ * `" * : < > ? / \ |` and names that are just dots, plus leading/trailing
+ * spaces or dots. Replace each banned char with `-`, collapse runs, trim.
+ * Returns an empty string if nothing usable survives — callers should treat
+ * that as a hard error.
+ */
+function sanitizeSharePointName(raw: string): string {
+  const replaced = raw.replace(/[\\/:*?"<>|]+/g, "-").replace(/-{2,}/g, "-");
+  return replaced.replace(/^[\s.]+|[\s.]+$/g, "").trim();
+}
+
+export async function ensureSharePointChildFolder(
+  env: GraphEnv,
+  parentAbsoluteUrl: string,
+  childName: string
+): Promise<{ webUrl: string; id: string; reused: boolean }> {
+  const sanitized = sanitizeSharePointName(childName);
+  if (!sanitized) throw new Error(`childName "${childName}" sanitizes to an empty SharePoint folder name`);
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, parentAbsoluteUrl);
+  const parentPath = graphPath(segments);
+
+  // 1. Look for an existing child with the same name (case-insensitive). Per
+  // Ryan's preference, an exact-match existing folder is adopted as the
+  // project's folder rather than creating "Foo 1".
+  const listPath = parentPath
+    ? `/drives/${driveId}/root:/${parentPath}:/children?$select=id,name,webUrl,folder&$top=1000`
+    : `/drives/${driveId}/root/children?$select=id,name,webUrl,folder&$top=1000`;
+  const listRes = await graphGet<{ value: GraphDriveItem[] }>(token, listPath);
+  const lower = sanitized.toLowerCase();
+  const existing = listRes.value.find(
+    (it) => !!it.folder && it.name.trim().toLowerCase() === lower
+  );
+  if (existing) {
+    return { webUrl: existing.webUrl ?? "", id: existing.id, reused: true };
+  }
+
+  // 2. Otherwise create it. conflictBehavior=fail because we already checked;
+  // if a race created it between our list + post, surface the error rather
+  // than silently rename to "Foo 1".
+  const createPath = parentPath
+    ? `/drives/${driveId}/root:/${parentPath}:/children`
+    : `/drives/${driveId}/root/children`;
+  const item = await graphPostJson<GraphDriveItem>(token, createPath, {
+    name: sanitized,
+    folder: {},
+    "@microsoft.graph.conflictBehavior": "fail",
+  });
+  return { webUrl: item.webUrl ?? "", id: item.id, reused: false };
 }
 
 export async function deleteSharePointFile(

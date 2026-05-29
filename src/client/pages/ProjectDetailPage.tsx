@@ -7,6 +7,7 @@ import {
   type DynamicsContact,
   type Note,
   type Phase,
+  type Stage,
   type Project,
   type ProjectContact,
   type ProjectStaffMember,
@@ -21,7 +22,9 @@ import {
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
-import ProjectExecutiveDashboard from "../components/project/ProjectExecutiveDashboard";
+import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
+import PhasesPanel from "../components/project/PhasesPanel";
+import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -36,7 +39,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
 
-type DetailTab = "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -88,6 +91,94 @@ function Badge({ label, color, style }: { label: string; color: string; style?: 
   );
 }
 
+// Inline contact-method icons used inside team chips in the project meta
+// section. Each populated method renders as its own clickable link so users
+// can see at a glance which contact paths are available (and one click is
+// enough to invoke any of them). Falls back to render nothing when a user
+// has no contact info on file.
+function ContactIcons({ email, phone, schedulerUrl, accent }: {
+  email?: string | null;
+  phone?: string | null;
+  schedulerUrl?: string | null;
+  accent: string;
+}) {
+  if (!email && !phone && !schedulerUrl) return null;
+  const iconStyle: React.CSSProperties = {
+    color: "#94a3b8",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    textDecoration: "none",
+    transition: "color 0.1s, background 0.1s",
+  };
+  const hoverIn  = (e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = accent; e.currentTarget.style.background = "rgba(0,0,0,0.04)"; };
+  const hoverOut = (e: React.MouseEvent<HTMLAnchorElement>) => { e.currentTarget.style.color = "#94a3b8"; e.currentTarget.style.background = "transparent"; };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 1, marginLeft: 4 }}>
+      {email && (
+        <a href={`mailto:${email}`} title={`Email ${email}`} style={iconStyle} onMouseEnter={hoverIn} onMouseLeave={hoverOut} aria-label={`Email ${email}`}>
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="currentColor"><path d="M2 4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V4Zm1 .5 5 3 5-3V4H3v.5Zm10 1.2L8.3 8.5a1 1 0 0 1-1.1 0L3 5.7V12h10V5.7Z"/></svg>
+        </a>
+      )}
+      {phone && (
+        <a href={`tel:${phone.replace(/[^\d+]/g, "")}`} title={`Call ${phone}`} style={iconStyle} onMouseEnter={hoverIn} onMouseLeave={hoverOut} aria-label={`Call ${phone}`}>
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="currentColor"><path d="M3.7 1.2a1.5 1.5 0 0 1 1.6.2L7 3.1c.5.4.7 1.1.4 1.7L6.7 6.2a8 8 0 0 0 3.1 3.1l1.4-.7c.6-.3 1.3-.1 1.7.4l1.7 1.7a1.5 1.5 0 0 1 .2 1.6c-.5 1-1.5 1.7-2.6 1.7C7.7 14 2 8.3 2 3.4c0-1.1.6-2.1 1.7-2.6Z"/></svg>
+        </a>
+      )}
+      {schedulerUrl && (
+        <a href={schedulerUrl} target="_blank" rel="noopener noreferrer" title="Schedule a meeting" style={iconStyle} onMouseEnter={hoverIn} onMouseLeave={hoverOut} aria-label="Schedule a meeting">
+          <svg width={12} height={12} viewBox="0 0 16 16" fill="currentColor"><path d="M5 1.5a.5.5 0 0 1 1 0V3h4V1.5a.5.5 0 0 1 1 0V3h1.5A1.5 1.5 0 0 1 14 4.5v9A1.5 1.5 0 0 1 12.5 15h-9A1.5 1.5 0 0 1 2 13.5v-9A1.5 1.5 0 0 1 3.5 3H5V1.5ZM3 6v7.5a.5.5 0 0 0 .5.5h9a.5.5 0 0 0 .5-.5V6H3Z"/></svg>
+        </a>
+      )}
+    </span>
+  );
+}
+
+// Phase tab picker — rendered above Tasks + Timeline on multi-phase
+// projects. "Initiate" is a synthetic tab for the shared (phase_id IS
+// NULL) stages; the rest are phase rows in display_order.
+function PhasePicker({
+  phases, hasSharedStages, selected, onSelect,
+}: {
+  phases: Phase[];
+  hasSharedStages: boolean;
+  selected: string;
+  onSelect: (v: string) => void;
+}) {
+  const tab = (key: string, label: string) => {
+    const active = key === selected;
+    return (
+      <button
+        key={key}
+        type="button"
+        onClick={() => onSelect(key)}
+        style={{
+          padding: "5px 14px",
+          fontSize: 12,
+          fontWeight: 600,
+          borderRadius: 999,
+          border: `1px solid ${active ? "#0078d4" : "#cbd5e1"}`,
+          background: active ? "#0078d4" : "#fff",
+          color: active ? "#fff" : "#475569",
+          cursor: "pointer",
+          transition: "background 0.1s, color 0.1s, border-color 0.1s",
+        }}
+      >
+        {label}
+      </button>
+    );
+  };
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+      {hasSharedStages && tab("shared", "Initiate")}
+      {phases.map((p) => tab(p.id, p.name))}
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function ProjectDetailPage() {
@@ -95,8 +186,13 @@ export default function ProjectDetailPage() {
   const [searchParams] = useSearchParams();
 
   const [project, setProject] = useState<Project | null>(null);
-  const [phases, setPhases] = useState<Phase[]>([]);
+  const [stages, setStages] = useState<Stage[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  // Multi-phase projects (phases.length >= 2) render a phase picker above
+  // Tasks + Timeline; the picker filters by phase. Selection uses "shared"
+  // for the Initiate (phase_id IS NULL) view, or the phase row's id.
+  const [phases, setPhases] = useState<Phase[]>([]);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
   const [risks, setRisks] = useState<Risk[]>([]);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -110,18 +206,23 @@ export default function ProjectDetailPage() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
-  const [tab, setTab] = useState<DetailTab>("overview");
-  const [collapsedPhases, setCollapsedPhases] = useState<Set<string>>(new Set());
+  const [tab, setTab] = useState<DetailTab>("dashboard");
+  const [collapsedStages, setCollapsedStages] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editStatus, setEditStatus] = useState("");
-  const [editTargetGoLiveDate, setEditTargetGoLiveDate] = useState("");
   const [editingTech, setEditingTech] = useState(false);
   const [editSolutionTypes, setEditSolutionTypes] = useState<SolutionType[]>([]);
+  // Captured at Edit-open so the Save flow can detect removed solution
+  // types and offer to clean up tasks tagged with them.
+  const [originalSolutionTypes, setOriginalSolutionTypes] = useState<SolutionType[]>([]);
+  // Solution-type cleanup confirm state. Non-null while the modal is open;
+  // captures the delete/retag counts so the dialog can display them. MUST
+  // live up here with the other useStates — declaring it down by
+  // saveEditTech would put it AFTER the loading/error/no-project early
+  // returns and trip React error #310 (hooks order mismatch).
+  const [solutionCleanup, setSolutionCleanup] = useState<{ removed: SolutionType[]; deleteCount: number; retagCount: number } | null>(null);
   const [editVendor, setEditVendor] = useState("");
   const [savingTech, setSavingTech] = useState(false);
-  const [savingProject, setSavingProject] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [newNoteBody, setNewNoteBody] = useState("");
   const [newNoteVisibility, setNewNoteVisibility] = useState<"internal" | "partner" | "public">("internal");
   const [savingNote, setSavingNote] = useState(false);
@@ -139,8 +240,8 @@ export default function ProjectDetailPage() {
   // Stored as an array of canonical types; persisted per project id.
   const [selectedTypes, setSelectedTypes] = useState<Set<SolutionType>>(() => new Set(SOLUTION_TYPES));
 
-  // Inline-create state for the Tasks table — phaseId currently being added to + the typed title
-  const [newTaskPhaseId, setNewTaskPhaseId] = useState<string | null>(null);
+  // Inline-create state for the Tasks table — stageId currently being added to + the typed title
+  const [newTaskStageId, setNewTaskStageId] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
 
@@ -150,10 +251,11 @@ export default function ProjectDetailPage() {
 
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
-  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
+  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "" });
   const [savingRisk, setSavingRisk] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
+  const [currentUserId, setCurrentUserId] = useState<string>("");
   const [projectStaff, setProjectStaff] = useState<ProjectStaffMember[]>([]);
   const [showStaffModal, setShowStaffModal] = useState(false);
   const [showPartnerModal, setShowPartnerModal] = useState(false);
@@ -165,14 +267,13 @@ export default function ProjectDetailPage() {
   const [syncingSuggestions, setSyncingSuggestions] = useState(false);
   const [syncSuggestions, setSyncSuggestions] = useState<ZoomRecordingSuggestion[] | null>(null);
   const [confirmingRecordings, setConfirmingRecordings] = useState(false);
-  const [suggestionPhaseOverrides, setSuggestionPhaseOverrides] = useState<Record<number, string | null>>({});
+  const [suggestionStageOverrides, setSuggestionStageOverrides] = useState<Record<number, string | null>>({});
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<number>>(new Set());
   const [suggestionTaskOverrides, setSuggestionTaskOverrides] = useState<Record<number, string | null>>({});
 
   const [addStaffUserId, setAddStaffUserId] = useState("");
   const [addStaffRole, setAddStaffRole] = useState("");
   const [addingStaff, setAddingStaff] = useState(false);
-  const [crmSyncing, setCrmSyncing] = useState(false);
   const [staffPhotoMap, setStaffPhotoMap] = useState<Record<string, string | null>>({});
   const [customerTeamPhotoMap, setCustomerTeamPhotoMap] = useState<Record<string, string | null>>({});
 
@@ -185,16 +286,11 @@ export default function ProjectDetailPage() {
   const [savingCaseLink, setSavingCaseLink] = useState(false);
 
   // Apply template
-  const [templateList, setTemplateList] = useState<{ id: string; name: string; phase_count?: number; task_count?: number }[]>([]);
-  const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [applyingTemplate, setApplyingTemplate] = useState(false);
-  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
-  const [applyResult, setApplyResult] = useState<{ phases_created: number; tasks_created: number; tasks_merged: number } | null>(null);
 
-  // Manual phase creation
-  const [newPhaseName, setNewPhaseName] = useState("");
-  const [creatingPhase, setCreatingPhase] = useState(false);
-  const [showNewPhaseInput, setShowNewPhaseInput] = useState(false);
+  // Manual stage creation
+  const [newStageName, setNewStageName] = useState("");
+  const [creatingStage, setCreatingStage] = useState(false);
+  const [showNewStageInput, setShowNewStageInput] = useState(false);
 
   const { showToast } = useToast();
 
@@ -260,9 +356,57 @@ export default function ProjectDetailPage() {
     return u ? `${u.name ?? u.email} · (off project)` : "(unknown user)";
   }
 
+  // Multi-phase project detection drives the phase-picker visibility on
+  // Tasks + Timeline. Single-phase projects (the default after PR E2's
+  // unification) render no picker — there's only one phase to look at.
+  const multiPhase = phases.length >= 2;
+  const hasSharedStages = useMemo(() => stages.some((s) => s.phase_id === null), [stages]);
+  const phasePickerLsKey = id ? `cloudconnect:project:selectedPhase:${id}` : null;
+
+  // Initialize / repair selectedPhaseId when phases load (or change). Falls
+  // back to "shared" (Initiate tab) if shared stages exist, else the first
+  // phase row. Persisted choice wins as long as it still references a live
+  // phase.
+  useEffect(() => {
+    if (!multiPhase) return;
+    if (phases.length === 0) return;
+    const phaseIds = new Set(phases.map((p) => p.id));
+    const persisted = phasePickerLsKey ? localStorage.getItem(phasePickerLsKey) : null;
+    const isValid = (v: string) => v === "shared" ? hasSharedStages : phaseIds.has(v);
+    if (selectedPhaseId && isValid(selectedPhaseId)) return;
+    if (persisted && isValid(persisted)) {
+      setSelectedPhaseId(persisted);
+      return;
+    }
+    setSelectedPhaseId(hasSharedStages ? "shared" : phases[0].id);
+  }, [multiPhase, phases, hasSharedStages, selectedPhaseId, phasePickerLsKey]);
+
+  useEffect(() => {
+    if (!phasePickerLsKey || !selectedPhaseId) return;
+    try { localStorage.setItem(phasePickerLsKey, selectedPhaseId); } catch { /* private mode etc. */ }
+  }, [phasePickerLsKey, selectedPhaseId]);
+
+  // Stages filtered to the selected phase for Tasks + Timeline tabs.
+  // Single-phase projects skip the filter entirely.
+  const visibleStages = useMemo(() => {
+    if (!multiPhase) return stages;
+    if (selectedPhaseId === "shared") return stages.filter((s) => s.phase_id === null);
+    if (!selectedPhaseId) return stages;
+    return stages.filter((s) => s.phase_id === selectedPhaseId);
+  }, [stages, multiPhase, selectedPhaseId]);
+
+  // Tasks restricted to the visible stages — so the Timeline's internal
+  // datedTasks / summary / date-bounds math doesn't include tasks from
+  // hidden phases.
+  const visibleStageIds = useMemo(() => new Set(visibleStages.map((s) => s.id)), [visibleStages]);
+  const visibleTasks = useMemo(
+    () => multiPhase ? tasks.filter((t) => t.stage_id !== null && visibleStageIds.has(t.stage_id)) : tasks,
+    [tasks, multiPhase, visibleStageIds]
+  );
+
   const groupedTasks = useMemo(
-    () => phases.map((phase) => ({ phase, tasks: filteredTasks.filter((t) => t.phase_id === phase.id) })),
-    [phases, filteredTasks]
+    () => visibleStages.map((stage) => ({ stage, tasks: filteredTasks.filter((t) => t.stage_id === stage.id) })),
+    [visibleStages, filteredTasks]
   );
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   function userName(id: string | null) {
@@ -275,19 +419,40 @@ export default function ProjectDetailPage() {
     if (!id) return;
     async function load() {
       try {
-        const [projectData, phaseData, taskData, riskData, noteData, userData, docData, staffData, meData] =
+        const [projectData, stageData, taskData, riskData, noteData, userData, docData, staffData, meData] =
           await Promise.all([
-            api.project(id), api.phases(id), api.tasks(id),
+            api.project(id), api.stages(id), api.tasks(id),
             api.risks(id), api.notes(id), api.users().catch(() => [] as User[]), api.documents(id),
             api.projectStaff(id),
             api.me(),
           ]);
         api.projectContacts(id).then(setContacts).catch(() => {});
         setProject(projectData);
-        setEditStatus(projectData.status ?? "");
-        setEditTargetGoLiveDate(projectData.target_go_live_date ?? "");
+        api.phases(id).then(setPhases).catch(() => {});
         api.zoomRecordings(id).then(setRecordings).catch(() => {});
         setProjectStaff(staffData);
+        // Auto-sync from CRM in the background so the Account Team chips
+        // are populated on first paint instead of waiting for a manual
+        // "Sync CRM" click. Fire-and-forget — failures are silent (the
+        // page still works with stored data) and the page renders
+        // immediately with what's already cached on the project row.
+        if (projectData.dynamics_account_id) {
+          api.projectCrmSync(id)
+            .then(({ staff: freshStaff, project: updatedProject }) => {
+              setProjectStaff(freshStaff);
+              if (updatedProject) setProject((p) => p ? { ...p, ...updatedProject } : updatedProject);
+              // If CRM filled in new customer-team emails, fetch their photos too.
+              const refreshedEmails = [
+                updatedProject?.customer_pf_ae_email,
+                updatedProject?.customer_pf_sa_email,
+                updatedProject?.customer_pf_csm_email,
+              ].filter(Boolean) as string[];
+              if (refreshedEmails.length > 0) {
+                api.staffPhotos(refreshedEmails).then(setCustomerTeamPhotoMap).catch(() => {});
+              }
+            })
+            .catch(() => { /* CRM unreachable / token expired — keep stored values */ });
+        }
         if (staffData.length > 0) {
           const emails = staffData.map((s: { email: string }) => s.email);
           api.staffPhotos(emails).then(setStaffPhotoMap).catch(() => {});
@@ -297,7 +462,7 @@ export default function ProjectDetailPage() {
         if (customerEmails.length > 0) {
           api.staffPhotos(customerEmails).then(setCustomerTeamPhotoMap).catch(() => {});
         }
-        setPhases(phaseData);
+        setStages(stageData);
         setTasks(taskData);
         // Load time entries for all tasks
         if (taskData.length > 0) {
@@ -309,6 +474,7 @@ export default function ProjectDetailPage() {
         setUsers(userData);
         setDocuments(docData);
         setCurrentUserRole(meData.role);
+        setCurrentUserId(meData.user.id);
 
         const tabParam = searchParams.get("tab") as DetailTab | null;
         if (tabParam) setTab(tabParam);
@@ -321,11 +487,6 @@ export default function ProjectDetailPage() {
     }
     load();
   }, [id]);
-
-  // Load template list for apply-template panel (admin + pm)
-  useEffect(() => {
-    api.templatesList().then(setTemplateList).catch(() => {});
-  }, []);
 
   // Load case compliance data when the case tab is opened
   useEffect(() => {
@@ -360,45 +521,66 @@ export default function ProjectDetailPage() {
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
-  async function handleSaveProject() {
-    if (!project) return;
-    setSavingProject(true);
-    setSaveMessage(null);
-    try {
-      const updated = await api.updateProject(project.id, {
-        status: editStatus || undefined,
-        target_go_live_date: editTargetGoLiveDate || undefined,
-      });
-      setProject(updated);
-      setSaveMessage("Saved.");
-      showToast("Project updated successfully.", "success");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to update project";
-      setSaveMessage(message);
-      showToast(message, "error");
-    } finally {
-      setSavingProject(false);
-    }
-  }
+  // Project-level Save was retired with the Project Settings card — status
+  // is auto-derived and target_go_live_date follows the canonical go-live
+  // task. handleSaveProject and its surrounding state intentionally
+  // removed.
 
   function startEditTech() {
     if (!project) return;
     setEditSolutionTypes(parseSolutionTypes(project.solution_types));
+    setOriginalSolutionTypes(parseSolutionTypes(project.solution_types));
     setEditVendor(project.vendor ?? "");
     setEditingTech(true);
   }
 
-  async function saveEditTech() {
+  type CleanupSummary = { removed: SolutionType[]; deleteCount: number; retagCount: number };
+
+  /** Compute how many project tasks would be deleted / re-tagged if the
+   *  given solution types were removed. Stays entirely client-side so the
+   *  Edit Save flow doesn't add a server round-trip when there's nothing
+   *  to clean up. */
+  function previewSolutionCleanup(removed: SolutionType[]): CleanupSummary {
+    if (removed.length === 0) return { removed, deleteCount: 0, retagCount: 0 };
+    const removedSet = new Set(removed);
+    let deleteCount = 0;
+    let retagCount = 0;
+    for (const t of tasks) {
+      const parsed = parseTaggedTitle(t.title);
+      if (parsed.types.length === 0) continue;
+      const surviving = parsed.types.filter((tp) => !removedSet.has(tp));
+      if (surviving.length === 0) deleteCount++;
+      else if (surviving.length !== parsed.types.length) retagCount++;
+    }
+    return { removed, deleteCount, retagCount };
+  }
+
+  async function persistEditTech(includeCleanup: boolean) {
     if (!project) return;
     setSavingTech(true);
     try {
-      const updated = await api.updateProject(project.id, {
+      const payload: Parameters<typeof api.updateProject>[1] = {
         vendor: editVendor || null,
         solution_types: editSolutionTypes,
-      });
+      };
+      if (includeCleanup && solutionCleanup && solutionCleanup.removed.length > 0) {
+        payload.cleanup_solution_types = solutionCleanup.removed;
+      }
+      const updated = await api.updateProject(project.id, payload);
       setProject(updated);
       setEditingTech(false);
-      showToast("Project details updated.", "success");
+      setSolutionCleanup(null);
+      if (includeCleanup && solutionCleanup) {
+        const parts: string[] = [];
+        if (solutionCleanup.deleteCount > 0) parts.push(`${solutionCleanup.deleteCount} deleted`);
+        if (solutionCleanup.retagCount > 0) parts.push(`${solutionCleanup.retagCount} re-tagged`);
+        showToast(`Project details updated; tasks: ${parts.join(", ")}.`, "success");
+        // Reload tasks since the cleanup may have removed or re-tagged some.
+        const newTasks = await api.tasks(project.id);
+        setTasks(newTasks);
+      } else {
+        showToast("Project details updated.", "success");
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to update project details", "error");
     } finally {
@@ -406,33 +588,25 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleApplyTemplate() {
-    if (!project || !selectedTemplateId) return;
-    setApplyingTemplate(true);
-    try {
-      const result = await api.applyTemplate(project.id, selectedTemplateId);
-      setApplyResult(result);
-      setShowApplyConfirm(false);
-      // Reload phases and tasks
-      const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
-      setPhases(newPhases);
-      setTasks(newTasks);
-      {
-        const parts: string[] = [];
-        parts.push(`${result.phases_created} new phase${result.phases_created !== 1 ? "s" : ""}`);
-        parts.push(`${result.tasks_created} task${result.tasks_created !== 1 ? "s" : ""} added`);
-        if (result.tasks_merged > 0) {
-          parts.push(`${result.tasks_merged} merged into existing tasks`);
-        }
-        showToast(`Template applied: ${parts.join(", ")}.`, "success");
-      }
-      setSelectedTemplateId("");
-    } catch {
-      showToast("Failed to apply template", "error");
-    } finally {
-      setApplyingTemplate(false);
+  async function saveEditTech() {
+    if (!project) return;
+    const removed = originalSolutionTypes.filter((t) => !editSolutionTypes.includes(t));
+    if (removed.length === 0) {
+      await persistEditTech(false);
+      return;
     }
+    const summary = previewSolutionCleanup(removed);
+    if (summary.deleteCount === 0 && summary.retagCount === 0) {
+      // Types removed but no tagged tasks reference them — silently save.
+      await persistEditTech(false);
+      return;
+    }
+    setSolutionCleanup(summary);
   }
+
+  // Project-level handleApplyTemplate retired with the Project Settings
+  // card. Phase-scoped template apply lives in the Phases panel's
+  // ApplyTemplateModal (src/client/components/project/PhasesPanel.tsx).
 
   async function handleAddStaff() {
     if (!addStaffUserId || !addStaffRole || !project) return;
@@ -456,25 +630,9 @@ export default function ProjectDetailPage() {
     }
   }
 
-  async function handleCrmSync() {
-    if (!project) return;
-    setCrmSyncing(true);
-    try {
-      const { staff, crm, project: updatedProject } = await api.projectCrmSync(project.id);
-      setProjectStaff(staff);
-      if (updatedProject) setProject(p => p ? { ...p, ...updatedProject } : updatedProject);
-      const matched = [
-        crm.ae_name  ? `AE: ${crm.ae_name}`  : null,
-        crm.sa_name  ? `SA: ${crm.sa_name}`  : null,
-        crm.csm_name ? `CSM: ${crm.csm_name}` : null,
-      ].filter(Boolean);
-      showToast(matched.length ? `Synced from CRM — ${matched.join(", ")}` : "Synced from CRM (no team found)", "success");
-    } catch {
-      showToast("CRM sync failed", "error");
-    } finally {
-      setCrmSyncing(false);
-    }
-  }
+  // handleCrmSync retired — the project load useEffect now fires
+  // api.projectCrmSync in the background so the Account Team chips
+  // are populated without a manual click.
 
   async function handleRemoveStaff(staffId: string) {
     if (!project) return;
@@ -523,6 +681,17 @@ export default function ProjectDetailPage() {
     try {
       const updated = await api.updateTask(project.id, taskId, patch);
       setTasks((ts) => ts.map((t) => (t.id === taskId ? updated : t)));
+      // When a go-live event task's date moves, the server auto-syncs
+      // projects.target_go_live_date — refetch the project so the meta
+      // header reflects the new value in-session.
+      const touchedGoLive = (prev.is_go_live_event === 1 || updated.is_go_live_event === 1)
+        && (patch.due_date !== undefined || patch.scheduled_end !== undefined);
+      if (touchedGoLive) {
+        try {
+          const refreshed = await api.project(project.id);
+          setProject(refreshed);
+        } catch { /* swallow — meta header just stays at the previous value */ }
+      }
     } catch (err) {
       setTasks((ts) => ts.map((t) => (t.id === taskId ? prev : t)));
       showToast(err instanceof Error ? err.message : "Failed to update task", "error");
@@ -531,22 +700,31 @@ export default function ProjectDetailPage() {
 
   async function handleDeleteTask(taskId: string) {
     if (!project) return;
+    const prev = tasks.find((t) => t.id === taskId);
     try {
       await api.deleteTask(project.id, taskId);
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setTasks((p) => p.filter((t) => t.id !== taskId));
+      // If the deleted task was the canonical go-live event, refetch the
+      // project so the meta header drops the stale Go-Live date.
+      if (prev?.is_go_live_event === 1) {
+        try {
+          const refreshed = await api.project(project.id);
+          setProject(refreshed);
+        } catch { /* swallow */ }
+      }
       showToast("Task deleted.", "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to delete task", "error");
     }
   }
 
-  async function commitInlineNewTask(phaseId: string) {
+  async function commitInlineNewTask(stageId: string) {
     if (!project) return;
     const title = newTaskTitle.trim();
     if (!title) return;
     setCreatingTask(true);
     try {
-      const created = await api.createTask(project.id, { title, phase_id: phaseId, status: "not_started" });
+      const created = await api.createTask(project.id, { title, stage_id: stageId, status: "not_started" });
       setTasks((prev) => [...prev, created]);
       setNewTaskTitle("");
       // Leave the row open + focused for rapid entry
@@ -559,7 +737,7 @@ export default function ProjectDetailPage() {
 
   function openNewRisk() {
     setEditingRisk(null);
-    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", task_id: "" });
+    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "" });
     setShowRiskModal(true);
   }
   function openEditRisk(risk: Risk) {
@@ -570,6 +748,7 @@ export default function ProjectDetailPage() {
       severity: risk.severity ?? "medium",
       status: risk.status ?? "open",
       owner_user_id: risk.owner_user_id ?? "",
+      owner_contact_id: risk.owner_contact_id ?? "",
       task_id: risk.task_id ?? "",
     });
     setShowRiskModal(true);
@@ -582,9 +761,10 @@ export default function ProjectDetailPage() {
       const payload = {
         title: riskForm.title.trim(),
         description: riskForm.description.trim() || undefined,
-        severity: riskForm.severity as "low" | "medium" | "high",
+        severity: riskForm.severity as "low" | "medium" | "high" | "critical",
         status: riskForm.status as "open" | "mitigated" | "closed",
         owner_user_id: riskForm.owner_user_id || null,
+        owner_contact_id: riskForm.owner_contact_id || null,
         task_id: riskForm.task_id || null,
       };
       if (editingRisk) {
@@ -620,13 +800,17 @@ export default function ProjectDetailPage() {
     setSavingNote(true);
     setNoteMessage(null);
     try {
-      // Partner AEs always post at partner visibility (server also enforces this)
-      const visibility = currentUserRole === "partner_ae" ? "partner" : newNoteVisibility;
+      // Partner AEs always post at partner visibility, clients always at public
+      // (server also enforces both)
+      const visibility = currentUserRole === "partner_ae" ? "partner"
+        : currentUserRole === "client" ? "public"
+        : newNoteVisibility;
       const created = await api.createNote(project.id, { body: newNoteBody.trim(), visibility });
       setNotes((prev) => [created, ...prev]);
       setNewNoteBody("");
       setNewNoteVisibility("internal");
-      showToast(currentUserRole === "partner_ae" ? "Comment posted." : "Note added.", "success");
+      const externalPoster = currentUserRole === "partner_ae" || currentUserRole === "client";
+      showToast(externalPoster ? "Comment posted." : "Note added.", "success");
     } catch (err) {
       setNoteMessage(err instanceof Error ? err.message : "Failed to add note");
     } finally {
@@ -649,16 +833,34 @@ export default function ProjectDetailPage() {
         </Link>
       </div>
 
-      {/* Customer Metadata Section — shown when linked to a customer */}
-      {project.customer_id && (
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
-              <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
-                {project.customer_name ?? project.customer_display_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+      {/* Slim project meta — name + customer + Go-Live + SharePoint only.
+          All other context (vendor/tech, account team, project team,
+          customer/partner contacts) lives on the Overview tab. */}
+      <div className="ms-card" style={{ padding: "16px 24px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
+              {project.health && (
+                <span
+                  title={`Health: ${humanize(project.health)}`}
+                  style={{ width: 12, height: 12, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }}
+                />
+              )}
+              {project.name}
+            </h1>
+            {project.customer_id && (
+              <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                {project.customer_name ?? project.customer_display_name} <span style={{ fontSize: 11 }}>↗</span>
               </Link>
-            </div>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {project.target_go_live_date && (
+              <span style={{ fontSize: 12, color: "#64748b" }}>
+                <span style={{ fontWeight: 600, marginRight: 4 }}>Go-Live:</span>
+                {formatDate(project.target_go_live_date)}
+              </span>
+            )}
             {project.customer_sharepoint_url && (
               <a href={project.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
@@ -666,94 +868,7 @@ export default function ProjectDetailPage() {
               </a>
             )}
           </div>
-          {(project.customer_pf_ae_name || project.customer_pf_sa_name || project.customer_pf_csm_name) && (
-            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {[
-                { role: "Account Executive", name: project.customer_pf_ae_name, email: project.customer_pf_ae_email },
-                { role: "Solution Architect", name: project.customer_pf_sa_name, email: project.customer_pf_sa_email },
-                { role: "Client Success Manager", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email },
-              ].filter(m => m.name).map((m) => {
-                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
-                const abbr = m.name!.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase();
-                return (
-                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    {photo
-                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                    }
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </div>
-      )}
-
-      {/* Project header card */}
-      <div className="ms-card" style={{ padding: "20px 24px", marginBottom: 20 }}>
-        <h1 style={{ margin: "0 0 14px", fontSize: 22, fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: 10 }}>
-          {project.health && (
-            <span
-              title={`Health: ${humanize(project.health)}`}
-              style={{ width: 12, height: 12, borderRadius: "50%", background: HEALTH_COLOR[project.health] ?? "#94a3b8", flexShrink: 0 }}
-            />
-          )}
-          {project.name}
-        </h1>
-
-        {/* Vendor + solution type badges (editable for admin/pm via a single Edit toggle) */}
-        {editingTech ? (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 18, maxWidth: 520 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</span>
-              <select
-                className="ms-input"
-                value={editVendor}
-                onChange={(e) => setEditVendor(e.target.value)}
-                disabled={savingTech}
-                style={{ fontSize: 13, padding: "6px 10px" }}
-              >
-                <option value="">— Not set —</option>
-                {VENDOR_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Solution Types</span>
-              <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingTech} />
-            </label>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button className="ms-btn-primary" onClick={saveEditTech} disabled={savingTech}>
-                {savingTech ? "Saving…" : "Save"}
-              </button>
-              <button className="ms-btn-ghost" onClick={() => setEditingTech(false)} disabled={savingTech}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap", alignItems: "center" }}>
-            {project.vendor ? (
-              <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
-                {vendorLabel(project.vendor)}
-              </span>
-            ) : (
-              <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
-            )}
-            <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
-            {canEdit && (
-              <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>
-                Edit
-              </button>
-            )}
-          </div>
-        )}
-
       </div>
 
       {/* Tab navigation */}
@@ -761,7 +876,19 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        const visibleTabs: DetailTab[] = ["overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+        // Partner AEs (Zoom/RC) see Dashboard + SharePoint only — they use the SP
+        // tab to upload discovery workbooks, phone bills, CSRs, etc. Customer
+        // clients see read-only Timeline/Tasks/Blockers plus an Activity tab
+        // filtered to public-visibility notes, so they can track progress and
+        // post public comments. Internal staff see everything.
+        const isPartnerAe = currentUserRole === "partner_ae";
+        const isClient = currentUserRole === "client";
+        const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
+        const visibleTabs: DetailTab[] = isPartnerAe
+          ? ["dashboard", ...externalSPTab]
+          : isClient
+          ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
+          : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -781,38 +908,55 @@ export default function ProjectDetailPage() {
       {tab === "builder" && canEdit && (
         <TimelineBuilder
           project={project}
+          phases={phases}
+          stages={stages}
+          tasks={tasks}
           onApplied={async () => {
-            // Reload phases + tasks after a rebuild
-            const [newPhases, newTasks] = await Promise.all([api.phases(project.id), api.tasks(project.id)]);
-            setPhases(newPhases);
+            // Reload stages + tasks after a rebuild
+            const [newStages, newTasks] = await Promise.all([api.stages(project.id), api.tasks(project.id)]);
+            setStages(newStages);
             setTasks(newTasks);
             setTab("timeline");
           }}
         />
       )}
 
+      {/* ── Dashboard (stakeholder view) ─────────────────────────────────── */}
+      {tab === "dashboard" && <ProjectDashboardTab projectId={project.id} currentUserRole={currentUserRole} onChangeTab={(t) => setTab(t as DetailTab)} />}
+
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {tab === "timeline" && (
+        <>
+        {multiPhase && (
+          <PhasePicker
+            phases={phases}
+            hasSharedStages={hasSharedStages}
+            selected={selectedPhaseId}
+            onSelect={setSelectedPhaseId}
+          />
+        )}
         <ProjectTimeline
-          phases={phases}
-          tasks={tasks}
-          recordings={recordings}
+          stages={visibleStages}
+          tasks={visibleTasks}
+          // Hide recording markers for clients — meeting topics on the Gantt could
+          // surface internal discussion names. Matches the Activity-tab gating.
+          recordings={currentUserRole === "client" ? [] : recordings}
           projectId={project.id}
           availableTypes={availableTypes}
           selectedTypes={selectedTypes}
           onToggleType={toggleSolutionType}
           ganttOnly
-          onUpdatePhase={async (phaseId, updates) => {
+          onUpdateStage={async (stageId, updates) => {
             if (!project) return;
-            const updated = await api.updatePhase(project.id, phaseId, updates);
-            setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+            const updated = await api.updateStage(project.id, stageId, updates);
+            setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
           }}
-          onClickPhase={(phaseId) => {
-            setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
+          onClickStage={(stageId) => {
+            setCollapsedStages((prev) => { const next = new Set(prev); next.delete(stageId); return next; });
             setTab("tasks");
           }}
-          onClickTask={(taskId, phaseId) => {
-            if (phaseId) setCollapsedPhases((prev) => { const next = new Set(prev); next.delete(phaseId); return next; });
+          onClickTask={(taskId, stageId) => {
+            if (stageId) setCollapsedStages((prev) => { const next = new Set(prev); next.delete(stageId); return next; });
             setTab("tasks");
             // Scroll the row into view after the tab mounts
             setTimeout(() => {
@@ -821,273 +965,329 @@ export default function ProjectDetailPage() {
             }, 50);
           }}
         />
+        </>
       )}
 
       {/* ── Overview ────────────────────────────────────────────────────── */}
-      {tab === "overview" && (
-        <div style={{ display: "grid", gap: 16 }}>
-          {/* ── Team & Controls (consolidated) ───────────────────────────── */}
-          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-            {/* Staff chips row */}
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginRight: 4 }}>Team</span>
-              {/* PM chip */}
-              {project.pm_user_id && (() => {
-                const pmFromMap = userMap.get(project.pm_user_id);
-                const pmName = pmFromMap?.name ?? (project as unknown as Record<string, unknown>).pm_name as string | null ?? null;
-                const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
-                if (!pmName && !pmEmail) return null;
-                const abbr = pmName ? pmName.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : (pmEmail ?? "PM").slice(0, 2).toUpperCase();
-                const photo = (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null;
-                return (
-                  <span key="pm" title={`PM · ${pmEmail ?? ""}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12 }}>
-                    {photo
-                      ? <img src={photo} alt={pmName ?? pmEmail ?? ""} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
-                    }
-                    <span style={{ color: "#334155", fontWeight: 500 }}>{pmName ?? pmEmail}</span>
-                    <span style={{ color: "#94a3b8", fontSize: 10 }}>PM</span>
-                  </span>
-                );
-              })()}
-              {/* PF staff chips — skip the staff_role='pm' row for the project's primary PM
-                  since that user already renders via the dedicated PM chip above. */}
-              {projectStaff.filter(s =>
-                s.staff_role !== "partner_ae"
-                && !["ae", "sa", "csm"].includes(s.staff_role)
-                && !(s.staff_role === "pm" && s.user_id === project.pm_user_id)
-              ).map((s) => {
-                const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const roleLabel: Record<string, string> = { engineer: "Eng", pm: "PM" };
-                const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-                return (
-                  <span key={s.id} title={`${s.staff_role} · ${s.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 4px 3px 4px", background: "rgba(0,120,212,0.08)", border: "1px solid rgba(0,120,212,0.2)", borderRadius: 20, fontSize: 12, position: "relative" }}>
-                    {photo
-                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(0,120,212,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#63c1ea", flexShrink: 0 }}>{abbr}</span>
-                    }
-                    <span style={{ color: "#334155", fontWeight: 500, paddingRight: canEdit ? 0 : 4 }}>{s.name ?? s.email}</span>
-                    {canEdit && <span style={{ color: "#94a3b8", fontSize: 10, paddingRight: 2 }}>{roleLabel[s.staff_role] ?? s.staff_role}</span>}
-                    {canEdit && <button onClick={() => handleRemoveStaff(s.id)} style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" }} title="Remove">✕</button>}
-                  </span>
-                );
-              })}
-              {/* Partner AE chips */}
-              {projectStaff.filter(s => s.staff_role === "partner_ae").map((s) => {
-                const abbr = s.name ? s.name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : s.email.slice(0, 2).toUpperCase();
-                const photo = staffPhotoMap[s.email] ?? s.avatar_url;
-                return (
-                  <span key={s.id} title={`Partner AE · ${s.organization_name ?? ""} · ${s.email}`} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 4px 3px 4px", background: "rgba(16,124,16,0.07)", border: "1px solid rgba(16,124,16,0.2)", borderRadius: 20, fontSize: 12 }}>
-                    {photo
-                      ? <img src={photo} alt={s.name ?? s.email} style={{ width: 22, height: 22, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <span style={{ width: 22, height: 22, borderRadius: "50%", background: "rgba(16,124,16,0.2)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: "#107c10", flexShrink: 0 }}>{abbr}</span>
-                    }
-                    <span style={{ color: "#334155", fontWeight: 500, paddingRight: canEdit ? 0 : 4 }}>{s.name ?? s.email}</span>
-                    {canEdit && <span style={{ color: "#94a3b8", fontSize: 10, paddingRight: 2 }}>Partner</span>}
-                    {canEdit && <button onClick={() => handleRemovePartner(s.id)} style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 12, lineHeight: 1, padding: "0 2px" }} title="Remove">✕</button>}
-                  </span>
-                );
-              })}
-              {/* Add buttons */}
-              {canEdit && (
-                <>
-                  <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
-                  {(() => {
-                    const partnerStaff = projectStaff.filter(s => s.staff_role === "partner_ae");
-                    const assignablePartners = users.filter(u => u.role === "partner_ae" && !partnerStaff.some(s => s.user_id === u.id));
-                    return <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner</button>;
-                  })()}
-                  {project.dynamics_account_id && (
-                    <button className="ms-btn-ghost" style={{ fontSize: 11, padding: "3px 8px", borderRadius: 20, borderStyle: "dashed" }} disabled={crmSyncing} onClick={handleCrmSync}>{crmSyncing ? "Syncing…" : "Sync CRM"}</button>
+      {tab === "overview" && (() => {
+        const isClient = currentUserRole === "client";
+
+        // Per-section accent palette. Each contact card gets a left-border stripe
+        // + matching avatar-fallback color so the four sections are visually
+        // distinct at a glance.
+        type Accent = { fg: string; border: string; pill: string };
+        const ACCENT_TEAL:  Accent = { fg: "#0b9aad", border: "rgba(11,154,173,0.25)", pill: "rgba(11,154,173,0.12)" };
+        const ACCENT_BLUE:  Accent = { fg: "#0078d4", border: "rgba(0,120,212,0.25)",  pill: "rgba(0,120,212,0.12)"  };
+        const ACCENT_GREEN: Accent = { fg: "#107c10", border: "rgba(16,124,16,0.25)",  pill: "rgba(16,124,16,0.12)"  };
+        const ACCENT_CYAN:  Accent = { fg: "#63c1ea", border: "rgba(99,193,234,0.3)",  pill: "rgba(99,193,234,0.14)" };
+        const ACCENT_AMBER: Accent = { fg: "#d97706", border: "rgba(217,119,6,0.3)",   pill: "rgba(217,119,6,0.14)"  };
+
+        // Normalized person row used by all 4 contact sections.
+        // `accent` lets an individual row override the section color — used to
+        // keep Partner AEs visually distinct (green) inside the otherwise-blue
+        // Project Team section.
+        type PersonRow = {
+          key: string;
+          name: string;
+          label?: string | null;
+          jobTitle?: string | null;
+          email?: string | null;
+          phone?: string | null;
+          scheduler?: string | null;
+          photo?: string | null;
+          accent?: Accent;
+          onRemove?: () => void;
+        };
+
+        const renderPerson = (p: PersonRow, accent: Accent) => {
+          const abbr = (p.name || p.email || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
+          return (
+            <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
+              {p.photo
+                ? <img src={p.photo} alt={p.name} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                : <span style={{ width: 40, height: 40, borderRadius: "50%", background: accent.pill, color: accent.fg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{abbr}</span>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{p.name}</span>
+                  {p.label && (
+                    <span className="ms-badge" style={{ background: accent.pill, color: accent.fg, border: `1px solid ${accent.border}`, fontSize: 10, padding: "1px 8px" }}>
+                      {p.label}
+                    </span>
                   )}
-                </>
+                </div>
+                {p.jobTitle && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{p.jobTitle}</div>}
+              </div>
+              <ContactIcons email={p.email} phone={p.phone} schedulerUrl={p.scheduler} accent={accent.fg} />
+              {p.onRemove && (
+                <button onClick={p.onRemove} title="Remove" style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "4px 8px", flexShrink: 0 }}>✕</button>
+              )}
+            </div>
+          );
+        };
+
+        const renderSection = (props: { title: string; accent: Accent; rows: PersonRow[]; empty: string; action?: React.ReactNode }) => (
+          <div className="ms-section-card" style={{ borderLeft: `3px solid ${props.accent.fg}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+              <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0, color: props.accent.fg }}>{props.title}</div>
+              {props.action}
+            </div>
+            {props.rows.length === 0
+              ? <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>{props.empty}</div>
+              : <div style={{ display: "grid", gap: 8 }}>{props.rows.map((r) => renderPerson(r, r.accent ?? props.accent))}</div>}
+          </div>
+        );
+
+        // ── Account Team: PF AE / SA / CSM tied to the customer record ─────────────
+        const accountTeamRows: PersonRow[] = ([
+          { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email,  phone: project.customer_pf_ae_phone,  scheduler: project.customer_pf_ae_scheduler_url  },
+          { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email,  phone: project.customer_pf_sa_phone,  scheduler: project.customer_pf_sa_scheduler_url  },
+          { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email, phone: project.customer_pf_csm_phone, scheduler: project.customer_pf_csm_scheduler_url },
+        ] as const).filter((m) => !!m.name).map((m) => ({
+          key: m.role,
+          name: m.name!,
+          label: m.role,
+          email: m.email,
+          phone: m.phone,
+          scheduler: m.scheduler,
+          photo: m.email ? customerTeamPhotoMap[m.email] : null,
+        }));
+
+        // ── Project Team: PM + internal staff + partner AEs ────────────────────────
+        const pmRow: PersonRow | null = (() => {
+          if (!project.pm_user_id) return null;
+          const pmFromMap = userMap.get(project.pm_user_id);
+          const pmName = pmFromMap?.name ?? (project as unknown as Record<string, unknown>).pm_name as string | null ?? null;
+          const pmEmail = pmFromMap?.email ?? (project as unknown as Record<string, unknown>).pm_email as string | null ?? null;
+          if (!pmName && !pmEmail) return null;
+          return {
+            key: "pm",
+            name: pmName ?? pmEmail ?? "",
+            label: "PM",
+            email: pmEmail,
+            phone: pmFromMap?.phone ?? project.pm_phone ?? null,
+            scheduler: pmFromMap?.scheduler_url ?? project.pm_scheduler_url ?? null,
+            photo: (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null,
+          };
+        })();
+        const roleLabel: Record<string, string> = { engineer: "Engineer", pm: "PM" };
+        const internalStaffRows: PersonRow[] = projectStaff
+          .filter((s) => s.staff_role !== "partner_ae"
+            && !["ae", "sa", "csm"].includes(s.staff_role)
+            && !(s.staff_role === "pm" && s.user_id === project.pm_user_id))
+          .map((s) => ({
+            key: s.id,
+            name: s.name ?? s.email,
+            label: roleLabel[s.staff_role] ?? s.staff_role,
+            email: s.email,
+            phone: s.phone,
+            scheduler: s.scheduler_url,
+            photo: staffPhotoMap[s.email] ?? s.avatar_url,
+            onRemove: canEdit ? () => handleRemoveStaff(s.id) : undefined,
+          }));
+        const partnerAeRows: PersonRow[] = projectStaff
+          .filter((s) => s.staff_role === "partner_ae")
+          .map((s) => ({
+            key: s.id,
+            name: s.name ?? s.email,
+            label: "Partner AE",
+            email: s.email,
+            phone: s.phone,
+            scheduler: s.scheduler_url,
+            photo: staffPhotoMap[s.email] ?? s.avatar_url,
+            accent: ACCENT_GREEN,
+            onRemove: canEdit ? () => handleRemovePartner(s.id) : undefined,
+          }));
+
+        // ── Customer + Partner contacts (project_contacts, split UI-side) ──────────
+        const customerContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
+        const partnerContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
+
+        function openAddContactModal(side: "customer" | "partner") {
+          setContactSide(side);
+          setShowContactModal(true);
+          const useCrm = side === "customer" && !!project!.dynamics_account_id;
+          setContactModalTab(useCrm ? "crm" : "manual");
+          setContactRole("");
+          setManualContact({ name: "", email: "", phone: "", job_title: "" });
+          if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
+            setCrmContactsLoading(true);
+            api.getDynamicsContacts(project!.dynamics_account_id)
+              .then(setCrmContacts)
+              .catch(() => {})
+              .finally(() => setCrmContactsLoading(false));
+          }
+        }
+
+        const projectContactToRow = (c: typeof contacts[number]): PersonRow => ({
+          key: c.id,
+          name: c.name,
+          label: c.contact_role,
+          jobTitle: c.job_title,
+          email: c.email,
+          phone: c.phone,
+          onRemove: canEdit ? async () => {
+            await api.removeProjectContact(project!.id, c.id);
+            setContacts((prev) => prev.filter((x) => x.id !== c.id));
+          } : undefined,
+        });
+        const customerContactRows = customerContacts.map(projectContactToRow);
+        const partnerContactRows  = partnerContacts.map(projectContactToRow);
+
+        // Two-column layout that collapses to one column on narrow viewports.
+        const twoCol: React.CSSProperties = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))", gap: 16 };
+        const ghostBtn: React.CSSProperties = { fontSize: 11, padding: "3px 10px", borderRadius: 4 };
+
+        return (
+          <div style={{ display: "grid", gap: 16 }}>
+            {/* Project Settings card retired (May-2026). Status is auto-derived
+                (PR E1); Template apply moved into the Phases panel below
+                (PR E2 — every project owns at least one Main phase). */}
+
+            {/* ── Project Details (vendor + Solution Types) ────────────────── */}
+            <div className="ms-section-card">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 8, flexWrap: "wrap" }}>
+                <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Project Details</div>
+                {!editingTech && canEdit && (
+                  <button className="ms-btn-ghost" onClick={startEditTech} style={{ fontSize: 12, padding: "2px 10px" }}>Edit</button>
+                )}
+              </div>
+              {editingTech ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, maxWidth: 520 }}>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Vendor</span>
+                    <select className="ms-input" value={editVendor} onChange={(e) => setEditVendor(e.target.value)} disabled={savingTech} style={{ fontSize: 13, padding: "6px 10px" }}>
+                      <option value="">— Not set —</option>
+                      {VENDOR_OPTIONS.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
+                    </select>
+                  </label>
+                  <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Solution Types</span>
+                    <SolutionTypePicker value={editSolutionTypes} onChange={setEditSolutionTypes} disabled={savingTech} />
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="ms-btn-primary" onClick={saveEditTech} disabled={savingTech}>{savingTech ? "Saving…" : "Save"}</button>
+                    <button className="ms-btn-ghost" onClick={() => setEditingTech(false)} disabled={savingTech}>Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  {project.vendor ? (
+                    <span className="ms-badge" style={{ background: "rgba(0,120,212,0.15)", color: "#4fc3f7", border: "1px solid rgba(0,120,212,0.35)", fontSize: 12, padding: "4px 12px" }}>
+                      {vendorLabel(project.vendor)}
+                    </span>
+                  ) : (
+                    <span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No vendor set</span>
+                  )}
+                  <SolutionTypePills types={project.solution_types} emptyFallback={<span style={{ color: "#94a3b8", fontSize: 12, fontStyle: "italic" }}>No solution types set</span>} />
+                </div>
               )}
             </div>
 
-            {/* Controls row */}
-            {canEdit && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", paddingTop: 10, borderTop: "1px solid #f1f5f9" }}>
-                <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editStatus} onChange={(e) => setEditStatus(e.target.value)}>
-                  <option value="">Status</option>
-                  <option value="not_started">Not Started</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="complete">Complete</option>
-                </select>
-                <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#64748b" }}>
-                  Go-Live
-                  <input type="date" className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={editTargetGoLiveDate ?? ""} onChange={(e) => setEditTargetGoLiveDate(e.target.value)} />
-                </label>
-                <button className="ms-btn-primary" style={{ fontSize: 12, padding: "4px 12px" }} onClick={handleSaveProject} disabled={savingProject}>
-                  {savingProject ? "Saving…" : "Save"}
-                </button>
-                {saveMessage && <span style={{ fontSize: 12, color: "#64748b" }}>{saveMessage}</span>}
-                {templateList.length > 0 && (
-                  <>
-                    <span style={{ color: "#e2e8f0", margin: "0 2px" }}>|</span>
-                    <select className="ms-input" style={{ fontSize: 12, padding: "4px 8px", width: "auto" }} value={selectedTemplateId} onChange={(e) => { setSelectedTemplateId(e.target.value); setApplyResult(null); }}>
-                      <option value="">— Template —</option>
-                      {templateList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-                    </select>
-                    <button className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 10px" }} disabled={!selectedTemplateId || applyingTemplate} onClick={() => setShowApplyConfirm(true)}>Apply</button>
-                    {applyResult && (
-                      <span style={{ fontSize: 12, color: "#059669" }}>
-                        {applyResult.phases_created} phases, {applyResult.tasks_created} tasks added
-                        {applyResult.tasks_merged > 0 && `, ${applyResult.tasks_merged} merged`}
-                      </span>
-                    )}
-                  </>
-                )}
+            {/* ── Account Team │ Project Team (2-column) ───────────────────── */}
+            <div style={twoCol}>
+              {renderSection({
+                title: "Account Team",
+                accent: ACCENT_TEAL,
+                rows: accountTeamRows,
+                empty: "No customer Account Team set in CRM.",
+              })}
+              {renderSection({
+                title: "Project Team",
+                accent: ACCENT_BLUE,
+                rows: [...(pmRow ? [pmRow] : []), ...internalStaffRows],
+                empty: "No project team assigned yet.",
+                action: canEdit ? (
+                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole(""); }}>+ Staff</button>
+                ) : undefined,
+              })}
+            </div>
+
+            {/* ── Customer Contacts │ Partner/Provider (2-column) ───────────
+                Partner/Provider panel groups Partner AE rows (project_staff)
+                with partner-side project_contacts under one "non-PF external
+                partners" header. Partner AE rows keep their green accent;
+                contact rows use the section amber. */}
+            <div style={twoCol}>
+              {renderSection({
+                title: "Customer Contacts",
+                accent: ACCENT_CYAN,
+                rows: customerContactRows,
+                empty: "No customer contacts added yet.",
+                action: canEdit ? (
+                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("customer")}>+ Add Contact</button>
+                ) : undefined,
+              })}
+              {renderSection({
+                title: "Partner / Provider",
+                accent: ACCENT_AMBER,
+                rows: [...partnerAeRows, ...partnerContactRows],
+                empty: "No partner AEs or partner/provider contacts yet.",
+                action: canEdit ? (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {(() => {
+                      const partnerStaff = projectStaff.filter((s) => s.staff_role === "partner_ae");
+                      const assignablePartners = users.filter((u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id));
+                      return <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner AE</button>;
+                    })()}
+                    <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("partner")}>+ Add Contact</button>
+                  </div>
+                ) : undefined,
+              })}
+            </div>
+
+            {/* ── Phases (multi-phase projects) — full width ─────────────────── */}
+            <PhasesPanel
+              projectId={project.id}
+              canEdit={canEdit}
+              onChange={async () => {
+                // Phase add/delete/edit can move stages between phase_id values
+                // and may flip the project between single-phase and multi-phase
+                // — keep our cache fresh on all three.
+                const [newPhases, newStages, newTasks] = await Promise.all([api.phases(project.id), api.stages(project.id), api.tasks(project.id)]);
+                setPhases(newPhases);
+                setStages(newStages);
+                setTasks(newTasks);
+              }}
+            />
+
+            {/* ── Status Meeting │ Meeting Prep (PM/admin only, 2-column) ──── */}
+            {!isClient && (
+              <div style={twoCol}>
+                <StatusMeetingPanel
+                  project={project}
+                  canEdit={canEdit}
+                  onSaved={(updated) => setProject(updated)}
+                />
+                <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+                  <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                    {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                      <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
+                        <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             )}
           </div>
-
-          {/* ── Customer + Partner Contacts ──────────────────────────────── */}
-          {/* Two stacked sections — customer-side roles vs partner/provider
-              roles (Porting Coordinator etc.). Underlying storage is one
-              project_contacts table; classification is purely UI-side. */}
-          {(() => {
-            const customerContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
-            const partnerContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
-
-            function openAddContactModal(side: "customer" | "partner") {
-              setContactSide(side);
-              setShowContactModal(true);
-              // CRM lookup only applies to customer contacts; partners are manual-only.
-              const useCrm = side === "customer" && !!project!.dynamics_account_id;
-              setContactModalTab(useCrm ? "crm" : "manual");
-              setContactRole("");
-              setManualContact({ name: "", email: "", phone: "", job_title: "" });
-              if (useCrm && project!.dynamics_account_id && crmContacts.length === 0) {
-                setCrmContactsLoading(true);
-                api.getDynamicsContacts(project!.dynamics_account_id)
-                  .then(setCrmContacts)
-                  .catch(() => {})
-                  .finally(() => setCrmContactsLoading(false));
-              }
-            }
-
-            const renderContactRow = (c: typeof contacts[number]) => (
-              <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 14, padding: "12px 14px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
-                <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(99,193,234,0.12)", border: "1px solid rgba(99,193,234,0.2)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 15, fontWeight: 700, color: "#63c1ea" }}>
-                  {c.name.charAt(0).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{c.name}</span>
-                    {c.contact_role && (
-                      <span className="ms-badge" style={{ background: "rgba(99,193,234,0.1)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
-                        {c.contact_role}
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 3 }}>
-                    {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
-                  </div>
-                </div>
-                {canEdit && (
-                  <button
-                    className="ms-btn-ghost"
-                    style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
-                    onClick={async () => {
-                      await api.removeProjectContact(project!.id, c.id);
-                      setContacts((prev) => prev.filter((x) => x.id !== c.id));
-                    }}
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
-            );
-
-            return (
-              <>
-                {/* Customer */}
-                <div className="ms-section-card">
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                    <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Customer Contacts</div>
-                    {canEdit && (
-                      <button className="ms-btn-secondary" onClick={() => openAddContactModal("customer")}>
-                        + Add Customer Contact
-                      </button>
-                    )}
-                  </div>
-                  {customerContacts.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                      No customer contacts added yet.
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>{customerContacts.map(renderContactRow)}</div>
-                  )}
-                </div>
-
-                {/* Partner / Provider */}
-                <div className="ms-section-card">
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                    <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Partner / Provider Contacts</div>
-                    {canEdit && (
-                      <button className="ms-btn-secondary" onClick={() => openAddContactModal("partner")}>
-                        + Add Partner Contact
-                      </button>
-                    )}
-                  </div>
-                  {partnerContacts.length === 0 ? (
-                    <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
-                      No partner/provider contacts added yet. (e.g. porting coordinator on the partner team.)
-                    </div>
-                  ) : (
-                    <div style={{ display: "grid", gap: 8 }}>{partnerContacts.map(renderContactRow)}</div>
-                  )}
-                </div>
-              </>
-            );
-          })()}
-
-          {/* ── Dashboard (KPIs, phase stepper, upcoming tasks, blockers) ── */}
-          <ProjectExecutiveDashboard
-            project={project}
-            phases={phases}
-            tasks={tasks}
-            risks={risks}
-            onViewBlockers={() => setTab("blockers")}
-            onViewTasks={() => setTab("tasks")}
-          />
-
-          {/* ── Meeting Prep Emails (lifecycle-staged, condensed) ─────────── */}
-          <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-            <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-              {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
-                <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
-                  <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Asana Phase Progress ──────────────────────────────────────── */}
-          <div className="ms-section-card">
-            <div className="ms-section-title">Quick Counts</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
-              {[["Phases", phases.length], ["Tasks", tasks.length], ["Blockers", risks.length], ["Notes", notes.length]].map(
-                ([label, value]) => (
-                  <div key={label as string} className="ms-info-item" style={{ textAlign: "center" }}>
-                    <div className="ms-info-label">{label}</div>
-                    <div style={{ fontSize: 28, fontWeight: 700, color: "#63c1ea", lineHeight: 1.2 }}>{value}</div>
-                  </div>
-                )
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {tab === "tasks" && (
         <>
+        {multiPhase && (
+          <PhasePicker
+            phases={phases}
+            hasSharedStages={hasSharedStages}
+            selected={selectedPhaseId}
+            onSelect={setSelectedPhaseId}
+          />
+        )}
         <div className="ms-section-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
-            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Phase</div>
+            <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Stage</div>
             <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
           </div>
           {tasks.length > 0 && filteredTasks.length === 0 && (
@@ -1108,46 +1308,48 @@ export default function ProjectDetailPage() {
             </div>
           )}
           <div style={{ display: "grid", gap: 24 }}>
-            {phases.length === 0 && (
+            {visibleStages.length === 0 && (
               <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
-                No phases yet. Apply a template above, or add phases manually below.
+                {multiPhase
+                  ? "No stages on this phase yet — apply a template via the Overview tab."
+                  : "No stages yet. Apply a template above, or add stages manually below."}
               </div>
             )}
-            {groupedTasks.map(({ phase, tasks: phaseTasks }) => {
-              const isCollapsed = collapsedPhases.has(phase.id);
-              const toggleCollapse = () => setCollapsedPhases((prev) => {
+            {groupedTasks.map(({ stage, tasks: stageTasks }) => {
+              const isCollapsed = collapsedStages.has(stage.id);
+              const toggleCollapse = () => setCollapsedStages((prev) => {
                 const next = new Set(prev);
-                next.has(phase.id) ? next.delete(phase.id) : next.add(phase.id);
+                next.has(stage.id) ? next.delete(stage.id) : next.add(stage.id);
                 return next;
               });
-              const isAddingHere = newTaskPhaseId === phase.id;
+              const isAddingHere = newTaskStageId === stage.id;
               const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
               const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
               const cellInputStyle: React.CSSProperties = canEdit ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
               return (
-              <div key={phase.id}>
-                {/* Phase header with inline editing — unchanged */}
+              <div key={stage.id}>
+                {/* Stage header with inline editing — unchanged */}
                 <div style={{ marginBottom: isCollapsed ? 0 : 10, paddingBottom: 8, borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
                   <div
                     style={{ fontWeight: 700, fontSize: 13, textTransform: "uppercase", letterSpacing: "0.05em", color: "#1e293b", marginBottom: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 6, userSelect: "none" }}
                     onClick={toggleCollapse}
                   >
                     <span style={{ fontSize: 10, color: "#94a3b8", transition: "transform 0.15s", display: "inline-block", transform: isCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▼</span>
-                    {phase.name}
-                    <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", textTransform: "none", letterSpacing: 0 }}>({phaseTasks.length} task{phaseTasks.length !== 1 ? "s" : ""})</span>
+                    {stage.name}
+                    <span style={{ fontSize: 11, fontWeight: 400, color: "#94a3b8", textTransform: "none", letterSpacing: 0 }}>({stageTasks.length} task{stageTasks.length !== 1 ? "s" : ""})</span>
                   </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                     <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                       Start
                       <input
                         type="date"
-                        value={phase.planned_start ?? ""}
+                        value={stage.planned_start ?? ""}
                         disabled={!canEdit}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
-                          const updated = await api.updatePhase(project.id, phase.id, { planned_start: e.target.value || null });
-                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                          const updated = await api.updateStage(project.id, stage.id, { planned_start: e.target.value || null });
+                          setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                         }}
                       />
                     </label>
@@ -1155,51 +1357,37 @@ export default function ProjectDetailPage() {
                       End
                       <input
                         type="date"
-                        value={phase.planned_end ?? ""}
+                        value={stage.planned_end ?? ""}
                         disabled={!canEdit}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
-                          const updated = await api.updatePhase(project.id, phase.id, { planned_end: e.target.value || null });
-                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+                          const updated = await api.updateStage(project.id, stage.id, { planned_end: e.target.value || null });
+                          setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
                         }}
                       />
                     </label>
-                    <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
-                      Status
-                      <select
-                        value={phase.status ?? "not_started"}
-                        disabled={!canEdit}
-                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
-                        onChange={async (e) => {
-                          if (!project) return;
-                          const updated = await api.updatePhase(project.id, phase.id, { status: e.target.value as "not_started" | "in_progress" | "completed" });
-                          setPhases((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-                        }}
-                      >
-                        <option value="not_started">Not Started</option>
-                        <option value="in_progress">In Progress</option>
-                        <option value="completed">Completed</option>
-                      </select>
-                    </label>
-                    <Badge label={humanize(phase.status ?? "not_started")} color={STATUS_COLOR[phase.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
+                    {/* Stage status is now auto-derived from task statuses on
+                        the server; PMs don't toggle it directly. Badge stays
+                        for at-a-glance read. */}
+                    <Badge label={humanize(stage.status ?? "not_started")} color={STATUS_COLOR[stage.status ?? "not_started"] ?? "#94a3b8"} style={{ textTransform: "none" }} />
                     {canEdit && (
                       <button
                         type="button"
-                        title="Delete phase"
+                        title="Delete stage"
                         onClick={async () => {
                           if (!project) return;
-                          const taskCount = phaseTasks.length;
+                          const taskCount = stageTasks.length;
                           const msg = taskCount === 0
-                            ? `Delete phase "${phase.name}"?`
-                            : `Delete phase "${phase.name}" and its ${taskCount} task${taskCount === 1 ? "" : "s"}? Documents tied to this phase will move to the project level; other data stays put.`;
+                            ? `Delete stage "${stage.name}"?`
+                            : `Delete stage "${stage.name}" and its ${taskCount} task${taskCount === 1 ? "" : "s"}? Documents tied to this stage will move to the project level; other data stays put.`;
                           if (!confirm(msg)) return;
                           try {
-                            await api.deletePhase(project.id, phase.id);
-                            setPhases((prev) => prev.filter((p) => p.id !== phase.id));
-                            setTasks((prev) => prev.filter((t) => t.phase_id !== phase.id));
+                            await api.deleteStage(project.id, stage.id);
+                            setStages((prev) => prev.filter((p) => p.id !== stage.id));
+                            setTasks((prev) => prev.filter((t) => t.stage_id !== stage.id));
                           } catch {
-                            showToast("Failed to delete phase", "error");
+                            showToast("Failed to delete stage", "error");
                           }
                         }}
                         style={{ marginLeft: "auto", background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "2px 8px", fontSize: 11, cursor: "pointer", lineHeight: 1.4 }}
@@ -1213,11 +1401,11 @@ export default function ProjectDetailPage() {
                 {/* Inline CRUD table */}
                 {!isCollapsed && (
                   <div>
-                    {phaseTasks.length === 0 && !isAddingHere && (
+                    {stageTasks.length === 0 && !isAddingHere && (
                       <div style={{ color: "#a19f9d", fontSize: 13, padding: "8px 0" }}>No tasks</div>
                     )}
 
-                    {(phaseTasks.length > 0 || isAddingHere) && (
+                    {(stageTasks.length > 0 || isAddingHere) && (
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
@@ -1241,7 +1429,7 @@ export default function ProjectDetailPage() {
                             </tr>
                           </thead>
                           <tbody>
-                            {phaseTasks.map((task) => {
+                            {stageTasks.map((task) => {
                               const taskRecordings = recordings.filter((r) => r.task_id === task.id);
                               const taskEntries = taskTimeEntries[task.id] ?? [];
                               const isDone = task.status === "completed";
@@ -1417,21 +1605,25 @@ export default function ProjectDetailPage() {
                                       </div>
                                     </td>
                                     <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
-                                      <button
-                                        className="ms-btn-secondary"
-                                        style={{ fontSize: 11, padding: "3px 8px", marginRight: 4 }}
-                                        title="Log time"
-                                        onClick={() => {
-                                          const today = new Date().toISOString().slice(0, 10);
-                                          setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
-                                          setTimeEntrySetup(null);
-                                          setTimeEntryTask(task);
-                                          setTimeEntryLoadingSetup(true);
-                                          api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
-                                        }}
-                                      >
-                                        ⏱
-                                      </button>
+                                      {/* Log-time button is PFI-only — server enforces this too via
+                                          canEditProject + pf_engineer-on-own-task on POST /time-entries. */}
+                                      {currentUserRole !== "client" && currentUserRole !== "partner_ae" && (
+                                        <button
+                                          className="ms-btn-secondary"
+                                          style={{ fontSize: 11, padding: "3px 8px", marginRight: 4 }}
+                                          title="Log time"
+                                          onClick={() => {
+                                            const today = new Date().toISOString().slice(0, 10);
+                                            setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", useCostCode: false });
+                                            setTimeEntrySetup(null);
+                                            setTimeEntryTask(task);
+                                            setTimeEntryLoadingSetup(true);
+                                            api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                                          }}
+                                        >
+                                          ⏱
+                                        </button>
+                                      )}
                                       {canEdit && task.due_date && (
                                         <button
                                           title="Cascade dates downstream from this task"
@@ -1446,6 +1638,53 @@ export default function ProjectDetailPage() {
                                           ↪
                                         </button>
                                       )}
+                                      {/* Meeting URL — clicking the button lets editors add/edit/clear a
+                                          Zoom or Teams link on this task. The Dashboard's "Next call" tile
+                                          picks the earliest upcoming task with a URL.
+
+                                          canEdit  → always show, prompt-based edit (highlighted when set)
+                                          !canEdit → only show if URL set, just opens it */}
+                                      {canEdit ? (
+                                        <button
+                                          title={task.meeting_join_url ? `Meeting URL set — click to edit (${task.meeting_join_url})` : "Add a meeting URL"}
+                                          onClick={() => {
+                                            const current = task.meeting_join_url ?? "";
+                                            const next = window.prompt(
+                                              "Meeting join URL (Zoom or Teams). Leave blank to clear.",
+                                              current
+                                            );
+                                            if (next === null) return;
+                                            const trimmed = next.trim();
+                                            if (trimmed === current) return;
+                                            patchTask(task.id, { meeting_join_url: trimmed || null });
+                                          }}
+                                          style={{
+                                            background: task.meeting_join_url ? "rgba(34,197,94,0.12)" : "none",
+                                            border: `1px solid ${task.meeting_join_url ? "#86efac" : "#cbd5e1"}`,
+                                            color: task.meeting_join_url ? "#166534" : "#64748b",
+                                            borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                          }}
+                                        >
+                                          🎥
+                                        </button>
+                                      ) : task.meeting_join_url ? (
+                                        <a
+                                          title="Join meeting"
+                                          href={task.meeting_join_url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          style={{
+                                            display: "inline-block",
+                                            background: "rgba(34,197,94,0.12)",
+                                            border: "1px solid #86efac",
+                                            color: "#166534",
+                                            borderRadius: 4, padding: "3px 8px", fontSize: 11, marginRight: 4,
+                                            textDecoration: "none",
+                                          }}
+                                        >
+                                          🎥
+                                        </a>
+                                      ) : null}
                                       {canEdit && (
                                         <button
                                           title="Delete task"
@@ -1497,7 +1736,7 @@ export default function ProjectDetailPage() {
                               <tr>
                                 <td colSpan={7} style={{ padding: "6px 8px" }}>
                                   <form
-                                    onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(phase.id); }}
+                                    onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(stage.id); }}
                                     style={{ display: "flex", gap: 8, alignItems: "center" }}
                                   >
                                     <input
@@ -1507,14 +1746,14 @@ export default function ProjectDetailPage() {
                                       value={newTaskTitle}
                                       onChange={(e) => setNewTaskTitle(e.target.value)}
                                       onKeyDown={(e) => {
-                                        if (e.key === "Escape") { setNewTaskTitle(""); setNewTaskPhaseId(null); }
+                                        if (e.key === "Escape") { setNewTaskTitle(""); setNewTaskStageId(null); }
                                       }}
                                       disabled={creatingTask}
                                       style={{ flex: 1, padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 4, fontSize: 13, background: "#fff", color: "#1e293b" }}
                                     />
                                     <button
                                       type="button"
-                                      onClick={() => { setNewTaskTitle(""); setNewTaskPhaseId(null); }}
+                                      onClick={() => { setNewTaskTitle(""); setNewTaskStageId(null); }}
                                       style={{ fontSize: 11, padding: "4px 10px", background: "none", border: "1px solid #cbd5e1", color: "#64748b", borderRadius: 4, cursor: "pointer" }}
                                     >
                                       Done
@@ -1531,7 +1770,7 @@ export default function ProjectDetailPage() {
                     {canEdit && !isAddingHere && (
                       <button
                         className="ms-btn-ghost"
-                        onClick={() => { setNewTaskTitle(""); setNewTaskPhaseId(phase.id); }}
+                        onClick={() => { setNewTaskTitle(""); setNewTaskStageId(stage.id); }}
                         style={{ marginTop: 8, fontSize: 12, border: "1px dashed #cbd5e1", color: "#64748b" }}
                       >
                         + Add Task
@@ -1544,58 +1783,58 @@ export default function ProjectDetailPage() {
             })}
 
             {canEdit && (
-              showNewPhaseInput ? (
-                <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, borderTop: phases.length > 0 ? "1px dashed #e2e8f0" : "none" }}>
+              showNewStageInput ? (
+                <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, borderTop: stages.length > 0 ? "1px dashed #e2e8f0" : "none" }}>
                   <input
                     type="text"
                     autoFocus
-                    placeholder="Phase name"
-                    value={newPhaseName}
-                    onChange={(e) => setNewPhaseName(e.target.value)}
+                    placeholder="Stage name"
+                    value={newStageName}
+                    onChange={(e) => setNewStageName(e.target.value)}
                     onKeyDown={async (e) => {
-                      if (e.key === "Enter" && newPhaseName.trim() && !creatingPhase && project) {
-                        setCreatingPhase(true);
+                      if (e.key === "Enter" && newStageName.trim() && !creatingStage && project) {
+                        setCreatingStage(true);
                         try {
-                          const created = await api.createPhase(project.id, { name: newPhaseName.trim() });
-                          setPhases((prev) => [...prev, created]);
-                          setNewPhaseName("");
-                          setShowNewPhaseInput(false);
+                          const created = await api.createStage(project.id, { name: newStageName.trim() });
+                          setStages((prev) => [...prev, created]);
+                          setNewStageName("");
+                          setShowNewStageInput(false);
                         } catch {
-                          showToast("Failed to create phase", "error");
+                          showToast("Failed to create stage", "error");
                         } finally {
-                          setCreatingPhase(false);
+                          setCreatingStage(false);
                         }
                       } else if (e.key === "Escape") {
-                        setNewPhaseName("");
-                        setShowNewPhaseInput(false);
+                        setNewStageName("");
+                        setShowNewStageInput(false);
                       }
                     }}
                     style={{ flex: 1, fontSize: 13, padding: "6px 10px", border: "1px solid #d1d5db", borderRadius: 4, background: "#fff", color: "#1e293b" }}
                   />
                   <button
                     className="ms-btn-primary"
-                    disabled={!newPhaseName.trim() || creatingPhase}
+                    disabled={!newStageName.trim() || creatingStage}
                     onClick={async () => {
                       if (!project) return;
-                      setCreatingPhase(true);
+                      setCreatingStage(true);
                       try {
-                        const created = await api.createPhase(project.id, { name: newPhaseName.trim() });
-                        setPhases((prev) => [...prev, created]);
-                        setNewPhaseName("");
-                        setShowNewPhaseInput(false);
+                        const created = await api.createStage(project.id, { name: newStageName.trim() });
+                        setStages((prev) => [...prev, created]);
+                        setNewStageName("");
+                        setShowNewStageInput(false);
                       } catch {
-                        showToast("Failed to create phase", "error");
+                        showToast("Failed to create stage", "error");
                       } finally {
-                        setCreatingPhase(false);
+                        setCreatingStage(false);
                       }
                     }}
                     style={{ fontSize: 12, padding: "5px 14px" }}
                   >
-                    {creatingPhase ? "Creating…" : "Create"}
+                    {creatingStage ? "Creating…" : "Create"}
                   </button>
                   <button
                     className="ms-btn-ghost"
-                    onClick={() => { setNewPhaseName(""); setShowNewPhaseInput(false); }}
+                    onClick={() => { setNewStageName(""); setShowNewStageInput(false); }}
                     style={{ fontSize: 12, padding: "5px 12px" }}
                   >
                     Cancel
@@ -1604,10 +1843,10 @@ export default function ProjectDetailPage() {
               ) : (
                 <button
                   className="ms-btn-ghost"
-                  onClick={() => setShowNewPhaseInput(true)}
-                  style={{ alignSelf: "start", border: "1px dashed #cbd5e1", color: "#64748b", marginTop: phases.length > 0 ? 8 : 0 }}
+                  onClick={() => setShowNewStageInput(true)}
+                  style={{ alignSelf: "start", border: "1px dashed #cbd5e1", color: "#64748b", marginTop: stages.length > 0 ? 8 : 0 }}
                 >
-                  + Add Phase
+                  + Add Stage
                 </button>
               )
             )}
@@ -1627,26 +1866,38 @@ export default function ProjectDetailPage() {
             <div style={{ color: "#a19f9d", fontSize: 14, padding: "8px 0" }}>No blockers recorded.</div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {risks.map((risk) => (
-                <div key={risk.id} className="ms-row-item">
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
-                    {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
-                    <div style={{ fontSize: 12, color: "#64748b" }}>
-                      Severity: {risk.severity ?? "—"} · Owner: {userName(risk.owner_user_id)}
-                      {risk.task_id && (() => {
-                        const t = tasks.find((t) => t.id === risk.task_id);
-                        return t ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{t.title}</span></> : null;
-                      })()}
+              {risks.map((risk) => {
+                const ownerContact = risk.owner_contact_id ? contacts.find((c) => c.id === risk.owner_contact_id) : null;
+                const ownerLabel = ownerContact
+                  ? ownerContact.name
+                  : risk.owner_user_id ? userName(risk.owner_user_id) : "Unassigned";
+                // A client who is the assigned project_contact (matched via
+                // dynamics_contact_id == their auth id) can edit this blocker.
+                const isAssignedToCurrentClient = currentUserRole === "client"
+                  && !!ownerContact?.dynamics_contact_id
+                  && ownerContact.dynamics_contact_id === currentUserId;
+                const canEditThisRisk = canEdit || isAssignedToCurrentClient;
+                return (
+                  <div key={risk.id} className="ms-row-item">
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
+                      {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
+                      <div style={{ fontSize: 12, color: "#64748b" }}>
+                        Severity: {risk.severity ?? "—"} · Owner: {ownerLabel}
+                        {risk.task_id && (() => {
+                          const t = tasks.find((t) => t.id === risk.task_id);
+                          return t ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{t.title}</span></> : null;
+                        })()}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+                      <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
+                      {canEditThisRisk && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
+                      {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
                     </div>
                   </div>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                    <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
-                    {canEdit && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
-                    {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -1657,7 +1908,7 @@ export default function ProjectDetailPage() {
         <ProjectDocuments
           projectId={project.id}
           documents={documents}
-          phases={phases}
+          stages={stages}
           tasks={tasks}
           onDocumentsChange={setDocuments}
         />
@@ -1665,21 +1916,30 @@ export default function ProjectDetailPage() {
 
       {/* ── SharePoint ────────────────────────────────────────────────────── */}
       {tab === "sharepoint" && project.dynamics_account_id && (
-        <SharePointDocs recordId={project.dynamics_account_id} />
+        <SharePointDocs
+          recordId={project.dynamics_account_id}
+          sharepointUrl={project.customer_sharepoint_url}
+          projectFolderUrl={project.sharepoint_folder_url}
+          projectId={project.id}
+          canEdit={canEdit}
+          onProjectFolderCreated={(url) => setProject({ ...project, sharepoint_folder_url: url })}
+        />
       )}
 
       {/* ── Activity ──────────────────────────────────────────────────────── */}
       {tab === "activity" && (() => {
         const isPartnerAe = currentUserRole === "partner_ae";
         const isPfAe = currentUserRole === "pf_ae";
-        const canComment = canEdit || isPartnerAe || isPfAe;
+        const isClient = currentUserRole === "client";
+        const canComment = canEdit || isPartnerAe || isPfAe || isClient;
+        const externalPoster = isPartnerAe || isClient;
         return (
           <div style={{ display: "grid", gap: 16 }}>
             {canComment && (
               <div className="ms-section-card">
-                <div className="ms-section-title">{isPartnerAe ? "Add Comment" : "Add Note"}</div>
+                <div className="ms-section-title">{externalPoster ? "Add Comment" : "Add Note"}</div>
                 <div style={{ display: "grid", gap: 12 }}>
-                  {!isPartnerAe && (
+                  {!externalPoster && (
                     <label className="ms-label">
                       <span>Visibility</span>
                       <select className="ms-input" value={newNoteVisibility} onChange={(e) => setNewNoteVisibility(e.target.value as "internal" | "partner" | "public")}>
@@ -1690,19 +1950,19 @@ export default function ProjectDetailPage() {
                     </label>
                   )}
                   <label className="ms-label">
-                    <span>{isPartnerAe ? "Comment" : "Note"}</span>
+                    <span>{externalPoster ? "Comment" : "Note"}</span>
                     <textarea
                       className="ms-input"
                       value={newNoteBody}
                       onChange={(e) => setNewNoteBody(e.target.value)}
                       rows={4}
                       style={{ resize: "vertical", minHeight: 90 }}
-                      placeholder={isPartnerAe ? "Share an update with the project team..." : "Add a project update..."}
+                      placeholder={externalPoster ? "Share an update with the project team..." : "Add a project update..."}
                     />
                   </label>
                   <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                     <button className="ms-btn-primary" onClick={handleAddNote} disabled={savingNote}>
-                      {savingNote ? "Posting..." : isPartnerAe ? "Post Comment" : "Add Note"}
+                      {savingNote ? "Posting..." : externalPoster ? "Post Comment" : "Add Note"}
                     </button>
                     {noteMessage && <span style={{ fontSize: 13, color: "#64748b" }}>{noteMessage}</span>}
                   </div>
@@ -1710,8 +1970,8 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            {/* ── Zoom Recordings ─────────────────────────────────────── */}
-            {detectPlatform(project.vendor) === "zoom" && (
+            {/* ── Zoom Recordings — hidden for clients ─────────────────────── */}
+            {!isClient && detectPlatform(project.vendor) === "zoom" && (
               <div className="ms-section-card">
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: recordings.length > 0 ? 14 : 0 }}>
                   <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Zoom Recordings</div>
@@ -1723,7 +1983,7 @@ export default function ProjectDetailPage() {
                       onClick={async () => {
                         setSyncingSuggestions(true);
                         setSyncSuggestions(null);
-                        setSuggestionPhaseOverrides({});
+                        setSuggestionStageOverrides({});
                         setSuggestionTaskOverrides({});
                         setSelectedSuggestions(new Set());
                         try {
@@ -1797,11 +2057,11 @@ export default function ProjectDetailPage() {
                               <select
                                 className="ms-input"
                                 style={{ fontSize: 12, padding: "2px 6px", height: "auto", width: "auto" }}
-                                value={rec.phase_id ?? ""}
+                                value={rec.stage_id ?? ""}
                                 onChange={async (e) => {
-                                  const newPhaseId = e.target.value || null;
+                                  const newStageId = e.target.value || null;
                                   try {
-                                    const updated = await api.zoomReassignRecording(project.id, rec.id, newPhaseId);
+                                    const updated = await api.zoomReassignRecording(project.id, rec.id, newStageId);
                                     setRecordings((prev) => prev.map((r) => r.id === updated.id ? updated : r));
                                     showToast("Recording reassigned.", "success");
                                   } catch {
@@ -1810,7 +2070,7 @@ export default function ProjectDetailPage() {
                                 }}
                               >
                                 <option value="">— unassigned —</option>
-                                {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                {stages.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
                               </select>
                             )}
                             {canEdit && (
@@ -1827,8 +2087,8 @@ export default function ProjectDetailPage() {
                               </button>
                             )}
                           </div>
-                          {rec.phase_name && (
-                            <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Phase: {rec.phase_name}</div>
+                          {rec.stage_name && (
+                            <div style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>Stage: {rec.stage_name}</div>
                           )}
                         </div>
                       </div>
@@ -1875,7 +2135,7 @@ export default function ProjectDetailPage() {
                       <div style={{ display: "grid", gap: 10, maxHeight: 420, overflowY: "auto" }}>
                         {syncSuggestions.map((s, idx) => {
                           const isSelected = selectedSuggestions.has(idx);
-                          const overridePhaseId = idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id;
+                          const overrideStageId = idx in suggestionStageOverrides ? suggestionStageOverrides[idx] : s.suggested_stage_id;
                           return (
                             <div
                               key={s.meeting_id}
@@ -1919,22 +2179,22 @@ export default function ProjectDetailPage() {
                                   {isSelected && (
                                     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>
                                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                        <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Phase:</span>
+                                        <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Stage:</span>
                                         <select
                                           className="ms-input"
                                           style={{ fontSize: 12, padding: "3px 8px", height: "auto" }}
-                                          value={overridePhaseId ?? ""}
+                                          value={overrideStageId ?? ""}
                                           onChange={(e) => {
-                                            setSuggestionPhaseOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }));
-                                            // Clear task when phase changes
+                                            setSuggestionStageOverrides((prev) => ({ ...prev, [idx]: e.target.value || null }));
+                                            // Clear task when stage changes
                                             setSuggestionTaskOverrides((prev) => ({ ...prev, [idx]: null }));
                                           }}
                                         >
                                           <option value="">— Unassigned —</option>
-                                          {phases.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
+                                          {stages.map((ph) => <option key={ph.id} value={ph.id}>{ph.name}</option>)}
                                         </select>
                                       </div>
-                                      {overridePhaseId && (
+                                      {overrideStageId && (
                                         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                                           <span style={{ fontSize: 12, color: "#64748b", flexShrink: 0 }}>Task:</span>
                                           <select
@@ -1945,7 +2205,7 @@ export default function ProjectDetailPage() {
                                           >
                                             <option value="">— None —</option>
                                             {tasks
-                                              .filter((t) => t.phase_id === overridePhaseId)
+                                              .filter((t) => t.stage_id === overrideStageId)
                                               .map((t) => <option key={t.id} value={t.id}>{t.title}</option>)}
                                           </select>
                                         </div>
@@ -1971,12 +2231,12 @@ export default function ProjectDetailPage() {
                             try {
                               const confirmations = [...selectedSuggestions].map((idx) => {
                                 const s = syncSuggestions[idx];
-                                const phaseId = (idx in suggestionPhaseOverrides ? suggestionPhaseOverrides[idx] : s.suggested_phase_id) ?? null;
+                                const stageId = (idx in suggestionStageOverrides ? suggestionStageOverrides[idx] : s.suggested_stage_id) ?? null;
                                 const taskId = suggestionTaskOverrides[idx] ?? null;
-                                const isManual = (idx in suggestionPhaseOverrides && suggestionPhaseOverrides[idx] !== s.suggested_phase_id) || !!taskId;
+                                const isManual = (idx in suggestionStageOverrides && suggestionStageOverrides[idx] !== s.suggested_stage_id) || !!taskId;
                                 return {
                                   meeting_id: s.meeting_id,
-                                  phase_id: phaseId,
+                                  stage_id: stageId,
                                   task_id: taskId,
                                   topic: s.topic,
                                   start_time: s.start_time,
@@ -2419,60 +2679,132 @@ export default function ProjectDetailPage() {
       })()}
 
       {/* ── Blocker Modal ─────────────────────────────────────────────────── */}
-      {showRiskModal && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
-          <div className="ms-modal">
-            <h2>{editingRisk ? "Edit Blocker" : "Add Blocker"}</h2>
-            <form onSubmit={handleSaveRisk} style={{ display: "grid", gap: 14 }}>
-              <label className="ms-label">
-                <span>Title *</span>
-                <input autoFocus required className="ms-input" value={riskForm.title} onChange={(e) => setRiskForm({ ...riskForm, title: e.target.value })} />
-              </label>
-              <label className="ms-label">
-                <span>Description</span>
-                <textarea className="ms-input" value={riskForm.description} onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })} rows={3} style={{ resize: "vertical" }} />
-              </label>
-              <label className="ms-label">
-                <span>Blocking Task</span>
-                <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
-                  <option value="">— Not task-specific —</option>
-                  {tasks.filter((t) => t.status !== "completed").map((t) => (
-                    <option key={t.id} value={t.id}>{t.title}</option>
-                  ))}
-                </select>
-              </label>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+      {showRiskModal && (() => {
+        // Client edit mode: customer is editing a blocker assigned to them.
+        // They can only change status + description; everything else is locked.
+        const clientEditMode = !canEdit && currentUserRole === "client" && !!editingRisk;
+        // Owner dropdown encodes the picked value as "user:<id>" or
+        // "contact:<id>" so a single select can switch between the two owner
+        // dimensions. handleOwnerChange writes back to the matching field.
+        const ownerValue = riskForm.owner_user_id
+          ? `user:${riskForm.owner_user_id}`
+          : riskForm.owner_contact_id ? `contact:${riskForm.owner_contact_id}` : "";
+        const handleOwnerChange = (raw: string) => {
+          if (raw.startsWith("user:"))    setRiskForm({ ...riskForm, owner_user_id: raw.slice(5), owner_contact_id: "" });
+          else if (raw.startsWith("contact:")) setRiskForm({ ...riskForm, owner_user_id: "", owner_contact_id: raw.slice(8) });
+          else                              setRiskForm({ ...riskForm, owner_user_id: "", owner_contact_id: "" });
+        };
+        const customerSideContacts = contacts.filter((c) => !isPartnerContactRole(c.contact_role));
+        const partnerSideContacts  = contacts.filter((c) =>  isPartnerContactRole(c.contact_role));
+
+        return (
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowRiskModal(false); }}>
+            <div className="ms-modal">
+              <h2>{editingRisk ? "Edit Blocker" : "Add Blocker"}</h2>
+              <form onSubmit={handleSaveRisk} style={{ display: "grid", gap: 14 }}>
+                {clientEditMode ? (
+                  // Customer view: title shown read-only for context, plus the
+                  // two fields they can change.
+                  <div style={{ padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9", fontSize: 13, color: "#475569" }}>
+                    {riskForm.title}
+                  </div>
+                ) : (
+                  <label className="ms-label">
+                    <span>Title *</span>
+                    <input autoFocus required className="ms-input" value={riskForm.title} onChange={(e) => setRiskForm({ ...riskForm, title: e.target.value })} />
+                  </label>
+                )}
                 <label className="ms-label">
-                  <span>Severity</span>
-                  <select className="ms-input" value={riskForm.severity} onChange={(e) => setRiskForm({ ...riskForm, severity: e.target.value })}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                  </select>
+                  <span>Description</span>
+                  <textarea className="ms-input" value={riskForm.description} onChange={(e) => setRiskForm({ ...riskForm, description: e.target.value })} rows={3} style={{ resize: "vertical" }} />
                 </label>
-                <label className="ms-label">
-                  <span>Status</span>
-                  <select className="ms-input" value={riskForm.status} onChange={(e) => setRiskForm({ ...riskForm, status: e.target.value })}>
-                    <option value="open">Open</option>
-                    <option value="mitigated">Mitigated</option>
-                    <option value="closed">Closed</option>
-                  </select>
-                </label>
-                <label className="ms-label">
-                  <span>Owner</span>
-                  <select className="ms-input" value={riskForm.owner_user_id} onChange={(e) => setRiskForm({ ...riskForm, owner_user_id: e.target.value })}>
-                    <option value="">Unassigned</option>
-                    {users.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
-                  </select>
-                </label>
-              </div>
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn-primary" disabled={savingRisk || !riskForm.title.trim()}>
-                  {savingRisk ? "Saving..." : editingRisk ? "Save Changes" : "Add Blocker"}
-                </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => setShowRiskModal(false)}>Cancel</button>
-              </div>
-            </form>
+                {!clientEditMode && (
+                  <label className="ms-label">
+                    <span>Blocking Task</span>
+                    <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
+                      <option value="">— Not task-specific —</option>
+                      {tasks.filter((t) => t.status !== "completed").map((t) => (
+                        <option key={t.id} value={t.id}>{t.title}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <div style={{ display: "grid", gridTemplateColumns: clientEditMode ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>
+                  {!clientEditMode && (
+                    <label className="ms-label">
+                      <span>Severity</span>
+                      <select className="ms-input" value={riskForm.severity} onChange={(e) => setRiskForm({ ...riskForm, severity: e.target.value })}>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="critical">Critical</option>
+                      </select>
+                    </label>
+                  )}
+                  <label className="ms-label">
+                    <span>Status</span>
+                    <select className="ms-input" value={riskForm.status} onChange={(e) => setRiskForm({ ...riskForm, status: e.target.value })}>
+                      <option value="open">Open</option>
+                      <option value="mitigated">Mitigated</option>
+                      <option value="closed">Closed</option>
+                    </select>
+                  </label>
+                  {!clientEditMode && (
+                    <label className="ms-label">
+                      <span>Owner</span>
+                      <select className="ms-input" value={ownerValue} onChange={(e) => handleOwnerChange(e.target.value)}>
+                        <option value="">Unassigned</option>
+                        <optgroup label="PF Staff">
+                          {users.map((u) => <option key={u.id} value={`user:${u.id}`}>{u.name ?? u.email}</option>)}
+                        </optgroup>
+                        {customerSideContacts.length > 0 && (
+                          <optgroup label="Customer Contacts">
+                            {customerSideContacts.map((c) => <option key={c.id} value={`contact:${c.id}`}>{c.name}</option>)}
+                          </optgroup>
+                        )}
+                        {partnerSideContacts.length > 0 && (
+                          <optgroup label="Partner / Provider Contacts">
+                            {partnerSideContacts.map((c) => <option key={c.id} value={`contact:${c.id}`}>{c.name}</option>)}
+                          </optgroup>
+                        )}
+                      </select>
+                    </label>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
+                  <button type="submit" className="ms-btn-primary" disabled={savingRisk || !riskForm.title.trim()}>
+                    {savingRisk ? "Saving..." : editingRisk ? "Save Changes" : "Add Blocker"}
+                  </button>
+                  <button type="button" className="ms-btn-secondary" onClick={() => setShowRiskModal(false)}>Cancel</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Solution-type removal cleanup confirm ─────────────────────────── */}
+      {solutionCleanup && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSolutionCleanup(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 500 }}>
+            <h2>Clean up tagged tasks?</h2>
+            <p style={{ color: "#475569", margin: "12px 0 8px", fontSize: 13 }}>
+              Removing {solutionCleanup.removed.map((t) => SOLUTION_TYPE_LABELS[t]).join(", ")} from this project's solution types.
+            </p>
+            <p style={{ color: "#475569", margin: "0 0 16px", fontSize: 13 }}>
+              {solutionCleanup.deleteCount > 0 && <><strong>{solutionCleanup.deleteCount}</strong> task{solutionCleanup.deleteCount === 1 ? " is" : "s are"} tagged only with the removed type{solutionCleanup.removed.length === 1 ? "" : "s"} — they'll be <strong>deleted</strong>.</>}
+              {solutionCleanup.deleteCount > 0 && solutionCleanup.retagCount > 0 && <br />}
+              {solutionCleanup.retagCount > 0 && <><strong>{solutionCleanup.retagCount}</strong> task{solutionCleanup.retagCount === 1 ? "" : "s"} carry combo tags (e.g. [UCaaS+CCaaS]) — they'll be <strong>re-tagged</strong> with the surviving type{editSolutionTypes.length === 1 ? "" : "s"}.</>}
+            </p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="ms-btn-ghost" onClick={() => setSolutionCleanup(null)} disabled={savingTech}>Cancel</button>
+              <button className="ms-btn-secondary" onClick={() => persistEditTech(false)} disabled={savingTech}>
+                Skip cleanup
+              </button>
+              <button className="ms-btn-primary" onClick={() => persistEditTech(true)} disabled={savingTech}>
+                {savingTech ? "Saving…" : "Save and clean up"}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2864,32 +3196,9 @@ export default function ProjectDetailPage() {
         </div>
       )}
 
-      {/* Apply Template Confirm */}
-      {showApplyConfirm && selectedTemplateId && (() => {
-        const tmpl = templateList.find((t) => t.id === selectedTemplateId);
-        return (
-          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowApplyConfirm(false); }}>
-            <div className="ms-modal" style={{ maxWidth: 440 }}>
-              <h2>Apply Template</h2>
-              <p style={{ color: "#475569", margin: "12px 0 20px" }}>
-                This will add <strong>{tmpl?.phase_count ?? "?"} phases</strong> and{" "}
-                <strong>{tmpl?.task_count ?? "?"} tasks</strong> from{" "}
-                <strong style={{ color: "#1e293b" }}>{tmpl?.name}</strong> to this project. Continue?
-              </p>
-              <div style={{ display: "flex", gap: 10 }}>
-                <button
-                  className="ms-btn-primary"
-                  disabled={applyingTemplate}
-                  onClick={handleApplyTemplate}
-                >
-                  {applyingTemplate ? "Applying..." : "Apply Template"}
-                </button>
-                <button className="ms-btn-secondary" onClick={() => setShowApplyConfirm(false)}>Cancel</button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
+      {/* Project-level Apply-Template confirm modal retired with the
+          Project Settings card. Phase-scoped template apply lives in
+          components/project/PhasesPanel.tsx → ApplyTemplateModal. */}
 
     </div>
   );

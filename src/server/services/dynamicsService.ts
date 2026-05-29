@@ -223,6 +223,42 @@ export async function searchAccounts(env: Env, query: string): Promise<DynamicsA
   return data.value ?? [];
 }
 
+// Create a D365 Account. Used by the New Solution flow when the SA can't
+// find the customer in CRM — they create one inline rather than tabbing out
+// to D365. statecode is omitted; D365 defaults new accounts to 0=Active.
+// Prefer: return=representation makes D365 echo the created row back so we
+// can hand it straight to the picker (no follow-up GET needed).
+// ownerSystemUserId is required — accounts created without an owner default
+// to the app-reg's service-principal user, which leaves the account unowned
+// from a sales-pipeline perspective. The SA picks the PF AE who'll own the
+// account from a D365-sourced AE list in the UI.
+// providerAeName/providerAeEmail land in PacketFusion's custom text fields
+// cr495_provideraename / cr495_provideraeemail on the account entity. These
+// mirror onto the new solution's partner_ae_name/email so downstream sales +
+// SOW signing know who the vendor-side counterpart is.
+export async function createAccount(
+  env: Env,
+  payload: {
+    name: string;
+    emailaddress1: string;
+    websiteurl?: string | null;
+    ownerSystemUserId: string;
+    providerAeName?: string | null;
+    providerAeEmail?: string | null;
+  },
+): Promise<DynamicsAccount> {
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    emailaddress1: payload.emailaddress1,
+    "ownerid@odata.bind": `/systemusers(${payload.ownerSystemUserId})`,
+  };
+  if (payload.websiteurl) body.websiteurl = payload.websiteurl;
+  if (payload.providerAeName)  body.cr495_provideraename  = payload.providerAeName;
+  if (payload.providerAeEmail) body.cr495_provideraeemail = payload.providerAeEmail;
+  const raw = await dynamicsPost<DynamicsAccount>(env, "/accounts", body, { prefer: "return=representation" });
+  return raw;
+}
+
 export async function getAccountContacts(env: Env, accountId: string): Promise<DynamicsContact[]> {
   if (!isConfigured(env)) return [];
 
@@ -400,11 +436,59 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
   return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email, address_city, address_state };
 }
 
-export async function getAccountOpportunities(env: Env, accountId: string): Promise<DynamicsOpportunity[]> {
+// Patch an existing D365 Opportunity. Used by syncOpportunityFromSolution
+// (lib/teamUtils) to push vendor / type / revenue-source / deal-reg-id onto
+// the bound opp every time a solution row changes. Caller is responsible
+// for shaping `patch` — including any `@odata.bind` lookup keys.
+export async function updateOpportunity(
+  env: Env,
+  opportunityId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await dynamicsPatch(env, `/opportunities(${opportunityId})`, patch);
+}
+
+// Create a D365 Opportunity tied to an account. Used by the New Solution
+// flow when the SA can't find an existing opportunity to bind the solution
+// to — they create one inline and we hand the new row back to the picker.
+// statecode is omitted; D365 defaults new opportunities to 0=Open.
+// parentaccountid is what our getAccountOpportunities() filters on, so the
+// new opp is immediately visible to subsequent picker fetches; we also set
+// customerid_account because some D365 configs require it on create.
+// pfi_sowhours / pfi_solutionarchitect intentionally left blank — those get
+// populated downstream as the solution progresses (per product direction).
+export async function createOpportunity(
+  env: Env,
+  payload: { name: string; parentAccountId: string },
+): Promise<DynamicsOpportunity> {
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    "parentaccountid@odata.bind":    `/accounts(${payload.parentAccountId})`,
+    "customerid_account@odata.bind": `/accounts(${payload.parentAccountId})`,
+  };
+  const raw = await dynamicsPost<DynamicsOpportunity>(env, "/opportunities", body, { prefer: "return=representation" });
+  return raw;
+}
+
+export async function getAccountOpportunities(
+  env: Env,
+  accountId: string,
+  opts: { allowedStates?: number[] } = {},
+): Promise<DynamicsOpportunity[]> {
   if (!isConfigured(env)) return [];
 
   const select = "opportunityid,name,estimatedclosedate,statecode";
-  const filter = `_parentaccountid_value eq ${accountId}`;
+  // D365 opportunity statecode: 0 = Open, 1 = Won, 2 = Lost. The solution
+  // creation flow wants Open + Won (implementation often kicks off right
+  // after a deal is marked Won and the SA still needs to bind a solution
+  // to it); the projects page wants no filter so a pinned opp's name still
+  // renders even after it's been lost.
+  const filterParts = [`_parentaccountid_value eq ${accountId}`];
+  if (opts.allowedStates && opts.allowedStates.length > 0) {
+    const stateFilter = opts.allowedStates.map((s) => `statecode eq ${s}`).join(" or ");
+    filterParts.push(`(${stateFilter})`);
+  }
+  const filter = filterParts.join(" and ");
   const path = `/opportunities?$select=${select}&$filter=${filter}&$top=50&$orderby=name asc`;
 
   const data = await dynamicsGet<{ value: DynamicsOpportunity[] }>(env, path);
@@ -885,7 +969,9 @@ export async function getPortalContact(env: Env, email: string): Promise<PortalC
   const escaped = email.toLowerCase().replace(/'/g, "''");
   const select = "contactid,firstname,lastname,emailaddress1,vtx_portaluser,amc_allowcaseopening,_parentcustomerid_value";
   const filter = `emailaddress1 eq '${escaped}' and vtx_portaluser eq true`;
-  const path = `/contacts?$select=${select}&$filter=${filter}&$top=1`;
+  // Encode the filter so user-controlled chars (+, &, #, spaces) survive the URL — `+` in a
+  // query string decodes to a space, which silently turns a real email into a non-match.
+  const path = `/contacts?$select=${select}&$filter=${encodeURIComponent(filter)}&$top=1`;
 
   try {
     const data = await dynamicsGetAnnotated<{ value: RawPortalContact[] }>(env, path);
@@ -1081,4 +1167,16 @@ export async function createTimeEntry(env: Env, input: CreateTimeEntryInput): Pr
     body["amc_company_amc_timeentry@odata.bind"] = `/accounts(${input.companyId})`;
   }
   return dynamicsCreate(env, "/amc_timeentries", body);
+}
+
+// Transitions an amc_timeentry from Open (statecode=0, statuscode=1) to
+// Completed (statecode=1, statuscode=2). Payroll's downstream sync keys off
+// Completed entries — Open ones get treated as in-flight and confuse the
+// integration. Called right after createTimeEntry so every entry we push
+// lands in a payroll-ready state on the first round-trip.
+export async function closeTimeEntry(env: Env, entryId: string): Promise<void> {
+  await dynamicsPatch(env, `/amc_timeentries(${entryId})`, {
+    statecode: 1,
+    statuscode: 2,
+  });
 }

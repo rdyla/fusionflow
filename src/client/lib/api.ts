@@ -63,6 +63,9 @@ export type User = {
   is_support_supervisor?: number;
   is_project_resource?: number;
   avatar_url?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  scheduler_url?: string | null;
   dynamics_account_id?: string | null;
   manager_id?: string | null;
   zoom_user_id?: string | null;
@@ -70,7 +73,20 @@ export type User = {
   cs_permission?: "none" | "user" | "power_user";
 };
 
-// Re-exported from the shared canonical source so every call site lines up
+export type MyProfile = {
+  id: string;
+  email: string;
+  role: string;
+  organization_name: string | null;
+  name: string | null;
+  title: string | null;
+  phone: string | null;
+  scheduler_url: string | null;
+  avatar_url: string | null;
+  has_custom_avatar: boolean;
+};
+
+// Re-exported from the shared canonical source so every call phase lines up
 // with the same enum used across the app.
 import type { SolutionType, OtherTechnology } from "../../shared/solutionTypes";
 import type { AddOn } from "../../shared/sowAddOns";
@@ -110,6 +126,9 @@ export type Solution = {
   name: string;
   customer_name: string;
   dynamics_account_id: string | null;
+  /** D365 opportunity id (statecode=0 at creation time). Required on new
+   *  solutions; nullable here to keep legacy pre-migration rows representable. */
+  crm_opportunity_id: string | null;
   vendor: SolutionVendor;
   solution_types: SolutionType[];
   other_technologies: OtherTechnology[];
@@ -123,6 +142,10 @@ export type Solution = {
   handoff_notes: string | null;
   phd_data: string | null;
   sow_data: string | null;
+  /** JSON blob: { msa_date?, revisions[] }. Mutated only via the SOW
+   *  metadata endpoints — `generateSowVersion` appends a revision and
+   *  `updateSowMetadata` patches the msa_date. */
+  sow_metadata: string | null;
   gap_analysis: string | null;
   linked_project_id: string | null;
   customer_id: string | null;
@@ -136,6 +159,19 @@ export type Solution = {
    *  Customer Agreement instead of the Packet Fusion MSA. Required for SLED
    *  and other Zoom-reseller-channel deals. */
   is_zoom_reseller: number;
+  /** 1 when the CRM account was created via the inline "Create new account
+   *  in CRM" form during this solution's New Solution flow (vs. picked from
+   *  existing CRM search). Drives am_revenuesource = New Logo on the bound
+   *  D365 opportunity. */
+  is_new_logo: number;
+  /** Partner deal-registration id (Zoom / RC vendor portal). Free text,
+   *  always editable on the solution detail page. Synced to D365 opportunity
+   *  field cr495_dealregistrationid on every PATCH. */
+  deal_registration_id: string | null;
+  /** When the customer's existing cloud contract expires (drives the
+   *  renewal-window conversation). ISO YYYY-MM-DD. Maps to
+   *  am_cloudcontractexpiration on the bound D365 opportunity. */
+  cloud_contract_expiration_date: string | null;
   // SOW pricing
   add_ons: AddOn[];
   blended_rate: number;
@@ -175,6 +211,14 @@ export type SPFile = {
   downloadUrl: string | null;
   isFolder: boolean;
   mimeType: string | null;
+  description: string | null;
+  /** SharePoint createdDateTime — when the file first landed in SP. */
+  createdAt: string | null;
+  /** Display name of the SP identity that created the item. With app-only
+   *  auth that's typically the app's name (e.g. "FusionFlow"); we surface
+   *  it anyway so users have at least a "by what process" hint. */
+  createdByName: string | null;
+  modifiedByName: string | null;
 };
 
 export type DashboardSummaryResponse = {
@@ -186,10 +230,10 @@ export type DashboardSummaryResponse = {
     openBlockers: number;
   };
   projects: Project[];
-  projectPhases: { project_id: string; name: string; status: string; sort_order: number }[];
+  projectStages: { project_id: string; name: string; status: string; sort_order: number }[];
   openTasks: DashboardTask[];
   openBlockers: DashboardRisk[];
-  phaseDistribution: { phase_name: string; count: number }[];
+  stageDistribution: { stage_name: string; count: number }[];
   vendorDistribution: { label: string; count: number }[];
   typeDistribution: { label: string; count: number }[];
   aeDistribution: { id: string | null; label: string; count: number }[];
@@ -219,11 +263,35 @@ export type Project = {
   has_optimization: number | null;
   customer_pf_ae_name: string | null;
   customer_pf_ae_email: string | null;
+  customer_pf_ae_phone: string | null;
+  customer_pf_ae_scheduler_url: string | null;
   customer_pf_sa_name: string | null;
   customer_pf_sa_email: string | null;
+  customer_pf_sa_phone: string | null;
+  customer_pf_sa_scheduler_url: string | null;
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
+  customer_pf_csm_phone: string | null;
+  customer_pf_csm_scheduler_url: string | null;
+  pm_email?: string | null;
+  pm_phone?: string | null;
+  pm_scheduler_url?: string | null;
   customer_sharepoint_url: string | null;
+  /** Project's own SharePoint folder URL — a subfolder under the customer's
+   *  sharepoint_url created on project insert (best-effort). NULL on projects
+   *  created before this feature, or when folder creation failed. The
+   *  SharePoint tab uses this URL as its root when present. */
+  sharepoint_folder_url: string | null;
+  // Recurring status-meeting cadence (drives "Next call" on the Dashboard when
+  // no closer milestone meeting is on the calendar). Persisted across all six
+  // status_meeting_* columns on the projects table; null on either side means
+  // no recurring cadence is configured.
+  status_meeting_title: string | null;
+  status_meeting_dow: number | null;          // 0 = Sun … 6 = Sat
+  status_meeting_time_local: string | null;   // "HH:MM"
+  status_meeting_timezone: string | null;     // IANA tz (e.g. "America/Los_Angeles")
+  status_meeting_duration_min: number | null;
+  status_meeting_join_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -250,8 +318,8 @@ export type ZoomRecordingFile = {
 export type ZoomRecording = {
   id: string;
   project_id: string;
-  phase_id: string | null;
-  phase_name: string | null;
+  stage_id: string | null;
+  stage_name: string | null;
   task_id: string | null;
   task_name: string | null;
   meeting_id: string;
@@ -276,8 +344,8 @@ export type ZoomRecordingSuggestion = {
   recording_files: ZoomRecordingFile[];
   recording_password: string | null;
   share_url: string | null;
-  suggested_phase_id: string | null;
-  suggested_phase_name: string | null;
+  suggested_stage_id: string | null;
+  suggested_stage_name: string | null;
   match_reason: string | null;
 };
 
@@ -516,7 +584,7 @@ export type SolutionContact = {
   added_at: string;
 };
 
-export type Phase = {
+export type Stage = {
   id: string;
   project_id: string;
   name: string;
@@ -526,12 +594,16 @@ export type Phase = {
   actual_start: string | null;
   actual_end: string | null;
   status: string | null;
+  /** Which deployment phase this stage belongs to. NULL = shared
+   *  (project-level Initiate on multi-phase projects). The Tasks +
+   *  Timeline tabs use this for per-phase filtering. */
+  phase_id: string | null;
 };
 
 /** Preview shape returned by GET /projects/:id/cascade/preview. */
 export type CascadeAffectedTask = {
   id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   due_date: string | null;
   scheduled_start: string | null;
@@ -553,7 +625,7 @@ export type CascadePreview = {
 export type Task = {
   id: string;
   project_id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   assignee_user_id: string | null;
   /** Optional non-user assignee (currently the porting coordinator for
@@ -569,6 +641,14 @@ export type Task = {
   pay_code_id: string | null;
   cost_code_id: string | null;
   crm_time_entry_id: string | null;
+  /** When set, the task is treated as a meeting (kickoff / design review /
+   *  go-live / etc.); the stakeholder view's "Next call" picks the earliest
+   *  upcoming task with a join URL. */
+  meeting_join_url: string | null;
+  /** Canonical go-live event flag (mirrors template_tasks.is_go_live_event
+   *  from migration 0081, carried into tasks by migration 0095). When set,
+   *  the task's due_date drives projects.target_go_live_date. */
+  is_go_live_event: number | null;
 };
 
 export type TimeEntrySetup = {
@@ -601,13 +681,14 @@ export type Risk = {
   severity: string | null;
   status: string | null;
   owner_user_id: string | null;
+  owner_contact_id: string | null;
   task_id: string | null;
 };
 
 export type Document = {
   id: string;
   project_id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   task_id: string | null;
   name: string;
   content_type: string | null;
@@ -765,6 +846,8 @@ export type ProjectStaffMember = {
   staff_role: string;
   name: string | null;
   email: string;
+  phone: string | null;
+  scheduler_url: string | null;
   role: string;
   avatar_url: string | null;
   organization_name: string | null;
@@ -965,7 +1048,7 @@ export type UtilizationSnapshot = {
 export type TemplateTask = {
   id: string;
   template_id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   priority: string | null;
   order_index: number;
@@ -979,12 +1062,12 @@ export type TemplateTask = {
   is_go_live_event?: number;
 };
 
-export type TemplatePhase = {
+export type TemplateStage = {
   id: string;
   template_id: string;
   name: string;
   order_index: number;
-  /** Workdays the phase takes; drives the Timeline Builder date math. */
+  /** Workdays the stage takes; drives the Timeline Builder date math. */
   working_days: number;
   tasks: TemplateTask[];
 };
@@ -994,9 +1077,9 @@ export type Template = {
   name: string;
   solution_type: string | null;
   description: string | null;
-  phase_count?: number;
+  stage_count?: number;
   task_count?: number;
-  phases?: TemplatePhase[];
+  stages?: TemplateStage[];
   created_at: string;
   updated_at: string;
 };
@@ -1022,6 +1105,146 @@ export type FeatureRequest = {
   updated_at: string;
 };
 
+// ── Multi-phase model ─────────────────────────────────────────────────────────
+export type Phase = {
+  id: string;
+  project_id: string;
+  name: string;
+  target_go_live_date: string | null;
+  display_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+// ── Stakeholder Dashboard ────────────────────────────────────────────────────
+export type StakeholderHealth = "on_track" | "at_risk" | "off_track";
+
+export type TeamMember = {
+  id: string;
+  name: string | null;
+  email: string;
+  title: string | null;
+  phone: string | null;
+  scheduler_url: string | null;
+  avatar_url: string | null;
+};
+
+export type StakeholderSummary = {
+  project: {
+    id: string;
+    name: string;
+    customer_name: string | null;
+    customer_id: string | null;
+    crm_case_id: string | null;
+    updated_at: string | null;
+  };
+  stats: {
+    overall_complete_pct: number;
+    tasks: { total: number; done: number; in_progress: number; not_started: number };
+    blockers: { total: number; critical: number };
+    days_to_final_go_live: number | null;
+    target_go_live_date: string | null;
+    next_call: {
+      scheduled_at: string;
+      title: string;
+      join_url: string | null;
+      source: "milestone" | "status";
+    } | null;
+    site_count: number;
+  };
+  /** Deployment phases inside the project (Libraries / Treatment / HQ-style).
+   *  Empty array means this project is single-phase and the UI hides the
+   *  Phases row entirely. */
+  phases: Array<{
+    id: string;
+    name: string;
+    target_go_live_date: string | null;
+    completion_pct: number;
+    task_count: number;
+    done_count: number;
+    days_left: number | null;
+    health: StakeholderHealth;
+  }>;
+  open_tasks: Array<{
+    id: string;
+    title: string;
+    due_date: string | null;
+    priority: string | null;
+    phase_id: string | null;
+    phase_name: string | null;
+    assignee_name: string | null;
+    is_meeting: boolean;
+  }>;
+  assignee_breakdown: Array<{
+    user_id: string;
+    name: string;
+    /** Open-task counts keyed by phase_id. Shared-stage tasks (Initiate)
+     *  surface separately under `shared`. Single-phase projects use only
+     *  `total`. */
+    counts: Record<string, number>;
+    shared: number;
+    total: number;
+  }>;
+  /** Per-assignee × stage-name pivot for the "By assignee" table on the
+   *  Open Tasks panel. Stage names are rolled up across phases so multi-
+   *  phase projects show one "Plan" column instead of one per phase. */
+  assignee_stage_breakdown: {
+    stage_columns: string[];
+    rows: Array<{
+      user_id: string;
+      name: string;
+      counts: Record<string, number>;
+      total: number;
+    }>;
+  };
+  blockers: Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    severity: string | null;
+    status: string | null;
+    owner_name: string | null;
+  }>;
+  key_updates: Array<{
+    id: string;
+    kind: "note" | "document";
+    body: string;
+    author_name: string | null;
+    created_at: string;
+  }>;
+  team: {
+    pm: TeamMember | null;
+    engineers: TeamMember[];
+    primary_contact: { name: string; email: string | null; job_title: string | null } | null;
+    partner_ae: TeamMember | null;
+  };
+  links: {
+    sharepoint_url: string | null;
+    crm_case_id: string | null;
+    timeline_url: string;
+    next_call_join_url: string | null;
+  };
+  /** Stage-progress sliders shown on the dashboard. One entry per
+   *  "column" — shared first (Initiate on multi-phase projects), then one
+   *  per phase in display order. Single-phase projects have one entry with
+   *  `phase_id = null` containing all stages. */
+  stage_progress: Array<{
+    phase_id: string | null;
+    phase_name: string | null;
+    stages: Array<{
+      id: string;
+      name: string;
+      sort_order: number | null;
+      status: string | null;
+      planned_start: string | null;
+      planned_end: string | null;
+      total_tasks: number;
+      done_tasks: number;
+      pct: number;
+    }>;
+  }>;
+};
+
 export const api = {
   me: () => request<MeResponse>("/me"),
   systemStatus: () => request<SystemStatusResponse>("/status"),
@@ -1035,7 +1258,7 @@ export const api = {
     if (params.priority) q.set("priority", params.priority);
     if (params.search)   q.set("search",   params.search);
     if (params.page)     q.set("page",     String(params.page));
-    return request<{ items: (Task & { project_name: string; phase_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
+    return request<{ items: (Task & { project_name: string; stage_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
   },
   projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string }) => {
     const qs = new URLSearchParams();
@@ -1046,14 +1269,14 @@ export const api = {
   },
   project: (id: string) => request<Project>(`/projects/${id}`),
 
-  phases: (projectId: string) => request<Phase[]>(`/projects/${projectId}/phases`),
+  stages: (projectId: string) => request<Stage[]>(`/projects/${projectId}/stages`),
   tasks: (projectId: string) => request<Task[]>(`/projects/${projectId}/tasks`),
   risks: (projectId: string) => request<Risk[]>(`/projects/${projectId}/risks`),
   notes: (projectId: string) => request<Note[]>(`/projects/${projectId}/notes`),
 
-  updatePhase: (
+  updateStage: (
     projectId: string,
-    phaseId: string,
+    stageId: string,
     payload: {
       status?: "not_started" | "in_progress" | "completed";
       planned_start?: string | null;
@@ -1062,12 +1285,12 @@ export const api = {
       actual_end?: string | null;
     }
   ) =>
-    request<Phase>(`/projects/${projectId}/phases/${phaseId}`, {
+    request<Stage>(`/projects/${projectId}/stages/${stageId}`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
 
-  createPhase: (
+  createStage: (
     projectId: string,
     payload: {
       name: string;
@@ -1076,27 +1299,66 @@ export const api = {
       status?: "not_started" | "in_progress" | "completed";
     }
   ) =>
-    request<Phase>(`/projects/${projectId}/phases`, {
+    request<Stage>(`/projects/${projectId}/stages`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
 
-  /** Delete a phase and its dependents:
-   *   - tasks within the phase: DELETED
-   *   - milestones within the phase: DELETED
-   *   - documents tied to the phase: orphaned to project level (phase_id = NULL)
-   *   - zoom_recordings: phase_id set to NULL via FK */
-  deletePhase: (projectId: string, phaseId: string) =>
-    request<{ success: boolean }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
+  /** Delete a stage and its dependents:
+   *   - tasks within the stage: DELETED
+   *   - milestones within the stage: DELETED
+   *   - documents tied to the stage: orphaned to project level (stage_id = NULL)
+   *   - zoom_recordings: stage_id set to NULL via FK */
+  deleteStage: (projectId: string, stageId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/stages/${stageId}`, { method: "DELETE" }),
 
   searchDynamicsAccounts: (q: string) =>
     request<DynamicsAccount[]>(`/dynamics/accounts?q=${encodeURIComponent(q)}`),
 
+  /** Create a new D365 Account. SA + admin only on the server. Returns the
+   *  created account in the same shape as a search result so the caller can
+   *  drop it straight into the customer picker. owner_systemuserid is the
+   *  D365 systemuserid of the PF AE who owns the new account (required — D365
+   *  defaults the owner to our app-reg's service principal otherwise). */
+  createDynamicsAccount: (payload: {
+    name: string;
+    emailaddress1: string;
+    websiteurl?: string;
+    owner_systemuserid: string;
+    /** Provider (partner) AE name + email — land in cr495_provideraename /
+     *  cr495_provideraeemail on the D365 account. Optional. */
+    provider_ae_name?: string;
+    provider_ae_email?: string;
+  }) =>
+    request<DynamicsAccount>("/dynamics/accounts", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  /** Live list of PF AEs (D365 systemusers filtered by title). Used by the
+   *  inline create-account form to populate the AE owner dropdown. */
+  getDynamicsAEs: () => request<DynamicsUser[]>("/dynamics/staff/account-executives"),
+
+  /** Create a new D365 Opportunity bound to an account. SA + admin only.
+   *  Minimal payload — name + account; pfi_sowhours and
+   *  pfi_solutionarchitect get populated downstream as the solution
+   *  progresses. Returns the new row so the caller can push it straight
+   *  into the picker. */
+  createDynamicsOpportunity: (payload: { name: string; parent_account_id: string }) =>
+    request<DynamicsOpportunity>("/dynamics/opportunities", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
 
-  getDynamicsOpportunities: (accountId: string) =>
-    request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities`),
+  /** `state` defaults to "open_or_won" (statecode in 0, 1) — solution creation
+   *  binds to in-flight or recently-won deals (implementation often kicks off
+   *  right after a deal is marked Won). Pass "open" to restrict further, or
+   *  "all" to include lost opps too. */
+  getDynamicsOpportunities: (accountId: string, state: "open" | "open_or_won" | "all" = "open_or_won") =>
+    request<DynamicsOpportunity[]>(`/dynamics/accounts/${accountId}/opportunities?state=${state}`),
 
   searchDynamicsCases: (params: { accountId?: string; q?: string }) => {
     const qs = new URLSearchParams();
@@ -1137,6 +1399,15 @@ export const api = {
       solution_types?: SolutionType[];
       crm_case_id?: string | null;
       crm_opportunity_id?: string | null;
+      status_meeting_title?: string | null;
+      status_meeting_dow?: number | null;
+      status_meeting_time_local?: string | null;
+      status_meeting_timezone?: string | null;
+      status_meeting_duration_min?: number | null;
+      status_meeting_join_url?: string | null;
+      /** Bundles a solution-type-removal task cleanup with the project
+       *  update — see PATCH /:id handler in routes/projects.ts. */
+      cleanup_solution_types?: SolutionType[];
     }
   ) =>
     request<Project>(`/projects/${id}`, {
@@ -1149,9 +1420,10 @@ export const api = {
     payload: {
       title: string;
       description?: string;
-      severity?: "low" | "medium" | "high";
+      severity?: "low" | "medium" | "high" | "critical";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
+      owner_contact_id?: string | null;
       task_id?: string | null;
     }
   ) =>
@@ -1166,9 +1438,10 @@ export const api = {
     payload: {
       title?: string;
       description?: string;
-      severity?: "low" | "medium" | "high";
+      severity?: "low" | "medium" | "high" | "critical";
       status?: "open" | "mitigated" | "closed";
       owner_user_id?: string | null;
+      owner_contact_id?: string | null;
       task_id?: string | null;
     }
   ) =>
@@ -1213,7 +1486,7 @@ export const api = {
     projectId: string,
     payload: {
       title: string;
-      phase_id?: string | null;
+      stage_id?: string | null;
       assignee_user_id?: string | null;
       due_date?: string | null;
       scheduled_start?: string | null;
@@ -1232,7 +1505,7 @@ export const api = {
     taskId: string,
     payload: {
       title?: string;
-      phase_id?: string | null;
+      stage_id?: string | null;
       assignee_user_id?: string | null;
       assignee_contact_id?: string | null;
       due_date?: string | null;
@@ -1241,6 +1514,7 @@ export const api = {
       completed_at?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
+      meeting_join_url?: string | null;
     }
   ) =>
     request<Task>(`/projects/${projectId}/tasks/${taskId}`, {
@@ -1260,7 +1534,7 @@ export const api = {
     ),
 
   cascadeApply: (projectId: string, payload: { from_task_id: string; slip_days: number; exclude_task_ids?: string[] }) =>
-    request<{ tasks_shifted: number; phases_shifted: number; new_target_go_live: string | null; recipients_notified: number }>(
+    request<{ tasks_shifted: number; stages_shifted: number; new_target_go_live: string | null; recipients_notified: number }>(
       `/projects/${projectId}/cascade/apply`,
       { method: "POST", body: JSON.stringify(payload) }
     ),
@@ -1320,14 +1594,14 @@ export const api = {
     payload: {
       file: File;
       category: string;
-      phase_id?: string | null;
+      stage_id?: string | null;
       task_id?: string | null;
     }
   ): Promise<Document> => {
     const form = new FormData();
     form.append("file", payload.file);
     form.append("category", payload.category);
-    if (payload.phase_id) form.append("phase_id", payload.phase_id);
+    if (payload.stage_id) form.append("stage_id", payload.stage_id);
     if (payload.task_id) form.append("task_id", payload.task_id);
 
     const res = await fetch(`${API_BASE}/projects/${projectId}/documents`, {
@@ -1375,10 +1649,17 @@ export const api = {
     request<{ locations: SPLocation[] }>(`/sharepoint/locations?recordId=${encodeURIComponent(recordId)}`),
   spFiles: (folderUrl: string) =>
     request<{ files: SPFile[] }>(`/sharepoint/files?url=${encodeURIComponent(folderUrl)}`),
-  spUpload: async (folderUrl: string, file: File): Promise<{ file: SPFile }> => {
+  /** Upload a file to a SharePoint folder. When `projectId` is provided, the
+   *  server shadows the upload in sharepoint_uploads so the file list can
+   *  show the real uploader (Graph runs app-only, so its createdBy is the
+   *  app principal). */
+  spUpload: async (folderUrl: string, file: File, opts?: { description?: string | null; projectId?: string | null }): Promise<{ file: SPFile }> => {
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch(`${API_BASE}/sharepoint/upload?url=${encodeURIComponent(folderUrl)}`, {
+    const params = new URLSearchParams({ url: folderUrl });
+    if (opts?.description?.trim()) params.set("description", opts.description.trim());
+    if (opts?.projectId) params.set("projectId", opts.projectId);
+    const res = await fetch(`${API_BASE}/sharepoint/upload?${params.toString()}`, {
       method: "POST",
       headers: { ...getImpersonationHeaders() },
       body: form,
@@ -1392,6 +1673,23 @@ export const api = {
   },
   spDelete: (webUrl: string) =>
     request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+  /** PATCH the description on an existing SharePoint file. Used by the inline
+   *  "Edit description" UI on the SharePoint tab so PMs can backfill context
+   *  on files uploaded via SP web directly. */
+  spUpdateDescription: (webUrl: string, description: string | null) =>
+    request<{ file: SPFile }>(`/sharepoint/file/description?webUrl=${encodeURIComponent(webUrl)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ description }),
+    }),
+
+  /** Create (or adopt an existing) per-project SharePoint folder under the
+   *  customer's SP root. Idempotent — server returns the existing URL if the
+   *  folder is already wired up. Used by the "Create project folder" button
+   *  on the SharePoint tab for projects created before the auto-create. */
+  ensureProjectSharePointFolder: (projectId: string) =>
+    request<{ sharepoint_folder_url: string; reused: boolean }>(`/projects/${projectId}/sharepoint-folder`, {
+      method: "POST",
+    }),
 
   // Admin
   adminProjects: () => request<Project[]>("/admin/projects"),
@@ -1408,11 +1706,25 @@ export const api = {
   adminRunHealthScoring: () =>
     request<{ scored: number }>("/admin/run-health-scoring", { method: "POST" }),
 
+  // Stakeholder view aggregation (one round-trip for the whole page)
+  stakeholderSummary: (projectId: string) =>
+    request<StakeholderSummary>(`/projects/${projectId}/stakeholder-summary`),
+
+  // Multi-phase CRUD (Libraries / Treatment / HQ-style deployment targets)
+  phases: (projectId: string) =>
+    request<Phase[]>(`/projects/${projectId}/phases`),
+  createPhase: (projectId: string, payload: { name: string; target_go_live_date?: string | null }) =>
+    request<Phase>(`/projects/${projectId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
+  updatePhase: (projectId: string, phaseId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number }) =>
+    request<Phase>(`/projects/${projectId}/phases/${phaseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deletePhase: (projectId: string, phaseId: string) =>
+    request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
+
   // Staging → Prod promotion (prod-only; staging worker returns 503)
   adminStagingInventory: () =>
     request<{
       solutions: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; needs_assessment_count: number; labor_estimate_count: number; contact_count: number; already_on_prod: boolean }>;
-      projects: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; phase_count: number; task_count: number; risk_count: number; document_count: number; already_on_prod: boolean }>;
+      projects: Array<{ id: string; name: string; customer_name: string | null; vendor: string | null; status: string | null; created_at: string; stage_count: number; task_count: number; risk_count: number; document_count: number; already_on_prod: boolean }>;
       optimize_accounts: Array<{ id: string; project_id: string; project_name: string; customer_name: string | null; graduated_at: string; impact_assessment_count: number; tech_stack_count: number; roadmap_count: number; utilization_count: number; already_on_prod: boolean }>;
     }>("/admin/staging/inventory"),
 
@@ -1489,7 +1801,10 @@ export const api = {
   createSolution: (payload: {
     customer_name: string;
     customer_id?: string;
-    dynamics_account_id?: string;
+    /** D365 account id — now required server-side. */
+    dynamics_account_id: string;
+    /** D365 opportunity id scoped to dynamics_account_id — now required. */
+    crm_opportunity_id: string;
     vendor?: SolutionVendor;
     solution_types?: SolutionType[];
     other_technologies?: OtherTechnology[];
@@ -1500,6 +1815,10 @@ export const api = {
     partner_ae_user_id?: string;
     partner_ae_name?: string;
     partner_ae_email?: string;
+    /** Set true when the SA used the inline "Create new account in CRM"
+     *  affordance — drives am_revenuesource=New Logo on the bound D365
+     *  opportunity. Defaults to false (Installed Base) server-side. */
+    is_new_logo?: boolean;
   }) =>
     request<Solution>("/solutions", {
       method: "POST",
@@ -1512,6 +1831,7 @@ export const api = {
       name: string;
       customer_name: string;
       dynamics_account_id: string | null;
+      crm_opportunity_id: string | null;
       vendor: SolutionVendor;
       solution_types: SolutionType[];
       other_technologies: OtherTechnology[];
@@ -1535,6 +1855,10 @@ export const api = {
       basic_inputs: UcaasBasicInputs | null;
       is_budgetary: number;
       is_zoom_reseller: number;
+      /** Partner deal-registration id — synced to D365 cr495_dealregistrationid. */
+      deal_registration_id: string | null;
+      /** Cloud contract expiration — synced to D365 am_cloudcontractexpiration. */
+      cloud_contract_expiration_date: string | null;
       /** If a solution_types update would orphan needs_assessments / labor_estimates rows
        *  for removed types, the server returns 409 unless this flag is set. The client
        *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */
@@ -1548,6 +1872,28 @@ export const api = {
 
   deleteSolution: (id: string) =>
     request<{ success: boolean }>(`/solutions/${id}`, { method: "DELETE" }),
+
+  /** Snapshot the current SOW as a new version (V1, V2, ...). Captures the
+   *  current user as the author. Optional note becomes the "Description"
+   *  column in the cover page's revision-history table. */
+  generateSowVersion: (id: string, payload: { note?: string | null }) =>
+    request<{
+      sow_metadata: { msa_date?: string | null; revisions: Array<{ version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null }> };
+      new_revision: { version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null };
+    }>(`/solutions/${id}/sow-version`, { method: "POST", body: JSON.stringify(payload) }),
+
+  /** Update SOW cover-page metadata (msa_date, target_go_live_date,
+   *  duration_band, custom_weeks). Doesn't touch revisions — those are
+   *  append-only via generateSowVersion. */
+  updateSowMetadata: (id: string, payload: {
+    msa_date?: string | null;
+    target_go_live_date?: string | null;
+    duration_band?: "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | null;
+    custom_weeks?: number | null;
+  }) =>
+    request<{ sow_metadata: { msa_date?: string | null; target_go_live_date?: string | null; duration_band?: string | null; custom_weeks?: number | null; revisions: unknown[] } }>(
+      `/solutions/${id}/sow-metadata`, { method: "PATCH", body: JSON.stringify(payload) }
+    ),
 
   createProjectFromSolution: (id: string) =>
     request<Project>(`/solutions/${id}/create-project`, { method: "POST" }),
@@ -1753,15 +2099,15 @@ export const api = {
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings`),
   zoomSyncRecordings: (projectId: string) =>
     request<{ suggestions: ZoomRecordingSuggestion[]; already_linked: ZoomRecording[] }>(`/projects/${projectId}/zoom/recordings/sync`, { method: "POST" }),
-  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; phase_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; recording_password?: string | null; share_url?: string | null; match_reason: string | null }[]) =>
+  zoomConfirmRecordings: (projectId: string, confirmations: { meeting_id: string; stage_id: string | null; task_id?: string | null; topic: string; start_time: string; duration_mins: number; host_email: string | null; recording_files: ZoomRecordingFile[]; recording_password?: string | null; share_url?: string | null; match_reason: string | null }[]) =>
     request<ZoomRecording[]>(`/projects/${projectId}/zoom/recordings/confirm`, {
       method: "POST",
       body: JSON.stringify({ confirmations }),
     }),
-  zoomReassignRecording: (projectId: string, recordingId: string, phase_id: string | null, task_id?: string | null) =>
+  zoomReassignRecording: (projectId: string, recordingId: string, stage_id: string | null, task_id?: string | null) =>
     request<ZoomRecording>(`/projects/${projectId}/zoom/recordings/${recordingId}`, {
       method: "PATCH",
-      body: JSON.stringify({ phase_id, task_id }),
+      body: JSON.stringify({ stage_id, task_id }),
     }),
   zoomDeleteRecording: (projectId: string, recordingId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/recordings/${recordingId}`, { method: "DELETE" }),
@@ -1808,7 +2154,7 @@ export const api = {
 
   // ── Templates ────────────────────────────────────────────────────────────────
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
-  /** Fetch one template with its phases + tasks. PM-accessible (for Timeline Builder). */
+  /** Fetch one template with its stages + tasks. PM-accessible (for Timeline Builder). */
   template: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminTemplates: () => request<Template[]>("/admin/templates"),
   adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
@@ -1818,21 +2164,35 @@ export const api = {
     request<Template>(`/admin/templates/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   adminDeleteTemplate: (id: string) =>
     request<{ success: boolean }>(`/admin/templates/${id}`, { method: "DELETE" }),
-  adminAddTemplatePhase: (templateId: string, payload: { name: string; order_index: number }) =>
-    request<TemplatePhase>(`/admin/templates/${templateId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
-  adminDeleteTemplatePhase: (templateId: string, phaseId: string) =>
-    request<{ success: boolean }>(`/admin/templates/${templateId}/phases/${phaseId}`, { method: "DELETE" }),
-  adminAddTemplateTask: (templateId: string, payload: { title: string; priority?: string; phase_id?: string; order_index?: number }) =>
+  adminAddTemplateStage: (templateId: string, payload: { name: string; order_index: number }) =>
+    request<TemplateStage>(`/admin/templates/${templateId}/stages`, { method: "POST", body: JSON.stringify(payload) }),
+  adminDeleteTemplateStage: (templateId: string, stageId: string) =>
+    request<{ success: boolean }>(`/admin/templates/${templateId}/stages/${stageId}`, { method: "DELETE" }),
+  adminAddTemplateTask: (templateId: string, payload: { title: string; priority?: string; stage_id?: string; order_index?: number }) =>
     request<TemplateTask>(`/admin/templates/${templateId}/tasks`, { method: "POST", body: JSON.stringify(payload) }),
   adminDeleteTemplateTask: (templateId: string, taskId: string) =>
     request<{ success: boolean }>(`/admin/templates/${templateId}/tasks/${taskId}`, { method: "DELETE" }),
-  applyTemplate: (projectId: string, templateId: string) =>
-    request<{ phases_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
+  /**
+   * Apply a template to a project, optionally scoped to a specific phase
+   * (so e.g. the ZCC template can land under the "Zoom Contact Center" phase
+   * without colliding with the "Zoom Phone" phase's same-named stages).
+   *
+   * When `targetGoLiveDate` (YYYY-MM-DD) is provided, the server uses the
+   * same workday math the Timeline Builder uses to chain stage dates
+   * backward from the go-live and stamp each new task with its stage's
+   * window for scheduled_start / scheduled_end / due_date.
+   */
+  applyTemplate: (projectId: string, templateId: string, phaseId?: string | null, targetGoLiveDate?: string | null) =>
+    request<{ stages_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
-      body: JSON.stringify({ template_id: templateId }),
+      body: JSON.stringify({
+        template_id: templateId,
+        phase_id: phaseId ?? null,
+        target_go_live_date: targetGoLiveDate ?? null,
+      }),
     }),
-  applyTimeline: (projectId: string, payload: { phases: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string }> }> }) =>
-    request<{ phases_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
+  applyTimeline: (projectId: string, payload: { phase_id?: string | null; stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string; isGoLiveEvent?: boolean }> }> }) =>
+    request<{ stages_created: number; tasks_created: number }>(`/projects/${projectId}/apply-timeline`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
@@ -1954,6 +2314,38 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ vendor }),
     }),
+
+  // ── Self-service profile ─────────────────────────────────────────────────────
+  getMyProfile: () => request<MyProfile>("/me/profile"),
+  updateMyProfile: (payload: {
+    name?: string;
+    title?: string | null;
+    phone?: string | null;
+    scheduler_url?: string | null;
+  }) =>
+    request<{ ok: true }>("/me/profile", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  uploadMyAvatar: async (file: File): Promise<{ avatar_url: string }> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE}/me/avatar`, {
+      method: "POST",
+      body: form,
+      headers: { ...getImpersonationHeaders() },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null) as Record<string, unknown> | null;
+      const message = (typeof body?.error === "string" ? body.error : null)
+        ?? (typeof body?.message === "string" ? body.message : null)
+        ?? `API error: ${res.status}`;
+      throw new ApiError(res.status, message, body);
+    }
+    return res.json();
+  },
+  deleteMyAvatar: () =>
+    request<{ ok: true }>("/me/avatar", { method: "DELETE" }),
 };
 
 // ── Meeting prep types ─────────────────────────────────────────────────────
@@ -1971,6 +2363,10 @@ export type MeetingPrepSendRecord = {
   /** True if the rendered HTML body was persisted (sends from before the
    *  body_html column was added will be false). */
   hasBody?: boolean;
+  /** For per-phase sends (UAT / go_live on multi-phase projects). NULL on
+   *  project-wide sends and on single-phase projects. */
+  phaseId?: string | null;
+  phaseName?: string | null;
 };
 
 export type MeetingPrepOptions = {
@@ -1997,6 +2393,10 @@ export type MeetingPrepOptions = {
   };
   /** Past sends of this meeting type for this project, newest first. */
   history: MeetingPrepSendRecord[];
+  /** Deployment phases for this project. Empty on single-phase projects.
+   *  Only meaningful for UAT / go-live meeting types — the UI shows a
+   *  required phase picker for those types when this array has entries. */
+  phases: Array<{ id: string; name: string }>;
 };
 
 export type MeetingPrepDraft = {
@@ -2004,6 +2404,9 @@ export type MeetingPrepDraft = {
   /** Optional per-send label distinguishing multiple sends of the same type
    *  (e.g. "Network Architecture" / "Call Flows" for split discoveries). */
   label?: string | null;
+  /** For UAT / go-live on multi-phase projects: scope this send to a phase.
+   *  Server folds the phase name into the subject's label suffix. */
+  phaseId?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */
   kickoffMeetingUrl?: string | null;
   /** Kickoff-specific. Other meeting types ignore. */

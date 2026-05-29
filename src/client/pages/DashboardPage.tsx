@@ -67,13 +67,12 @@ const VENDOR_LABELS: Record<string, string> = {
   tbd:         "TBD",
 };
 
-const PHASE_STATUS_COLOR: Record<string, string> = {
-  completed:   "#059669",
+const PROJECT_STATUS_COLOR: Record<string, string> = {
+  completed: "#059669",
   in_progress: "#0891b2",
-  not_started: "#475569",
-  blocked:     "#d13438",
+  not_started: "#94a3b8",
+  blocked: "#d13438",
 };
-
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(d: string | null) {
@@ -175,39 +174,18 @@ function DonutChart({
   );
 }
 
-type PhaseEntry = { project_id: string; name: string; status: string; sort_order: number };
+type StageEntry = { project_id: string; name: string; status: string; sort_order: number };
 
-function PhaseFlowIndicator({ phases }: { phases: PhaseEntry[] }) {
-  if (!phases || phases.length === 0) return <span style={{ color: "#64748b", fontSize: 11 }}>—</span>;
-  const sorted = [...phases].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  return (
-    <div style={{ display: "flex", alignItems: "center" }}>
-      {sorted.map((phase, i) => {
-        const status = phase.status || "not_started";
-        const color = PHASE_STATUS_COLOR[status] ?? "#475569";
-        const isActive = status === "in_progress";
-        const prevDone = i > 0 && sorted[i - 1].status === "completed";
-        return (
-          <div key={phase.name + i} style={{ display: "flex", alignItems: "center" }}>
-            {i > 0 && <div style={{ width: 5, height: 2, background: prevDone ? "#107c10" : "#475569", flexShrink: 0 }} />}
-            <div
-              title={`${phase.name} — ${status.replace(/_/g, " ")}`}
-              style={{
-                width: isActive ? 13 : 10,
-                height: isActive ? 13 : 10,
-                borderRadius: "50%",
-                background: status === "not_started" ? "#475569" : color,
-                border: `1.5px solid ${status === "not_started" ? "#64748b" : color}`,
-                boxShadow: isActive ? `0 0 0 2.5px ${color}55` : "none",
-                flexShrink: 0,
-                cursor: "default",
-              }}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
+/** Return the "current stage" label for a project — the in_progress stage
+ *  with the highest sort_order. Multi-phase projects may have the same
+ *  stage name repeated per phase; using max sort_order picks the latest
+ *  position in the lifecycle even when a phase is ahead of another. */
+function currentStageName(stages: StageEntry[] | undefined): string {
+  if (!stages || stages.length === 0) return "—";
+  const inProgress = stages.filter((s) => s.status === "in_progress");
+  if (inProgress.length === 0) return "—";
+  const latest = inProgress.reduce((a, b) => ((a.sort_order ?? 0) >= (b.sort_order ?? 0) ? a : b));
+  return latest.name;
 }
 
 function MetricCard({
@@ -259,7 +237,7 @@ function MetricCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-type MyTask = Task & { project_name: string; phase_name: string | null; assignee_name: string | null };
+type MyTask = Task & { project_name: string; stage_name: string | null; assignee_name: string | null };
 
 const STATUS_FILTER_OPTIONS = [
   { value: "all",         label: "All Open"     },
@@ -369,10 +347,10 @@ export default function DashboardPage() {
     return <div style={{ padding: 40, color: "#64748b" }}>Loading...</div>;
   }
 
-  const { user, summary, projects, projectPhases, openBlockers, phaseDistribution, vendorDistribution, typeDistribution, aeDistribution, isSalesLeader } = data;
+  const { user, summary, projects, projectStages, openBlockers, stageDistribution, vendorDistribution, typeDistribution, aeDistribution, isSalesLeader } = data;
 
-  // Build a map from project_id → sorted phases
-  const phasesByProject = projectPhases.reduce<Record<string, PhaseEntry[]>>((acc, ph) => {
+  // Build a map from project_id → sorted stages
+  const stagesByProject = projectStages.reduce<Record<string, StageEntry[]>>((acc, ph) => {
     if (!acc[ph.project_id]) acc[ph.project_id] = [];
     acc[ph.project_id].push(ph);
     return acc;
@@ -429,7 +407,7 @@ export default function DashboardPage() {
         <div className="ms-section-card">
           <div className="ms-section-title">By Stage</div>
           <DonutChart
-            data={phaseDistribution.map((d) => ({ label: d.phase_name, count: d.count }))}
+            data={stageDistribution.map((d) => ({ label: d.stage_name, count: d.count }))}
             fallbackColors={PHASE_COLORS}
             centerLabel="projects"
           />
@@ -478,7 +456,7 @@ export default function DashboardPage() {
         <table className="ms-table">
           <thead>
             <tr>
-              {["Project", "Customer", "Provider / Tech", "Phases", "Health"].map((h) => (
+              {["Project", "Customer", "Provider / Tech", "Status", "Current Stage", "Health"].map((h) => (
                 <th key={h}>{h}</th>
               ))}
             </tr>
@@ -486,7 +464,7 @@ export default function DashboardPage() {
           <tbody>
             {projects.length === 0 && (
               <tr>
-                <td colSpan={5} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
+                <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
                   No projects yet.
                 </td>
               </tr>
@@ -529,7 +507,12 @@ export default function DashboardPage() {
                     ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
                   </td>
                   <td>
-                    <PhaseFlowIndicator phases={phasesByProject[p.id] ?? []} />
+                    {p.status ? (
+                      <Badge label={humanize(p.status)} color={PROJECT_STATUS_COLOR[p.status] ?? "#94a3b8"} style={{ textTransform: "none" }} />
+                    ) : <span style={{ color: "#94a3b8", fontSize: 12 }}>—</span>}
+                  </td>
+                  <td style={{ fontSize: 13, color: isCompleted ? "#94a3b8" : "#334155" }}>
+                    {currentStageName(stagesByProject[p.id])}
                   </td>
                   <td>
                     <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -646,7 +629,7 @@ export default function DashboardPage() {
                         <Link to={`/projects/${t.project_id}`} style={{ color: "#63c1ea", textDecoration: "none" }}>
                           {t.project_name}
                         </Link>
-                        {t.phase_name && <span>· {t.phase_name}</span>}
+                        {t.stage_name && <span>· {t.stage_name}</span>}
                         {t.assignee_name && <span>· {t.assignee_name}</span>}
                         {t.due_date && (
                           <span style={{ color: isOverdue ? "#d13438" : "#94a3b8", fontWeight: isOverdue ? 600 : 400 }}>

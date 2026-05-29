@@ -9,8 +9,49 @@ import { sendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
+import { ensureSharePointChildFolder, getSharePointLocations } from "../services/graphService";
+
+/**
+ * Resolve a customer's SharePoint root URL, looking it up from Dynamics doc
+ * locations on the fly and caching to customers.sharepoint_url when it's
+ * not already set. Customers auto-created via CRM linking (project POST
+ * with dynamics_account_id) don't get sharepoint_url populated at insert
+ * time, so this fills the gap so per-project folder creation works
+ * end-to-end without manual customer-record edits.
+ *
+ * Returns null when both: customer.sharepoint_url is empty AND no Dynamics
+ * doc location is linked to the customer's CRM account.
+ */
+async function resolveCustomerSharePointUrl(
+  env: Bindings,
+  db: D1Database,
+  customerId: string
+): Promise<string | null> {
+  const customer = await db
+    .prepare("SELECT sharepoint_url, crm_account_id FROM customers WHERE id = ? LIMIT 1")
+    .bind(customerId)
+    .first<{ sharepoint_url: string | null; crm_account_id: string | null }>();
+  if (!customer) return null;
+  if (customer.sharepoint_url) return customer.sharepoint_url;
+  if (!customer.crm_account_id) return null;
+
+  try {
+    const locations = await getSharePointLocations(env, customer.crm_account_id);
+    const first = locations[0]?.absoluteUrl;
+    if (!first) return null;
+    await db
+      .prepare("UPDATE customers SET sharepoint_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(first, customerId)
+      .run();
+    return first;
+  } catch (err) {
+    console.warn(`[resolveCustomerSharePointUrl] Dynamics lookup failed for customer ${customerId}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
 import { findOrCreatePfUser } from "../lib/crmUsers";
-import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, buildTaggedTitle, parseTaggedTitle, type SolutionType } from "../../shared/solutionTypes";
+import { syncStageStatus, syncProjectStatus, syncProjectGoLiveDate } from "../lib/teamUtils";
 import { canonicalizeVendor } from "../../shared/vendors";
 import { getDemoVendor } from "../lib/appSettings";
 
@@ -105,12 +146,13 @@ app.get("/:id", async (c) => {
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
+             p.sharepoint_folder_url,
              p.created_at, p.updated_at,
-             pmu.email AS pm_email,
+             pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,
-             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
-             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
-             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email, cpu1.phone AS customer_pf_ae_phone, cpu1.scheduler_url AS customer_pf_ae_scheduler_url,
+             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email, cpu2.phone AS customer_pf_sa_phone, cpu2.scheduler_url AS customer_pf_sa_scheduler_url,
+             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email, cpu3.phone AS customer_pf_csm_phone, cpu3.scheduler_url AS customer_pf_csm_scheduler_url,
              c.sharepoint_url AS customer_sharepoint_url,
              CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = p.id) THEN 1 ELSE 0 END AS has_optimization
       FROM projects p
@@ -210,16 +252,54 @@ app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .bind(projectId, name, customer_name ?? null, customer_id ?? null, vendor ?? null, serializeSolutionTypes(solution_types), kickoff_date ?? null, target_go_live_date ?? null, pm_user_id, dynamics_account_id ?? null, crm_case_id ?? null)
     .run();
 
+  // Every project owns at least one deployment phase. Single-phase projects
+  // operate entirely on this default; multi-phase projects add more rows via
+  // the Phases panel. Created here so the PM never has to manually seed it
+  // before applying a template.
+  await db
+    .prepare(
+      `INSERT INTO phases (id, project_id, name, target_go_live_date, display_order)
+       VALUES (?, ?, 'Main', ?, 0)`
+    )
+    .bind(`phase-${projectId}`, projectId, target_go_live_date ?? null)
+    .run();
+
+  // Best-effort: create the project's SharePoint subfolder under the customer's
+  // SP root. resolveCustomerSharePointUrl lazily backfills the customer's
+  // sharepoint_url from Dynamics doc locations if it isn't set yet — most
+  // customers get a default SP location on CRM provisioning, so this should
+  // succeed on the first try without manual customer-record edits. Failures
+  // log and continue; PM can retry from the SharePoint tab.
+  if (customer_id) {
+    try {
+      const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, customer_id);
+      if (customerSpUrl) {
+        const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, name);
+        if (folder.webUrl) {
+          await db
+            .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
+            .bind(folder.webUrl, projectId)
+            .run();
+        }
+      }
+    } catch (err) {
+      console.warn(`[projects.create] SharePoint folder creation failed for ${projectId}:`, err instanceof Error ? err.message : err);
+    }
+  }
+
   const created = await db
-    .prepare("SELECT id, name, customer_name, vendor, solution_types, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT id, name, customer_name, vendor, solution_types, status, health, kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id, customer_id, sharepoint_folder_url, created_at, updated_at FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
     .first();
 
   return c.json(created ? normalizeSolutionTypesField(created) : null, 201);
 });
 
+// Project status is auto-derived from stages + open blockers — see
+// teamUtils.syncProjectStatus, fired from routes/tasks.ts and routes/risks.ts
+// on any task or blocker write. PMs can't set it manually anymore
+// (May-2026); a `status` field in the payload is silently dropped by zod.
 const updateProjectSchema = z.object({
-  status: z.enum(["not_started", "in_progress", "blocked", "complete"]).optional(),
   health: z.string().min(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),
@@ -231,6 +311,20 @@ const updateProjectSchema = z.object({
   managed_in_asana: z.number().int().min(0).max(1).optional(),
   crm_case_id: z.string().nullable().optional(),
   crm_opportunity_id: z.string().nullable().optional(),
+  // Recurring status-meeting cadence (drives "Next call" on the stakeholder view).
+  // dow uses 0=Sun … 6=Sat; time_local is "HH:MM" in status_meeting_timezone.
+  status_meeting_title: z.string().max(255).nullable().optional(),
+  status_meeting_dow: z.number().int().min(0).max(6).nullable().optional(),
+  status_meeting_time_local: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  status_meeting_timezone: z.string().max(64).nullable().optional(),
+  status_meeting_duration_min: z.number().int().min(5).max(480).nullable().optional(),
+  status_meeting_join_url: z.string().max(2000).nullable().optional(),
+  /** When a PM removes one or more solution_types from a combo project,
+   *  setting this list also cleans up tasks tagged with those types via
+   *  buildTaggedTitle. Tasks whose only types are in the cleanup list get
+   *  deleted; tasks with overlapping types get re-tagged with the
+   *  surviving types. Stages and stage-level dates are unaffected. */
+  cleanup_solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
 });
 
 app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
@@ -255,7 +349,7 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .bind(projectId)
     .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null }>();
 
-  const { clear_health_override, ...updates } = parsed.data;
+  const { clear_health_override, cleanup_solution_types, ...updates } = parsed.data;
   const fields: string[] = [];
   const values: unknown[] = [];
 
@@ -314,6 +408,38 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
     )
     .bind(...values, projectId)
     .run();
+
+  // Solution-type cleanup — runs after the project UPDATE so the project's
+  // canonical solution_types is already what the PM picked. Tasks whose
+  // only tagged types are in the cleanup list get deleted; tasks with
+  // surviving types are re-tagged.
+  if (cleanup_solution_types && cleanup_solution_types.length > 0) {
+    const removed = new Set<SolutionType>(cleanup_solution_types);
+    const taskRows = await db
+      .prepare("SELECT id, stage_id, title FROM tasks WHERE project_id = ?")
+      .bind(projectId)
+      .all<{ id: string; stage_id: string | null; title: string }>();
+    const stageIdsTouched = new Set<string>();
+    for (const t of (taskRows.results ?? [])) {
+      const parsed = parseTaggedTitle(t.title);
+      if (parsed.types.length === 0) continue; // no recognized tag → leave alone
+      const surviving = parsed.types.filter((tp) => !removed.has(tp));
+      if (surviving.length === 0) {
+        await db.prepare("DELETE FROM tasks WHERE id = ?").bind(t.id).run();
+        if (t.stage_id) stageIdsTouched.add(t.stage_id);
+      } else if (surviving.length !== parsed.types.length) {
+        const newTitle = buildTaggedTitle(surviving, parsed.rawTitle);
+        await db.prepare("UPDATE tasks SET title = ? WHERE id = ?").bind(newTitle, t.id).run();
+      }
+    }
+    // Stages that lost their only task can flip status (e.g. completed → not_started)
+    // and the project's blocker/go-live picture may change too.
+    for (const stageId of stageIdsTouched) {
+      await syncStageStatus(db, stageId);
+    }
+    await syncProjectGoLiveDate(db, projectId);
+    await syncProjectStatus(db, projectId);
+  }
 
   const updated = await db
     .prepare("SELECT * FROM projects WHERE id = ? LIMIT 1")
@@ -419,6 +545,73 @@ app.get("/:id/case", async (c) => {
   return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities });
 });
 
+// ── SharePoint folder (retrofit for projects created before the auto-create) ─
+//
+// Creates (or adopts an existing) named subfolder for this project under the
+// customer's SP root, persists the URL on the project. Mirrors the best-effort
+// folder-create logic in the POST /projects handler but errors out loudly so
+// the PM sees what went wrong. Idempotent — clicking it twice returns the
+// already-set URL without creating a duplicate.
+
+app.post("/:id/sharepoint-folder", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  if (!(await canEditProject(db, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const project = await db
+    .prepare("SELECT name, customer_id, sharepoint_folder_url FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ name: string; customer_id: string | null; sharepoint_folder_url: string | null }>();
+  if (!project) return c.json({ error: "Project not found" }, 404);
+
+  // Already wired up — just return the existing URL so the client can hot-swap.
+  if (project.sharepoint_folder_url) {
+    return c.json({ sharepoint_folder_url: project.sharepoint_folder_url, reused: true });
+  }
+
+  // Error responses use c.json (not HTTPException) so the client toast can read
+  // the message — HTTPException defaults to text/plain and the request helper
+  // falls back to "API error: 400" which hides the real reason.
+  if (!project.customer_id) {
+    return c.json({
+      error: "Project has no linked customer. Link a customer record (CRM account) before creating a SharePoint folder.",
+    }, 400);
+  }
+  const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, project.customer_id);
+  if (!customerSpUrl) {
+    // Pull a bit of extra context so the PM can see whether it's a CRM-side
+    // gap (no doc locations on the account) vs. a missing CRM link entirely.
+    const cust = await db
+      .prepare("SELECT name, crm_account_id FROM customers WHERE id = ? LIMIT 1")
+      .bind(project.customer_id)
+      .first<{ name: string; crm_account_id: string | null }>();
+    const detail = cust?.crm_account_id
+      ? `Customer "${cust?.name}" is linked to CRM account ${cust.crm_account_id} but Dynamics returned no SharePoint document locations for it. Check that the account has a SharePoint folder set up in CRM, then retry.`
+      : `Customer "${cust?.name ?? "(unknown)"}" has no SharePoint URL set and no CRM account linked, so we can't auto-resolve one. Set sharepoint_url on the customer record, or link the customer to a CRM account, then retry.`;
+    return c.json({ error: detail }, 400);
+  }
+
+  try {
+    const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, project.name);
+    if (!folder.webUrl) {
+      return c.json({ error: "Folder created but no webUrl returned from Graph." }, 500);
+    }
+    await db
+      .prepare("UPDATE projects SET sharepoint_folder_url = ? WHERE id = ?")
+      .bind(folder.webUrl, projectId)
+      .run();
+    return c.json({ sharepoint_folder_url: folder.webUrl, reused: folder.reused });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "SharePoint folder create failed";
+    console.error(`[projects.${projectId}.sharepoint-folder]`, message);
+    return c.json({ error: `SharePoint folder create failed: ${message}` }, 500);
+  }
+});
+
 // ── Project Contacts ──────────────────────────────────────────────────────────
 
 app.get("/:id/contacts", async (c) => {
@@ -498,7 +691,7 @@ app.get("/:id/staff", async (c) => {
 
   const rows = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url, u.organization_name
+           u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps
     JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ?
@@ -523,7 +716,7 @@ app.post("/:id/staff", async (c) => {
 
   const created = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-           u.name, u.email, u.role, u.avatar_url, u.organization_name
+           u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
   `).bind(projectId, user_id, staff_role).first();
@@ -598,17 +791,17 @@ app.post("/:id/crm-sync", async (c) => {
   const [staff, updatedProject] = await Promise.all([
     db.prepare(`
       SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
-             u.name, u.email, u.role, u.avatar_url, u.organization_name
+             u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
       FROM project_staff ps JOIN users u ON u.id = ps.user_id
       WHERE ps.project_id = ?
       ORDER BY ps.staff_role, u.name
     `).bind(projectId).all(),
     db.prepare(`
-      SELECT p.*, pmu.email AS pm_email,
+      SELECT p.*, pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,
-             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email,
-             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email,
-             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email,
+             cpu1.name AS customer_pf_ae_name, cpu1.email AS customer_pf_ae_email, cpu1.phone AS customer_pf_ae_phone, cpu1.scheduler_url AS customer_pf_ae_scheduler_url,
+             cpu2.name AS customer_pf_sa_name, cpu2.email AS customer_pf_sa_email, cpu2.phone AS customer_pf_sa_phone, cpu2.scheduler_url AS customer_pf_sa_scheduler_url,
+             cpu3.name AS customer_pf_csm_name, cpu3.email AS customer_pf_csm_email, cpu3.phone AS customer_pf_csm_phone, cpu3.scheduler_url AS customer_pf_csm_scheduler_url,
              c.sharepoint_url AS customer_sharepoint_url
       FROM projects p
       LEFT JOIN users pmu ON pmu.id = p.pm_user_id

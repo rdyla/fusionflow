@@ -1,0 +1,16 @@
+-- Blockers (risks) can be assigned to a project_contact in addition to or
+-- instead of an internal user. Mirrors the tasks.assignee_contact_id pattern
+-- from migration 0070.
+--
+-- owner_user_id remains the primary owner field for PF staff assignments;
+-- owner_contact_id is the equivalent for non-user assignees (customer or
+-- partner-side project_contacts).
+--
+-- When the assigned contact corresponds to a portal-loginable customer
+-- (dynamics_contact_id matches the portal user's auth id), the server lets
+-- that customer edit the blocker's status + description. Other contacts
+-- (e.g. porting coordinator on the partner side) remain read-only.
+--
+-- ON DELETE SET NULL so removing the contact orphans the assignment rather
+-- than blocking the contact delete.
+ALTER TABLE risks ADD COLUMN owner_contact_id TEXT REFERENCES project_contacts(id) ON DELETE SET NULL;

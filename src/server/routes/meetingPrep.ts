@@ -77,22 +77,29 @@ type SendHistoryRow = {
   sent_by_user_id: string | null;
   sent_at: string;
   has_body: number;
+  phase_id: string | null;
+  site_name: string | null;
 };
 
 async function loadSendHistory(db: D1Database, projectId: string, meetingType: MeetingType) {
   const rows = await db
     .prepare(
-      `SELECT id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at,
-              CASE WHEN body_html IS NOT NULL AND body_html != '' THEN 1 ELSE 0 END AS has_body
-       FROM meeting_prep_sends
-       WHERE project_id = ? AND meeting_type = ?
-       ORDER BY sent_at DESC`
+      `SELECT m.id, m.meeting_type, m.label, m.subject, m.recipient_emails,
+              m.sent_by_user_id, m.sent_at,
+              CASE WHEN m.body_html IS NOT NULL AND m.body_html != '' THEN 1 ELSE 0 END AS has_body,
+              m.phase_id, s.name AS site_name
+       FROM meeting_prep_sends m
+       LEFT JOIN phases s ON s.id = m.phase_id
+       WHERE m.project_id = ? AND m.meeting_type = ?
+       ORDER BY m.sent_at DESC`
     )
     .bind(projectId, meetingType)
     .all<SendHistoryRow>();
   return (rows.results ?? []).map((r) => ({
     id: r.id,
     label: r.label,
+    phaseId: r.phase_id,
+    phaseName: r.site_name,
     subject: r.subject,
     sentBy: r.sent_by_user_id,
     sentAt: r.sent_at,
@@ -195,6 +202,14 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
   const { contacts, staff } = await loadRecipientCandidates(c.env.DB, project);
   const history = await loadSendHistory(c.env.DB, projectId, meetingType);
 
+  // Phases — only meaningful for uat / go_live meeting types, but always loaded
+  // so the client can decide. Empty array for single-phase projects.
+  const phasesRows = await c.env.DB
+    .prepare("SELECT id, name FROM phases WHERE project_id = ? ORDER BY display_order ASC, name ASC")
+    .bind(projectId)
+    .all<{ id: string; name: string }>();
+  const phases = phasesRows.results ?? [];
+
   // SharePoint listing is only used by the send modal, which non-editors
   // can't open. Skip the network call for read-only viewers.
   let sharepointFiles: Array<{ name: string; webUrl: string; size: number | null; mimeType: string | null }> = [];
@@ -243,6 +258,7 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
     },
     sharepoint: { folderUrl: sharepointUrl, files: sharepointFiles },
     history,
+    phases,
   });
 });
 
@@ -253,6 +269,11 @@ const draftSchema = z.object({
   // Free-form per-send label distinguishing multiple sends of the same type
   // (e.g. "Network Architecture" / "Call Flows" for split discovery sessions).
   label: z.string().max(200).nullable().optional(),
+  // For UAT + go_live on multi-phase projects: scope this send to a specific
+  // phase (Libraries UAT vs Treatment UAT etc.). The server silently ignores
+  // phaseId for meeting types other than uat/go_live so the client doesn't
+  // have to clear it on type switch.
+  phaseId: z.string().nullable().optional(),
   // Allow any string for the kickoff URL — PMs often paste shortened or
   // scheme-less Zoom links and we don't want strict URL validation to 400.
   // Kickoff-only fields; other meeting types ignore.
@@ -357,6 +378,24 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
     sections: resolvedSections,
   };
 
+  // For per-phase UAT / go-live sends, fold the phase name into the label so the
+  // subject + history line carry phase context (e.g. "UAT prep (Libraries) — …"
+  // or "UAT prep (Libraries · Stage 1 readiness) — …" if PM also typed a label).
+  let resolvedLabel = draft.label?.trim() || null;
+  if ((meetingType === "uat" || meetingType === "go_live") && draft.phaseId) {
+    // `c` is typed `any` here (legacy), so the .first() generic isn't valid —
+    // cast the result instead.
+    const phaseRow = (await c.env.DB
+      .prepare("SELECT name FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(draft.phaseId, project.id)
+      .first()) as { name: string } | null;
+    if (phaseRow?.name) {
+      resolvedLabel = resolvedLabel
+        ? `${phaseRow.name} · ${resolvedLabel}`
+        : phaseRow.name;
+    }
+  }
+
   // Kickoff has extra type-specific fields (kickoff URL/when, dates, DL email);
   // every other type takes the standard envelope shape with `label`.
   const rendererData = meetingType === "kickoff"
@@ -370,7 +409,7 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
       }
     : {
         ...commonData,
-        label: draft.label?.trim() || null,
+        label: resolvedLabel,
       };
 
   const { html, subject } = renderer(rendererData);
@@ -488,6 +527,29 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
     return c.json({ error: `Invalid draft: ${parsed.error.issues.map(i => `${i.path.join(".")}: ${i.message}`).join("; ")}` }, 400);
   }
 
+  // On multi-phase projects, UAT + go-live sends must specify which phase they
+  // belong to so the history row is meaningfully scoped (Libraries UAT vs
+  // Treatment UAT etc.). Other meeting types are project-wide.
+  if (meetingType === "uat" || meetingType === "go_live") {
+    const phaseCountRow = await c.env.DB
+      .prepare("SELECT COUNT(*) AS c FROM phases WHERE project_id = ?")
+      .bind(projectId)
+      .first<{ c: number }>();
+    const hasPhases = (phaseCountRow?.c ?? 0) > 0;
+    if (hasPhases && !parsed.data.phaseId) {
+      throw new HTTPException(400, {
+        message: `${meetingType === "uat" ? "UAT" : "Go-Live"} prep on a multi-phase project requires a phase selection.`,
+      });
+    }
+    if (parsed.data.phaseId) {
+      const phaseCheck = await c.env.DB
+        .prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1")
+        .bind(parsed.data.phaseId, projectId)
+        .first();
+      if (!phaseCheck) throw new HTTPException(400, { message: "Selected phase does not belong to this project." });
+    }
+  }
+
   let html: string;
   let subject: string;
   let recipientEmails: string[];
@@ -511,16 +573,24 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
   const sendId = crypto.randomUUID();
   const label = parsed.data.label?.trim() || null;
 
+  // phase_id only applies to per-phase meeting types (uat / go_live). For
+  // kickoff / discovery / design_review we drop it to NULL so the column is
+  // strictly meaningful where it matters.
+  const phaseIdForSend = (meetingType === "uat" || meetingType === "go_live")
+    ? (parsed.data.phaseId || null)
+    : null;
+
   await c.env.DB
     .prepare(
-      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, subject, recipient_emails, sent_by_user_id, sent_at, body_html)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO meeting_prep_sends (id, project_id, meeting_type, label, phase_id, subject, recipient_emails, sent_by_user_id, sent_at, body_html)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       sendId,
       projectId,
       meetingType,
       label,
+      phaseIdForSend,
       subject,
       JSON.stringify(recipientEmails),
       auth.user.id,

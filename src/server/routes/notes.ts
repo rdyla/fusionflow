@@ -27,6 +27,8 @@ app.get("/:id/notes", async (c) => {
 
   if (auth.role === "partner_ae") {
     sql += ` AND n.visibility IN ('partner', 'public')`;
+  } else if (auth.role === "client") {
+    sql += ` AND n.visibility = 'public'`;
   }
 
   sql += ` ORDER BY n.created_at DESC`;
@@ -54,8 +56,11 @@ app.post("/:id/notes", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const { body } = parsed.data;
-  // Partner AEs can only post partner-visible comments; enforce server-side
-  const visibility = auth.role === "partner_ae" ? "partner" : parsed.data.visibility;
+  // Partner AEs can only post partner-visible comments; clients can only post
+  // public-visible comments. Enforce server-side regardless of payload.
+  const visibility = auth.role === "partner_ae" ? "partner"
+    : auth.role === "client" ? "public"
+    : parsed.data.visibility;
 
   const noteId = crypto.randomUUID();
   await db

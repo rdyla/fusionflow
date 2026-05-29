@@ -12,7 +12,7 @@
  *       per recipient (fired via c.executionCtx.waitUntil so the response is fast)
  *
  * "Downstream" = tasks with due_date strictly after the source task's due_date.
- * Phases that own any shifted task have their planned_start / planned_end
+ * Stages that own any shifted task have their planned_start / planned_end
  * shifted by the same slip so the Gantt stays coherent. target_go_live_date
  * shifts when it is set; otherwise we leave it untouched.
  */
@@ -33,7 +33,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 type TaskRow = {
   id: string;
-  phase_id: string | null;
+  stage_id: string | null;
   title: string;
   due_date: string | null;
   scheduled_start: string | null;
@@ -41,7 +41,7 @@ type TaskRow = {
   assignee_user_id: string | null;
 };
 
-type PhaseRow = {
+type StageRow = {
   id: string;
   planned_start: string | null;
   planned_end: string | null;
@@ -82,7 +82,7 @@ async function computeAffected(
 }> {
   const fromTask = await db
     .prepare(
-      "SELECT id, phase_id, title, due_date, scheduled_start, scheduled_end, assignee_user_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1"
+      "SELECT id, stage_id, title, due_date, scheduled_start, scheduled_end, assignee_user_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1"
     )
     .bind(fromTaskId, projectId)
     .first<TaskRow>();
@@ -94,7 +94,7 @@ async function computeAffected(
   // Downstream = tasks with due_date strictly later than the source's.
   const downstream = await db
     .prepare(
-      `SELECT id, phase_id, title, due_date, scheduled_start, scheduled_end, assignee_user_id
+      `SELECT id, stage_id, title, due_date, scheduled_start, scheduled_end, assignee_user_id
        FROM tasks
        WHERE project_id = ?
          AND due_date IS NOT NULL
@@ -167,7 +167,7 @@ app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa"), async (c) =>
   const { from_task_id, slip_days, exclude_task_ids } = parsed.data;
 
   if (slip_days === 0) {
-    return c.json({ tasks_shifted: 0, phases_shifted: 0, new_target_go_live: null });
+    return c.json({ tasks_shifted: 0, stages_shifted: 0, new_target_go_live: null });
   }
 
   const excluded = new Set(exclude_task_ids);
@@ -175,7 +175,7 @@ app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa"), async (c) =>
   const { affected: allAffected } = await computeAffected(db, projectId, from_task_id, slip_days);
   const tasksToShift = allAffected.filter((t) => !excluded.has(t.id));
   if (tasksToShift.length === 0) {
-    return c.json({ tasks_shifted: 0, phases_shifted: 0, new_target_go_live: null });
+    return c.json({ tasks_shifted: 0, stages_shifted: 0, new_target_go_live: null });
   }
 
   const project = await db
@@ -185,31 +185,31 @@ app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa"), async (c) =>
   if (!project) throw new HTTPException(404, { message: "Project not found" });
   const newTargetGoLive = shiftDate(project.target_go_live_date, slip_days);
 
-  // Phases that contain at least one shifted task → shift their planned dates
+  // Stages that contain at least one shifted task → shift their planned dates
   // by the same slip so the Gantt stays coherent.
-  const affectedPhaseIds = [...new Set(tasksToShift.map((t) => t.phase_id).filter((id): id is string => !!id))];
-  const phaseRows = affectedPhaseIds.length > 0
+  const affectedStageIds = [...new Set(tasksToShift.map((t) => t.stage_id).filter((id): id is string => !!id))];
+  const stageRows = affectedStageIds.length > 0
     ? await db
-        .prepare(`SELECT id, planned_start, planned_end FROM phases WHERE project_id = ? AND id IN (${affectedPhaseIds.map(() => "?").join(",")})`)
-        .bind(projectId, ...affectedPhaseIds)
-        .all<PhaseRow>()
-    : { results: [] as PhaseRow[] };
+        .prepare(`SELECT id, planned_start, planned_end FROM stages WHERE project_id = ? AND id IN (${affectedStageIds.map(() => "?").join(",")})`)
+        .bind(projectId, ...affectedStageIds)
+        .all<StageRow>()
+    : { results: [] as StageRow[] };
 
-  const phaseUpdates = (phaseRows.results ?? []).map((p) => ({
+  const stageUpdates = (stageRows.results ?? []).map((p) => ({
     id: p.id,
     new_planned_start: shiftDate(p.planned_start, slip_days),
     new_planned_end:   shiftDate(p.planned_end, slip_days),
   }));
 
-  // Single atomic batch: task shifts + phase shifts + target go-live update.
-  // tasks + phases don't have an updated_at column in this schema (only
+  // Single atomic batch: task shifts + stage shifts + target go-live update.
+  // tasks + stages don't have an updated_at column in this schema (only
   // projects does — see migration 0001), so we don't touch one here.
   const stmts = [
     ...tasksToShift.map((t) => db
       .prepare("UPDATE tasks SET due_date = ?, scheduled_start = ?, scheduled_end = ? WHERE id = ? AND project_id = ?")
       .bind(t.new_due_date, t.new_scheduled_start, t.new_scheduled_end, t.id, projectId)),
-    ...phaseUpdates.map((p) => db
-      .prepare("UPDATE phases SET planned_start = ?, planned_end = ? WHERE id = ? AND project_id = ?")
+    ...stageUpdates.map((p) => db
+      .prepare("UPDATE stages SET planned_start = ?, planned_end = ? WHERE id = ? AND project_id = ?")
       .bind(p.new_planned_start, p.new_planned_end, p.id, projectId)),
   ];
   if (newTargetGoLive && newTargetGoLive !== project.target_go_live_date) {
@@ -287,7 +287,7 @@ app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa"), async (c) =>
 
   return c.json({
     tasks_shifted: tasksToShift.length,
-    phases_shifted: phaseUpdates.length,
+    stages_shifted: stageUpdates.length,
     new_target_go_live: newTargetGoLive,
     recipients_notified: batch.size(),
   });

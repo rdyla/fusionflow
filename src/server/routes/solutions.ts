@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
-import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
@@ -192,7 +192,15 @@ app.get("/", async (c) => {
 const createSolutionSchema = z.object({
   customer_name: z.string().min(1).max(500),
   customer_id: z.string().optional(),
-  dynamics_account_id: z.string().optional(),
+  /** D365 account id. Required: a solution must bind to a real CRM account
+   *  so account-team / opportunity / hours-compliance lookups resolve. The
+   *  client now provides a "Create new account in CRM" affordance when none
+   *  exists yet (handled in a follow-up PR). */
+  dynamics_account_id: z.string().min(1),
+  /** D365 opportunity id, scoped to dynamics_account_id. Required for the
+   *  same reason — pre-sales work without an opportunity has nowhere to
+   *  attach SOW hours, quotes, or won/lost outcomes. */
+  crm_opportunity_id: z.string().min(1),
   vendor: z.enum(["zoom", "ringcentral", "tbd"]).optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
@@ -200,6 +208,10 @@ const createSolutionSchema = z.object({
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
   partner_ae_email: z.string().email().optional().or(z.literal("")),
+  /** 1 when the CRM account was created via the inline form during this
+   *  solution-create flow (vs. picked from existing search results).
+   *  Drives am_revenuesource = New Logo on the bound opportunity. */
+  is_new_logo: z.boolean().optional(),
 });
 
 app.post("/", async (c) => {
@@ -210,8 +222,8 @@ app.post("/", async (c) => {
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const {
-    customer_name, customer_id, dynamics_account_id,
-    partner_ae_user_id, partner_ae_name, partner_ae_email,
+    customer_name, customer_id, dynamics_account_id, crm_opportunity_id,
+    partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo,
   } = parsed.data;
 
   const journeys = parsed.data.journeys ?? [];
@@ -286,16 +298,34 @@ app.post("/", async (c) => {
   await db
     .prepare(
       `INSERT INTO solutions
-         (id, name, customer_name, customer_id, dynamics_account_id, vendor, solution_types, other_technologies, journeys,
-          partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, name, customer_name, customer_id, dynamics_account_id, crm_opportunity_id, vendor, solution_types, other_technologies, journeys,
+          partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
-      id, name, customer_name, resolvedCustomerId, dynamics_account_id ?? null, vendor,
+      id, name, customer_name, resolvedCustomerId, dynamics_account_id, crm_opportunity_id, vendor,
       serializeSolutionTypes(solution_types), serializeOtherTechnologies(other_technologies), journeysJson,
-      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
+      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, is_new_logo ? 1 : 0, auth.user.id
     )
     .run();
+
+  // Mirror the resolved partner AE into solution_staff so the detail page's
+  // "Zoom AEs / Partner AEs" panel picks it up — the panel reads exclusively
+  // from solution_staff (not from solutions.partner_ae_user_id), so without
+  // this insert the freshly-picked AE appears as "No partner AEs assigned"
+  // until the SA manually re-adds them via the panel's + button.
+  if (resolvedPartnerAeUserId) {
+    await db
+      .prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, 'partner_ae')")
+      .bind(crypto.randomUUID(), id, resolvedPartnerAeUserId)
+      .run();
+  }
+
+  // Push the just-set vendor / opp-type / revenue-source onto the bound D365
+  // opportunity. Best-effort: D365 failures get logged but don't break the
+  // solution-create response. Runs after the DB row is committed so the sync
+  // helper's own SELECT sees the new state.
+  c.executionCtx.waitUntil(syncOpportunityFromSolution(c.env, db, id));
 
   const created = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(id).first();
 
@@ -342,6 +372,9 @@ const updateSolutionSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   customer_name: z.string().min(1).max(500).optional(),
   dynamics_account_id: z.string().nullable().optional(),
+  /** Allow PATCH to re-bind the linked opportunity (e.g. an SA picked the
+   *  wrong one). Nullable for legacy rows that pre-date the requirement. */
+  crm_opportunity_id: z.string().nullable().optional(),
   vendor: z.string().optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
@@ -358,6 +391,13 @@ const updateSolutionSchema = z.object({
   sow_data: z.string().nullable().optional(),
   gap_analysis: z.string().nullable().optional(),
   linked_project_id: z.string().nullable().optional(),
+  /** Partner deal-reg id (Zoom/RC vendor portal). Free text. Maps to
+   *  cr495_dealregistrationid on the bound D365 opportunity. */
+  deal_registration_id: z.string().nullable().optional(),
+  /** Cloud contract expiration date (when customer's existing cloud
+   *  contract ends — drives renewal-window planning). ISO YYYY-MM-DD.
+   *  Maps to am_cloudcontractexpiration on the bound D365 opportunity. */
+  cloud_contract_expiration_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
   pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
@@ -507,6 +547,23 @@ app.patch("/:id", async (c) => {
     await recomputeSowTotal(db, solutionId);
   }
 
+  // Resync the bound D365 opportunity whenever any field that maps onto
+  // the D365 opp could have changed. Includes the pricing path because
+  // recomputeSowTotal() above can change sow_total_amount → actualvalue
+  // + am_combinedrevenue. Helper short-circuits when no opportunity is
+  // bound and PATCHing the same values is a no-op on D365's side.
+  const synced =
+    "vendor" in updates ||
+    "is_zoom_reseller" in updates ||
+    "deal_registration_id" in updates ||
+    "cloud_contract_expiration_date" in updates ||
+    "crm_opportunity_id" in updates ||
+    "status" in updates ||
+    pricingTouched;
+  if (synced) {
+    c.executionCtx.waitUntil(syncOpportunityFromSolution(c.env, db, solutionId));
+  }
+
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
   const normalizedUpdated = updated ? normalizeSolutionRow(updated) : null;
 
@@ -521,6 +578,143 @@ app.patch("/:id", async (c) => {
   }
 
   return c.json(normalizedUpdated);
+});
+
+// ── SOW Metadata + Versioning ─────────────────────────────────────────────────
+//
+// sow_metadata is a JSON blob on the solution row: { msa_date?, revisions[] }.
+// "Generate Version" appends to revisions[]. The latest revision's `version`
+// (e.g. "V3") is the SOW's current version; the array doubles as the revision
+// history shown on the SOW cover page.
+//
+// We deliberately don't expose a full PATCH on the blob — every mutation
+// goes through one of the two endpoints below so callers can't accidentally
+// blow away revision history with a stale write.
+
+type SowRevision = {
+  version: string;
+  saved_at: string;
+  saved_by_user_id: string | null;
+  saved_by_name: string | null;
+  note?: string | null;
+};
+
+/**
+ * Duration bands drive the Key Dates table on the SOW cover. Planning &
+ * Port Order milestones scale with total project length; the other rows
+ * (Kickoff +5bd from SOW exec, UAT -1wk, Closure +1wk) stay fixed.
+ *
+ * "custom" pairs with `custom_weeks` for non-standard engagements.
+ */
+type DurationBand = "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom";
+
+type SowMetadata = {
+  msa_date?: string | null;
+  target_go_live_date?: string | null;
+  duration_band?: DurationBand | null;
+  custom_weeks?: number | null;
+  revisions: SowRevision[];
+};
+
+function readSowMetadata(blob: string | null | undefined): SowMetadata {
+  if (!blob) return { revisions: [] };
+  try {
+    const parsed = JSON.parse(blob) as Partial<SowMetadata>;
+    return {
+      msa_date: parsed.msa_date ?? null,
+      target_go_live_date: parsed.target_go_live_date ?? null,
+      duration_band: parsed.duration_band ?? null,
+      custom_weeks: parsed.custom_weeks ?? null,
+      revisions: Array.isArray(parsed.revisions) ? parsed.revisions : [],
+    };
+  } catch {
+    return { revisions: [] };
+  }
+}
+
+/** Returns the next monotonic version string. Skips no numbers — V1, V2, V3, ... */
+function nextVersion(revisions: SowRevision[]): string {
+  const max = revisions.reduce((acc, r) => {
+    const n = Number((r.version ?? "").replace(/^V/i, ""));
+    return Number.isFinite(n) && n > acc ? n : acc;
+  }, 0);
+  return `V${max + 1}`;
+}
+
+const sowVersionSchema = z.object({
+  note: z.string().max(2000).nullable().optional(),
+});
+
+app.post("/:id/sow-version", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const existing = await db
+    .prepare("SELECT id, sow_metadata FROM solutions WHERE id = ? LIMIT 1")
+    .bind(solutionId)
+    .first<{ id: string; sow_metadata: string | null }>();
+  if (!existing) throw new HTTPException(404, { message: "Solution not found" });
+
+  const parsed = sowVersionSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+
+  const meta = readSowMetadata(existing.sow_metadata);
+  const newRev: SowRevision = {
+    version: nextVersion(meta.revisions),
+    saved_at: new Date().toISOString(),
+    saved_by_user_id: auth.user.id,
+    saved_by_name: auth.user.name ?? auth.user.email,
+    note: parsed.data.note?.trim() || null,
+  };
+  meta.revisions = [...meta.revisions, newRev];
+
+  await db
+    .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(JSON.stringify(meta), solutionId)
+    .run();
+
+  return c.json({ sow_metadata: meta, new_revision: newRev });
+});
+
+const sowMetadataSchema = z.object({
+  msa_date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  target_go_live_date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  duration_band:        z.enum(["4_6_weeks", "6_8_weeks", "8_12_weeks", "custom"]).nullable().optional(),
+  custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
+});
+
+app.patch("/:id/sow-metadata", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  // Tap into the existing access path — same gate as PATCH /:id.
+  const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
+    ? await getTeamUserIds(auth.user.id, db)
+    : [auth.user.id];
+  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+  const existing = await db
+    .prepare(`SELECT s.id, s.sow_metadata FROM solutions s WHERE s.id = ? AND (${where}) LIMIT 1`)
+    .bind(solutionId, ...bindings)
+    .first<{ id: string; sow_metadata: string | null }>();
+  if (!existing) throw new HTTPException(404, { message: "Solution not found" });
+
+  const parsed = sowMetadataSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+
+  const meta = readSowMetadata(existing.sow_metadata);
+  if (parsed.data.msa_date !== undefined)             meta.msa_date = parsed.data.msa_date;
+  if (parsed.data.target_go_live_date !== undefined)  meta.target_go_live_date = parsed.data.target_go_live_date;
+  if (parsed.data.duration_band !== undefined)        meta.duration_band = parsed.data.duration_band;
+  if (parsed.data.custom_weeks !== undefined)         meta.custom_weeks = parsed.data.custom_weeks;
+
+  await db
+    .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .bind(JSON.stringify(meta), solutionId)
+    .run();
+
+  return c.json({ sow_metadata: meta });
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────────

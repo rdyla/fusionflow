@@ -278,6 +278,26 @@
       "order": 4
     },
     {
+      "id": "project_duration_band",
+      "section_id": "project_context",
+      "solution_types": [
+        "ccaas",
+        "ci",
+        "ucaas"
+      ],
+      "type": "single_select",
+      "label": "Proposed project duration",
+      "help": "Drives the SOW's Key Dates table. The Planning and Port Orders milestones scale with this; Kickoff (+5 bd) and Closure (+1 wk) stay fixed against SOW Execution and Go-Live.",
+      "required": false,
+      "order": 5,
+      "options": [
+        { "value": "4_6_weeks",  "label": "4–6 weeks" },
+        { "value": "6_8_weeks",  "label": "6–8 weeks" },
+        { "value": "8_12_weeks", "label": "8–12 weeks (standard UCaaS)" },
+        { "value": "custom",     "label": "Custom" }
+      ]
+    },
+    {
       "id": "platform_under_consideration",
       "section_id": "project_context",
       "solution_types": [

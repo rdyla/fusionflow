@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   api, type Solution, type SolutionStatus, type User, type CrmAccountTeam,
+  type DynamicsOpportunity, type DynamicsUser,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { useDemoMode } from "../lib/demoMode";
@@ -125,6 +126,7 @@ const STATUS_COLOR: Record<SolutionStatus, string> = {
 const EMPTY_FORM = {
   customer_name: "",
   dynamics_account_id: "",
+  crm_opportunity_id: "",
   journeys: [] as string[],
   ucaas_vendor: "" as "" | "zoom" | "ringcentral" | "agnostic",
   pf_ae_user_id: "",
@@ -148,6 +150,51 @@ export default function SolutionsPage() {
   const [crmSearching, setCrmSearching] = useState(false);
   const [crmTeam, setCrmTeam] = useState<CrmAccountTeam | null>(null);
   const [crmTeamLoading, setCrmTeamLoading] = useState(false);
+  // Open opportunities (statecode=0) for the selected account. Loaded lazily
+  // when an account is picked; cleared when the user re-edits the customer
+  // field. Empty list after a load means D365 returned no matches and the
+  // user needs the "Create new opportunity" affordance (added in PR 3).
+  const [opportunities, setOpportunities] = useState<DynamicsOpportunity[]>([]);
+  const [opportunitiesLoading, setOpportunitiesLoading] = useState(false);
+  // "+ Create new account in CRM" inline form. Used when the SA can't find
+  // an existing account in D365 — they fill name + email (+ optional site)
+  // and we POST to D365, then immediately bind the returned account into
+  // the picker so the rest of the New Solution flow proceeds normally.
+  const [showCreateAccount, setShowCreateAccount] = useState(false);
+  // True after the SA created the CRM account inline (vs. picked from
+  // existing search results). Drives is_new_logo on the createSolution
+  // payload; reset whenever the SA edits the customer field or picks a
+  // different account from search, so a stale "true" can't leak across
+  // an account swap mid-flow.
+  const [createdAccountInline, setCreatedAccountInline] = useState(false);
+  const [creatingAccount, setCreatingAccount] = useState(false);
+  const [newAccountForm, setNewAccountForm] = useState({
+    name: "",
+    emailaddress1: "",
+    websiteurl: "",
+    owner_systemuserid: "",
+    // Provider (partner) AE pick — same shape the main form's Vendor AE
+    // block uses. "existing" reads name/email from the picked user; "new"
+    // collects them inline (the user gets invited downstream when the
+    // solution submits).
+    provider_ae_mode: "existing" as "existing" | "new",
+    provider_ae_user_id: "",
+    provider_ae_name: "",
+    provider_ae_email: "",
+  });
+  // D365-sourced AE list for the create-account owner dropdown. Loaded the
+  // first time the SA opens the inline form and cached after that — the
+  // list rarely changes within a session and re-fetching on every reopen
+  // would add a noticeable delay to a flow that's already CRM-bound.
+  const [dynamicsAes, setDynamicsAes] = useState<DynamicsUser[]>([]);
+  const [dynamicsAesLoading, setDynamicsAesLoading] = useState(false);
+  // Inline "Create new opportunity" form — appears under the opportunity
+  // picker. Minimal: just a name input. The new opp is bound to the
+  // picked account's id via parentaccountid server-side. pfi_sowhours and
+  // pfi_solutionarchitect get filled in D365 later as the deal progresses.
+  const [showCreateOpportunity, setShowCreateOpportunity] = useState(false);
+  const [creatingOpportunity, setCreatingOpportunity] = useState(false);
+  const [newOpportunityName, setNewOpportunityName] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -182,11 +229,23 @@ export default function SolutionsPage() {
   }
 
   function selectCrmAccount(account: { id: string; name: string }) {
-    setForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.id }));
+    // Reset crm_opportunity_id on every account pick — last-selected opp from
+    // a different account has nothing to do with the new account's pipeline.
+    setForm((f) => ({ ...f, customer_name: account.name, dynamics_account_id: account.id, crm_opportunity_id: "" }));
     setCrmSearch(account.name);
     setCrmResults([]);
     setCrmTeam(null);
     setCrmTeamLoading(true);
+    setOpportunities([]);
+    // Reset the New Logo flag — picking an existing account is by definition
+    // Installed Base. handleCreateAccount sets it back to true after this
+    // call when the new account came from the inline create form.
+    setCreatedAccountInline(false);
+    setOpportunitiesLoading(true);
+    // Hide a stale create-opportunity form if the SA had it open while
+    // re-binding accounts — the new opp would point at the old account.
+    setShowCreateOpportunity(false);
+    setNewOpportunityName("");
     api.optimizeCrmAccountTeam(account.id)
       .then((team) => {
         setCrmTeam(team);
@@ -199,19 +258,172 @@ export default function SolutionsPage() {
       })
       .catch(() => setCrmTeam(null))
       .finally(() => setCrmTeamLoading(false));
+    api.getDynamicsOpportunities(account.id, "open_or_won")
+      .then(setOpportunities)
+      .catch(() => setOpportunities([]))
+      .finally(() => setOpportunitiesLoading(false));
+  }
+
+  // Open the inline "Create new account" form. We seed the name from
+  // whatever the SA was searching for so they don't have to retype it,
+  // and kick off a one-time fetch of the D365 AE list for the owner picker.
+  function openCreateAccountForm() {
+    setNewAccountForm({
+      name: crmSearch.trim(),
+      emailaddress1: "",
+      websiteurl: "",
+      owner_systemuserid: "",
+      provider_ae_mode: "existing",
+      provider_ae_user_id: "",
+      provider_ae_name: "",
+      provider_ae_email: "",
+    });
+    setShowCreateAccount(true);
+    setCrmResults([]);
+    if (dynamicsAes.length === 0 && !dynamicsAesLoading) {
+      setDynamicsAesLoading(true);
+      api.getDynamicsAEs()
+        .then(setDynamicsAes)
+        .catch(() => setDynamicsAes([]))
+        .finally(() => setDynamicsAesLoading(false));
+    }
+  }
+
+  async function handleCreateAccount(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newAccountForm.name.trim() || !newAccountForm.emailaddress1.trim()) return;
+    if (!newAccountForm.owner_systemuserid) {
+      showToast("Pick the PF AE who will own this account.", "error");
+      return;
+    }
+    // "Add New" mode without both name AND email would otherwise create the
+    // CRM account with a partially-stamped or empty provider AE pair AND
+    // silently skip seeding the main form's partner_ae_* state. The button
+    // disabled predicate also enforces this; the runtime check is the
+    // safety net (and gives a useful toast over a no-op click).
+    if (
+      newAccountForm.provider_ae_mode === "new" &&
+      (!newAccountForm.provider_ae_name.trim() || !newAccountForm.provider_ae_email.trim())
+    ) {
+      showToast("Enter both name and email for the new provider AE, or switch to Select Existing.", "error");
+      return;
+    }
+    // Auto-prepend https:// when the SA enters a bare hostname so the URL
+    // lands in D365 as a clickable link. We only touch the value if it's
+    // non-empty AND missing a scheme — leaves `http://` and `https://`
+    // inputs untouched.
+    const rawWebsite = newAccountForm.websiteurl.trim();
+    const websiteurl = rawWebsite && !/^https?:\/\//i.test(rawWebsite)
+      ? `https://${rawWebsite}`
+      : rawWebsite;
+
+    // Resolve provider AE → name + email. In "existing" mode we read both
+    // off the picked user record; in "new" mode the SA typed them in.
+    let providerName  = "";
+    let providerEmail = "";
+    let providerUserId = "";
+    if (newAccountForm.provider_ae_mode === "existing" && newAccountForm.provider_ae_user_id) {
+      const u = partnerAes.find((x) => x.id === newAccountForm.provider_ae_user_id);
+      if (u) {
+        providerName  = u.name ?? "";
+        providerEmail = u.email ?? "";
+        providerUserId = u.id;
+      }
+    } else if (newAccountForm.provider_ae_mode === "new") {
+      providerName  = newAccountForm.provider_ae_name.trim();
+      providerEmail = newAccountForm.provider_ae_email.trim();
+    }
+
+    setCreatingAccount(true);
+    try {
+      const created = await api.createDynamicsAccount({
+        name: newAccountForm.name.trim(),
+        emailaddress1: newAccountForm.emailaddress1.trim(),
+        websiteurl: websiteurl || undefined,
+        owner_systemuserid: newAccountForm.owner_systemuserid,
+        provider_ae_name:  providerName  || undefined,
+        provider_ae_email: providerEmail || undefined,
+      });
+      // Drop the new account straight into the picker as if it had been
+      // selected from search — kicks off the same team + opportunities
+      // fetches so the SA continues with the normal flow.
+      selectCrmAccount({ id: created.accountid, name: created.name });
+      // selectCrmAccount() above clears createdAccountInline (since it's
+      // also called from the search-picker path). Re-flip it back on here
+      // so the createSolution submit downstream sends is_new_logo=true.
+      setCreatedAccountInline(true);
+      // Seed the main form's Vendor AE state from what the SA just picked,
+      // so the rest of the New Solution submit carries the same partner AE
+      // into the solution row (createSolution will resolve / invite based
+      // on partner_ae_user_id or partner_ae_email).
+      if (providerUserId) {
+        setForm((f) => ({
+          ...f,
+          partner_ae_mode: "existing",
+          partner_ae_user_id: providerUserId,
+          partner_ae_name: providerName,
+          partner_ae_email: providerEmail,
+        }));
+      } else if (providerEmail) {
+        setForm((f) => ({
+          ...f,
+          partner_ae_mode: "new",
+          partner_ae_user_id: "",
+          partner_ae_name: providerName,
+          partner_ae_email: providerEmail,
+        }));
+      }
+      setShowCreateAccount(false);
+      setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" });
+      showToast(`Created ${created.name} in CRM.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create account in CRM", "error");
+    } finally {
+      setCreatingAccount(false);
+    }
+  }
+
+  async function handleCreateOpportunity() {
+    if (!form.dynamics_account_id) {
+      showToast("Pick a CRM account first.", "error");
+      return;
+    }
+    if (!newOpportunityName.trim()) return;
+    setCreatingOpportunity(true);
+    try {
+      const created = await api.createDynamicsOpportunity({
+        name: newOpportunityName.trim(),
+        parent_account_id: form.dynamics_account_id,
+      });
+      // Push the new opp into the picker list AND auto-select it so the
+      // SA doesn't have to scroll the dropdown for the row they just made.
+      setOpportunities((prev) => [created, ...prev]);
+      setForm((f) => ({ ...f, crm_opportunity_id: created.opportunityid }));
+      setShowCreateOpportunity(false);
+      setNewOpportunityName("");
+      showToast(`Created opportunity "${created.name}" in CRM.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create opportunity in CRM", "error");
+    } finally {
+      setCreatingOpportunity(false);
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!form.customer_name.trim()) return;
+    if (!form.dynamics_account_id) { showToast("Pick a CRM account.", "error"); return; }
+    if (!form.crm_opportunity_id) { showToast("Pick an opportunity from CRM.", "error"); return; }
     if (!form.journeys.length) { showToast("Select at least one journey.", "error"); return; }
     setSaving(true);
     try {
       const payload: Parameters<typeof api.createSolution>[0] = {
         customer_name: form.customer_name.trim(),
+        dynamics_account_id: form.dynamics_account_id,
+        crm_opportunity_id: form.crm_opportunity_id,
         journeys: form.journeys,
+        is_new_logo: createdAccountInline,
       };
-      if (form.dynamics_account_id) payload.dynamics_account_id = form.dynamics_account_id;
       if (form.pf_ae_user_id) payload.pf_ae_user_id = form.pf_ae_user_id;
       if (form.pf_sa_user_id) payload.pf_sa_user_id = form.pf_sa_user_id;
       if (form.pf_csm_user_id) payload.pf_csm_user_id = form.pf_csm_user_id;
@@ -367,10 +579,363 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); } }}>
-          <div className="ms-modal" style={{ maxWidth: 560 }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); setCreatedAccountInline(false); } }}>
+          <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
+
+              {/* ── Customer (CRM-bound) ── */}
+              {/* Customer field is on top because PR 2 will add a "Create new account"
+                  affordance here — if the SA can't find the account they often need
+                  to start the create flow before anything else gets filled in. */}
+              <label className="ms-label">
+                <span>Customer *</span>
+                <div style={{ position: "relative" }}>
+                  <input
+                    autoFocus
+                    className="ms-input"
+                    placeholder="Search CRM…"
+                    value={crmSearch || form.customer_name}
+                    onChange={(e) => {
+                      setCrmSearch(e.target.value);
+                      // Editing the customer field invalidates the current CRM
+                      // bindings (account, opportunity, team) — clear them all
+                      // so the SA can't accidentally submit with stale ids
+                      // attached to a different customer's name.
+                      setForm((f) => ({ ...f, customer_name: e.target.value, dynamics_account_id: "", crm_opportunity_id: "" }));
+                      setOpportunities([]);
+                      setCrmTeam(null);
+                      setCreatedAccountInline(false);
+                      handleCrmSearch(e.target.value);
+                    }}
+                    required
+                  />
+                  {(crmSearching || crmResults.length > 0) && (
+                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
+                      {crmSearching && <div style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 13 }}>Searching…</div>}
+                      {crmResults.map((r) => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer" }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.1)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
+                          onClick={() => selectCrmAccount(r)}
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {form.dynamics_account_id && (
+                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
+                )}
+                {/* "Create new account" affordance — only when no account is
+                    bound yet AND the inline form isn't already showing. We
+                    hide it once a customer is picked so the UI doesn't tempt
+                    the SA into creating a duplicate. */}
+                {!form.dynamics_account_id && !showCreateAccount && (
+                  <button
+                    type="button"
+                    onClick={openCreateAccountForm}
+                    style={{ marginTop: 6, background: "none", border: "none", color: "#63c1ea", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0, alignSelf: "flex-start" }}
+                  >
+                    + Can't find them? Create a new account in CRM
+                  </button>
+                )}
+              </label>
+
+              {/* ── Inline "Create new account in CRM" form ── */}
+              {showCreateAccount && (
+                <div
+                  // The inline form sits INSIDE the outer New Solution
+                  // <form>; without this, pressing Enter in any field
+                  // submits the outer form (which then trips its own
+                  // validation: "Pick an opportunity from CRM"). Intercept
+                  // Enter at the wrapper level so it routes to the inline
+                  // create handler instead.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateAccount(e as unknown as React.FormEvent);
+                    }
+                  }}
+                  style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new account in CRM</div>
+                  <label className="ms-label">
+                    <span>Account name *</span>
+                    <input
+                      className="ms-input"
+                      placeholder="e.g. Acme Health Systems"
+                      value={newAccountForm.name}
+                      onChange={(e) => setNewAccountForm((f) => ({ ...f, name: e.target.value }))}
+                      disabled={creatingAccount}
+                    />
+                  </label>
+                  <label className="ms-label">
+                    <span>Primary contact email *</span>
+                    <input
+                      className="ms-input"
+                      type="email"
+                      placeholder="contact@acmehealth.com"
+                      value={newAccountForm.emailaddress1}
+                      onChange={(e) => setNewAccountForm((f) => ({ ...f, emailaddress1: e.target.value }))}
+                      disabled={creatingAccount}
+                    />
+                  </label>
+                  <label className="ms-label">
+                    <span>Website</span>
+                    <input
+                      className="ms-input"
+                      // type="text" not "url" — the browser's url validator
+                      // is over-aggressive about scheme; we auto-prepend
+                      // https:// on submit and let bare hostnames through.
+                      type="text"
+                      placeholder="acmehealth.com"
+                      value={newAccountForm.websiteurl}
+                      onChange={(e) => setNewAccountForm((f) => ({ ...f, websiteurl: e.target.value }))}
+                      disabled={creatingAccount}
+                    />
+                  </label>
+                  <label className="ms-label">
+                    <span>Owner (PF AE) *</span>
+                    {dynamicsAesLoading ? (
+                      <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading AEs…</div>
+                    ) : (
+                      <select
+                        className="ms-input"
+                        value={newAccountForm.owner_systemuserid}
+                        onChange={(e) => setNewAccountForm((f) => ({ ...f, owner_systemuserid: e.target.value }))}
+                        disabled={creatingAccount}
+                      >
+                        <option value="">— Select AE —</option>
+                        {dynamicsAes.map((u) => {
+                          const fullName = [u.firstname, u.lastname].filter(Boolean).join(" ") || u.internalemailaddress || "(unnamed AE)";
+                          return (
+                            <option key={u.systemuserid} value={u.systemuserid}>{fullName}</option>
+                          );
+                        })}
+                      </select>
+                    )}
+                  </label>
+
+                  {/* Provider (vendor / partner) AE — mirrors the main form's
+                      pattern. Saving the account stamps these onto the D365
+                      account via cr495_provideraename / cr495_provideraeemail
+                      AND seeds the main form's partner_ae_* so the solution
+                      carries the same person forward. */}
+                  <label className="ms-label">
+                    <span>Provider AE</span>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      {(["existing", "new"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setNewAccountForm((f) => ({ ...f, provider_ae_mode: mode }))}
+                          disabled={creatingAccount}
+                          style={{
+                            flex: 1, padding: "5px 0", fontSize: 12, borderRadius: 4,
+                            border: `1px solid ${newAccountForm.provider_ae_mode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
+                            background: newAccountForm.provider_ae_mode === mode ? "rgba(99,193,234,0.1)" : "transparent",
+                            color: newAccountForm.provider_ae_mode === mode ? "#63c1ea" : "#94a3b8",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {mode === "existing" ? "Select Existing" : "Add New"}
+                        </button>
+                      ))}
+                    </div>
+                    {newAccountForm.provider_ae_mode === "existing" ? (
+                      <select
+                        className="ms-input"
+                        value={newAccountForm.provider_ae_user_id}
+                        onChange={(e) => setNewAccountForm((f) => ({ ...f, provider_ae_user_id: e.target.value }))}
+                        disabled={creatingAccount}
+                      >
+                        <option value="">— None —</option>
+                        {partnerAes.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <input
+                          className="ms-input"
+                          placeholder="Full name"
+                          value={newAccountForm.provider_ae_name}
+                          onChange={(e) => setNewAccountForm((f) => ({ ...f, provider_ae_name: e.target.value }))}
+                          disabled={creatingAccount}
+                        />
+                        <input
+                          className="ms-input"
+                          type="email"
+                          placeholder="ae@partner.com"
+                          value={newAccountForm.provider_ae_email}
+                          onChange={(e) => setNewAccountForm((f) => ({ ...f, provider_ae_email: e.target.value }))}
+                          disabled={creatingAccount}
+                        />
+                      </div>
+                    )}
+                  </label>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="ms-btn-primary"
+                      onClick={handleCreateAccount}
+                      disabled={
+                        creatingAccount
+                        || !newAccountForm.name.trim()
+                        || !newAccountForm.emailaddress1.trim()
+                        || !newAccountForm.owner_systemuserid
+                        || (
+                          newAccountForm.provider_ae_mode === "new" &&
+                          (!newAccountForm.provider_ae_name.trim() || !newAccountForm.provider_ae_email.trim())
+                        )
+                      }
+                    >
+                      {creatingAccount ? "Creating…" : "Create account"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ms-btn-ghost"
+                      onClick={() => { setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); }}
+                      disabled={creatingAccount}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── Opportunity (scoped to the picked account) ── */}
+              {/* Only meaningful once an account is bound. statecode in
+                  (0, 1) — Open + Won — since implementation work often
+                  kicks off right after Won. The "Create new" affordance
+                  below lets the SA spin one up inline if they can't find
+                  it; new opps stamp parentaccountid only (pfi_sowhours +
+                  pfi_solutionarchitect get filled in D365 later). */}
+              {form.dynamics_account_id && (
+                <label className="ms-label">
+                  <span>Opportunity *</span>
+                  {opportunitiesLoading ? (
+                    <div style={{ fontSize: 12, color: "#64748b", padding: "8px 0" }}>Loading opportunities…</div>
+                  ) : opportunities.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#b45309", padding: "8px 12px", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6 }}>
+                      No open or recently-won opportunities found on this account. Create one below.
+                    </div>
+                  ) : (
+                    <select
+                      className="ms-input"
+                      value={form.crm_opportunity_id}
+                      onChange={(e) => setForm((f) => ({ ...f, crm_opportunity_id: e.target.value }))}
+                      required
+                    >
+                      <option value="">— Select an opportunity —</option>
+                      {opportunities.map((o) => (
+                        <option key={o.opportunityid} value={o.opportunityid}>
+                          {o.name}
+                          {o.statecode === 1 ? " · Won" : ""}
+                          {o.estimatedclosedate ? ` · est. close ${o.estimatedclosedate.slice(0, 10)}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {!showCreateOpportunity && (
+                    <button
+                      type="button"
+                      onClick={() => { setShowCreateOpportunity(true); setNewOpportunityName(""); }}
+                      disabled={opportunitiesLoading}
+                      style={{ marginTop: 6, background: "none", border: "none", color: "#63c1ea", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: 0, alignSelf: "flex-start" }}
+                    >
+                      + Can't find it? Create a new opportunity in CRM
+                    </button>
+                  )}
+                </label>
+              )}
+
+              {/* ── Inline "Create new opportunity in CRM" form ── */}
+              {showCreateOpportunity && form.dynamics_account_id && (
+                <div
+                  // Same Enter-intercept as the create-account inline form
+                  // above — this sub-form lives inside the outer New
+                  // Solution <form>, so without this Enter on the name
+                  // input submits the outer form and short-circuits with
+                  // "Pick an opportunity from CRM" before the opp is ever
+                  // created.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateOpportunity();
+                    }
+                  }}
+                  style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new opportunity in CRM</div>
+                  <label className="ms-label">
+                    <span>Opportunity name *</span>
+                    <input
+                      className="ms-input"
+                      placeholder="e.g. Acme Health — Zoom UCaaS 2026"
+                      value={newOpportunityName}
+                      onChange={(e) => setNewOpportunityName(e.target.value)}
+                      disabled={creatingOpportunity}
+                    />
+                  </label>
+                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                    Bound to <strong>{form.customer_name}</strong>. SOW hours and Solution Architect populate later as the solution progresses.
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      className="ms-btn-primary"
+                      onClick={handleCreateOpportunity}
+                      disabled={creatingOpportunity || !newOpportunityName.trim()}
+                    >
+                      {creatingOpportunity ? "Creating…" : "Create opportunity"}
+                    </button>
+                    <button
+                      type="button"
+                      className="ms-btn-ghost"
+                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); }}
+                      disabled={creatingOpportunity}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* ── CRM team suggestion ── */}
+              {(crmTeamLoading || crmTeam) && (
+                <div style={{ padding: "10px 14px", background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 8 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad", marginBottom: 8 }}>From CRM</div>
+                  {crmTeamLoading ? (
+                    <div style={{ fontSize: 12, color: "#64748b" }}>Loading team…</div>
+                  ) : crmTeam && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+                      {[
+                        { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
+                        { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
+                        { label: "CSM", name: crmTeam.csm_name, email: crmTeam.csm_email },
+                      ].map(({ label, name, email }) => (
+                        <div key={label}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
+                          {name ? (
+                            <>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{name}</div>
+                              {email && <div style={{ fontSize: 11, color: "#64748b" }}>{email}</div>}
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* ── Journey Picker ── */}
               <div className="ms-label">
@@ -460,75 +1025,6 @@ export default function SolutionsPage() {
                 )}
               </div>
 
-              {/* Customer — CRM lookup or manual */}
-              <label className="ms-label">
-                <span>Customer *</span>
-                <div style={{ position: "relative" }}>
-                  <input
-                    autoFocus
-                    className="ms-input"
-                    placeholder="Search CRM or enter name…"
-                    value={crmSearch || form.customer_name}
-                    onChange={(e) => {
-                      setCrmSearch(e.target.value);
-                      setForm((f) => ({ ...f, customer_name: e.target.value, dynamics_account_id: "" }));
-                      handleCrmSearch(e.target.value);
-                    }}
-                    required
-                  />
-                  {(crmSearching || crmResults.length > 0) && (
-                    <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50, background: "#1a2f4a", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 4, maxHeight: 180, overflowY: "auto", marginTop: 2 }}>
-                      {crmSearching && <div style={{ padding: "10px 14px", color: "#94a3b8", fontSize: 13 }}>Searching…</div>}
-                      {crmResults.map((r) => (
-                        <button
-                          key={r.id}
-                          type="button"
-                          style={{ width: "100%", textAlign: "left", padding: "9px 14px", background: "none", border: "none", color: "rgba(255,255,255,0.85)", fontSize: 13, cursor: "pointer" }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(99,193,234,0.1)"; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.background = "none"; }}
-                          onClick={() => selectCrmAccount(r)}
-                        >
-                          {r.name}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                {form.dynamics_account_id && (
-                  <div style={{ fontSize: 11, color: "#63c1ea", marginTop: 4 }}>✓ Linked to CRM</div>
-                )}
-              </label>
-
-              {/* CRM team suggestion */}
-              {(crmTeamLoading || crmTeam) && (
-                <div style={{ padding: "10px 14px", background: "rgba(11,154,173,0.06)", border: "1px solid rgba(11,154,173,0.2)", borderRadius: 8 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad", marginBottom: 8 }}>From CRM</div>
-                  {crmTeamLoading ? (
-                    <div style={{ fontSize: 12, color: "#64748b" }}>Loading team…</div>
-                  ) : crmTeam && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
-                      {[
-                        { label: "AE", name: crmTeam.ae_name, email: crmTeam.ae_email },
-                        { label: "SA", name: crmTeam.sa_name, email: crmTeam.sa_email },
-                        { label: "CSM", name: crmTeam.csm_name, email: crmTeam.csm_email },
-                      ].map(({ label, name, email }) => (
-                        <div key={label}>
-                          <div style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{label}</div>
-                          {name ? (
-                            <>
-                              <div style={{ fontSize: 12, fontWeight: 600, color: "#1e293b" }}>{name}</div>
-                              {email && <div style={{ fontSize: 11, color: "#64748b" }}>{email}</div>}
-                            </>
-                          ) : (
-                            <div style={{ fontSize: 12, color: "#94a3b8" }}>—</div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
                 {/* PF AE — hidden when CRM team is loaded */}
                 {!crmTeam && (
@@ -611,10 +1107,26 @@ export default function SolutionsPage() {
 
 
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button type="submit" className="ms-btn-primary" disabled={saving || !form.customer_name.trim()}>
+                <button
+                  type="submit"
+                  className="ms-btn-primary"
+                  disabled={
+                    saving ||
+                    !form.customer_name.trim() ||
+                    !form.dynamics_account_id ||
+                    !form.crm_opportunity_id ||
+                    form.journeys.length === 0
+                  }
+                  title={
+                    !form.dynamics_account_id ? "Pick a CRM account first" :
+                    !form.crm_opportunity_id ? "Pick an opportunity from CRM" :
+                    form.journeys.length === 0 ? "Select at least one journey" :
+                    undefined
+                  }
+                >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); setCreatedAccountInline(false); }}>
                   Cancel
                 </button>
               </div>

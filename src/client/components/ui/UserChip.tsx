@@ -91,8 +91,25 @@ export function UserChip({ user, popout = "up", compact = false }: { user: User;
             )}
           </div>
 
-          {/* Sign out */}
+          {/* Menu */}
           <div style={{ padding: "6px 8px" }}>
+            <a
+              href="/profile"
+              style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "9px 10px", borderRadius: 6,
+                fontSize: 13, fontWeight: 500, color: "#1e293b",
+                textDecoration: "none", cursor: "pointer", transition: "background 0.12s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = "#f1f5f9")}
+              onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 16, height: 16, color: "#64748b", flexShrink: 0 }}>
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+              My Profile
+            </a>
             <a
               href="/api/auth/logout"
               style={{

@@ -1,7 +1,9 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
+import { requireRole } from "../middleware/requireRole";
+import { createAccount, createOpportunity, searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -23,6 +25,83 @@ app.get("/accounts", async (c) => {
   }
 });
 
+// POST /api/dynamics/accounts — create a new D365 account from the New
+// Solution flow. SA + admin only (mirrors who can create solutions).
+// Returns the created account in the same shape as searchAccounts so the
+// client can drop it straight into the customer picker.
+const createAccountSchema = z.object({
+  name: z.string().min(1).max(160),
+  emailaddress1: z.string().email().max(100),
+  // D365 stores websiteurl as plain text up to 200 chars — no URL-shape
+  // enforcement on their end. We deliberately don't run z.url() here either
+  // because the client auto-prepends https:// for bare hostnames, and any
+  // stricter check would just bounce legitimate input ("acme.co/contact"
+  // etc.). Length cap is the only guard.
+  websiteurl: z.string().max(200).optional().or(z.literal("")),
+  /** D365 systemuserid of the PF AE who will own this account. Required —
+   *  without it the account ends up owned by the app-reg service principal
+   *  and disappears from AE pipelines. */
+  owner_systemuserid: z.string().min(1),
+  /** Provider (partner) AE name + email — land in cr495_provideraename /
+   *  cr495_provideraeemail on the D365 account. Optional but typically set:
+   *  the inline form makes the SA pick an existing partner_ae user or invite
+   *  a new one, and the resolved name/email flows through. */
+  provider_ae_name:  z.string().max(160).optional().or(z.literal("")),
+  provider_ae_email: z.string().email().max(100).optional().or(z.literal("")),
+});
+app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
+  const parsed = createAccountSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    // Surface Zod issues to the client so future field-level bugs show
+    // up in the UI toast instead of just "Invalid request body".
+    const firstIssue = parsed.error.issues[0];
+    const detail = firstIssue ? `${firstIssue.path.join(".")}: ${firstIssue.message}` : "Invalid request body";
+    throw new HTTPException(400, { message: detail });
+  }
+  const { name, emailaddress1, websiteurl, owner_systemuserid, provider_ae_name, provider_ae_email } = parsed.data;
+
+  try {
+    const account = await createAccount(c.env, {
+      name,
+      emailaddress1,
+      websiteurl: websiteurl || null,
+      ownerSystemUserId: owner_systemuserid,
+      providerAeName:  provider_ae_name  || null,
+      providerAeEmail: provider_ae_email || null,
+    });
+    return c.json(account, 201);
+  } catch (err) {
+    console.error("Dynamics account create error:", err);
+    throw new HTTPException(502, { message: "Failed to create account in CRM" });
+  }
+});
+
+// POST /api/dynamics/opportunities — create a new D365 opportunity bound
+// to an account. SA + admin only. Minimal surface area on purpose: name +
+// parentaccountid only. pfi_sowhours / pfi_solutionarchitect get populated
+// downstream as the solution progresses, not here.
+const createOpportunitySchema = z.object({
+  name: z.string().min(1).max(300),
+  parent_account_id: z.string().min(1),
+});
+app.post("/opportunities", requireRole("admin", "pf_sa"), async (c) => {
+  const parsed = createOpportunitySchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) {
+    const firstIssue = parsed.error.issues[0];
+    const detail = firstIssue ? `${firstIssue.path.join(".")}: ${firstIssue.message}` : "Invalid request body";
+    throw new HTTPException(400, { message: detail });
+  }
+  const { name, parent_account_id } = parsed.data;
+
+  try {
+    const opp = await createOpportunity(c.env, { name, parentAccountId: parent_account_id });
+    return c.json(opp, 201);
+  } catch (err) {
+    console.error("Dynamics opportunity create error:", err);
+    throw new HTTPException(502, { message: "Failed to create opportunity in CRM" });
+  }
+});
+
 // GET /api/dynamics/accounts/:id/contacts
 app.get("/accounts/:id/contacts", async (c) => {
   const accountId = c.req.param("id");
@@ -40,16 +119,27 @@ app.get("/accounts/:id/contacts", async (c) => {
   }
 });
 
-// GET /api/dynamics/accounts/:id/opportunities
+// GET /api/dynamics/accounts/:id/opportunities[?state=open|open_or_won|all]
+// `state=open_or_won` (default) returns statecode in (0, 1) — the solution
+// creation modal binds new solutions to in-flight OR recently won deals
+// (implementation work often starts right after Won). `state=open` is
+// statecode=0 only; `state=all` returns every state so the projects page
+// can render a pinned opp's name even after it's lost.
 app.get("/accounts/:id/opportunities", async (c) => {
   const accountId = c.req.param("id");
+  const state = c.req.query("state") ?? "open_or_won";
 
   if (!accountId) {
     throw new HTTPException(400, { message: "Account ID required" });
   }
 
+  const allowedStates =
+    state === "open" ? [0] :
+    state === "open_or_won" ? [0, 1] :
+    undefined; // "all"
+
   try {
-    const opps = await getAccountOpportunities(c.env, accountId);
+    const opps = await getAccountOpportunities(c.env, accountId, { allowedStates });
     return c.json(opps);
   } catch (err) {
     console.error("Dynamics opportunities fetch error:", err);

@@ -73,43 +73,43 @@ export function workdaysBetween(startIso: string, endIso: string): number {
   return count;
 }
 
-/** Phase input for the chain computer. */
-export type PhaseInput = {
+/** Stage input for the chain computer. */
+export type StageInput = {
   id: string;
   working_days: number;
-  /** If set, this phase's Start is pinned (manual override); upstream
-   *  phases are unaffected, downstream chain from this phase's End. */
+  /** If set, this stage's Start is pinned (manual override); upstream
+   *  stages are unaffected, downstream chain from this stage's End. */
   pinned_start?: string | null;
-  /** If set, this phase's End is pinned (manual override). When both
+  /** If set, this stage's End is pinned (manual override). When both
    *  pinned_start and pinned_end are set, working_days is ignored for
-   *  this phase and the pin wins. */
+   *  this stage and the pin wins. */
   pinned_end?: string | null;
 };
 
-export type PhaseResult = {
+export type StageResult = {
   id: string;
   start: string;
   end: string;
 };
 
 /**
- * Chain phases forward from an anchor start date, using WORKDAY math.
+ * Chain stages forward from an anchor start date, using WORKDAY math.
  *
- * - Each phase's End = WORKDAY(Start, working_days).
- * - Next phase's Start = WORKDAY(prev End, 1) — i.e., the next workday.
- * - If a phase has `pinned_start` or `pinned_end`, that value is honored
+ * - Each stage's End = WORKDAY(Start, working_days).
+ * - Next stage's Start = WORKDAY(prev End, 1) — i.e., the next workday.
+ * - If a stage has `pinned_start` or `pinned_end`, that value is honored
  *   and the chain resumes from it.
  *
- * Returns one result per phase, in order.
+ * Returns one result per stage, in order.
  */
-export function chainForward(anchorStartIso: string, phases: PhaseInput[]): PhaseResult[] {
-  const results: PhaseResult[] = [];
+export function chainForward(anchorStartIso: string, stages: StageInput[]): StageResult[] {
+  const results: StageResult[] = [];
   let cursorIso = bumpToWorkdayIso(anchorStartIso);
 
-  for (const phase of phases) {
-    const start = phase.pinned_start ?? cursorIso;
-    const end = phase.pinned_end ?? workday(start, Math.max(phase.working_days, 0));
-    results.push({ id: phase.id, start, end });
+  for (const stage of stages) {
+    const start = stage.pinned_start ?? cursorIso;
+    const end = stage.pinned_end ?? workday(start, Math.max(stage.working_days, 0));
+    results.push({ id: stage.id, start, end });
     cursorIso = workday(end, 1);
   }
   return results;
@@ -117,14 +117,14 @@ export function chainForward(anchorStartIso: string, phases: PhaseInput[]): Phas
 
 /**
  * Back-compute an anchor start date from a target go-live and total
- * working days across all phases. The result is the earliest start that,
- * chained forward, lands a final phase end on or before the go-live.
+ * working days across all stages. The result is the earliest start that,
+ * chained forward, lands a final stage end on or before the go-live.
  */
 export function startFromGoLive(goLiveIso: string, totalWorkingDays: number): string {
   const goLive = bumpToWorkdayIso(goLiveIso);
   if (totalWorkingDays <= 0) return goLive;
   // The chain produces N working days, then increments by 1 to advance to
-  // the next phase. For a single timeline ending ON the go-live, the
+  // the next stage. For a single timeline ending ON the go-live, the
   // start = workday(goLive, -(N - 1)) where N is total working days, so
   // that workday(start, N-1) === goLive.
   return workday(goLive, -(totalWorkingDays - 1));

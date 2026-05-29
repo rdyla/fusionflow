@@ -12,6 +12,14 @@ export interface AppUser {
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions
   cs_permission?: "none" | "user" | "power_user"; // cloud support calculator access
+  // Self-editable profile fields (per migration 0090). avatar_url is the
+  // resolved URL — either /api/users/:id/avatar when the user has uploaded
+  // a custom one, or the cached Zoom CDN URL for internal staff with no
+  // upload. title / phone / scheduler_url are free-form.
+  avatar_url?: string | null;
+  title?: string | null;
+  phone?: string | null;
+  scheduler_url?: string | null;
 }
 
 export interface AuthContext {
@@ -68,6 +76,13 @@ export type Bindings = {
   // Zoom Custom App webhook + shared secret for support-case notifications (HMAC-signed)
   ZOOM_WEBHOOK_URL?: string;
   ZOOM_WEBHOOK_SECRET?: string;
+  // SOW HTML → .docx converter Lambda. Deployed manually per the runbook
+  // in aws/sow-converter/README.md. URL is the Function URL; secret is
+  // matched against X-PFI-Auth header by the Lambda. Both wrangler secrets
+  // (npx wrangler secret put ...). When unset, the Word-export endpoint
+  // returns 503 + a clear "not configured" message.
+  SOW_CONVERTER_LAMBDA_URL?: string;
+  SOW_CONVERTER_SHARED_SECRET?: string;
 };
 
 export type Variables = {

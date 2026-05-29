@@ -7,15 +7,15 @@ import { sendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
 import {
-  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry,
+  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry,
 } from "../services/dynamicsService";
-import { syncProjectBlockedStatus } from "../lib/teamUtils";
+import { syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate, syncProjectStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
-  SELECT id, project_id, phase_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority,
+  SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
+         completed_at, status, priority, meeting_join_url, is_go_live_event,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
@@ -40,7 +40,7 @@ app.get("/:id/tasks", async (c) => {
 
 const createTaskSchema = z.object({
   title: z.string().min(1).max(500),
-  phase_id: z.string().nullable().optional(),
+  stage_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
   due_date: z.string().nullable().optional(),
   scheduled_start: z.string().nullable().optional(),
@@ -66,18 +66,23 @@ app.post("/:id/tasks", async (c) => {
     throw new HTTPException(400, { message: "Invalid request body" });
   }
 
-  const { title, phase_id, assignee_user_id, due_date, scheduled_start, scheduled_end, priority, status } = parsed.data;
+  const { title, stage_id, assignee_user_id, due_date, scheduled_start, scheduled_end, priority, status } = parsed.data;
   const taskId = crypto.randomUUID();
 
   await db
     .prepare(
       `
-      INSERT INTO tasks (id, project_id, phase_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority)
+      INSERT INTO tasks (id, project_id, stage_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(taskId, projectId, phase_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
+    .bind(taskId, projectId, stage_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
     .run();
+
+  // Re-derive the parent stage's status now that a new task lives under it.
+  await syncStageStatus(db, stage_id ?? null);
+  await syncProjectGoLiveDate(db, projectId);
+  await syncProjectStatus(db, projectId);
 
   const created = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
@@ -115,7 +120,7 @@ app.post("/:id/tasks", async (c) => {
 
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(500).optional(),
-  phase_id: z.string().nullable().optional(),
+  stage_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
   /** Optional non-user contact tied to the task — currently used for the
    *  porting coordinator (project_contact with contact_role='Porting
@@ -129,6 +134,10 @@ const updateTaskSchema = z.object({
   completed_at: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
+  /** When set, the task is treated as a meeting (kickoff / design review /
+   *  go-live / etc.). The stakeholder view computes "Next call" by picking
+   *  the next upcoming task with a join URL. */
+  meeting_join_url: z.string().max(2000).nullable().optional(),
 });
 
 app.patch("/:id/tasks/:taskId", async (c) => {
@@ -140,7 +149,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const existing = await db
     .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -206,7 +215,19 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const updated = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
-    .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+
+  // Auto-derive stage status from the new task state. Sync both the old and
+  // new stage when a task moved between stages.
+  await syncStageStatus(db, existing.stage_id);
+  if (updated && updated.stage_id !== existing.stage_id) {
+    await syncStageStatus(db, updated.stage_id);
+  }
+  await maybeGraduateProject(db, projectId, auth.user.id);
+  // If a go-live event task's due_date moves, the project's target_go_live_date
+  // follows. Re-sync after any task update — cheap enough that we don't gate
+  // on the specific fields that changed.
+  await syncProjectGoLiveDate(db, projectId);
 
   const appUrl = c.env.APP_URL ?? "";
   const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
@@ -247,9 +268,11 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     }
   }
 
-  // Sync project blocked status whenever task status changes
+  // Sync project.status whenever task status changes — picks up
+  // blocked / in_progress / completed transitions from the stages we
+  // just resynced above plus any blocked tasks / open risks.
   if (updates.status !== undefined) {
-    await syncProjectBlockedStatus(db, projectId);
+    await syncProjectStatus(db, projectId);
   }
 
   // Notify PM if task just became blocked
@@ -514,6 +537,20 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
     throw new HTTPException(502, { message: `CRM error: ${message}` });
   }
 
+  // Payroll's integration only picks up Completed entries; leaving the entry
+  // in Open creates a stuck record in their feed. Hard-fail if the close
+  // PATCH errors — the create-then-close is a single logical operation from
+  // the user's perspective, and a half-completed state is worse than a clean
+  // error they can retry from. Local row is intentionally not inserted on
+  // failure; the orphan in CRM is the cost of keeping retry idempotent-ish.
+  try {
+    await closeTimeEntry(c.env, crmTimeEntryId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry close failed";
+    console.error("closeTimeEntry error:", message, "orphan entry:", crmTimeEntryId);
+    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
+  }
+
   const entryId = crypto.randomUUID();
   await db
     .prepare(`
@@ -543,9 +580,9 @@ app.delete("/:id/tasks/:taskId", async (c) => {
   }
 
   const existing = await db
-    .prepare(`SELECT id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
+    .prepare(`SELECT id, stage_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first();
+    .first<{ id: string; stage_id: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -555,6 +592,14 @@ app.delete("/:id/tasks/:taskId", async (c) => {
     .prepare(`DELETE FROM tasks WHERE id = ? AND project_id = ?`)
     .bind(taskId, projectId)
     .run();
+
+  // Removing a task may flip the parent stage's status (e.g. it was the
+  // only un-completed task → stage is now fully done) AND, if the deleted
+  // task was the go-live event, the project's target_go_live_date.
+  await syncStageStatus(db, existing.stage_id);
+  await maybeGraduateProject(db, projectId, auth.user.id);
+  await syncProjectGoLiveDate(db, projectId);
+  await syncProjectStatus(db, projectId);
 
   return c.json({ success: true });
 });
