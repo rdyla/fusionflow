@@ -1326,6 +1326,17 @@ export const api = {
    *  inline create-account form to populate the AE owner dropdown. */
   getDynamicsAEs: () => request<DynamicsUser[]>("/dynamics/staff/account-executives"),
 
+  /** Create a new D365 Opportunity bound to an account. SA + admin only.
+   *  Minimal payload — name + account; pfi_sowhours and
+   *  pfi_solutionarchitect get populated downstream as the solution
+   *  progresses. Returns the new row so the caller can push it straight
+   *  into the picker. */
+  createDynamicsOpportunity: (payload: { name: string; parent_account_id: string }) =>
+    request<DynamicsOpportunity>("/dynamics/opportunities", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
 
