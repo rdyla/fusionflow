@@ -1304,12 +1304,18 @@ export const api = {
 
   /** Create a new D365 Account. SA + admin only on the server. Returns the
    *  created account in the same shape as a search result so the caller can
-   *  drop it straight into the customer picker. */
-  createDynamicsAccount: (payload: { name: string; emailaddress1: string; websiteurl?: string }) =>
+   *  drop it straight into the customer picker. owner_systemuserid is the
+   *  D365 systemuserid of the PF AE who owns the new account (required — D365
+   *  defaults the owner to our app-reg's service principal otherwise). */
+  createDynamicsAccount: (payload: { name: string; emailaddress1: string; websiteurl?: string; owner_systemuserid: string }) =>
     request<DynamicsAccount>("/dynamics/accounts", {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+
+  /** Live list of PF AEs (D365 systemusers filtered by title). Used by the
+   *  inline create-account form to populate the AE owner dropdown. */
+  getDynamicsAEs: () => request<DynamicsUser[]>("/dynamics/staff/account-executives"),
 
   getDynamicsContacts: (accountId: string) =>
     request<DynamicsContact[]>(`/dynamics/accounts/${accountId}/contacts`),
