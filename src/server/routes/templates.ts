@@ -574,18 +574,26 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // individual tasks afterward via the Tasks tab.
     //
     // The canonical go-live event is the exception: it's a single-day
-    // milestone on the go-live date (= its stage's END, where the anchor math
-    // lands target_go_live_date), not the full stage window. Collapsing its
-    // start to the stage end keeps it a 1-day event and keeps the derived
-    // project go-live date consistent. Mirrors taskWindow() in TimelineBuilder.
+    // milestone landing on the exact go-live date the user supplied — NOT the
+    // go-live stage's end. The anchor math (startFromGoLive/chainForward)
+    // leaves the stage end a few workdays past the typed date, so the supplied
+    // date falls inside the stage window; the stage can carry post-go-live
+    // tasks that end after the event. Pinning the event to target_go_live_date
+    // keeps it on the date entered and keeps the derived project go-live date
+    // (synced from this task's due_date) exact. Mirrors taskWindow() in
+    // TimelineBuilder.
     const newTaskId = crypto.randomUUID();
     const insertedTitle = templateSolutionType
       ? buildTaggedTitle([templateSolutionType], normalizedTitle)
       : normalizedTitle;
     const stageDates = mappedStageId ? stageDatesByDestId.get(mappedStageId) : undefined;
     const isGoLiveEvent = (task.is_go_live_event ?? 0) === 1;
-    const taskEnd   = stageDates?.planned_end ?? null;
-    const taskStart = isGoLiveEvent ? taskEnd : (stageDates?.planned_start ?? null);
+    const taskStart = isGoLiveEvent && target_go_live_date
+      ? target_go_live_date
+      : (stageDates?.planned_start ?? null);
+    const taskEnd = isGoLiveEvent && target_go_live_date
+      ? target_go_live_date
+      : (stageDates?.planned_end ?? null);
     await db
       .prepare(
         "INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date, is_go_live_event) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?, ?)"
