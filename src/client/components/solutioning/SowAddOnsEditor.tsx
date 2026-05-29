@@ -16,6 +16,11 @@ type Props = {
    *  Advanced mode for the labor subtotal display. Ignored in Basic mode. */
   laborHoursTotal: number;
   canEdit: boolean;
+  /** Customer-facing render. Strips the labor-rate input, labor breakdown,
+   *  pricing-mode pointer, and intro copy — leaves only the add-on rows
+   *  (read-only) + SOW total. Returns null when there are no add-ons since
+   *  the bare total alone has nothing to anchor against on this card. */
+  isClient?: boolean;
   onSaved: (next: {
     add_ons: AddOn[];
     blended_rate: number;
@@ -33,7 +38,7 @@ function newId(): string {
   return "ao_" + Math.random().toString(36).slice(2, 10);
 }
 
-export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, onSaved }: Props) {
+export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, isClient = false, onSaved }: Props) {
   const [addOns, setAddOns] = useState<AddOn[]>(solution.add_ons ?? []);
   const [rate, setRate] = useState<number>(solution.blended_rate || DEFAULT_BLENDED_RATE);
   const [saving, setSaving] = useState(false);
@@ -100,6 +105,45 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, on
 
   const accent = "#003B5C";
   const accentGreen = "#17C662";
+
+  // ── Customer-facing render ────────────────────────────────────────────────
+  // Strip everything internal-only. Hide the whole card when there are no
+  // add-ons — a customer doesn't need a "SOW Pricing" panel that shows just
+  // the bottom-line total without any line items above it; the SOW print
+  // already carries that summary.
+  if (isClient) {
+    if (addOns.length === 0) return null;
+    return (
+      <div className="ms-card">
+        <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+          SOW Pricing &amp; Add-Ons
+        </h3>
+        <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+          {addOns.map((line, i) => {
+            const dollar = breakdown.addOnEffects[i]?.dollar ?? 0;
+            const isDiscount = dollar < 0;
+            return (
+              <div
+                key={line.id}
+                style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "baseline", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}
+              >
+                <div style={{ fontSize: 13, color: "#1e293b" }}>{line.label || (isDiscount ? "Discount" : "Add-on")}</div>
+                <div style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 14, fontWeight: 700, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>
+                  {fmtUsd(dollar)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 4, borderTop: "2px solid #cbd5e1" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>SOW Total</div>
+          <div style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 18, fontWeight: 800, color: accentGreen }}>
+            {fmtUsd(breakdown.total)}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="ms-card">

@@ -440,16 +440,22 @@ export default function ScopeOfWorkDocument({
       </div>
       )}
 
-      <div className="ms-card" style={{ padding: "16px 20px", marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#03395f", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
-          Variant
+      {/* Variant summary — staff debugging aid (confirms which SOW
+          template variant will render). Hidden from clients: the
+          internal product-line key + raw counts aren't useful to
+          them and the print preview already shows everything visually. */}
+      {!isClient && (
+        <div className="ms-card" style={{ padding: "16px 20px", marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#03395f", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+            Variant
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginBottom: 6 }}>{variant.productLine}</div>
+          <div style={{ fontSize: 12, color: "#64748b" }}>
+            Customer <strong>{ctx.customerName}</strong> · Locations <strong>{ctx.locationCount}</strong> ·
+            {" "}Primary seats <strong>{ctx.primarySeatCount}</strong> · DIDs <strong>{ctx.ditNumbers}</strong> · Project total <strong>${ctx.projectTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
+          </div>
         </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginBottom: 6 }}>{variant.productLine}</div>
-        <div style={{ fontSize: 12, color: "#64748b" }}>
-          Customer <strong>{ctx.customerName}</strong> · Locations <strong>{ctx.locationCount}</strong> ·
-          {" "}Primary seats <strong>{ctx.primarySeatCount}</strong> · DIDs <strong>{ctx.ditNumbers}</strong> · Project total <strong>${ctx.projectTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

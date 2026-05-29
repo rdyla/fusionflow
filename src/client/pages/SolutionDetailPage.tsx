@@ -13,6 +13,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { solutionTypeLabel, otherTechnologyLabel, OTHER_TECHNOLOGIES, OTHER_TECHNOLOGY_LABELS } from "../../shared/solutionTypes";
+import { resolveVendorBadge } from "../lib/vendorBadge";
 import otherJourneysSurveyJson from "../assets/other_journeys_needs_assessment_v1.json";
 import {
   composeAssessment,
@@ -686,8 +687,25 @@ export default function SolutionDetailPage() {
                     <option value="other">Other</option>
                   </select>
                 ) : (
-                  <div style={{ fontSize: 14, color: solution.vendor === "tbd" ? "#94a3b8" : "#334155", padding: "8px 0" }}>
-                    {solution.vendor === "tbd" ? "— Not yet assigned —" : solution.vendor}
+                  <div style={{ padding: "8px 0" }}>
+                    {(() => {
+                      if (solution.vendor === "tbd") {
+                        return <span style={{ fontSize: 14, color: "#94a3b8" }}>— Not yet assigned —</span>;
+                      }
+                      // Render as a colored badge so the customer sees a
+                      // recognizable Zoom / RingCentral chip rather than
+                      // raw lowercase column values like "zoom".
+                      const badge = resolveVendorBadge(solution.vendor);
+                      if (!badge) return <span style={{ fontSize: 14, color: "#334155" }}>{solution.vendor}</span>;
+                      return (
+                        <span
+                          className="ms-badge"
+                          style={{ background: `${badge.color}1a`, color: badge.color, border: `1px solid ${badge.color}40`, fontSize: 13, fontWeight: 600, textTransform: "none" }}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                 )}
               </label>
@@ -701,6 +719,11 @@ export default function SolutionDetailPage() {
                   </div>
                 )}
               </label>
+              {/* "Other Technologies" — hide this row entirely for
+                  clients when the solution has none. Staff still see
+                  the row (with the picker or "None" label) so they
+                  can add. */}
+              {(!isClient || solution.other_technologies.length > 0) && (
               <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
                 <span>Other Technologies</span>
                 {canEdit ? (
@@ -740,6 +763,7 @@ export default function SolutionDetailPage() {
                   </div>
                 )}
               </label>
+              )}
             </div>
             {canEdit && (
               <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
@@ -1334,6 +1358,7 @@ export default function SolutionDetailPage() {
             solution={solution}
             laborHoursTotal={laborTotals.expected}
             canEdit={canEdit}
+            isClient={isClient}
             onSaved={(next) => {
               setSolution(prev => prev ? { ...prev, ...next } : prev);
             }}
@@ -1341,7 +1366,10 @@ export default function SolutionDetailPage() {
 
           {/* SOW switches — affect both the rendered/printed SOW and the
               solution overview. Both flags are independent: budgetary
-              quotes can also be Zoom Reseller (e.g. SLED). */}
+              quotes can also be Zoom Reseller (e.g. SLED). Hidden from
+              clients — the budgetary watermark + reseller-MSA toggle are
+              internal sales-ops levers and irrelevant to the customer view. */}
+          {!isClient && (
           <div className="ms-card">
             <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
               SOW Switches
@@ -1379,6 +1407,7 @@ export default function SolutionDetailPage() {
               </label>
             </div>
           </div>
+          )}
 
           {/* SOW document generator */}
           <ScopeOfWorkDocument
@@ -1395,29 +1424,44 @@ export default function SolutionDetailPage() {
             }}
           />
 
-          {/* Scope notes textarea — feeds into the generated document */}
+          {/* Additional Scope Notes — feeds into the generated SOW.
+              For clients: hidden when empty (nothing to read); shown
+              as a read-only display when non-empty. Staff get the
+              editable textarea regardless. */}
+          {(!isClient || scope.trim().length > 0) && (
           <div className="ms-card">
             <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
               Additional Scope Notes
             </h3>
-            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-              Any additional context, exclusions, or special terms. This text is included in the generated SOW document.
-            </p>
-            <textarea
-              className="ms-input"
-              rows={8}
-              style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6 }}
-              value={scope}
-              onChange={(e) => setScope(e.target.value)}
-              placeholder="Out of scope items, special terms, exclusions…"
-              disabled={!canEdit}
-            />
-            {canEdit && (
-              <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ scope_of_work: scope })}>
-                {saving ? "Saving…" : "Save Notes"}
-              </button>
+            {!isClient && (
+              <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
+                Any additional context, exclusions, or special terms. This text is included in the generated SOW document.
+              </p>
+            )}
+            {isClient ? (
+              <div style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.6, color: "#1e293b", whiteSpace: "pre-wrap", padding: "8px 0" }}>
+                {scope}
+              </div>
+            ) : (
+              <>
+                <textarea
+                  className="ms-input"
+                  rows={8}
+                  style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6 }}
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value)}
+                  placeholder="Out of scope items, special terms, exclusions…"
+                  disabled={!canEdit}
+                />
+                {canEdit && (
+                  <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ scope_of_work: scope })}>
+                    {saving ? "Saving…" : "Save Notes"}
+                  </button>
+                )}
+              </>
             )}
           </div>
+          )}
         </div>
 
       {/* ── Handoff Tab ── */}
