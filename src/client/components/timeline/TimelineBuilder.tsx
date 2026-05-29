@@ -139,6 +139,19 @@ function workdaysThroughGoLive(merged: { working_days: number; tasks: { isGoLive
   return sum;
 }
 
+/**
+ * Date window a task occupies inside its stage. Every task inherits the full
+ * stage window EXCEPT the canonical go-live event, which is by nature a
+ * single-day event pinned to the go-live date. The anchor math lands the
+ * target go-live on the go-live stage's END, and `target_go_live_date` derives
+ * from this task's due_date — so collapsing it to start = end = stage end keeps
+ * the event a 1-day milestone on the supplied date and the stored go-live date
+ * consistent.
+ */
+function taskWindow(task: { isGoLiveEvent: boolean }, stageStart: string, stageEnd: string): { start: string; end: string } {
+  return task.isGoLiveEvent ? { start: stageEnd, end: stageEnd } : { start: stageStart, end: stageEnd };
+}
+
 function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
   const merged = mergeTemplates(templates);
   const inputs: StageInput[] = merged.map((m) => ({ id: m.name, working_days: m.working_days }));
@@ -149,7 +162,7 @@ function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
     start: computed[i].start,
     end:   computed[i].end,
     pinned: false,
-    tasks: m.tasks.map((t) => ({ ...t, start: computed[i].start, end: computed[i].end })),
+    tasks: m.tasks.map((t) => ({ ...t, ...taskWindow(t, computed[i].start, computed[i].end) })),
   }));
 }
 
@@ -179,7 +192,7 @@ function recomputeChain(rows: Row[], anchorStart: string): Row[] {
   return rows.map((r, i) => {
     const newStage = { ...r, start: computed[i].start, end: computed[i].end };
     newStage.tasks = r.tasks.map((t) => {
-      if (!t.pinned) return { ...t, start: newStage.start, end: newStage.end };
+      if (!t.pinned) return { ...t, ...taskWindow(t, newStage.start, newStage.end) };
       return t;
     });
     return newStage;

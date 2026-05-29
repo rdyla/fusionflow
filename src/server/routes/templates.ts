@@ -572,18 +572,25 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // scheduled_end/due_date = stage.end. Matches Timeline Builder's
     // "every task spans its stage window" convention — PMs stagger
     // individual tasks afterward via the Tasks tab.
+    //
+    // The canonical go-live event is the exception: it's a single-day
+    // milestone on the go-live date (= its stage's END, where the anchor math
+    // lands target_go_live_date), not the full stage window. Collapsing its
+    // start to the stage end keeps it a 1-day event and keeps the derived
+    // project go-live date consistent. Mirrors taskWindow() in TimelineBuilder.
     const newTaskId = crypto.randomUUID();
     const insertedTitle = templateSolutionType
       ? buildTaggedTitle([templateSolutionType], normalizedTitle)
       : normalizedTitle;
     const stageDates = mappedStageId ? stageDatesByDestId.get(mappedStageId) : undefined;
-    const taskStart = stageDates?.planned_start ?? null;
+    const isGoLiveEvent = (task.is_go_live_event ?? 0) === 1;
     const taskEnd   = stageDates?.planned_end ?? null;
+    const taskStart = isGoLiveEvent ? taskEnd : (stageDates?.planned_start ?? null);
     await db
       .prepare(
         "INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date, is_go_live_event) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd, task.is_go_live_event ?? 0)
+      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd, isGoLiveEvent ? 1 : 0)
       .run();
     if (mappedStageId) {
       const stageTasks = tasksByStage.get(mappedStageId);
