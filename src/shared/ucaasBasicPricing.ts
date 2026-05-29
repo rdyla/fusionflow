@@ -116,7 +116,18 @@ export function calcUcaasBasicBreakdown(
   return { components, hours, laborSubtotal, trainingTotal, deviceInstallTotal, prePmSubtotal, pm, total };
 }
 
-/** Tolerant reader for the basic_inputs JSON column (DB may give us a string or already-parsed object). */
+/** Tolerant reader for the basic_inputs JSON column (DB may give us a string or
+ *  already-parsed object).
+ *
+ *  Spreads the raw object through FIRST, then overlays the cleaned-up base
+ *  fields. The spread preserves any extra keys we didn't know about — most
+ *  notably the combo sub-blocks (ccaas, apps, zva_voice, zva_chat, analog,
+ *  final_discount_pct) added in PR #306. Without this passthrough, every
+ *  read via normalizeSolutionRow stripped combo data, which made the SA's
+ *  combo-calculator save appear to wipe everything on the response. The
+ *  return type stays UcaasBasicInputs (structural — TS allows extras), so
+ *  callers that care about the combo shape cast via parseCcaasComboInputs
+ *  or `as Partial<CcaasComboInputs>`. */
 export function parseBasicInputs(raw: unknown): UcaasBasicInputs | null {
   if (raw == null) return null;
   let obj: unknown = raw;
@@ -128,6 +139,7 @@ export function parseBasicInputs(raw: unknown): UcaasBasicInputs | null {
   if (!obj || typeof obj !== "object") return null;
   const r = obj as Record<string, unknown>;
   return {
+    ...(r as Partial<UcaasBasicInputs>),
     users:             n(r.users),
     sites:             Math.max(1, n(r.sites, 1)),
     go_lives:          Math.max(1, n(r.go_lives, 1)),
