@@ -309,6 +309,18 @@ app.post("/", async (c) => {
     )
     .run();
 
+  // Mirror the resolved partner AE into solution_staff so the detail page's
+  // "Zoom AEs / Partner AEs" panel picks it up — the panel reads exclusively
+  // from solution_staff (not from solutions.partner_ae_user_id), so without
+  // this insert the freshly-picked AE appears as "No partner AEs assigned"
+  // until the SA manually re-adds them via the panel's + button.
+  if (resolvedPartnerAeUserId) {
+    await db
+      .prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, 'partner_ae')")
+      .bind(crypto.randomUUID(), id, resolvedPartnerAeUserId)
+      .run();
+  }
+
   // Push the just-set vendor / opp-type / revenue-source onto the bound D365
   // opportunity. Best-effort: D365 failures get logged but don't break the
   // solution-create response. Runs after the DB row is committed so the sync
