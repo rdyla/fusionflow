@@ -9,6 +9,14 @@ import {
   type AddOnKind,
 } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
+import {
+  APP_LABELS,
+  ANALOG_LABELS,
+  calcCcaasComboBreakdown,
+  isComboMode,
+  parseCcaasComboInputs,
+  type AppKey,
+} from "../../../shared/ccaasComboPricing";
 
 type Props = {
   solution: Solution;
@@ -115,17 +123,57 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
   // Total stands on its own. Whole card returns null only when there's
   // truly nothing — no calculated total AND no add-ons.
   if (isClient) {
-    const hasTotal = breakdown.total > 0;
-    const hasAddOns = addOns.length > 0;
+    // Combo path: when this solution runs through the CCaaS combo
+    // calculator (CCaaS in solution_types + basic pricing), the
+    // legacy breakdown.total is meaningless — combo has its own
+    // discount/PM/final stack. Compute the combo breakdown directly
+    // and use its finalSowPrice + line items for the Based-on grid.
+    const combo = isBasic && isComboMode(solution.solution_types);
+    const comboInputs = combo ? parseCcaasComboInputs(solution.basic_inputs) : null;
+    const comboBreakdown = comboInputs ? calcCcaasComboBreakdown(comboInputs, rate) : null;
+
+    const displayedTotal = comboBreakdown ? comboBreakdown.finalSowPrice : breakdown.total;
+    const hasTotal = displayedTotal > 0;
+    const hasAddOns = !combo && addOns.length > 0; // combo skips external add-ons entirely
     if (!hasTotal && !hasAddOns) return null;
 
     // Build a "based on" line-item list that explains where the total
-    // came from — users / sites / go-lives / training / on-site work
-    // for basic mode, seat tier for tiered, total labor hours for
-    // advanced. Customer-facing, so keep labels in plain English.
+    // came from. Tailored per pricing mode so the customer sees the
+    // inputs they signed off on (and only those). Combo gets the
+    // richest set since the formula has the most knobs.
     type SummaryRow = { label: string; value: string };
     const summaryRows: SummaryRow[] = [];
-    if (isBasic && solution.basic_inputs) {
+    if (combo && comboInputs) {
+      if (comboInputs.users > 0)             summaryRows.push({ label: "UCaaS users",       value: comboInputs.users.toLocaleString() });
+      const agents = comboInputs.ccaas?.agents ?? 0;
+      if (agents > 0)                        summaryRows.push({ label: comboInputs.ccaas?.omnichannel ? "CCaaS agents (omni)" : "CCaaS agents (voice)", value: agents.toLocaleString() });
+      if (comboInputs.sites > 0)             summaryRows.push({ label: "Sites",              value: comboInputs.sites.toLocaleString() });
+      if (comboInputs.go_lives > 0)          summaryRows.push({ label: "Go-live events",     value: comboInputs.go_lives.toLocaleString() });
+      if (comboInputs.training_sessions > 0) summaryRows.push({ label: "Training sessions",  value: comboInputs.training_sessions.toLocaleString() });
+      // Analog devices — only surface device types with non-zero counts.
+      const analog = comboInputs.analog;
+      if (analog) {
+        for (const k of Object.keys(ANALOG_LABELS) as (keyof typeof ANALOG_LABELS)[]) {
+          const qty = analog[k] ?? 0;
+          if (qty > 0) summaryRows.push({ label: ANALOG_LABELS[k], value: qty.toLocaleString() });
+        }
+      }
+      // Apps included — single combined row listing names so the grid
+      // doesn't blow up with one chip per app.
+      const includedApps = comboBreakdown!.appRows.filter((r) => r.included);
+      if (includedApps.length > 0) {
+        summaryRows.push({
+          label: `Apps (${comboBreakdown!.appTier} tier)`,
+          value: includedApps.map((r) => APP_LABELS[r.key as AppKey]).join(" · "),
+        });
+      }
+      if (comboBreakdown!.zvaVoice.workflows > 0) {
+        summaryRows.push({ label: "ZVA Voice", value: `${comboBreakdown!.zvaVoice.workflows} workflow${comboBreakdown!.zvaVoice.workflows === 1 ? "" : "s"}` });
+      }
+      if (comboBreakdown!.zvaChat.workflows > 0) {
+        summaryRows.push({ label: "ZVA Chat", value: `${comboBreakdown!.zvaChat.workflows} workflow${comboBreakdown!.zvaChat.workflows === 1 ? "" : "s"}` });
+      }
+    } else if (isBasic && solution.basic_inputs) {
       const bi = solution.basic_inputs;
       if (bi.users > 0)             summaryRows.push({ label: "Users",              value: bi.users.toLocaleString() });
       if (bi.sites > 0)             summaryRows.push({ label: "Sites",              value: bi.sites.toLocaleString() });
@@ -184,7 +232,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 4, borderTop: hasAddOns ? "2px solid #cbd5e1" : "none" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>SOW Total</div>
           <div style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 18, fontWeight: 800, color: accentGreen }}>
-            {fmtUsd(breakdown.total)}
+            {fmtUsd(displayedTotal)}
           </div>
         </div>
       </div>
