@@ -14,6 +14,8 @@ import {
   type UcaasBasicInputs,
 } from "../../../shared/ucaasBasicPricing";
 import { DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
+import { isComboMode } from "../../../shared/ccaasComboPricing";
+import CcaasComboCalculator from "./CcaasComboCalculator";
 
 const WORKSTREAM_LABELS: Record<string, string> = {
   discovery_requirements: "Discovery & Requirements",
@@ -462,7 +464,8 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
       </div>
       <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 14px", lineHeight: 1.5 }}>
         {effectiveMode === "tiered" && "Tiered pricing uses a fixed-price ladder by seat count for sub-100-seat UCaaS deployments. Fastest path to a quote — no formula, no estimate."}
-        {effectiveMode === "basic" && "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per site + 6h per go-live, plus optional training and on-site work, +15% PM."}
+        {effectiveMode === "basic" && isComboMode(solution.solution_types) && "Combo pricing covers UCaaS + CCaaS + analog + advanced apps + ZVA. Bundle discount applies to apps + ZVA, then 15% PM, then an optional final discount."}
+        {effectiveMode === "basic" && !isComboMode(solution.solution_types) && "Basic pricing uses a formula: 20h base + 0.05h/user + 2h per site + 6h per go-live, plus optional training and on-site work, +15% PM."}
         {effectiveMode === "advanced" && "Advanced pricing uses the full labor calculator — workstream hours derived from inputs (direct or from the needs assessment), then priced at the blended rate."}
       </p>
 
@@ -517,7 +520,19 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
         </>
       )}
 
-      {effectiveMode === "basic" && (
+      {/* Combo-mode (CCaaS in scope) takes over the entire basic-pricing
+          render — its own embedded breakdown panel + Save button live
+          inside the CcaasComboCalculator component. Pure-UCaaS basic
+          stays on the existing 6-field form below. */}
+      {effectiveMode === "basic" && isComboMode(solution.solution_types) && (
+        <CcaasComboCalculator
+          solution={solution}
+          canEdit={canEdit}
+          onSolutionChange={onSolutionChange}
+        />
+      )}
+
+      {effectiveMode === "basic" && !isComboMode(solution.solution_types) && (
         <>
           {/* 6-field input grid */}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>

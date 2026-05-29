@@ -137,10 +137,19 @@ export function parseBasicInputs(raw: unknown): UcaasBasicInputs | null {
   };
 }
 
-/** True iff this solution can use basic pricing — pure UCaaS only (combos use Advanced). */
+/** True iff this solution can use basic / formula-driven pricing.
+ *  Two paths feed this:
+ *    - pure UCaaS  → calcUcaasBasicBreakdown
+ *    - has CCaaS   → calcCcaasComboBreakdown (the combo calculator from
+ *                    PR #306, gated on solution_types containing 'ccaas')
+ *  Anything else (CI, VA, etc. without UCaaS or CCaaS) falls through to
+ *  Advanced mode. The Labor-tab UI picks which form to render based on
+ *  isComboMode() in shared/ccaasComboPricing.ts. */
 export function canUseBasicPricing(solutionTypes: readonly string[] | null | undefined): boolean {
   if (!solutionTypes) return false;
-  return solutionTypes.length === 1 && solutionTypes[0] === "ucaas";
+  if (solutionTypes.length === 1 && solutionTypes[0] === "ucaas") return true;
+  if (solutionTypes.includes("ccaas")) return true;
+  return false;
 }
 
 // ── Tiered mode ────────────────────────────────────────────────────────────
@@ -178,7 +187,12 @@ export function getUcaasTieredTier(seatCount: number | null | undefined): UcaasT
   return null;
 }
 
-/** True iff this solution can use tiered pricing — pure UCaaS, sub-100. */
+/** True iff this solution can use tiered pricing — pure UCaaS only.
+ *  Tiered is the sub-100-seat fixed-ladder shortcut; combos can't use it
+ *  because the tier table doesn't model CCaaS / apps / ZVA at all. Stays
+ *  decoupled from canUseBasicPricing so the combo expansion in PR #306
+ *  doesn't accidentally surface the tiered radio for combos. */
 export function canUseTieredPricing(solutionTypes: readonly string[] | null | undefined): boolean {
-  return canUseBasicPricing(solutionTypes);
+  if (!solutionTypes) return false;
+  return solutionTypes.length === 1 && solutionTypes[0] === "ucaas";
 }
