@@ -322,7 +322,11 @@ export default function SolutionDetailPage() {
 
   const isClient = currentRole === "client";
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae" || currentRole === "pf_sa";
-  const canEditNA = canEdit || isClient;
+  // Clients VIEW completed needs assessments via the SOR view but never
+  // edit them or start new ones. Including isClient here was a launch-day
+  // bug — it exposed the wizard + "Start Needs Assessment" buttons in the
+  // customer portal.
+  const canEditNA = canEdit;
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;

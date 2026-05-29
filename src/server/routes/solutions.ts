@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+import { requireRole } from "../middleware/requireRole";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution } from "../lib/teamUtils";
@@ -645,7 +646,10 @@ const sowVersionSchema = z.object({
   note: z.string().max(2000).nullable().optional(),
 });
 
-app.post("/:id/sow-version", async (c) => {
+// PF-staff only. Clients view SOWs but never bump revision versions or
+// mutate metadata on them — UI hides the controls and this gate matches
+// it server-side so a determined customer can't curl their way past it.
+app.post("/:id/sow-version", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const solutionId = c.req.param("id");
@@ -684,7 +688,7 @@ const sowMetadataSchema = z.object({
   custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
 });
 
-app.patch("/:id/sow-metadata", async (c) => {
+app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const solutionId = c.req.param("id");
