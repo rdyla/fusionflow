@@ -436,6 +436,18 @@ export async function getAccountTeam(env: Env, accountId: string): Promise<Accou
   return { ae_name, ae_email, sa_name, sa_email, csm_name, csm_email, address_city, address_state };
 }
 
+// Patch an existing D365 Opportunity. Used by syncOpportunityFromSolution
+// (lib/teamUtils) to push vendor / type / revenue-source / deal-reg-id onto
+// the bound opp every time a solution row changes. Caller is responsible
+// for shaping `patch` — including any `@odata.bind` lookup keys.
+export async function updateOpportunity(
+  env: Env,
+  opportunityId: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  await dynamicsPatch(env, `/opportunities(${opportunityId})`, patch);
+}
+
 // Create a D365 Opportunity tied to an account. Used by the New Solution
 // flow when the SA can't find an existing opportunity to bind the solution
 // to — they create one inline and we hand the new row back to the picker.

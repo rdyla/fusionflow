@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
-import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
@@ -208,6 +208,10 @@ const createSolutionSchema = z.object({
   partner_ae_user_id: z.string().optional(),
   partner_ae_name: z.string().optional(),
   partner_ae_email: z.string().email().optional().or(z.literal("")),
+  /** 1 when the CRM account was created via the inline form during this
+   *  solution-create flow (vs. picked from existing search results).
+   *  Drives am_revenuesource = New Logo on the bound opportunity. */
+  is_new_logo: z.boolean().optional(),
 });
 
 app.post("/", async (c) => {
@@ -219,7 +223,7 @@ app.post("/", async (c) => {
 
   const {
     customer_name, customer_id, dynamics_account_id, crm_opportunity_id,
-    partner_ae_user_id, partner_ae_name, partner_ae_email,
+    partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo,
   } = parsed.data;
 
   const journeys = parsed.data.journeys ?? [];
@@ -295,15 +299,21 @@ app.post("/", async (c) => {
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, customer_id, dynamics_account_id, crm_opportunity_id, vendor, solution_types, other_technologies, journeys,
-          partner_ae_user_id, partner_ae_name, partner_ae_email, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, resolvedCustomerId, dynamics_account_id, crm_opportunity_id, vendor,
       serializeSolutionTypes(solution_types), serializeOtherTechnologies(other_technologies), journeysJson,
-      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, auth.user.id
+      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, is_new_logo ? 1 : 0, auth.user.id
     )
     .run();
+
+  // Push the just-set vendor / opp-type / revenue-source onto the bound D365
+  // opportunity. Best-effort: D365 failures get logged but don't break the
+  // solution-create response. Runs after the DB row is committed so the sync
+  // helper's own SELECT sees the new state.
+  c.executionCtx.waitUntil(syncOpportunityFromSolution(c.env, db, id));
 
   const created = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(id).first();
 
@@ -369,6 +379,13 @@ const updateSolutionSchema = z.object({
   sow_data: z.string().nullable().optional(),
   gap_analysis: z.string().nullable().optional(),
   linked_project_id: z.string().nullable().optional(),
+  /** Partner deal-reg id (Zoom/RC vendor portal). Free text. Maps to
+   *  cr495_dealregistrationid on the bound D365 opportunity. */
+  deal_registration_id: z.string().nullable().optional(),
+  /** Cloud contract expiration date (when customer's existing cloud
+   *  contract ends — drives renewal-window planning). ISO YYYY-MM-DD.
+   *  Maps to am_cloudcontractexpiration on the bound D365 opportunity. */
+  cloud_contract_expiration_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
   pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
@@ -516,6 +533,23 @@ app.patch("/:id", async (c) => {
 
   if (pricingTouched) {
     await recomputeSowTotal(db, solutionId);
+  }
+
+  // Resync the bound D365 opportunity whenever any field that maps onto
+  // the D365 opp could have changed. Includes the pricing path because
+  // recomputeSowTotal() above can change sow_total_amount → actualvalue
+  // + am_combinedrevenue. Helper short-circuits when no opportunity is
+  // bound and PATCHing the same values is a no-op on D365's side.
+  const synced =
+    "vendor" in updates ||
+    "is_zoom_reseller" in updates ||
+    "deal_registration_id" in updates ||
+    "cloud_contract_expiration_date" in updates ||
+    "crm_opportunity_id" in updates ||
+    "status" in updates ||
+    pricingTouched;
+  if (synced) {
+    c.executionCtx.waitUntil(syncOpportunityFromSolution(c.env, db, solutionId));
   }
 
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();

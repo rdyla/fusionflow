@@ -481,6 +481,61 @@ export default function SolutionDetailPage() {
             <span className="ms-badge" style={{ background: `${STATUS_COLOR[solution.status]}18`, color: STATUS_COLOR[solution.status], border: `1px solid ${STATUS_COLOR[solution.status]}40` }}>
               {STATUS_LABELS[solution.status]}
             </span>
+            {/* New Logo badge — surfaces is_new_logo at a glance, matches
+                what the SA sees on the D365 opportunity (am_revenuesource). */}
+            {solution.is_new_logo === 1 && (
+              <span className="ms-badge" style={{ background: "rgba(217,119,6,0.12)", color: "#b45309", border: "1px solid rgba(217,119,6,0.3)" }}>New Logo</span>
+            )}
+          </div>
+          {/* CRM-sync inputs — always editable. Both feed
+              syncOpportunityFromSolution on the next save() call so the
+              bound D365 opportunity stays current without sales ops having
+              to re-enter anything. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 10, fontSize: 12, color: "#475569", flexWrap: "wrap" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, color: "#64748b" }}>Deal Reg ID:</span>
+              <input
+                className="ms-input"
+                placeholder={canEdit ? "Enter vendor deal reg #…" : "—"}
+                defaultValue={solution.deal_registration_id ?? ""}
+                disabled={!canEdit || saving}
+                onBlur={(e) => {
+                  const next = e.target.value.trim() || null;
+                  const prev = solution.deal_registration_id ?? null;
+                  if (next !== prev) save({ deal_registration_id: next });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    (e.target as HTMLInputElement).value = solution.deal_registration_id ?? "";
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                style={{ width: 220, padding: "3px 8px", fontSize: 12 }}
+              />
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, color: "#64748b" }}>Cloud contract expires:</span>
+              <input
+                className="ms-input"
+                type="date"
+                defaultValue={solution.cloud_contract_expiration_date ?? ""}
+                disabled={!canEdit || saving}
+                onBlur={(e) => {
+                  const next = e.target.value || null;
+                  const prev = solution.cloud_contract_expiration_date ?? null;
+                  if (next !== prev) save({ cloud_contract_expiration_date: next });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    (e.target as HTMLInputElement).value = solution.cloud_contract_expiration_date ?? "";
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                style={{ width: 170, padding: "3px 8px", fontSize: 12 }}
+              />
+            </label>
           </div>
         </div>
 
