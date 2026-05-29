@@ -410,6 +410,40 @@ const updateSolutionSchema = z.object({
     training_sessions: z.number().int().min(0),
     onsite_sites:      z.number().int().min(0),
     onsite_devices:    z.number().int().min(0),
+    // ── Combo (UCaaS + CCaaS) sub-blocks — all optional. UCaaS-only
+    // solutions leave these out; combo solutions populate any subset.
+    // calcCcaasComboBreakdown() in shared/ccaasComboPricing.ts is the
+    // source of truth on what each block drives.
+    ccaas: z.object({
+      agents:      z.number().int().min(0),
+      omnichannel: z.boolean(),
+    }).optional(),
+    apps: z.record(z.string(), z.object({
+      included:         z.boolean(),
+      integrations:     z.number().int().min(0),
+      custom_dev_hours: z.number().min(0),
+    })).optional(),
+    zva_voice: z.object({
+      workflows:            z.number().int().min(0),
+      knowledge_sources:    z.number().int().min(0),
+      large_override_hours: z.number().min(0),
+      custom_dev_hours:     z.number().min(0),
+    }).optional(),
+    zva_chat: z.object({
+      workflows:            z.number().int().min(0),
+      knowledge_sources:    z.number().int().min(0),
+      large_override_hours: z.number().min(0),
+      custom_dev_hours:     z.number().min(0),
+    }).optional(),
+    analog: z.object({
+      did_porting_blocks:   z.number().int().min(0),
+      analog_fax_devices:   z.number().int().min(0),
+      paging_systems:       z.number().int().min(0),
+      door_phones:          z.number().int().min(0),
+      gate_controllers:     z.number().int().min(0),
+      other_analog_devices: z.number().int().min(0),
+    }).optional(),
+    final_discount_pct: z.number().min(0).max(100).optional(),
   }).nullable().optional(),
   /** 1 = SOW renders a "BUDGETARY" diagonal watermark + the solution shows a budgetary banner. */
   is_budgetary: z.number().int().min(0).max(1).optional(),

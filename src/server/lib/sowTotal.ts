@@ -1,6 +1,8 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { calcSowTotal, calcBasicSowTotal, parseAddOns, DEFAULT_BLENDED_RATE } from "../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, parseBasicInputs, getUcaasTieredTier } from "../../shared/ucaasBasicPricing";
+import { calcCcaasComboBreakdown, isComboMode, parseCcaasComboInputs } from "../../shared/ccaasComboPricing";
+import { parseSolutionTypes } from "../../shared/solutionTypes";
 
 /**
  * Recomputes solutions.sow_total_amount.
@@ -21,7 +23,7 @@ import { calcUcaasBasicBreakdown, parseBasicInputs, getUcaasTieredTier } from ".
  */
 export async function recomputeSowTotal(db: D1Database, solutionId: string): Promise<number | null> {
   const solution = await db
-    .prepare("SELECT add_ons, blended_rate, pricing_mode, basic_seat_count, basic_inputs FROM solutions WHERE id = ? LIMIT 1")
+    .prepare("SELECT add_ons, blended_rate, pricing_mode, basic_seat_count, basic_inputs, solution_types FROM solutions WHERE id = ? LIMIT 1")
     .bind(solutionId)
     .first<{
       add_ons: string | null;
@@ -29,16 +31,29 @@ export async function recomputeSowTotal(db: D1Database, solutionId: string): Pro
       pricing_mode: string | null;
       basic_seat_count: number | null;
       basic_inputs: string | null;
+      solution_types: string | null;
     }>();
   if (!solution) return null;
 
   const addOns = parseAddOns(solution.add_ons);
   const rate = Number(solution.blended_rate) || DEFAULT_BLENDED_RATE;
+  const solutionTypes = parseSolutionTypes(solution.solution_types);
 
   let total: number;
   if (solution.pricing_mode === "tiered") {
     const tier = getUcaasTieredTier(solution.basic_seat_count);
     total = tier ? calcBasicSowTotal(tier.price, addOns, rate).total : 0;
+  } else if (solution.pricing_mode === "basic" && isComboMode(solutionTypes)) {
+    // Combo path: UCaaS + CCaaS, with apps / ZVA / analog / final
+    // discount handled inside the calculator. The standard add-ons
+    // table is NOT applied on top — combo has its own
+    // discount/PM/final-discount math via calcCcaasComboBreakdown.
+    const comboInputs = parseCcaasComboInputs(solution.basic_inputs);
+    if (!comboInputs) {
+      total = 0;
+    } else {
+      total = calcCcaasComboBreakdown(comboInputs, rate).finalSowPrice;
+    }
   } else if (solution.pricing_mode === "basic") {
     const inputs = parseBasicInputs(solution.basic_inputs);
     if (!inputs) {
