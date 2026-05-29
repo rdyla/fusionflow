@@ -95,25 +95,6 @@ type Props = {
 
 // ── Helpers — pluck counts from sow_data + needs_assessment ──────────────────
 
-/**
- * Fetch an image URL and return it as a base64 data URL. Used by the Word
- * exporter to inline the logo + hero so the resulting .doc is self-
- * contained when the user emails it. Relative / dev-server URLs (e.g.
- * http://localhost:5173/…) wouldn't resolve once the file leaves the
- * browser.
- */
-async function fetchAsDataUrl(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  const blob = await res.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"));
-    reader.readAsDataURL(blob);
-  });
-}
-
 function num(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = Number(v);
@@ -161,8 +142,11 @@ export default function ScopeOfWorkDocument({
 }: Props) {
   const { showToast } = useToast();
   const [generating, setGenerating] = useState(false);
-  const [downloadingDoc, setDownloadingDoc] = useState(false);
   const [savingMsa, setSavingMsa] = useState(false);
+  // Customers can VIEW a generated SOW (summary + Export/Print PDF) but
+  // shouldn't see any of the metadata-editing controls or version-bump
+  // affordances. Derived once from currentUser.role.
+  const isClient = currentUser?.role === "client";
   const [msaDateDraft, setMsaDateDraft] = useState(sowMetadata?.msa_date ?? "");
   // Drafts for the timeline-derivation inputs. When blank, the renderer
   // falls back to the needs assessment's project_context answers (target
@@ -265,82 +249,6 @@ export default function ScopeOfWorkDocument({
     win.focus();
   }
 
-  /**
-   * Export the SOW as a real .docx via server-side LibreOffice conversion.
-   *
-   * Flow:
-   *   1. Build the SOW HTML same as the print path (full hero, all styling)
-   *   2. POST it to /api/sow/word-export
-   *   3. Worker forwards to the LibreOffice Lambda
-   *   4. Lambda runs `libreoffice --headless --convert-to docx`
-   *   5. Binary streams back through the Worker and triggers download
-   *
-   * Prior attempts (PR #242 Word-HTML, PR #244 html-to-docx, PR #245
-   * text-only-cover) all hit ceilings — Word HTML mangles images, the
-   * library produced unopenable files, and the text-only fallback lost
-   * the visual identity. LibreOffice's HTML→DOCX is the same engine Word
-   * itself uses for cross-format conversion; it handles the cover image
-   * + complex tables correctly.
-   *
-   * The conversion service has to be deployed once via
-   * aws/sow-converter/README.md before this works. Until then the
-   * endpoint returns 503 with a clear message.
-   */
-  async function downloadAsWord() {
-    setDownloadingDoc(true);
-    try {
-      const resolveAsset = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
-      const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
-
-      // Inline images so the HTML LibreOffice receives is self-contained.
-      // The Lambda can't fetch resources from the public internet during
-      // conversion (no relative-URL resolution, and pointing it at our
-      // CDN would race with auth + caching).
-      const [logoDataUrl, heroDataUrl] = await Promise.all([
-        fetchAsDataUrl(resolveAsset(logoUrl)),
-        heroAsset ? fetchAsDataUrl(resolveAsset(heroAsset)) : Promise.resolve(null),
-      ]);
-
-      const html = buildSowHtml({
-        variant, ctx,
-        logoUrl: logoDataUrl,
-        heroImageUrl: heroDataUrl,
-        kickoffDate: null,
-        goLiveDate: null,
-        forWordExport: true,
-      });
-
-      const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
-      const filename = `${safeName} - SOW ${ctx.sowNumber}`;
-
-      const res = await fetch("/api/sow/word-export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html, filename }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null) as { error?: string; message?: string } | null;
-        const message = body?.error ?? body?.message ?? `Word export failed (HTTP ${res.status})`;
-        throw new Error(message);
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${filename}.docx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to build Word export", "error");
-    } finally {
-      setDownloadingDoc(false);
-    }
-  }
-
   async function saveMsaDate() {
     setSavingMsa(true);
     try {
@@ -393,14 +301,6 @@ export default function ScopeOfWorkDocument({
         <button className="ms-btn-primary" onClick={openPrintWindow} style={{ background: "#03395f" }}>
           Export / Print SOW
         </button>
-        <button
-          className="ms-btn-secondary"
-          onClick={downloadAsWord}
-          disabled={downloadingDoc}
-          title="Download a real .docx with full layout + images. Converted server-side via LibreOffice. Edit in Word, send to customer for Track Changes review."
-        >
-          {downloadingDoc ? "Converting…" : "Download for Word (.docx)"}
-        </button>
         {variant.isStub && (
           <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
             ⚠ {variant.productLine} variant is a stub — content pending in a follow-up PR
@@ -408,7 +308,10 @@ export default function ScopeOfWorkDocument({
         )}
       </div>
 
-      {/* Metadata + versioning panel */}
+      {/* Metadata + versioning panel — staff only. Customers see a
+          summary + Export/Print PDF above; they have no business poking
+          at the MSA date / duration band / revision-bump controls. */}
+      {!isClient && (
       <div className="ms-section-card" style={{ padding: "16px 18px", marginBottom: 16 }}>
         <div className="ms-section-title" style={{ marginBottom: 12 }}>SOW Metadata</div>
 
@@ -535,6 +438,7 @@ export default function ScopeOfWorkDocument({
           </div>
         )}
       </div>
+      )}
 
       <div className="ms-card" style={{ padding: "16px 20px", marginBottom: 16 }}>
         <div style={{ fontSize: 11, fontWeight: 700, color: "#03395f", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
