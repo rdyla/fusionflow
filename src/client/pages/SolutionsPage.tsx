@@ -898,7 +898,7 @@ export default function SolutionsPage() {
                     <button
                       type="button"
                       className="ms-btn-ghost"
-                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); setCreatedAccountInline(false); }}
+                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); }}
                       disabled={creatingOpportunity}
                     >
                       Cancel
