@@ -247,7 +247,11 @@ export default function ProjectsPage() {
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <div className="ms-page-header">
         <h1 className="ms-page-title">Projects</h1>
-        {currentRole !== "client" && (
+        {/* Allowlist instead of `!== "client"` so the empty pre-load
+            `currentRole = ""` state doesn't slip the button through. The
+            button materializes only after /me/profile has resolved AND
+            the role is on the staff list. */}
+        {["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"].includes(currentRole) && (
           <button className="ms-btn-primary" onClick={() => setShowModal(true)}>
             + New Project
           </button>
