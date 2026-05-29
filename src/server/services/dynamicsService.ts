@@ -232,9 +232,20 @@ export async function searchAccounts(env: Env, query: string): Promise<DynamicsA
 // to the app-reg's service-principal user, which leaves the account unowned
 // from a sales-pipeline perspective. The SA picks the PF AE who'll own the
 // account from a D365-sourced AE list in the UI.
+// providerAeName/providerAeEmail land in PacketFusion's custom text fields
+// cr495_provideraename / cr495_provideraeemail on the account entity. These
+// mirror onto the new solution's partner_ae_name/email so downstream sales +
+// SOW signing know who the vendor-side counterpart is.
 export async function createAccount(
   env: Env,
-  payload: { name: string; emailaddress1: string; websiteurl?: string | null; ownerSystemUserId: string },
+  payload: {
+    name: string;
+    emailaddress1: string;
+    websiteurl?: string | null;
+    ownerSystemUserId: string;
+    providerAeName?: string | null;
+    providerAeEmail?: string | null;
+  },
 ): Promise<DynamicsAccount> {
   const body: Record<string, unknown> = {
     name: payload.name,
@@ -242,6 +253,8 @@ export async function createAccount(
     "ownerid@odata.bind": `/systemusers(${payload.ownerSystemUserId})`,
   };
   if (payload.websiteurl) body.websiteurl = payload.websiteurl;
+  if (payload.providerAeName)  body.cr495_provideraename  = payload.providerAeName;
+  if (payload.providerAeEmail) body.cr495_provideraeemail = payload.providerAeEmail;
   const raw = await dynamicsPost<DynamicsAccount>(env, "/accounts", body, { prefer: "return=representation" });
   return raw;
 }

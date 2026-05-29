@@ -162,7 +162,20 @@ export default function SolutionsPage() {
   // the picker so the rest of the New Solution flow proceeds normally.
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
-  const [newAccountForm, setNewAccountForm] = useState({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" });
+  const [newAccountForm, setNewAccountForm] = useState({
+    name: "",
+    emailaddress1: "",
+    websiteurl: "",
+    owner_systemuserid: "",
+    // Provider (partner) AE pick — same shape the main form's Vendor AE
+    // block uses. "existing" reads name/email from the picked user; "new"
+    // collects them inline (the user gets invited downstream when the
+    // solution submits).
+    provider_ae_mode: "existing" as "existing" | "new",
+    provider_ae_user_id: "",
+    provider_ae_name: "",
+    provider_ae_email: "",
+  });
   // D365-sourced AE list for the create-account owner dropdown. Loaded the
   // first time the SA opens the inline form and cached after that — the
   // list rarely changes within a session and re-fetching on every reopen
@@ -234,7 +247,16 @@ export default function SolutionsPage() {
   // whatever the SA was searching for so they don't have to retype it,
   // and kick off a one-time fetch of the D365 AE list for the owner picker.
   function openCreateAccountForm() {
-    setNewAccountForm({ name: crmSearch.trim(), emailaddress1: "", websiteurl: "", owner_systemuserid: "" });
+    setNewAccountForm({
+      name: crmSearch.trim(),
+      emailaddress1: "",
+      websiteurl: "",
+      owner_systemuserid: "",
+      provider_ae_mode: "existing",
+      provider_ae_user_id: "",
+      provider_ae_name: "",
+      provider_ae_email: "",
+    });
     setShowCreateAccount(true);
     setCrmResults([]);
     if (dynamicsAes.length === 0 && !dynamicsAesLoading) {
@@ -261,6 +283,24 @@ export default function SolutionsPage() {
     const websiteurl = rawWebsite && !/^https?:\/\//i.test(rawWebsite)
       ? `https://${rawWebsite}`
       : rawWebsite;
+
+    // Resolve provider AE → name + email. In "existing" mode we read both
+    // off the picked user record; in "new" mode the SA typed them in.
+    let providerName  = "";
+    let providerEmail = "";
+    let providerUserId = "";
+    if (newAccountForm.provider_ae_mode === "existing" && newAccountForm.provider_ae_user_id) {
+      const u = partnerAes.find((x) => x.id === newAccountForm.provider_ae_user_id);
+      if (u) {
+        providerName  = u.name ?? "";
+        providerEmail = u.email ?? "";
+        providerUserId = u.id;
+      }
+    } else if (newAccountForm.provider_ae_mode === "new") {
+      providerName  = newAccountForm.provider_ae_name.trim();
+      providerEmail = newAccountForm.provider_ae_email.trim();
+    }
+
     setCreatingAccount(true);
     try {
       const created = await api.createDynamicsAccount({
@@ -268,13 +308,36 @@ export default function SolutionsPage() {
         emailaddress1: newAccountForm.emailaddress1.trim(),
         websiteurl: websiteurl || undefined,
         owner_systemuserid: newAccountForm.owner_systemuserid,
+        provider_ae_name:  providerName  || undefined,
+        provider_ae_email: providerEmail || undefined,
       });
       // Drop the new account straight into the picker as if it had been
       // selected from search — kicks off the same team + opportunities
       // fetches so the SA continues with the normal flow.
       selectCrmAccount({ id: created.accountid, name: created.name });
+      // Seed the main form's Vendor AE state from what the SA just picked,
+      // so the rest of the New Solution submit carries the same partner AE
+      // into the solution row (createSolution will resolve / invite based
+      // on partner_ae_user_id or partner_ae_email).
+      if (providerUserId) {
+        setForm((f) => ({
+          ...f,
+          partner_ae_mode: "existing",
+          partner_ae_user_id: providerUserId,
+          partner_ae_name: providerName,
+          partner_ae_email: providerEmail,
+        }));
+      } else if (providerEmail) {
+        setForm((f) => ({
+          ...f,
+          partner_ae_mode: "new",
+          partner_ae_user_id: "",
+          partner_ae_name: providerName,
+          partner_ae_email: providerEmail,
+        }));
+      }
       setShowCreateAccount(false);
-      setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" });
+      setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" });
       showToast(`Created ${created.name} in CRM.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create account in CRM", "error");
@@ -452,7 +515,7 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" }); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); } }}>
           <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
@@ -578,6 +641,65 @@ export default function SolutionsPage() {
                       </select>
                     )}
                   </label>
+
+                  {/* Provider (vendor / partner) AE — mirrors the main form's
+                      pattern. Saving the account stamps these onto the D365
+                      account via cr495_provideraename / cr495_provideraeemail
+                      AND seeds the main form's partner_ae_* so the solution
+                      carries the same person forward. */}
+                  <label className="ms-label">
+                    <span>Provider AE</span>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+                      {(["existing", "new"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setNewAccountForm((f) => ({ ...f, provider_ae_mode: mode }))}
+                          disabled={creatingAccount}
+                          style={{
+                            flex: 1, padding: "5px 0", fontSize: 12, borderRadius: 4,
+                            border: `1px solid ${newAccountForm.provider_ae_mode === mode ? "#63c1ea" : "rgba(0,0,0,0.1)"}`,
+                            background: newAccountForm.provider_ae_mode === mode ? "rgba(99,193,234,0.1)" : "transparent",
+                            color: newAccountForm.provider_ae_mode === mode ? "#63c1ea" : "#94a3b8",
+                            cursor: "pointer",
+                          }}
+                        >
+                          {mode === "existing" ? "Select Existing" : "Add New"}
+                        </button>
+                      ))}
+                    </div>
+                    {newAccountForm.provider_ae_mode === "existing" ? (
+                      <select
+                        className="ms-input"
+                        value={newAccountForm.provider_ae_user_id}
+                        onChange={(e) => setNewAccountForm((f) => ({ ...f, provider_ae_user_id: e.target.value }))}
+                        disabled={creatingAccount}
+                      >
+                        <option value="">— None —</option>
+                        {partnerAes.map((u) => (
+                          <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                        <input
+                          className="ms-input"
+                          placeholder="Full name"
+                          value={newAccountForm.provider_ae_name}
+                          onChange={(e) => setNewAccountForm((f) => ({ ...f, provider_ae_name: e.target.value }))}
+                          disabled={creatingAccount}
+                        />
+                        <input
+                          className="ms-input"
+                          type="email"
+                          placeholder="ae@partner.com"
+                          value={newAccountForm.provider_ae_email}
+                          onChange={(e) => setNewAccountForm((f) => ({ ...f, provider_ae_email: e.target.value }))}
+                          disabled={creatingAccount}
+                        />
+                      </div>
+                    )}
+                  </label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
@@ -590,7 +712,7 @@ export default function SolutionsPage() {
                     <button
                       type="button"
                       className="ms-btn-ghost"
-                      onClick={() => { setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" }); }}
+                      onClick={() => { setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); }}
                       disabled={creatingAccount}
                     >
                       Cancel
@@ -852,7 +974,7 @@ export default function SolutionsPage() {
                 >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "" }); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); }}>
                   Cancel
                 </button>
               </div>
