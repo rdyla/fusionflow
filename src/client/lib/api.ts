@@ -159,6 +159,15 @@ export type Solution = {
    *  Customer Agreement instead of the Packet Fusion MSA. Required for SLED
    *  and other Zoom-reseller-channel deals. */
   is_zoom_reseller: number;
+  /** 1 when the CRM account was created via the inline "Create new account
+   *  in CRM" form during this solution's New Solution flow (vs. picked from
+   *  existing CRM search). Drives am_revenuesource = New Logo on the bound
+   *  D365 opportunity. */
+  is_new_logo: number;
+  /** Partner deal-registration id (Zoom / RC vendor portal). Free text,
+   *  always editable on the solution detail page. Synced to D365 opportunity
+   *  field cr495_dealregistrationid on every PATCH. */
+  deal_registration_id: string | null;
   // SOW pricing
   add_ons: AddOn[];
   blended_rate: number;
@@ -1802,6 +1811,10 @@ export const api = {
     partner_ae_user_id?: string;
     partner_ae_name?: string;
     partner_ae_email?: string;
+    /** Set true when the SA used the inline "Create new account in CRM"
+     *  affordance — drives am_revenuesource=New Logo on the bound D365
+     *  opportunity. Defaults to false (Installed Base) server-side. */
+    is_new_logo?: boolean;
   }) =>
     request<Solution>("/solutions", {
       method: "POST",
@@ -1838,6 +1851,8 @@ export const api = {
       basic_inputs: UcaasBasicInputs | null;
       is_budgetary: number;
       is_zoom_reseller: number;
+      /** Partner deal-registration id — synced to D365 cr495_dealregistrationid. */
+      deal_registration_id: string | null;
       /** If a solution_types update would orphan needs_assessments / labor_estimates rows
        *  for removed types, the server returns 409 unless this flag is set. The client
        *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */

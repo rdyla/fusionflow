@@ -181,3 +181,97 @@ export async function syncProjectGoLiveDate(db: D1Database, projectId: string): 
     .bind(goLive, projectId, goLive)
     .run();
 }
+
+// ── D365 opportunity sync ────────────────────────────────────────────────────
+// PATCHes the bound D365 opportunity with the four fields the sales side
+// cares about, derived from the solution row:
+//
+//   am_opportunitytype       — always 930680038 (PFI - CloudPro). The PS
+//                              labor PacketFusion quotes for implementation
+//                              work, regardless of the underlying tech type.
+//   am_revenuesource         — 930680001 (New Logo) when the CRM account was
+//                              created via the inline form during New Solution
+//                              (is_new_logo=1), else 930680000 (Installed Base).
+//   am_OpportunityVendors    — lookup to am_vendoraccount. Resolved from
+//                              solution.vendor + is_zoom_reseller:
+//                                ringcentral          → Ring Central
+//                                zoom + reseller=1    → Zoom Resell
+//                                zoom + reseller=0    → Zoom
+//                                tbd                  → field unset
+//   cr495_dealregistrationid — passthrough text from solution.deal_registration_id.
+//
+// Best-effort: D365 failures are logged but never block the solution write
+// path. Caller is solutions POST + PATCH after the DB row is in place.
+// No-op when solution has no crm_opportunity_id (legacy rows, or rows
+// somehow created without the gate).
+// Structurally matches the subset of fields dynamicsService cares about.
+// Route handlers can pass their `c.env` straight through — Hono Bindings
+// always carry these.
+type SyncOpportunityEnv = {
+  KV: KVNamespace;
+  DYNAMICS_TENANT_ID?: string;
+  DYNAMICS_CLIENT_ID?: string;
+  DYNAMICS_CLIENT_SECRET?: string;
+  DYNAMICS_SUPPORT_CLIENT_ID?: string;
+  DYNAMICS_SUPPORT_CLIENT_SECRET?: string;
+};
+
+const VENDOR_GUIDS = {
+  ring_central: "b84b00ae-7951-ec11-8f8e-000d3a5bc238",
+  zoom:         "e34b00ae-7951-ec11-8f8e-000d3a5bc238",
+  zoom_resell:  "2b97d3d0-115f-ef11-bfe3-000d3a593ab7",
+} as const;
+
+const OPP_TYPE_CLOUDPRO = 930680038;
+const REV_SRC_INSTALLED_BASE = 930680000;
+const REV_SRC_NEW_LOGO       = 930680001;
+
+export async function syncOpportunityFromSolution(
+  env: SyncOpportunityEnv,
+  db: D1Database,
+  solutionId: string,
+): Promise<void> {
+  const row = await db
+    .prepare(
+      `SELECT crm_opportunity_id, vendor, is_zoom_reseller, is_new_logo, deal_registration_id
+       FROM solutions WHERE id = ? LIMIT 1`
+    )
+    .bind(solutionId)
+    .first<{
+      crm_opportunity_id: string | null;
+      vendor: string | null;
+      is_zoom_reseller: number | null;
+      is_new_logo: number | null;
+      deal_registration_id: string | null;
+    }>();
+  if (!row?.crm_opportunity_id) return;
+
+  // Vendor lookup: only set when we have a confident map. "tbd" or
+  // unrecognized values leave the field alone so we don't overwrite a
+  // manually-set vendor in CRM with nothing.
+  let vendorGuid: string | null = null;
+  if (row.vendor === "ringcentral") {
+    vendorGuid = VENDOR_GUIDS.ring_central;
+  } else if (row.vendor === "zoom") {
+    vendorGuid = row.is_zoom_reseller === 1 ? VENDOR_GUIDS.zoom_resell : VENDOR_GUIDS.zoom;
+  }
+
+  const patch: Record<string, unknown> = {
+    am_opportunitytype: OPP_TYPE_CLOUDPRO,
+    am_revenuesource:   row.is_new_logo === 1 ? REV_SRC_NEW_LOGO : REV_SRC_INSTALLED_BASE,
+    cr495_dealregistrationid: row.deal_registration_id ?? null,
+  };
+  if (vendorGuid) {
+    patch["am_OpportunityVendors@odata.bind"] = `/am_vendoraccounts(${vendorGuid})`;
+  }
+
+  // Lazy-import to avoid a circular dependency: dynamicsService imports
+  // from various route modules in the future, and routes/solutions imports
+  // from teamUtils. The dynamic import sidesteps that.
+  try {
+    const { updateOpportunity } = await import("../services/dynamicsService");
+    await updateOpportunity(env, row.crm_opportunity_id, patch);
+  } catch (err) {
+    console.error(`syncOpportunityFromSolution failed for solution ${solutionId}:`, err);
+  }
+}

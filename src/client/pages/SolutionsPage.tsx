@@ -161,6 +161,12 @@ export default function SolutionsPage() {
   // and we POST to D365, then immediately bind the returned account into
   // the picker so the rest of the New Solution flow proceeds normally.
   const [showCreateAccount, setShowCreateAccount] = useState(false);
+  // True after the SA created the CRM account inline (vs. picked from
+  // existing search results). Drives is_new_logo on the createSolution
+  // payload; reset whenever the SA edits the customer field or picks a
+  // different account from search, so a stale "true" can't leak across
+  // an account swap mid-flow.
+  const [createdAccountInline, setCreatedAccountInline] = useState(false);
   const [creatingAccount, setCreatingAccount] = useState(false);
   const [newAccountForm, setNewAccountForm] = useState({
     name: "",
@@ -231,6 +237,10 @@ export default function SolutionsPage() {
     setCrmTeam(null);
     setCrmTeamLoading(true);
     setOpportunities([]);
+    // Reset the New Logo flag — picking an existing account is by definition
+    // Installed Base. handleCreateAccount sets it back to true after this
+    // call when the new account came from the inline create form.
+    setCreatedAccountInline(false);
     setOpportunitiesLoading(true);
     // Hide a stale create-opportunity form if the SA had it open while
     // re-binding accounts — the new opp would point at the old account.
@@ -338,6 +348,10 @@ export default function SolutionsPage() {
       // selected from search — kicks off the same team + opportunities
       // fetches so the SA continues with the normal flow.
       selectCrmAccount({ id: created.accountid, name: created.name });
+      // selectCrmAccount() above clears createdAccountInline (since it's
+      // also called from the search-picker path). Re-flip it back on here
+      // so the createSolution submit downstream sends is_new_logo=true.
+      setCreatedAccountInline(true);
       // Seed the main form's Vendor AE state from what the SA just picked,
       // so the rest of the New Solution submit carries the same partner AE
       // into the solution row (createSolution will resolve / invite based
@@ -408,6 +422,7 @@ export default function SolutionsPage() {
         dynamics_account_id: form.dynamics_account_id,
         crm_opportunity_id: form.crm_opportunity_id,
         journeys: form.journeys,
+        is_new_logo: createdAccountInline,
       };
       if (form.pf_ae_user_id) payload.pf_ae_user_id = form.pf_ae_user_id;
       if (form.pf_sa_user_id) payload.pf_sa_user_id = form.pf_sa_user_id;
@@ -564,7 +579,7 @@ export default function SolutionsPage() {
 
       {/* Create Modal */}
       {showCreate && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); } }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); setCreatedAccountInline(false); } }}>
           <div className="ms-modal" style={{ maxWidth: 680 }}>
             <h2>New Solution</h2>
             <form onSubmit={handleCreate} style={{ display: "grid", gap: 16, marginTop: 16 }}>
@@ -590,6 +605,7 @@ export default function SolutionsPage() {
                       setForm((f) => ({ ...f, customer_name: e.target.value, dynamics_account_id: "", crm_opportunity_id: "" }));
                       setOpportunities([]);
                       setCrmTeam(null);
+                      setCreatedAccountInline(false);
                       handleCrmSearch(e.target.value);
                     }}
                     required
@@ -882,7 +898,7 @@ export default function SolutionsPage() {
                     <button
                       type="button"
                       className="ms-btn-ghost"
-                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); }}
+                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); setCreatedAccountInline(false); }}
                       disabled={creatingOpportunity}
                     >
                       Cancel
@@ -1110,7 +1126,7 @@ export default function SolutionsPage() {
                 >
                   {saving ? "Creating…" : "Create Solution"}
                 </button>
-                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); }}>
+                <button type="button" className="ms-btn-secondary" onClick={() => { setShowCreate(false); setForm(EMPTY_FORM); setCrmSearch(""); setCrmResults([]); setCrmTeam(null); setOpportunities([]); setShowCreateAccount(false); setNewAccountForm({ name: "", emailaddress1: "", websiteurl: "", owner_systemuserid: "", provider_ae_mode: "existing", provider_ae_user_id: "", provider_ae_name: "", provider_ae_email: "" }); setShowCreateOpportunity(false); setNewOpportunityName(""); setCreatedAccountInline(false); }}>
                   Cancel
                 </button>
               </div>

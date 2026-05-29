@@ -481,6 +481,36 @@ export default function SolutionDetailPage() {
             <span className="ms-badge" style={{ background: `${STATUS_COLOR[solution.status]}18`, color: STATUS_COLOR[solution.status], border: `1px solid ${STATUS_COLOR[solution.status]}40` }}>
               {STATUS_LABELS[solution.status]}
             </span>
+            {/* New Logo badge — surfaces is_new_logo at a glance, matches
+                what the SA sees on the D365 opportunity (am_revenuesource). */}
+            {solution.is_new_logo === 1 && (
+              <span className="ms-badge" style={{ background: "rgba(217,119,6,0.12)", color: "#b45309", border: "1px solid rgba(217,119,6,0.3)" }}>New Logo</span>
+            )}
+          </div>
+          {/* Deal Registration ID — always editable inline. Synced to D365's
+              cr495_dealregistrationid via syncOpportunityFromSolution on the
+              save() call below. */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, fontSize: 12, color: "#475569" }}>
+            <span style={{ fontWeight: 600, color: "#64748b" }}>Deal Reg ID:</span>
+            <input
+              className="ms-input"
+              placeholder={canEdit ? "Enter vendor deal reg #…" : "—"}
+              defaultValue={solution.deal_registration_id ?? ""}
+              disabled={!canEdit || saving}
+              onBlur={(e) => {
+                const next = e.target.value.trim() || null;
+                const prev = solution.deal_registration_id ?? null;
+                if (next !== prev) save({ deal_registration_id: next });
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                if (e.key === "Escape") {
+                  (e.target as HTMLInputElement).value = solution.deal_registration_id ?? "";
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              style={{ width: 220, padding: "3px 8px", fontSize: 12 }}
+            />
           </div>
         </div>
 
