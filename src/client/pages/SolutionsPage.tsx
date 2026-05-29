@@ -632,7 +632,21 @@ export default function SolutionsPage() {
 
               {/* ── Inline "Create new account in CRM" form ── */}
               {showCreateAccount && (
-                <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}>
+                <div
+                  // The inline form sits INSIDE the outer New Solution
+                  // <form>; without this, pressing Enter in any field
+                  // submits the outer form (which then trips its own
+                  // validation: "Pick an opportunity from CRM"). Intercept
+                  // Enter at the wrapper level so it routes to the inline
+                  // create handler instead.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateAccount(e as unknown as React.FormEvent);
+                    }
+                  }}
+                  style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}
+                >
                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new account in CRM</div>
                   <label className="ms-label">
                     <span>Account name *</span>
@@ -827,7 +841,21 @@ export default function SolutionsPage() {
 
               {/* ── Inline "Create new opportunity in CRM" form ── */}
               {showCreateOpportunity && form.dynamics_account_id && (
-                <div style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}>
+                <div
+                  // Same Enter-intercept as the create-account inline form
+                  // above — this sub-form lives inside the outer New
+                  // Solution <form>, so without this Enter on the name
+                  // input submits the outer form and short-circuits with
+                  // "Pick an opportunity from CRM" before the opp is ever
+                  // created.
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleCreateOpportunity();
+                    }
+                  }}
+                  style={{ padding: "14px 16px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(99,193,234,0.3)", display: "grid", gap: 10 }}
+                >
                   <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#0b9aad" }}>Create new opportunity in CRM</div>
                   <label className="ms-label">
                     <span>Opportunity name *</span>
