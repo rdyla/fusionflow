@@ -492,10 +492,11 @@ export default function SolutionDetailPage() {
               <span className="ms-badge" style={{ background: "rgba(217,119,6,0.12)", color: "#b45309", border: "1px solid rgba(217,119,6,0.3)" }}>New Logo</span>
             )}
           </div>
-          {/* CRM-sync inputs — always editable. Both feed
-              syncOpportunityFromSolution on the next save() call so the
-              bound D365 opportunity stays current without sales ops having
-              to re-enter anything. */}
+          {/* CRM-sync inputs — staff-only. Both fields drive D365
+              opportunity sync (cr495_dealregistrationid +
+              am_cloudcontractexpiration) and have no meaning in the
+              customer-facing view. */}
+          {!isClient && (
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 10, fontSize: 12, color: "#475569", flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontWeight: 600, color: "#64748b" }}>Deal Reg ID:</span>
@@ -542,6 +543,7 @@ export default function SolutionDetailPage() {
               />
             </label>
           </div>
+          )}
         </div>
 
         {/* Status actions */}

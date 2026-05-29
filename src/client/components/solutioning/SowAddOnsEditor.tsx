@@ -107,35 +107,42 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
   const accentGreen = "#17C662";
 
   // ── Customer-facing render ────────────────────────────────────────────────
-  // Strip everything internal-only. Hide the whole card when there are no
-  // add-ons — a customer doesn't need a "SOW Pricing" panel that shows just
-  // the bottom-line total without any line items above it; the SOW print
-  // already carries that summary.
+  // Strip everything internal-only (labor rate, labor breakdown, pricing-
+  // mode pointer, derivation notes, save button). The pricing summary
+  // ALWAYS renders as long as there's a meaningful total to show — the
+  // customer needs to see what they're being charged. The add-on rows
+  // sub-section only renders when add-ons exist; without any, the SOW
+  // Total stands on its own. Whole card returns null only when there's
+  // truly nothing — no calculated total AND no add-ons.
   if (isClient) {
-    if (addOns.length === 0) return null;
+    const hasTotal = breakdown.total > 0;
+    const hasAddOns = addOns.length > 0;
+    if (!hasTotal && !hasAddOns) return null;
     return (
       <div className="ms-card">
         <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          SOW Pricing &amp; Add-Ons
+          SOW Pricing{hasAddOns ? " & Add-Ons" : ""}
         </h3>
-        <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-          {addOns.map((line, i) => {
-            const dollar = breakdown.addOnEffects[i]?.dollar ?? 0;
-            const isDiscount = dollar < 0;
-            return (
-              <div
-                key={line.id}
-                style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "baseline", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}
-              >
-                <div style={{ fontSize: 13, color: "#1e293b" }}>{line.label || (isDiscount ? "Discount" : "Add-on")}</div>
-                <div style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 14, fontWeight: 700, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>
-                  {fmtUsd(dollar)}
+        {hasAddOns && (
+          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+            {addOns.map((line, i) => {
+              const dollar = breakdown.addOnEffects[i]?.dollar ?? 0;
+              const isDiscount = dollar < 0;
+              return (
+                <div
+                  key={line.id}
+                  style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 12, alignItems: "baseline", padding: "8px 0", borderBottom: "1px solid #f1f5f9" }}
+                >
+                  <div style={{ fontSize: 13, color: "#1e293b" }}>{line.label || (isDiscount ? "Discount" : "Add-on")}</div>
+                  <div style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 14, fontWeight: 700, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>
+                    {fmtUsd(dollar)}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 4, borderTop: "2px solid #cbd5e1" }}>
+              );
+            })}
+          </div>
+        )}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", paddingTop: 4, borderTop: hasAddOns ? "2px solid #cbd5e1" : "none" }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>SOW Total</div>
           <div style={{ fontFamily: "ui-monospace, SFMono-Regular, monospace", fontSize: 18, fontWeight: 800, color: accentGreen }}>
             {fmtUsd(breakdown.total)}
