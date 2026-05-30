@@ -1,6 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { calcSowTotal, calcBasicSowTotal, parseAddOns, DEFAULT_BLENDED_RATE } from "../../shared/sowAddOns";
-import { calcUcaasBasicBreakdown, parseBasicInputs, getUcaasTieredTier } from "../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown, parseBasicInputs, getUcaasTieredTier, sowDataToBasicInputs } from "../../shared/ucaasBasicPricing";
 import { calcCcaasComboBreakdown, isComboMode, parseCcaasComboInputs } from "../../shared/ccaasComboPricing";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
 
@@ -23,7 +23,7 @@ import { parseSolutionTypes } from "../../shared/solutionTypes";
  */
 export async function recomputeSowTotal(db: D1Database, solutionId: string): Promise<number | null> {
   const solution = await db
-    .prepare("SELECT add_ons, blended_rate, pricing_mode, basic_seat_count, basic_inputs, solution_types FROM solutions WHERE id = ? LIMIT 1")
+    .prepare("SELECT add_ons, blended_rate, pricing_mode, basic_seat_count, basic_inputs, sow_data, solution_types FROM solutions WHERE id = ? LIMIT 1")
     .bind(solutionId)
     .first<{
       add_ons: string | null;
@@ -31,6 +31,7 @@ export async function recomputeSowTotal(db: D1Database, solutionId: string): Pro
       pricing_mode: string | null;
       basic_seat_count: number | null;
       basic_inputs: string | null;
+      sow_data: string | null;
       solution_types: string | null;
     }>();
   if (!solution) return null;
@@ -55,8 +56,14 @@ export async function recomputeSowTotal(db: D1Database, solutionId: string): Pro
       total = calcCcaasComboBreakdown(comboInputs, rate).finalSowPrice;
     }
   } else if (solution.pricing_mode === "basic") {
-    const inputs = parseBasicInputs(solution.basic_inputs);
-    if (!inputs) {
+    // Basic (non-combo): the consolidated SOW Sizing form (sow_data) is the
+    // source; fall back to legacy basic_inputs for solutions not yet re-saved.
+    const fallback = parseBasicInputs(solution.basic_inputs);
+    let sowParsed: unknown = null;
+    if (solution.sow_data) { try { sowParsed = JSON.parse(solution.sow_data); } catch { /* ignore */ } }
+    const inputs = sowDataToBasicInputs(sowParsed, fallback);
+    // Keep the "not yet priced → 0" signal when nothing was entered anywhere.
+    if (!fallback && inputs.users === 0) {
       total = 0;
     } else {
       const breakdown = calcUcaasBasicBreakdown(inputs, rate);

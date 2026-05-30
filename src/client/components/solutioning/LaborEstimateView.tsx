@@ -1,19 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type LaborEstimate, type Solution } from "../../lib/api";
 import {
-  calcUcaasBasicBreakdown,
   canUseBasicPricing,
   canUseTieredPricing,
   getUcaasTieredTier,
   UCAAS_BASIC_DEFAULTS,
   UCAAS_TIERED_TIERS,
   UCAAS_TIERED_MAX_SEATS,
-  TRAINING_SESSION_COST,
-  ONSITE_DEVICE_COST,
-  PM_MULTIPLIER,
   type UcaasBasicInputs,
 } from "../../../shared/ucaasBasicPricing";
-import { DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
 import { isComboMode } from "../../../shared/ccaasComboPricing";
 import CcaasComboCalculator from "./CcaasComboCalculator";
 
@@ -96,7 +91,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
   const [basicInputs, setBasicInputs] = useState<UcaasBasicInputs>(initialInputs);
   const [savedPricingMode, setSavedPricingMode] = useState<PricingMode>(solution.pricing_mode ?? "advanced");
   const [savedTieredSeatCount, setSavedTieredSeatCount] = useState<number | null>(solution.basic_seat_count ?? null);
-  const [savedBasicInputs, setSavedBasicInputs] = useState<UcaasBasicInputs>(initialInputs);
   const [savingPricing, setSavingPricing] = useState(false);
 
   // Re-sync local pricing state when the solution prop changes (e.g. after
@@ -112,7 +106,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     setBasicInputs(next);
     setSavedPricingMode(solution.pricing_mode ?? "advanced");
     setSavedTieredSeatCount(solution.basic_seat_count ?? null);
-    setSavedBasicInputs(next);
   }, [solution.pricing_mode, solution.basic_inputs, solution.basic_seat_count]);
 
   // Combo solutions force advanced.
@@ -121,29 +114,12 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     if (pricingMode === "basic" && !basicAvailable) return "advanced";
     return pricingMode;
   })();
-  const blendedRateForBasic = solution.blended_rate || DEFAULT_BLENDED_RATE;
-  const basicBreakdown = useMemo(
-    () => calcUcaasBasicBreakdown(basicInputs, blendedRateForBasic),
-    [basicInputs, blendedRateForBasic],
-  );
   const tieredTier = effectiveMode === "tiered" ? getUcaasTieredTier(tieredSeatCount) : null;
   const tieredOver = effectiveMode === "tiered" && tieredSeatCount !== null && tieredSeatCount > UCAAS_TIERED_MAX_SEATS;
 
-  const inputsDirtyVsSaved =
-    basicInputs.users             !== savedBasicInputs.users ||
-    basicInputs.sites             !== savedBasicInputs.sites ||
-    basicInputs.go_lives          !== savedBasicInputs.go_lives ||
-    basicInputs.training_sessions !== savedBasicInputs.training_sessions ||
-    basicInputs.onsite_sites      !== savedBasicInputs.onsite_sites ||
-    basicInputs.onsite_devices    !== savedBasicInputs.onsite_devices;
   const pricingDirty =
     effectiveMode !== savedPricingMode ||
-    (effectiveMode === "basic" && inputsDirtyVsSaved) ||
     (effectiveMode === "tiered" && (tieredSeatCount ?? null) !== (savedTieredSeatCount ?? null));
-
-  function updateBasicInput<K extends keyof UcaasBasicInputs>(key: K, value: UcaasBasicInputs[K]) {
-    setBasicInputs((prev) => ({ ...prev, [key]: value }));
-  }
 
   async function savePricing() {
     setSavingPricing(true);
@@ -158,7 +134,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
       onSolutionChange(updated);
       setSavedPricingMode(effectiveMode);
       setSavedTieredSeatCount(effectiveMode === "tiered" ? (tieredSeatCount ?? null) : null);
-      setSavedBasicInputs(effectiveMode === "basic" ? basicInputs : { ...UCAAS_BASIC_DEFAULTS });
     } finally {
       setSavingPricing(false);
     }
@@ -330,118 +305,9 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
       )}
 
       {effectiveMode === "basic" && !isComboMode(solution.solution_types) && (
-        <>
-          {/* 6-field input grid */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12, marginBottom: 14 }}>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Users</span>
-              <input
-                className="ms-input"
-                type="number"
-                min={0}
-                step={1}
-                value={basicInputs.users || ""}
-                onChange={(e) => updateBasicInput("users", parseInt(e.target.value, 10) || 0)}
-                disabled={!canEdit}
-                placeholder="e.g. 50"
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>0.05h each</span>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Sites</span>
-              <input
-                className="ms-input"
-                type="number"
-                min={1}
-                step={1}
-                value={basicInputs.sites || ""}
-                onChange={(e) => updateBasicInput("sites", Math.max(1, parseInt(e.target.value, 10) || 1))}
-                disabled={!canEdit}
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>2h each</span>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Go-Lives</span>
-              <input
-                className="ms-input"
-                type="number"
-                min={1}
-                step={1}
-                value={basicInputs.go_lives || ""}
-                onChange={(e) => updateBasicInput("go_lives", Math.max(1, parseInt(e.target.value, 10) || 1))}
-                disabled={!canEdit}
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>6h each</span>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>Training Sessions</span>
-              <input
-                className="ms-input"
-                type="number"
-                min={0}
-                step={1}
-                value={basicInputs.training_sessions || ""}
-                onChange={(e) => updateBasicInput("training_sessions", parseInt(e.target.value, 10) || 0)}
-                disabled={!canEdit}
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>flat ${TRAINING_SESSION_COST} each</span>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>On-site Travel (sites)</span>
-              <input
-                className="ms-input"
-                type="number"
-                min={0}
-                step={1}
-                value={basicInputs.onsite_sites || ""}
-                onChange={(e) => updateBasicInput("onsite_sites", parseInt(e.target.value, 10) || 0)}
-                disabled={!canEdit}
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>+2h labor per site</span>
-            </label>
-            <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>On-site Devices</span>
-              <input
-                className="ms-input"
-                type="number"
-                min={0}
-                step={1}
-                value={basicInputs.onsite_devices || ""}
-                onChange={(e) => updateBasicInput("onsite_devices", parseInt(e.target.value, 10) || 0)}
-                disabled={!canEdit}
-              />
-              <span style={{ fontSize: 11, color: "#94a3b8" }}>flat ${ONSITE_DEVICE_COST} each</span>
-            </label>
-          </div>
-
-          {/* Detailed breakdown for the calculator user */}
-          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 16px", marginBottom: 14, fontSize: 12 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Calculation</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4, columnGap: 16, color: "#475569" }}>
-              <div>Base</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.base}h</div>
-              <div>Users ({basicInputs.users} × 0.05h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.users.toFixed(2)}h</div>
-              <div>Sites ({basicInputs.sites} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.sites}h</div>
-              <div>Go-lives ({basicInputs.go_lives} × 6h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.goLives}h</div>
-              <div>On-site travel ({basicInputs.onsite_sites} × 2h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{basicBreakdown.components.onsiteTravel}h</div>
-              <div style={{ paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>Total hours × ${blendedRateForBasic}/hr</div>
-              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>{fmtUsd(basicBreakdown.laborSubtotal)}</div>
-              {basicInputs.training_sessions > 0 && (<>
-                <div>Training ({basicInputs.training_sessions} × ${TRAINING_SESSION_COST})</div>
-                <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{fmtUsd(basicBreakdown.trainingTotal)}</div>
-              </>)}
-              {basicInputs.onsite_devices > 0 && (<>
-                <div>On-site device install ({basicInputs.onsite_devices} × ${ONSITE_DEVICE_COST})</div>
-                <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{fmtUsd(basicBreakdown.deviceInstallTotal)}</div>
-              </>)}
-              <div style={{ paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>Subtotal</div>
-              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 4, borderTop: "1px solid #e2e8f0", fontWeight: 600 }}>{fmtUsd(basicBreakdown.prePmSubtotal)}</div>
-              <div>Project Management ({(PM_MULTIPLIER * 100).toFixed(0)}%)</div>
-              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace" }}>{fmtUsd(basicBreakdown.pm)}</div>
-              <div style={{ paddingTop: 6, borderTop: "2px solid #17C662", fontWeight: 800, color: "#1e293b" }}>Total</div>
-              <div style={{ textAlign: "right", fontFamily: "ui-monospace, SFMono-Regular, monospace", paddingTop: 6, borderTop: "2px solid #17C662", fontWeight: 800, color: "#17C662" }}>{fmtUsd(basicBreakdown.total)}</div>
-            </div>
-          </div>
-        </>
+        <div style={{ marginBottom: 14, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 12, color: "#0369a1" }}>
+          Basic sizing &amp; pricing now live on the <strong>SOW tab</strong> &mdash; enter users, sites, go-lives, and the flat-cost add-ons there. The price updates automatically when you save the SOW sizing.
+        </div>
       )}
 
       {canEdit && pricingDirty && (
