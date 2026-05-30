@@ -8,7 +8,6 @@ import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ScopeOfWorkDocument, { parseSowMetadata } from "../components/solutioning/ScopeOfWorkDocument";
 import SowAddOnsEditor from "../components/solutioning/SowAddOnsEditor";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
-import { isComboMode } from "../../shared/ccaasComboPricing";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
@@ -1348,8 +1347,7 @@ export default function SolutionDetailPage() {
               not spec'd) and Basic+combo (the CcaasComboCalculator on the Labor
               tab owns combo sizing). In Advanced it shows hours-driving scoping;
               in Basic it shows the flat-price inputs + breakdown. */}
-          {solution.pricing_mode !== "tiered"
-            && !(solution.pricing_mode === "basic" && isComboMode(solution.solution_types)) && (
+          {solution.pricing_mode !== "tiered" && (
             <SowSizingForm
               solution={solution}
               needsAssessments={needsAssessments}

@@ -1,7 +1,7 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import { calcSowTotal, calcBasicSowTotal, parseAddOns, DEFAULT_BLENDED_RATE } from "../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, parseBasicInputs, getUcaasTieredTier, sowDataToBasicInputs } from "../../shared/ucaasBasicPricing";
-import { calcCcaasComboBreakdown, isComboMode, parseCcaasComboInputs } from "../../shared/ccaasComboPricing";
+import { calcCcaasComboBreakdown, isComboMode, parseCcaasComboInputs, sowDataToComboInputs } from "../../shared/ccaasComboPricing";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
 
 /**
@@ -45,12 +45,16 @@ export async function recomputeSowTotal(db: D1Database, solutionId: string): Pro
     const tier = getUcaasTieredTier(solution.basic_seat_count);
     total = tier ? calcBasicSowTotal(tier.price, addOns, rate).total : 0;
   } else if (solution.pricing_mode === "basic" && isComboMode(solutionTypes)) {
-    // Combo path: UCaaS + CCaaS, with apps / ZVA / analog / final
-    // discount handled inside the calculator. The standard add-ons
-    // table is NOT applied on top — combo has its own
-    // discount/PM/final-discount math via calcCcaasComboBreakdown.
-    const comboInputs = parseCcaasComboInputs(solution.basic_inputs);
-    if (!comboInputs) {
+    // Combo path: UCaaS + CCaaS + apps / ZVA / analog / final discount. The
+    // consolidated SOW form (sow_data.combo) is the single source; fall back to
+    // legacy basic_inputs for solutions not yet re-saved. The standard add-ons
+    // table is NOT applied — combo owns its bundle/PM/final-discount math.
+    const fallback = parseCcaasComboInputs(solution.basic_inputs);
+    let sowParsed: unknown = null;
+    if (solution.sow_data) { try { sowParsed = JSON.parse(solution.sow_data); } catch { /* ignore */ } }
+    const comboInputs = sowDataToComboInputs(sowParsed, fallback);
+    // Preserve "not yet priced → 0" when nothing was entered anywhere.
+    if (!fallback && comboInputs.users === 0 && (comboInputs.ccaas?.agents ?? 0) === 0) {
       total = 0;
     } else {
       total = calcCcaasComboBreakdown(comboInputs, rate).finalSowPrice;

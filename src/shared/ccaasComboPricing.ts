@@ -426,6 +426,22 @@ export function calcCcaasComboBreakdown(
 /** Parse the combo-extended basic_inputs blob off solutions.basic_inputs.
  *  Returns null if the JSON is missing/unparseable. Tolerant of partial
  *  data — every sub-block is optional. */
+/**
+ * Derive combo pricing inputs from the SOW Sizing form blob (`sow_data`).
+ *
+ * In Basic+combo mode the consolidated SOW form is the single source: it stores
+ * the full combo input set under `sow_data.combo` (a CcaasComboInputs blob,
+ * edited by the embedded combo editor). When present that wins; otherwise we
+ * fall back to the solution's legacy `basic_inputs` so combo solutions priced
+ * before this consolidation keep their price until re-saved.
+ */
+export function sowDataToComboInputs(sowData: unknown, fallback: CcaasComboInputs | null): CcaasComboInputs {
+  const sd = sowData && typeof sowData === "object" ? (sowData as Record<string, unknown>) : null;
+  const fromSow = sd ? parseCcaasComboInputs(sd.combo) : null;
+  if (fromSow) return fromSow;
+  return fallback ?? (parseCcaasComboInputs({}) as CcaasComboInputs);
+}
+
 export function parseCcaasComboInputs(raw: unknown): CcaasComboInputs | null {
   if (!raw) return null;
   let obj: unknown = raw;

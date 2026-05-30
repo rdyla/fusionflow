@@ -10,7 +10,6 @@ import {
   type UcaasBasicInputs,
 } from "../../../shared/ucaasBasicPricing";
 import { isComboMode } from "../../../shared/ccaasComboPricing";
-import CcaasComboCalculator from "./CcaasComboCalculator";
 
 const WORKSTREAM_LABELS: Record<string, string> = {
   discovery_requirements: "Discovery & Requirements",
@@ -292,21 +291,11 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
         </>
       )}
 
-      {/* Combo-mode (CCaaS in scope) takes over the entire basic-pricing
-          render — its own embedded breakdown panel + Save button live
-          inside the CcaasComboCalculator component. Pure-UCaaS basic
-          stays on the existing 6-field form below. */}
-      {effectiveMode === "basic" && isComboMode(solution.solution_types) && (
-        <CcaasComboCalculator
-          solution={solution}
-          canEdit={canEdit}
-          onSolutionChange={onSolutionChange}
-        />
-      )}
-
-      {effectiveMode === "basic" && !isComboMode(solution.solution_types) && (
+      {/* Basic sizing + pricing (UCaaS-only AND combo) now live on the SOW tab's
+          consolidated form. The Labor tab keeps only the pricing-mode selector. */}
+      {effectiveMode === "basic" && (
         <div style={{ marginBottom: 14, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6, fontSize: 12, color: "#0369a1" }}>
-          Basic sizing &amp; pricing now live on the <strong>SOW tab</strong> &mdash; enter users, sites, go-lives, and the flat-cost add-ons there. The price updates automatically when you save the SOW sizing.
+          Basic sizing &amp; pricing now live on the <strong>SOW tab</strong> &mdash; enter UCaaS / CCaaS / apps there. The price updates automatically when you save the SOW sizing.
         </div>
       )}
 
