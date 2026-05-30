@@ -19,6 +19,9 @@ CREATE TABLE stage_time_entries (
   scheduled_end TEXT,
   pay_code_id TEXT,
   cost_code_id TEXT,
+  -- Free-text note the PM entered; combined into the CRM subject as
+  -- "{stage} | {note}" and shown in the per-stage time-entry list.
+  note TEXT,
   user_id TEXT,
   created_at TEXT DEFAULT CURRENT_TIMESTAMP
 );

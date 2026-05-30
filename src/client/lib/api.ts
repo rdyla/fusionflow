@@ -678,6 +678,7 @@ export type StageTimeEntry = {
   scheduled_end: string | null;
   pay_code_id: string | null;
   cost_code_id: string | null;
+  note: string | null;
   user_id: string | null;
   user_name: string | null;
   created_at: string;
@@ -1571,6 +1572,11 @@ export const api = {
     request<StageTimeEntry>(`/projects/${projectId}/stages/${stageId}/time-entries`, {
       method: "POST",
       body: JSON.stringify(payload),
+    }),
+
+  deleteStageTimeEntry: (projectId: string, stageId: string, entryId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/stages/${stageId}/time-entries/${entryId}`, {
+      method: "DELETE",
     }),
 
   // Project Contacts
