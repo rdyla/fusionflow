@@ -563,7 +563,9 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
       )}
 
       {/* ── Virtual Agent ── */}
-      {showVa && (
+      {/* Hidden in basic+combo — the combo calculator's ZVA Voice / ZVA Chat
+          workflows size + price virtual agent there. */}
+      {showVa && !isBasicCombo && (
         <div className="ms-card">
           <h3 style={SECTION_HEADER}>Virtual Agent Sizing</h3>
 
@@ -598,40 +600,19 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
         </div>
       )}
 
-      {/* ── Shared / Infrastructure ── */}
-      <div className="ms-card">
-        <h3 style={SECTION_HEADER}>Deployment & Infrastructure</h3>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Deployment</p>
-        <div style={{ ...GRID4, marginBottom: 20 }}>
-          {/* Sites & Go-Lives live in the combo calculator for combo solutions. */}
-          {!isBasicCombo && <Field label="Sites"><Num value={sow.shared.sites_count} onChange={v => upd("shared", { ...sow.shared, sites_count: v })} canEdit={canEdit} /></Field>}
-          {!isBasicCombo && <Field label="Phases / Go-Lives"><Num value={sow.shared.phases_count} onChange={v => upd("shared", { ...sow.shared, phases_count: v })} canEdit={canEdit} /></Field>}
-          <Field label="Implementation Strategy">
-            <Sel value={sow.shared.implementation_strategy} onChange={v => upd("shared", { ...sow.shared, implementation_strategy: v })} canEdit={canEdit} options={[
-              { value: "cloudpro", label: "CloudPro" },
-              { value: "advocacy", label: "Advocacy" },
-              { value: "cloudcare", label: "CloudCare" },
-            ]} />
-          </Field>
+      {/* ── Sites & Go-Lives ──
+          Combo solutions size sites/go-lives in the combo calculator above, so
+          this card is hidden for them. Implementation strategy (always CloudPro,
+          implied) and the free-form notes were dropped as unused. */}
+      {!isBasicCombo && (
+        <div className="ms-card">
+          <h3 style={SECTION_HEADER}>Sites &amp; Go-Lives</h3>
+          <div style={{ ...GRID4 }}>
+            <Field label="Sites"><Num value={sow.shared.sites_count} onChange={v => upd("shared", { ...sow.shared, sites_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Phases / Go-Lives"><Num value={sow.shared.phases_count} onChange={v => upd("shared", { ...sow.shared, phases_count: v })} canEdit={canEdit} /></Field>
+          </div>
         </div>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Additional Notes</p>
-        {canEdit ? (
-          <textarea
-            className="ms-input"
-            rows={4}
-            style={{ width: "100%", fontSize: 12, resize: "vertical" }}
-            value={sow.additional_notes}
-            onChange={e => { upd("additional_notes", e.target.value); }}
-            placeholder="Exclusions, assumptions, special terms…"
-          />
-        ) : (
-          <span style={{ fontSize: 13, color: sow.additional_notes ? "#e2e8f0" : "#475569", whiteSpace: "pre-wrap" }}>
-            {sow.additional_notes || "—"}
-          </span>
-        )}
-      </div>
+      )}
     </div>
   );
 }
