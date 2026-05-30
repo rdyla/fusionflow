@@ -17,6 +17,7 @@ import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/a
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
+import { parseCcaasComboInputs } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
 import { resolveSowVariant } from "../../../shared/sowTemplate/variants";
 import type { SowBuildContext } from "../../../shared/sowTemplate/types";
@@ -134,11 +135,19 @@ function pickCounts(
     : (basic && num(basic.go_lives) > 0 ? num(basic.go_lives) : locations);
 
   // Per-type headline counts (combo SOWs need distinct numbers, not one shared
-  // "primary"). These come straight from the SOW Sizing form (sow_data):
+  // "primary"). Primary source is the SOW Sizing form (sow_data):
   //  - CCaaS agents: ccaas.agents
   //  - CI recorded seats: ci.licensed_seats
   //  - VA workflows: count of enabled VA channels (voice + chat + sms)
-  const ccaasAgents = num(sd?.ccaas?.agents);
+  //
+  // CCaaS fallback: a basic-mode UCaaS+CCaaS combo stores the agent count in
+  // basic_inputs.ccaas.agents (via CcaasComboCalculator), not sow_data. Fall
+  // back to it — like the UCaaS users fallback above — so a combo/basic SOW
+  // that never filled the sizing form doesn't export 0 agents (WFM/QM tiles
+  // inherit this count too).
+  const comboInputs = parseCcaasComboInputs(solution.basic_inputs);
+  const sdCcaasAgents = num(sd?.ccaas?.agents);
+  const ccaasAgents = sdCcaasAgents > 0 ? sdCcaasAgents : num(comboInputs?.ccaas?.agents);
   const ciSeats     = num(sd?.ci?.licensed_seats);
   const vaWorkflows = (sd?.va?.voice ? 1 : 0) + (sd?.va?.chat ? 1 : 0) + (sd?.va?.sms ? 1 : 0);
 
