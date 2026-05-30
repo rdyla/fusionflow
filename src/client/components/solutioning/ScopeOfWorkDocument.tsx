@@ -342,20 +342,9 @@ export default function ScopeOfWorkDocument({
 
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button className="ms-btn-primary" onClick={openPrintWindow} style={{ background: "#03395f" }}>
-          Export / Print SOW
-        </button>
-        {variant.isStub && (
-          <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
-            ⚠ {variant.productLine} variant is a stub — content pending in a follow-up PR
-          </span>
-        )}
-      </div>
-
-      {/* Metadata + versioning panel — staff only. Customers see a
-          summary + Export/Print PDF above; they have no business poking
-          at the MSA date / duration band / revision-bump controls. */}
+      {/* Metadata + versioning panel — staff only. Customers see only the
+          Export/Print button at the bottom; they have no business poking at
+          the MSA date / duration band / revision-bump controls. */}
       {!isClient && (
       <div className="ms-section-card" style={{ padding: "16px 18px", marginBottom: 16 }}>
         <div className="ms-section-title" style={{ marginBottom: 12 }}>SOW Metadata</div>
@@ -485,6 +474,17 @@ export default function ScopeOfWorkDocument({
       </div>
       )}
 
+      {/* Generate the SOW — bottom of the tab, after sizing / pricing / notes. */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 4 }}>
+        <button className="ms-btn-primary" onClick={openPrintWindow} style={{ background: "#03395f" }}>
+          Export / Print SOW
+        </button>
+        {variant.isStub && (
+          <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
+            ⚠ {variant.productLine} variant is a stub — content pending in a follow-up PR
+          </span>
+        )}
+      </div>
     </div>
   );
 }
