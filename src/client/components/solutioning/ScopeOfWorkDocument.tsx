@@ -16,8 +16,8 @@ import { useEffect, useState } from "react";
 import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
-import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
-import { parseCcaasComboInputs } from "../../../shared/ccaasComboPricing";
+import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
+import { parseCcaasComboInputs, isComboMode } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
 import { resolveSowVariant } from "../../../shared/sowTemplate/variants";
 import type { SowBuildContext } from "../../../shared/sowTemplate/types";
@@ -200,7 +200,13 @@ export default function ScopeOfWorkDocument({
     const tier = getUcaasTieredTier(solution.basic_seat_count);
     const basicSubtotal = tier?.price ?? 0;
     feeBreakdown = calcBasicSowTotal(basicSubtotal, addOns, blendedRate);
+  } else if (solution.pricing_mode === "basic" && !isComboMode(solution.solution_types ?? [])) {
+    // Basic (non-combo): the consolidated SOW Sizing form is the source;
+    // fall back to legacy basic_inputs for solutions not yet re-saved.
+    const basic = calcUcaasBasicBreakdown(sowDataToBasicInputs(sowData ?? null, solution.basic_inputs), blendedRate);
+    feeBreakdown = calcBasicSowTotal(basic.total, addOns, blendedRate);
   } else if (solution.pricing_mode === "basic" && solution.basic_inputs) {
+    // Basic combo: the CcaasComboCalculator owns the inputs (unchanged).
     const basic = calcUcaasBasicBreakdown(solution.basic_inputs, blendedRate);
     feeBreakdown = calcBasicSowTotal(basic.total, addOns, blendedRate);
   } else {

@@ -8,6 +8,7 @@ import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
 import ScopeOfWorkDocument, { parseSowMetadata } from "../components/solutioning/ScopeOfWorkDocument";
 import SowAddOnsEditor from "../components/solutioning/SowAddOnsEditor";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
+import { isComboMode } from "../../shared/ccaasComboPricing";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
@@ -1342,12 +1343,13 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
       <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
-          {/* Sizing confirmation form — hidden in Tiered and Basic modes.
-              Both already collect every input they need on the Labor tab,
-              so the sizing form is redundant there. The SOW document handles
-              the empty sizing case gracefully (skips the Confirmed Solution
-              Sizing section entirely). */}
-          {solution.pricing_mode !== "basic" && solution.pricing_mode !== "tiered" && (
+          {/* Consolidated SOW Sizing form — the single source for sizing in
+              Advanced AND Basic (non-combo) modes. Hidden in Tiered (trivial,
+              not spec'd) and Basic+combo (the CcaasComboCalculator on the Labor
+              tab owns combo sizing). In Advanced it shows hours-driving scoping;
+              in Basic it shows the flat-price inputs + breakdown. */}
+          {solution.pricing_mode !== "tiered"
+            && !(solution.pricing_mode === "basic" && isComboMode(solution.solution_types)) && (
             <SowSizingForm
               solution={solution}
               needsAssessments={needsAssessments}

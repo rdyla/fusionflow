@@ -43,6 +43,39 @@ export const UCAAS_BASIC_DEFAULTS: UcaasBasicInputs = {
   onsite_devices: 0,
 };
 
+/**
+ * Derive Basic-mode pricing inputs from the SOW Sizing form blob (sow_data).
+ *
+ * In Basic mode the consolidated SOW Sizing form is the single source: users =
+ * sum of the UCaaS user breakdown, sites/go-lives from the shared section, and
+ * training/on-site from the form's UCaaS section. `fallback` (the solution's
+ * legacy `basic_inputs`) fills any field the form hasn't populated yet, so
+ * solutions priced before this consolidation don't drop to $0 until re-saved.
+ * Combo (UCaaS+CCaaS) keeps its own CcaasComboCalculator — this is UCaaS-only.
+ */
+export function sowDataToBasicInputs(sowData: unknown, fallback: UcaasBasicInputs | null): UcaasBasicInputs {
+  const fb = fallback ?? UCAAS_BASIC_DEFAULTS;
+  if (!sowData || typeof sowData !== "object") return { ...fb };
+  const sd = sowData as Record<string, unknown>;
+  const u = (sd.ucaas ?? {}) as Record<string, unknown>;
+  const sh = (sd.shared ?? {}) as Record<string, unknown>;
+  const n = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : null;
+  };
+  const userSum = (n(u.basic_users) ?? 0) + (n(u.advanced_users) ?? 0)
+                + (n(u.common_area) ?? 0) + (n(u.conference_rooms) ?? 0);
+  return {
+    users:             userSum > 0 ? userSum : fb.users,
+    sites:             Math.max(1, n(sh.sites_count) ?? fb.sites),
+    go_lives:          Math.max(1, n(sh.phases_count) ?? fb.go_lives),
+    training_sessions: n(u.training_sessions) ?? fb.training_sessions,
+    onsite_sites:      n(u.onsite_sites) ?? fb.onsite_sites,
+    onsite_devices:    n(u.onsite_devices) ?? fb.onsite_devices,
+  };
+}
+
 // ── Formula constants ──────────────────────────────────────────────────────
 export const BASE_HOURS            = 20;
 export const HOURS_PER_USER        = 0.05;
