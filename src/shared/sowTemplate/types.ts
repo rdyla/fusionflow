@@ -20,7 +20,9 @@ export type SowSolutionTypeKey =
   | "ccaas"
   | "ci"          // Conversation Intelligence (Zoom Revenue Accelerator / RingCentral ACE)
   | "va"          // Virtual Agent (Zoom AI Virtual Agent / RingCentral AVA)
-  | "rc_air";     // RingCentral AIR (AI Receptionist)
+  | "rc_air"      // RingCentral AIR (AI Receptionist)
+  | "wfm"         // Workforce Management (Zoom Contact Center WFM) — CCaaS add-on
+  | "qm";         // Quality Management (Zoom Contact Center QM) — CCaaS add-on
 
 export type SowVendorKey = "zoom" | "ringcentral" | "tbd";
 
