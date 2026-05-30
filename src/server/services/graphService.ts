@@ -38,6 +38,10 @@ export type SPFile = {
   createdAt: string | null;
   createdByName: string | null;
   modifiedByName: string | null;
+  /** App-side overlay (folders only): whether this folder is shared with the
+   *  customer-facing roles (client / partner_ae). Set by the /files route from
+   *  sharepoint_folder_visibility; undefined for files / when not overlaid. */
+  visibleToClient?: boolean;
 };
 
 // ── Token helpers ──────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import {
   uploadToSharePoint,
   deleteSharePointFile,
   updateSharePointFileDescription,
+  ensureSharePointChildFolder,
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
@@ -56,20 +57,111 @@ app.get("/locations", async (c) => {
   }
 });
 
+/** Customer-facing roles — they see only folders a PM marked visible. */
+function isExternalRole(role: string | undefined): boolean {
+  return role === "client" || role === "partner_ae";
+}
+
+/** Overlay each FOLDER's client/partner visibility flag from
+ *  sharepoint_folder_visibility (by sp_item_id). Files are untouched. */
+async function overlayFolderVisibility(db: D1Database, files: SPFile[]): Promise<SPFile[]> {
+  const folderIds = files.filter((f) => f.isFolder).map((f) => f.id);
+  if (folderIds.length === 0) return files;
+  const ph = inPlaceholders(folderIds);
+  const rows = await db
+    .prepare(`SELECT sp_item_id, visible_to_client FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
+    .bind(...folderIds)
+    .all<{ sp_item_id: string; visible_to_client: number }>();
+  const visById = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r.visible_to_client === 1]));
+  return files.map((f) => (f.isFolder ? { ...f, visibleToClient: visById.get(f.id) === true } : f));
+}
+
 // GET /api/sharepoint/files?url=xxx
 // Lists files in a SharePoint folder by its absolute URL. Overlays per-file
-// uploader attribution from sharepoint_uploads where we have it.
+// uploader attribution + per-folder client visibility. For client/partner
+// viewers, returns ONLY folders marked visible — plus files only when the
+// currently-listed folder is itself a shared folder (so loose files at the
+// project root stay internal).
 app.get("/files", async (c) => {
   const url = c.req.query("url");
   if (!url) return c.json({ error: "url required" }, 400);
+  const auth = c.get("auth");
 
   try {
     const raw = await listSharePointFiles(c.env, url);
-    const files = await overlayUploaderAttribution(c.env.DB, raw);
+    const withAttribution = await overlayUploaderAttribution(c.env.DB, raw);
+    let files = await overlayFolderVisibility(c.env.DB, withAttribution);
+
+    if (isExternalRole(auth?.role)) {
+      // Is the folder being listed itself shared? (root project folder isn't,
+      // so its loose files stay hidden.) Matched by web_url.
+      const cur = await c.env.DB
+        .prepare("SELECT visible_to_client FROM sharepoint_folder_visibility WHERE web_url = ? LIMIT 1")
+        .bind(url)
+        .first<{ visible_to_client: number }>();
+      const currentFolderVisible = cur?.visible_to_client === 1;
+      files = files.filter((f) => (f.isFolder ? f.visibleToClient === true : currentFolderVisible));
+    }
+
     return c.json({ files });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list SharePoint files";
     console.error("SharePoint files error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// POST /api/sharepoint/folder?url=<parentUrl>&projectId=xxx
+// Body: { name: string }. Creates (or adopts) a child folder under the parent.
+// New folders are NOT visible to client/partner by default (no visibility row).
+app.post("/folder", async (c) => {
+  const parentUrl = c.req.query("url");
+  if (!parentUrl) return c.json({ error: "url required" }, 400);
+  let body: { name?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const name = (body.name ?? "").trim();
+  if (!name) return c.json({ error: "name required" }, 400);
+
+  try {
+    const folder = await ensureSharePointChildFolder(c.env, parentUrl, name);
+    return c.json({ folder });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create folder";
+    console.error("SharePoint create-folder error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// PATCH /api/sharepoint/folder/visibility
+// Body: { sp_item_id, web_url, project_id?, visible: boolean }
+// Upserts a folder's client/partner visibility. Editor-only (clients can't
+// see the toggle; this guards the API regardless).
+app.patch("/folder/visibility", async (c) => {
+  const auth = c.get("auth");
+  if (isExternalRole(auth?.role)) return c.json({ error: "Forbidden" }, 403);
+  let body: { sp_item_id?: string; web_url?: string; project_id?: string | null; visible?: boolean };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  if (!body.sp_item_id) return c.json({ error: "sp_item_id required" }, 400);
+
+  try {
+    await c.env.DB
+      .prepare(
+        `INSERT INTO sharepoint_folder_visibility
+           (sp_item_id, project_id, web_url, visible_to_client, set_by_user_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         ON CONFLICT(sp_item_id) DO UPDATE SET
+           project_id        = excluded.project_id,
+           web_url           = excluded.web_url,
+           visible_to_client = excluded.visible_to_client,
+           set_by_user_id    = excluded.set_by_user_id,
+           updated_at        = CURRENT_TIMESTAMP`
+      )
+      .bind(body.sp_item_id, body.project_id ?? null, body.web_url ?? null, body.visible ? 1 : 0, auth?.user?.id ?? null)
+      .run();
+    return c.json({ ok: true, visible: !!body.visible });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update folder visibility";
+    console.error("SharePoint folder-visibility error:", message);
     return c.json({ error: message }, 500);
   }
 });
