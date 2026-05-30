@@ -156,11 +156,17 @@ function pickCounts(
   // the combo's users / agents / sites / go-lives.
   if (isComboMode(solution.solution_types ?? [])) {
     const combo = sowDataToComboInputs(sd, parseCcaasComboInputs(solution.basic_inputs));
+    // Combo sizes virtual agent via the calculator's ZVA Voice/Chat workflows,
+    // not the sow.va channel toggles — so VA workflow count = the two ZVA
+    // workflow counts (fall back to the channel-based count if no ZVA entered).
+    const zvaWorkflows = (combo.zva_voice?.workflows ?? 0) + (combo.zva_chat?.workflows ?? 0);
     return {
       locations: combo.sites || locations,
       users:     combo.users || users,
       ccaasAgents: combo.ccaas?.agents ?? ccaasAgents,
-      ciSeats, vaWorkflows, dids, meetings,
+      ciSeats,
+      vaWorkflows: zvaWorkflows > 0 ? zvaWorkflows : vaWorkflows,
+      dids, meetings,
       goLives:   combo.go_lives || goLives,
     };
   }

@@ -4,7 +4,8 @@
  * Replaces the inline 900-line buildSowHtml in the old ScopeOfWorkDocument.
  * The new SOW mirrors the May-2026 services SOW template (docx) — cover
  * page → executive summary → engagement snapshot → pricing summary →
- * key dates → numbered sections 1-13 → signature.
+ * numbered sections 1-13 (incl. Section 7 Timeline & Milestones as relative
+ * week ranges, not dated milestones) → signature.
  */
 
 import type { SowVariant, SowBuildContext, StageSection, OptionalService, Deliverable } from "./types";
@@ -223,99 +224,6 @@ function snapshotAndPricing(variant: SowVariant, ctx: SowBuildContext): string {
   `;
 }
 
-// ── Key Dates ─────────────────────────────────────────────────────────────
-//
-// When PM supplies a target go-live + duration band, the renderer back-fills
-// all 7 rows of the Key Dates table from it. Math runs on calendar dates so
-// the row reads naturally to a customer; we don't try to skip weekends here
-// (the milestones land on whatever day the math produces — close enough for
-// a sales-stage SOW; the actual project plan refines after kickoff).
-//
-//   SOW Execution    = issue date (= today / version-stamp time)
-//   Kickoff Complete = SOW Execution + 5 business days
-//   Planning Complete (Design Validated) = Go-Live − planning_weeks (varies by band)
-//   Port Orders Submitted                = Go-Live − port_weeks     (varies by band)
-//   UAT Complete & Customer Sign-off     = Go-Live − 1 week         (fixed)
-//   Go-Live                              = the supplied date
-//   Project Closure & Transition to CSM  = Go-Live + 1 week         (fixed)
-
-type BandOffsets = { planning_weeks: number; port_weeks: number; label: string };
-
-function offsetsForBand(band: SowBuildContext["durationBand"], customWeeks: number | null): BandOffsets {
-  // Planning + Port offsets scale with total project length. 8-12 weeks is the
-  // standard UCaaS profile; shorter bands compress the front end.
-  if (band === "4_6_weeks")  return { planning_weeks: 3, port_weeks: 3, label: "4–6 weeks" };
-  if (band === "6_8_weeks")  return { planning_weeks: 5, port_weeks: 4, label: "6–8 weeks" };
-  if (band === "8_12_weeks") return { planning_weeks: 6, port_weeks: 5, label: "8–12 weeks" };
-  if (band === "custom" && customWeeks) {
-    // Proportional scale off the 10-week reference (planning 6, port 5).
-    const ratio = customWeeks / 10;
-    return {
-      planning_weeks: Math.max(1, Math.round(6 * ratio)),
-      port_weeks:     Math.max(1, Math.round(5 * ratio)),
-      label: `${customWeeks} weeks`,
-    };
-  }
-  // Default assumption when go-live is set but band isn't.
-  return { planning_weeks: 6, port_weeks: 5, label: "8–12 weeks (assumed)" };
-}
-
-function addDaysIso(iso: string, days: number): string {
-  const d = new Date(iso + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function addBusinessDaysIso(iso: string, days: number): string {
-  const d = new Date(iso + "T00:00:00Z");
-  let added = 0;
-  while (added < days) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const dow = d.getUTCDay();
-    if (dow !== 0 && dow !== 6) added++;
-  }
-  return d.toISOString().slice(0, 10);
-}
-
-function keyDates(ctx: SowBuildContext): string {
-  const goLive = ctx.targetGoLiveDate;
-  const offsets = offsetsForBand(ctx.durationBand, ctx.customWeeks);
-
-  // SOW execution falls on the issue date — that's the docx's convention
-  // (Section 9.3 invoices SOW Execution + Go-Live, and the cover lists Issue
-  // Date right above SOW Number). We parse issueDateText as a US locale string.
-  const today = new Date();
-  const sowExecIso = today.toISOString().slice(0, 10);
-
-  const kickoffIso = addBusinessDaysIso(sowExecIso, 5);
-  const planningIso = goLive ? addDaysIso(goLive, -offsets.planning_weeks * 7) : null;
-  const portIso     = goLive ? addDaysIso(goLive, -offsets.port_weeks * 7)     : null;
-  const uatIso      = goLive ? addDaysIso(goLive, -7)                          : null;
-  const closureIso  = goLive ? addDaysIso(goLive,  +7)                         : null;
-
-  const cell = (iso: string | null) => esc(fmtDate(iso));
-  const planningAnnotation = goLive && (!ctx.durationBand || ctx.durationBand === null)
-    ? ` <span class="muted">(assumes 8–12 wk project)</span>`
-    : "";
-
-  return `
-    <section class="page-section">
-      <h3>Key Dates ${goLive ? `<span class="muted" style="font-weight:400;">· ${esc(offsets.label)}</span>` : ""}</h3>
-      <table class="data-table">
-        <thead><tr><th>Milestone</th><th>Target Date</th><th>Owner</th></tr></thead>
-        <tbody>
-          <tr><td>SOW Execution</td><td>${cell(sowExecIso)}</td><td>Joint</td></tr>
-          <tr><td>Kickoff Complete</td><td>${cell(kickoffIso)}</td><td>Packet Fusion</td></tr>
-          <tr><td>Planning Complete (Design Validated)${planningAnnotation}</td><td>${cell(planningIso)}</td><td>Customer</td></tr>
-          <tr><td>Port Orders Submitted</td><td>${cell(portIso)}</td><td>Packet Fusion</td></tr>
-          <tr><td>UAT Complete &amp; Customer Sign-off</td><td>${cell(uatIso)}</td><td>Joint</td></tr>
-          <tr><td>Go-Live</td><td>${cell(goLive)}</td><td>Joint</td></tr>
-          <tr><td>Project Closure &amp; Transition to CSM</td><td>${cell(closureIso)}</td><td>Joint</td></tr>
-        </tbody>
-      </table>
-    </section>
-  `;
-}
 
 function section1(variant: SowVariant, ctx: SowBuildContext): string {
   const rows = variant.scopeAtAGlance.map((r) => `
@@ -774,7 +682,9 @@ export function buildSowHtml(args: {
     revisionHistory(ctx),
     executiveSummary(variant, ctx),
     snapshotAndPricing(variant, ctx),
-    keyDates(ctx),
+    // The old hard-dated "Key Dates" table was retired — Section 7 (Timeline &
+    // Milestones) carries the schedule as relative week ranges so the SOW
+    // doesn't commit to specific milestone dates (only the target go-live).
     section1(variant, ctx),
     section2(variant),
     section3(variant.deliverables),
