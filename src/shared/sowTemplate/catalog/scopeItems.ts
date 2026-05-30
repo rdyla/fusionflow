@@ -48,4 +48,16 @@ export const SCOPE_ITEMS: ScopeItem[] = [
   { appliesTo: ["rc_air"], element: "Greeting / persona library",   quantity: "Per design",  notes: "Receptionist persona, voice, and greeting flow tuned to the Customer's brand.",                  sortOrder: 30 },
   { appliesTo: ["rc_air"], element: "Routing logic",                quantity: "Per design",  notes: "Hours, business units, escalation triggers, voicemail fallback.",                              sortOrder: 40 },
   { appliesTo: ["rc_air"], element: "Languages",                    quantity: "Per design",  notes: "Languages enabled; fallback when an unsupported language is detected.",                          sortOrder: 50 },
+
+  // ── WFM (Workforce Management) ──────────────────────────────────────────
+  { appliesTo: ["wfm"], element: "WFM-managed agents",             quantity: "{primary}",   notes: "Agents synchronized into Workforce Management for forecasting and scheduling.",                  sortOrder: 20 },
+  { appliesTo: ["wfm"], element: "Queues / work types forecasted", quantity: "Per design",  notes: "Contact-center queues mapped to forecast groups and staffing models.",                          sortOrder: 30 },
+  { appliesTo: ["wfm"], element: "Schedule rules + shift profiles", quantity: "Per design",  notes: "Shift templates, breaks, time-off rules, and scheduling constraints per the Customer's operation.", sortOrder: 40 },
+  { appliesTo: ["wfm"], element: "Adherence + reporting views",    quantity: "Standard library", notes: "Real-time adherence and historical reporting; Customer-specific views available as an optional service.", sortOrder: 50 },
+
+  // ── QM (Quality Management) ─────────────────────────────────────────────
+  { appliesTo: ["qm"], element: "QM-evaluated agents",             quantity: "{primary}",   notes: "Agents whose interactions are captured and scored for quality evaluation.",                      sortOrder: 20 },
+  { appliesTo: ["qm"], element: "Evaluation forms / scorecards",   quantity: "Per design",  notes: "Quality scorecards aligned to the Customer's evaluation framework.",                             sortOrder: 30 },
+  { appliesTo: ["qm"], element: "Calibration + coaching workflows", quantity: "Per design",  notes: "Calibration sessions and coaching assignment workflows for supervisors and evaluators.",         sortOrder: 40 },
+  { appliesTo: ["qm"], element: "Quality reporting dashboards",    quantity: "Standard library", notes: "Quality and coaching dashboards; Customer-specific dashboards available as an optional service.", sortOrder: 50 },
 ];

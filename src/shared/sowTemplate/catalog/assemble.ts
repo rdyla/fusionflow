@@ -78,9 +78,16 @@ function pickVariantMeta(
   }
   // Specificity = number of `appliesTo` keys that match the solution's types.
   // Higher specificity wins; priority breaks ties.
+  //
+  // A combo signature (e.g. ucaas+ccaas) only counts when ALL its keys are in
+  // scope. Otherwise a partial match — ccaas present but ucaas not — would let
+  // the higher-priority combo entry mislabel a non-combo SOW (a CCaaS+WFM+QM
+  // deal is not "UCaaS + Contact Center"). Partial matches score 0 so a
+  // fully-matched single-type entry outranks them.
   function specificity(m: VariantMeta): number {
     if (!m.appliesTo || m.appliesTo.length === 0) return 0;
-    return m.appliesTo.filter((t) => solutionTypes.includes(t)).length;
+    const matched = m.appliesTo.filter((t) => solutionTypes.includes(t)).length;
+    return matched === m.appliesTo.length ? matched : 0;
   }
   eligible.sort((a, b) => {
     const spec = specificity(b) - specificity(a);
@@ -310,7 +317,7 @@ export function assembleSowFromCatalog(
   // as `tbd`; unknown solution types are filtered out so they can't match
   // anything (the renderer still produces a usable doc).
   const v: SowVendorKey = vendor === "zoom" || vendor === "ringcentral" ? vendor : "tbd";
-  const allowed = new Set<SowSolutionTypeKey>(["ucaas", "ccaas", "ci", "va", "rc_air"]);
+  const allowed = new Set<SowSolutionTypeKey>(["ucaas", "ccaas", "ci", "va", "rc_air", "wfm", "qm"]);
   const types = solutionTypes
     .map((t) => (t ?? "").toLowerCase())
     // Both Zoom AI Virtual Agent (zoom_zva) and RingCentral AI Receptionist

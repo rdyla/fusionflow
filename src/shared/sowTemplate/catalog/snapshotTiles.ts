@@ -91,6 +91,21 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     priority: 90,
   },
 
+  // WFM / QM — modest priority so they fill a slot on a standalone WFM/QM
+  // SOW but yield to Locations + the CCaaS Agents tile on the usual combo.
+  {
+    appliesTo: ["wfm"],
+    label: "WFM Agents",
+    value: (ctx) => String(ctx.primarySeatCount || 0),
+    priority: 35,
+  },
+  {
+    appliesTo: ["qm"],
+    label: "QM-Evaluated Agents",
+    value: (ctx) => String(ctx.primarySeatCount || 0),
+    priority: 34,
+  },
+
   // Go-live count — common across all variants, lower priority so it
   // only appears when there's room.
   {

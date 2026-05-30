@@ -65,6 +65,29 @@ export const VARIANT_META: VariantMeta[] = [
     trainingIncluded: "Administrator + intent-author training delivered by Packet Fusion covering bot persona configuration, intent library management, fallback handling, and conversation analytics.",
     trainingOptional: "Live, remote, instructor-led intent-design workshops with the Customer's content owners. See Section 9.2 for pricing.",
   },
+  {
+    // WFM is almost always sold alongside Zoom CCaaS, in which case the combo
+    // picks the CCaaS meta by specificity. This entry covers a standalone
+    // Zoom WFM SOW so it doesn't fall back to the generic placeholder.
+    appliesTo: ["wfm"],
+    vendor: ["zoom"],
+    productLine: "Zoom Contact Center Workforce Management Professional Services",
+    projectReferenceTemplate: "Zoom Workforce Management Implementation – {customer}",
+    heroImageKey: "ccaas",
+    showE911Footnote: false,
+    trainingIncluded: "Administrator + supervisor training delivered by Packet Fusion covering forecasting, schedule building, intraday management, and adherence monitoring.",
+    trainingOptional: "Live, remote, instructor-led workshops on forecast tuning and schedule optimization. See Section 9.2 for pricing.",
+  },
+  {
+    appliesTo: ["qm"],
+    vendor: ["zoom"],
+    productLine: "Zoom Contact Center Quality Management Professional Services",
+    projectReferenceTemplate: "Zoom Quality Management Implementation – {customer}",
+    heroImageKey: "ccaas",
+    showE911Footnote: false,
+    trainingIncluded: "Administrator + supervisor training delivered by Packet Fusion covering evaluation form design, scorecard authoring, calibration, and coaching workflows.",
+    trainingOptional: "Live, remote, instructor-led calibration workshops with the Customer's quality team. See Section 9.2 for pricing.",
+  },
 
   // ─── RingCentral ──────────────────────────────────────────────────────────
   {

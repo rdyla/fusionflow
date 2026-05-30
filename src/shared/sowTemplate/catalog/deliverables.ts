@@ -131,4 +131,36 @@ export const DELIVERABLES: DeliverableEntry[] = [
     acceptanceCriteria: "Persona, greeting flow, routing logic, language coverage, and escalation paths approved by Customer authorized signer.",
     sortOrder: 30,
   },
+
+  // ── WFM-specific ────────────────────────────────────────────────────────
+  {
+    appliesTo: ["wfm"],
+    name: "Forecast & Schedule Configuration",
+    format: "PDF + platform export",
+    acceptanceCriteria: "Forecast groups, queue mappings, staffing models, shift profiles, and time-off rules configured per the validated design and approved by Customer authorized signer.",
+    sortOrder: 30,
+  },
+  {
+    appliesTo: ["wfm"],
+    name: "Adherence Configuration Summary",
+    format: "PDF",
+    acceptanceCriteria: "Real-time and historical adherence thresholds, exception codes, and supervisor views documented; Customer confirms adherence tracking against a representative schedule.",
+    sortOrder: 35,
+  },
+
+  // ── QM-specific ─────────────────────────────────────────────────────────
+  {
+    appliesTo: ["qm"],
+    name: "Evaluation Form & Scorecard Catalog",
+    format: "PDF + platform export",
+    acceptanceCriteria: "Evaluation forms and scorecards aligned to the Customer's quality framework; published to supervisors / evaluators and signed off by Customer reviewer.",
+    sortOrder: 30,
+  },
+  {
+    appliesTo: ["qm"],
+    name: "Calibration & Coaching Workflow Summary",
+    format: "PDF",
+    acceptanceCriteria: "Calibration session cadence, coaching assignment rules, and evaluator permissions documented and confirmed by the Customer's quality owner.",
+    sortOrder: 35,
+  },
 ];

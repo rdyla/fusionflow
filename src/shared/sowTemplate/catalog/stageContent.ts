@@ -63,6 +63,16 @@ export const STAGE_INTROS: StageIntro[] = [
     stage: "planning",
     intro: "Planning produces the inputs required to configure the AI Receptionist — greeting and persona, routing logic, language coverage, and escalation paths.",
   },
+  {
+    appliesTo: ["wfm"],
+    stage: "planning",
+    intro: "Planning produces the inputs required to stand up Workforce Management — the agents and queues to forecast, the staffing models, and the schedule rules that reflect how the Customer runs its contact center.",
+  },
+  {
+    appliesTo: ["qm"],
+    stage: "planning",
+    intro: "Planning produces the inputs required to stand up Quality Management — the evaluation forms and scorecards, the calibration cadence, and the coaching workflows aligned to the Customer's quality framework.",
+  },
 
   // Executing
   {
@@ -95,6 +105,16 @@ export const STAGE_INTROS: StageIntro[] = [
     appliesTo: ["rc_air"],
     stage: "executing",
     intro: "Executing configures the AI Receptionist persona, routing logic, and language coverage; greeting flows are recorded and validated end-to-end before customer testing.",
+  },
+  {
+    appliesTo: ["wfm"],
+    stage: "executing",
+    intro: "Executing synchronizes agents, maps queues to forecast groups, and builds the forecast, schedule, and adherence configuration agreed during Planning.",
+  },
+  {
+    appliesTo: ["qm"],
+    stage: "executing",
+    intro: "Executing builds the evaluation forms and scorecards, configures calibration and coaching workflows, and confirms interaction capture is firing for the in-scope agents.",
   },
 
   // Monitoring
@@ -327,6 +347,38 @@ export const SUBSECTIONS: Subsection[] = [
     sortOrder: 10,
   },
 
+  // WFM-specific Planning
+  {
+    appliesTo: ["wfm"],
+    stage: "planning",
+    title: "Forecast + Schedule Design",
+    bullets: [
+      "Identify the agents, queues, and work types to bring under Workforce Management.",
+      "Confirm historical interaction data available for forecasting and the forecast horizon.",
+      "Design staffing models, service-level targets, and shrinkage assumptions.",
+      "Design shift templates, breaks, time-off rules, and scheduling constraints.",
+      "Confirm adherence thresholds, exception codes, and supervisor access.",
+      "Customer signs off on the forecast + schedule design before configuration.",
+    ],
+    sortOrder: 12,
+  },
+
+  // QM-specific Planning
+  {
+    appliesTo: ["qm"],
+    stage: "planning",
+    title: "Evaluation + Coaching Design",
+    bullets: [
+      "Inventory the Customer's quality framework (evaluation criteria, weighting, scoring scale).",
+      "Author evaluation forms and scorecards for the in-scope interaction types.",
+      "Design calibration cadence and the coaching assignment workflow.",
+      "Identify evaluator / supervisor roles and their permissions.",
+      "Confirm interaction-capture scope (voice / screen) and any redaction requirements.",
+      "Customer signs off on the evaluation + coaching design before configuration.",
+    ],
+    sortOrder: 14,
+  },
+
   // Shared Planning bullets (any variant)
   {
     stage: "planning",
@@ -446,6 +498,34 @@ export const SUBSECTIONS: Subsection[] = [
     sortOrder: 10,
   },
 
+  // WFM
+  {
+    appliesTo: ["wfm"],
+    stage: "executing",
+    title: "WFM Build",
+    bullets: [
+      "Synchronize agents and map queues / work types to forecast groups.",
+      "Build forecasts, staffing models, and the schedule rules per the Planning-stage design.",
+      "Configure real-time and historical adherence tracking with exception codes.",
+      "Configure supervisor and intraday-management access and reporting views.",
+    ],
+    sortOrder: 12,
+  },
+
+  // QM
+  {
+    appliesTo: ["qm"],
+    stage: "executing",
+    title: "QM Build",
+    bullets: [
+      "Build evaluation forms and scorecards per the Planning-stage design.",
+      "Configure calibration sessions and the coaching assignment workflow.",
+      "Confirm interaction capture (voice / screen) is firing for in-scope agents and apply any redaction rules.",
+      "Configure evaluator / supervisor access and quality dashboards.",
+    ],
+    sortOrder: 14,
+  },
+
   // Shared Executing
   {
     stage: "executing",
@@ -535,6 +615,30 @@ export const SUBSECTIONS: Subsection[] = [
       "Verify routing decisions and escalation triggers fire as designed.",
       "Packet Fusion adjusts persona, scripts, and routing as needed.",
       "Customer signs off on the receptionist behavior prior to Go-Live.",
+    ],
+    sortOrder: 40,
+  },
+  {
+    appliesTo: ["wfm"],
+    stage: "monitoring",
+    title: "Forecast + Schedule Validation",
+    bullets: [
+      "Generate a forecast and schedule against a representative period and review with the Customer.",
+      "Validate adherence tracking and exception handling with live or sample data.",
+      "Packet Fusion tunes staffing models, schedule rules, and adherence thresholds as needed.",
+      "Customer signs off on WFM configuration prior to Go-Live.",
+    ],
+    sortOrder: 40,
+  },
+  {
+    appliesTo: ["qm"],
+    stage: "monitoring",
+    title: "Evaluation + Calibration Validation",
+    bullets: [
+      "Evaluators score a representative sample of interactions using the configured scorecards.",
+      "Run a calibration session to confirm scoring consistency across evaluators.",
+      "Packet Fusion tunes evaluation forms, scorecards, and coaching workflows as needed.",
+      "Customer signs off on QM configuration prior to Go-Live.",
     ],
     sortOrder: 40,
   },
