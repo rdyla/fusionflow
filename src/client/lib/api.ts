@@ -219,6 +219,9 @@ export type SPFile = {
    *  it anyway so users have at least a "by what process" hint. */
   createdByName: string | null;
   modifiedByName: string | null;
+  /** Folders only: whether shared with client/partner roles. Set by the server
+   *  overlay; undefined for files. */
+  visibleToClient?: boolean;
 };
 
 export type DashboardSummaryResponse = {
@@ -1696,6 +1699,21 @@ export const api = {
     request<{ file: SPFile }>(`/sharepoint/file/description?webUrl=${encodeURIComponent(webUrl)}`, {
       method: "PATCH",
       body: JSON.stringify({ description }),
+    }),
+
+  /** Create (or adopt) a child folder under the given parent folder URL. New
+   *  folders are internal by default (not visible to client/partner). */
+  spCreateFolder: (parentUrl: string, name: string, projectId?: string | null) =>
+    request<{ folder: { webUrl: string; id: string; reused: boolean } }>(
+      `/sharepoint/folder?url=${encodeURIComponent(parentUrl)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ""}`,
+      { method: "POST", body: JSON.stringify({ name }) }
+    ),
+
+  /** Toggle whether a folder is visible to client/partner roles. Editor-only. */
+  spSetFolderVisibility: (input: { sp_item_id: string; web_url: string; project_id?: string | null; visible: boolean }) =>
+    request<{ ok: boolean; visible: boolean }>(`/sharepoint/folder/visibility`, {
+      method: "PATCH",
+      body: JSON.stringify(input),
     }),
 
   /** Create (or adopt an existing) per-project SharePoint folder under the

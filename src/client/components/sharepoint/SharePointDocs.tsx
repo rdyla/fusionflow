@@ -174,6 +174,25 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
     }
   }
 
+  // ── Create folder ─────────────────────────────────────────────────────────
+
+  async function handleCreateFolder() {
+    const currentUrl = folderStack.length > 0 ? folderStack[folderStack.length - 1].url : null;
+    if (!currentUrl) return;
+    const name = window.prompt("New folder name:");
+    if (!name || !name.trim()) return;
+    setCreatingFolder(true);
+    try {
+      await api.spCreateFolder(currentUrl, name.trim(), projectId ?? null);
+      showToast(`Folder "${name.trim()}" created.`, "success");
+      loadFiles(currentUrl);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create folder", "error");
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
   // ── Delete ──────────────────────────────────────────────────────────────────
 
   async function handleDelete(file: SPFile) {
@@ -340,6 +359,16 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
             >
               {uploading ? "Uploading…" : "↑ Upload File"}
             </button>
+            {canEdit && (
+              <button
+                className="ms-btn-ghost"
+                onClick={handleCreateFolder}
+                disabled={creatingFolder || !currentUrl}
+                style={{ fontSize: 13 }}
+              >
+                {creatingFolder ? "Creating…" : "+ New Folder"}
+              </button>
+            )}
             <button
               className="ms-btn-ghost"
               onClick={() => currentUrl && loadFiles(currentUrl)}
@@ -366,11 +395,16 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
                 <FileRow
                   key={file.id}
                   file={file}
+                  canEdit={!!canEdit}
+                  projectId={projectId ?? null}
                   isDeleting={deletingId === file.id}
                   onNavigateInto={() => navigateInto(file)}
                   onDelete={() => handleDelete(file)}
                   onDescriptionSaved={(updated) =>
                     setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
+                  }
+                  onVisibilityChanged={(visible) =>
+                    setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, visibleToClient: visible } : f)))
                   }
                 />
               ))}
@@ -386,21 +420,47 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
 
 function FileRow({
   file,
+  canEdit,
+  projectId,
   isDeleting,
   onNavigateInto,
   onDelete,
   onDescriptionSaved,
+  onVisibilityChanged,
 }: {
   file: SPFile;
+  canEdit: boolean;
+  projectId: string | null;
   isDeleting: boolean;
   onNavigateInto: () => void;
   onDelete: () => void;
   onDescriptionSaved: (updated: SPFile) => void;
+  onVisibilityChanged: (visible: boolean) => void;
 }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(file.description ?? "");
   const [saving, setSaving] = useState(false);
+  const [togglingVis, setTogglingVis] = useState(false);
+
+  async function toggleVisibility() {
+    const next = !file.visibleToClient;
+    setTogglingVis(true);
+    try {
+      await api.spSetFolderVisibility({
+        sp_item_id: file.id,
+        web_url: file.webUrl,
+        project_id: projectId,
+        visible: next,
+      });
+      onVisibilityChanged(next);
+      showToast(next ? "Folder shared with client/partner." : "Folder hidden from client/partner.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update visibility", "error");
+    } finally {
+      setTogglingVis(false);
+    }
+  }
 
   async function save() {
     setSaving(true);
@@ -510,6 +570,23 @@ function FileRow({
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+        {file.isFolder && canEdit && (
+          <button
+            className="ms-btn-ghost"
+            onClick={toggleVisibility}
+            disabled={togglingVis}
+            title={file.visibleToClient
+              ? "Visible to client/partner — click to make internal-only"
+              : "Internal-only — click to share with client/partner"}
+            style={{
+              fontSize: 12,
+              color: file.visibleToClient ? "#107c10" : "#64748b",
+              borderColor: file.visibleToClient ? "rgba(16,124,16,0.35)" : "#cbd5e1",
+            }}
+          >
+            {togglingVis ? "…" : file.visibleToClient ? "👁 Visible to client" : "🔒 Internal only"}
+          </button>
+        )}
         {!file.isFolder && file.downloadUrl && (
           <a
             href={file.downloadUrl}
