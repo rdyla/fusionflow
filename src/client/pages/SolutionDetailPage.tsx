@@ -1415,25 +1415,9 @@ export default function SolutionDetailPage() {
           </div>
           )}
 
-          {/* SOW document generator */}
-          <ScopeOfWorkDocument
-            solution={solution}
-            needsAssessment={needsAssessment}
-            laborEstimates={Object.values(laborEstimates)}
-            scopeText={scope}
-            sowData={sowData}
-            sowMetadata={parseSowMetadata(solution.sow_metadata)}
-            currentUser={currentUser}
-            onMetadataChanged={async () => {
-              const refreshed = await api.solution(solution.id);
-              setSolution(refreshed);
-            }}
-          />
-
-          {/* Additional Scope Notes — feeds into the generated SOW.
-              For clients: hidden when empty (nothing to read); shown
-              as a read-only display when non-empty. Staff get the
-              editable textarea regardless. */}
+          {/* Additional Scope Notes — feeds into the generated SOW, so it sits
+              ABOVE the SOW document/Generate button. For clients: hidden when
+              empty; read-only display when non-empty. Staff get the textarea. */}
           {(!isClient || scope.trim().length > 0) && (
           <div className="ms-card">
             <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
@@ -1468,6 +1452,22 @@ export default function SolutionDetailPage() {
             )}
           </div>
           )}
+
+          {/* SOW document generator — last, with the Export / Print SOW button
+              at the bottom of the tab. */}
+          <ScopeOfWorkDocument
+            solution={solution}
+            needsAssessment={needsAssessment}
+            laborEstimates={Object.values(laborEstimates)}
+            scopeText={scope}
+            sowData={sowData}
+            sowMetadata={parseSowMetadata(solution.sow_metadata)}
+            currentUser={currentUser}
+            onMetadataChanged={async () => {
+              const refreshed = await api.solution(solution.id);
+              setSolution(refreshed);
+            }}
+          />
         </div>
 
       {/* ── Handoff Tab ── */}
