@@ -688,6 +688,23 @@ async function dynamicsPost<T>(env: Env, path: string, body: unknown, options?: 
   return res.json() as Promise<T>;
 }
 
+async function dynamicsDelete(env: Env, path: string): Promise<void> {
+  const token = await getToken(env);
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "DELETE",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "OData-MaxVersion": "4.0",
+      "OData-Version": "4.0",
+    },
+  });
+  // 404 → already gone; treat as success so the local row can be cleaned up too.
+  if (!res.ok && res.status !== 404) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`Dynamics DELETE error: ${res.status} ${path} - ${text}`);
+  }
+}
+
 async function dynamicsPatch(env: Env, path: string, body: unknown): Promise<void> {
   const token = await getToken(env);
   const res = await fetch(`${API_BASE}${path}`, {
@@ -1179,4 +1196,19 @@ export async function closeTimeEntry(env: Env, entryId: string): Promise<void> {
     statecode: 1,
     statuscode: 2,
   });
+}
+
+// Deletes an amc_timeentry. The entry is normally Completed (statecode=1),
+// and Dynamics blocks deletion of inactive records — so reopen it to Active
+// (statecode=0, statuscode=1) first, best-effort, then delete. Used when a PM
+// removes a time entry from the app so the CRM record goes too (no orphan left
+// in payroll's feed).
+export async function deleteTimeEntry(env: Env, entryId: string): Promise<void> {
+  try {
+    await dynamicsPatch(env, `/amc_timeentries(${entryId})`, { statecode: 0, statuscode: 1 });
+  } catch {
+    // If reopening fails (already active, or not permitted), still attempt the
+    // delete — it will surface its own error if the record truly can't go.
+  }
+  await dynamicsDelete(env, `/amc_timeentries(${entryId})`);
 }

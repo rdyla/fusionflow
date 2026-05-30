@@ -230,6 +230,9 @@ export default function ProjectDetailPage() {
 
   // Time is logged per STAGE (one Log Time action per stage group), not per task.
   const [timeEntryStage, setTimeEntryStage] = useState<Stage | null>(null);
+  // Stage whose logged time entries are being viewed/managed in the list popup.
+  const [viewEntriesStage, setViewEntriesStage] = useState<Stage | null>(null);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   // PM-initiated date cascade — which task is the shift anchor (null = closed).
   const [cascadeFromTask, setCascadeFromTask] = useState<Task | null>(null);
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
@@ -1400,9 +1403,14 @@ export default function ProjectDetailPage() {
                             ⏱ Log time
                           </button>
                           {stageEntries.length > 0 && (
-                            <span style={{ fontSize: 11, color: "#0369a1", fontWeight: 600 }} title={`${stageEntries.length} time ${stageEntries.length === 1 ? "entry" : "entries"} logged to CRM`}>
-                              {totalMins === 0 ? "0m" : `${h > 0 ? `${h}h ` : ""}${m > 0 ? `${m}m` : ""}`} logged
-                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setViewEntriesStage(stage)}
+                              title={`View ${stageEntries.length} time ${stageEntries.length === 1 ? "entry" : "entries"} logged to CRM`}
+                              style={{ fontSize: 11, color: "#0369a1", fontWeight: 600, background: "none", border: "none", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+                            >
+                              {totalMins === 0 ? "0m" : `${h > 0 ? `${h}h ` : ""}${m > 0 ? `${m}m` : ""}`} logged ({stageEntries.length})
+                            </button>
                           )}
                         </>
                       );
@@ -2918,6 +2926,83 @@ export default function ProjectDetailPage() {
           </div>
         </div>
       )}
+
+      {/* ── Stage time-entry list (view / delete) ───────────────────────────── */}
+      {viewEntriesStage && (() => {
+        const entries = (stageTimeEntries[viewEntriesStage.id] ?? []).slice().sort((a, b) => (a.scheduled_start ?? "").localeCompare(b.scheduled_start ?? ""));
+        return (
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setViewEntriesStage(null); }}>
+            <div className="ms-modal" style={{ maxWidth: 560 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Time entries</h2>
+                <button onClick={() => setViewEntriesStage(null)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+              </div>
+              <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, fontWeight: 500 }}>{viewEntriesStage.name} stage</div>
+
+              {entries.length === 0 ? (
+                <div style={{ color: "#94a3b8", fontSize: 13, padding: "8px 0" }}>No time entries logged for this stage.</div>
+              ) : (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {entries.map((entry) => {
+                    const startDt = entry.scheduled_start ? new Date(entry.scheduled_start) : null;
+                    const endDt = entry.scheduled_end ? new Date(entry.scheduled_end) : null;
+                    const mins = startDt && endDt ? Math.round((endDt.getTime() - startDt.getTime()) / 60000) : null;
+                    const h = mins !== null ? Math.floor(mins / 60) : 0;
+                    const m = mins !== null ? mins % 60 : 0;
+                    return (
+                      <div key={entry.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 13, color: "#1e293b", fontWeight: 600 }}>
+                            {startDt ? startDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                            {mins !== null && <span style={{ color: "#0891b2", marginLeft: 8 }}>{h > 0 ? `${h}h ` : ""}{m > 0 ? `${m}m` : ""}{mins === 0 ? "0m" : ""}</span>}
+                          </div>
+                          {entry.note && <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>{entry.note}</div>}
+                          <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                            {entry.user_name ?? "Unknown"}
+                            {startDt && endDt ? ` · ${startDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}–${endDt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}` : ""}
+                            {entry.crm_time_entry_id ? " · in CRM" : " · not in CRM"}
+                          </div>
+                        </div>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            disabled={deletingEntryId === entry.id}
+                            title="Delete this entry from the app and CRM"
+                            onClick={async () => {
+                              if (!project) return;
+                              if (!confirm("Delete this time entry? It will be removed from the app and from Dynamics CRM.")) return;
+                              setDeletingEntryId(entry.id);
+                              try {
+                                await api.deleteStageTimeEntry(project.id, viewEntriesStage.id, entry.id);
+                                setStageTimeEntries((prev) => ({
+                                  ...prev,
+                                  [viewEntriesStage.id]: (prev[viewEntriesStage.id] ?? []).filter((e) => e.id !== entry.id),
+                                }));
+                                showToast("Time entry deleted from CRM.", "success");
+                              } catch (err) {
+                                showToast(err instanceof Error ? err.message : "Failed to delete time entry", "error");
+                              } finally {
+                                setDeletingEntryId(null);
+                              }
+                            }}
+                            style={{ background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}
+                          >
+                            {deletingEntryId === entry.id ? "Deleting…" : "Delete"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+                <button className="ms-btn-secondary" onClick={() => setViewEntriesStage(null)}>Close</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
 
       {/* ── Add Staff Modal ──────────────────────────────────────────────── */}
