@@ -2866,7 +2866,7 @@ export default function ProjectDetailPage() {
                     onChange={(e) => setTimeEntryForm((f) => ({ ...f, note: e.target.value }))}
                   />
                   <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, display: "block" }}>
-                    CRM subject: <span style={{ color: "#64748b" }}>{project?.name ?? "Project"} ({timeEntryStage.name}){timeEntryForm.note.trim() ? ` ${timeEntryForm.note.trim()}` : ""}</span>
+                    CRM subject: <span style={{ color: "#64748b" }}>{timeEntryStage.name}{timeEntryForm.note.trim() ? ` | ${timeEntryForm.note.trim()}` : ""}</span>
                   </span>
                 </label>
 

@@ -620,11 +620,6 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
     .first<{ id: string; name: string }>();
   if (!stage) throw new HTTPException(404, { message: "Stage not found" });
 
-  const projectRow = await db
-    .prepare("SELECT name FROM projects WHERE id = ? LIMIT 1")
-    .bind(projectId)
-    .first<{ name: string }>();
-
   // PFI users who can edit the project may log time; engineers who are project
   // staff may log time even without full edit rights (mirrors the per-task rule,
   // but stage-level has no single assignee so membership is the gate).
@@ -648,10 +643,11 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
   const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
   if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
 
-  // CRM subject: "{project} ({stage}) {note}" — e.g.
-  // "Zoom UCaaS (Initiate) Kick off meeting with client".
+  // CRM subject: "{stage} | {note}" — e.g. "Initiate | Kick off meeting with
+  // client". The entry is related to the project's CRM case, which already
+  // identifies the project, so the project name isn't repeated here.
   const noteTrimmed = (note ?? "").trim();
-  const subject = `${projectRow?.name ?? "Project"} (${stage.name})${noteTrimmed ? ` ${noteTrimmed}` : ""}`;
+  const subject = noteTrimmed ? `${stage.name} | ${noteTrimmed}` : stage.name;
 
   let crmTimeEntryId: string;
   try {
