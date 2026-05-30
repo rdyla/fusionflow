@@ -8,13 +8,14 @@ import {
   calcBasicSowTotal,
   type AddOnKind,
 } from "../../../shared/sowAddOns";
-import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
 import {
   APP_LABELS,
   ANALOG_LABELS,
   calcCcaasComboBreakdown,
   isComboMode,
   parseCcaasComboInputs,
+  sowDataToComboInputs,
   type AppKey,
 } from "../../../shared/ccaasComboPricing";
 
@@ -58,26 +59,37 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
     setRate(solution.blended_rate || DEFAULT_BLENDED_RATE);
   }, [solution.add_ons, solution.blended_rate]);
 
-  // Pricing mode + relevant inputs are set on the Labor tab; this component
-  // just reads them off the solution row and shows the resulting totals.
+  // Sizing now lives in the SOW Sizing form (sow_data), edited above on THIS
+  // tab — not the Labor tab. Derive the pre-add-on subtotal from sow_data (with
+  // a basic_inputs fallback for solutions saved before the consolidation), so
+  // the price shown here matches the calculator.
   const isTiered = solution.pricing_mode === "tiered";
   const isBasic  = solution.pricing_mode === "basic";
-  const isFlat   = isTiered || isBasic; // both bypass the labor estimate
+  const isCombo  = isBasic && isComboMode(solution.solution_types);
+  const isFlat   = isTiered || isBasic; // all bypass the labor estimate
   const tieredTier = isTiered ? getUcaasTieredTier(solution.basic_seat_count) : null;
-  const basicBreakdown = isBasic && solution.basic_inputs
-    ? calcUcaasBasicBreakdown(solution.basic_inputs, rate)
-    : null;
 
-  // Pre-add-on subtotal: tier price for tiered, formula total for basic, hours×rate for advanced.
+  const sowData: unknown = (() => {
+    try { return solution.sow_data ? JSON.parse(solution.sow_data) : null; } catch { return null; }
+  })();
+  const comboInputs = isCombo ? sowDataToComboInputs(sowData, parseCcaasComboInputs(solution.basic_inputs)) : null;
+  const comboBreakdown = comboInputs ? calcCcaasComboBreakdown(comboInputs, rate) : null;
+  const basicInputs = (isBasic && !isCombo) ? sowDataToBasicInputs(sowData, solution.basic_inputs) : null;
+  const basicBreakdown = basicInputs ? calcUcaasBasicBreakdown(basicInputs, rate) : null;
+
+  // Pre-add-on subtotal: tier price (tiered), formula total (basic non-combo).
   let flatSubtotal = 0;
   if (isTiered) flatSubtotal = tieredTier?.price ?? 0;
-  if (isBasic)  flatSubtotal = basicBreakdown?.total ?? 0;
+  if (basicBreakdown) flatSubtotal = basicBreakdown.total;
 
+  // Combo owns its bundle/PM/final-discount stack and ignores external add-ons
+  // (matches the server). Other modes stack add-ons on the subtotal.
   const breakdown = isFlat
     ? calcBasicSowTotal(flatSubtotal, addOns, rate)
     : calcSowTotal(laborHoursTotal, addOns, rate);
+  const displayedTotal = comboBreakdown ? comboBreakdown.finalSowPrice : breakdown.total;
 
-  const flatReady = (isTiered && tieredTier) || (isBasic && basicBreakdown);
+  const flatReady = isCombo ? !!comboBreakdown : (isTiered ? !!tieredTier : !!basicBreakdown);
 
   function updateAddOn(idx: number, patch: Partial<AddOn>) {
     setAddOns((prev) => prev.map((a, i) => (i === idx ? { ...a, ...patch } : a)));
@@ -100,7 +112,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
       onSaved({
         add_ons: updated.add_ons ?? addOns,
         blended_rate: updated.blended_rate ?? rate,
-        sow_total_amount: updated.sow_total_amount ?? breakdown.total,
+        sow_total_amount: updated.sow_total_amount ?? displayedTotal,
       });
     } finally {
       setSaving(false);
@@ -123,18 +135,11 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
   // Total stands on its own. Whole card returns null only when there's
   // truly nothing — no calculated total AND no add-ons.
   if (isClient) {
-    // Combo path: when this solution runs through the CCaaS combo
-    // calculator (CCaaS in solution_types + basic pricing), the
-    // legacy breakdown.total is meaningless — combo has its own
-    // discount/PM/final stack. Compute the combo breakdown directly
-    // and use its finalSowPrice + line items for the Based-on grid.
-    const combo = isBasic && isComboMode(solution.solution_types);
-    const comboInputs = combo ? parseCcaasComboInputs(solution.basic_inputs) : null;
-    const comboBreakdown = comboInputs ? calcCcaasComboBreakdown(comboInputs, rate) : null;
-
-    const displayedTotal = comboBreakdown ? comboBreakdown.finalSowPrice : breakdown.total;
+    // Combo (CCaaS + basic) has its own discount/PM/final stack and ignores
+    // external add-ons; its total + line items come from comboBreakdown (sourced
+    // from sow_data above). Other modes use the add-on breakdown total.
     const hasTotal = displayedTotal > 0;
-    const hasAddOns = !combo && addOns.length > 0; // combo skips external add-ons entirely
+    const hasAddOns = !isCombo && addOns.length > 0; // combo skips external add-ons entirely
     if (!hasTotal && !hasAddOns) return null;
 
     // Build a "based on" line-item list that explains where the total
@@ -143,7 +148,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
     // richest set since the formula has the most knobs.
     type SummaryRow = { label: string; value: string };
     const summaryRows: SummaryRow[] = [];
-    if (combo && comboInputs) {
+    if (isCombo && comboInputs) {
       if (comboInputs.users > 0)             summaryRows.push({ label: "UCaaS users",       value: comboInputs.users.toLocaleString() });
       const agents = comboInputs.ccaas?.agents ?? 0;
       if (agents > 0)                        summaryRows.push({ label: comboInputs.ccaas?.omnichannel ? "CCaaS agents (omni)" : "CCaaS agents (voice)", value: agents.toLocaleString() });
@@ -173,8 +178,8 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
       if (comboBreakdown!.zvaChat.workflows > 0) {
         summaryRows.push({ label: "ZVA Chat", value: `${comboBreakdown!.zvaChat.workflows} workflow${comboBreakdown!.zvaChat.workflows === 1 ? "" : "s"}` });
       }
-    } else if (isBasic && solution.basic_inputs) {
-      const bi = solution.basic_inputs;
+    } else if (basicInputs) {
+      const bi = basicInputs;
       if (bi.users > 0)             summaryRows.push({ label: "Users",              value: bi.users.toLocaleString() });
       if (bi.sites > 0)             summaryRows.push({ label: "Sites",              value: bi.sites.toLocaleString() });
       if (bi.go_lives > 0)          summaryRows.push({ label: "Go-live events",     value: bi.go_lives.toLocaleString() });
@@ -250,24 +255,28 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
         )}
       </div>
 
-      {/* Pricing-mode pointer — read-only here; toggle + inputs live on the Labor tab. */}
+      {/* Pricing-mode pointer — sizing is entered in the SOW Sizing form above
+          on this tab (basic/combo) or derived from the labor estimate (advanced). */}
       <div style={{ marginBottom: 14, padding: "8px 12px", background: isFlat ? "#f0f9ff" : "#f8fafc", border: `1px solid ${isFlat ? "#bae6fd" : "#e2e8f0"}`, borderRadius: 6, fontSize: 12, color: "#475569", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span>
           Pricing mode: <strong style={{ color: isFlat ? "#0369a1" : "#1e293b", textTransform: "capitalize" }}>{solution.pricing_mode ?? "advanced"}</strong>
           {isTiered && tieredTier && <> · {tieredTier.label} — {fmtUsd(tieredTier.price)}</>}
           {isTiered && !tieredTier && solution.basic_seat_count != null && <> · seat count out of range</>}
           {isTiered && solution.basic_seat_count == null && <> · no seat count set</>}
-          {isBasic && solution.basic_inputs && (
-            <> · {solution.basic_inputs.users} user{solution.basic_inputs.users === 1 ? "" : "s"} · {fmtUsd(basicBreakdown?.total ?? 0)}</>
+          {isCombo && comboInputs && (
+            <> · {comboInputs.users} UCaaS · {comboInputs.ccaas?.agents ?? 0} agents · {fmtUsd(displayedTotal)}</>
           )}
-          {isBasic && !solution.basic_inputs && <> · no inputs set</>}
+          {isBasic && !isCombo && basicInputs && (
+            <> · {basicInputs.users} user{basicInputs.users === 1 ? "" : "s"} · {fmtUsd(basicBreakdown?.total ?? 0)}</>
+          )}
         </span>
-        <span style={{ color: "#94a3b8" }}>Set on the Labor tab</span>
+        <span style={{ color: "#94a3b8" }}>{isFlat ? "Sized in the form above" : "From the labor estimate"}</span>
       </div>
 
       <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
+        {isCombo && "Combo pricing (UCaaS + CCaaS + apps/ZVA) comes from the sizing form above and includes its own bundle, PM, and final-discount math — external add-ons don't apply."}
         {isTiered && "Add-ons stack on top of the tier price. Blended rate is used only for hours-kind add-ons."}
-        {isBasic && "Add-ons stack on top of the formula total. Blended rate is used only for hours-kind add-ons."}
+        {isBasic && !isCombo && "Add-ons stack on top of the formula total. Blended rate is used only for hours-kind add-ons."}
         {!isFlat && "Labor hours come from the labor estimate. Add-ons charge or discount against that, then everything is priced at the blended rate."}
       </p>
 
@@ -288,7 +297,18 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
           />
         </label>
         <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "10px 14px", display: "grid", gridTemplateColumns: isFlat ? "repeat(2, 1fr)" : "repeat(3, 1fr)", gap: 12, fontSize: 12 }}>
-          {isFlat ? (
+          {isCombo ? (
+            <>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Subtotal</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: flatReady ? accent : "#94a3b8" }}>{flatReady ? fmtUsd(comboBreakdown!.sowSubtotal) : "—"}</div>
+              </div>
+              <div>
+                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
+                <div style={{ fontSize: 16, fontWeight: 800, color: flatReady ? accentGreen : "#94a3b8" }}>{flatReady ? fmtUsd(displayedTotal) : "—"}</div>
+              </div>
+            </>
+          ) : isFlat ? (
             <>
               <div>
                 <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>{isTiered ? "Tier Price" : "Basic Subtotal"}</div>
@@ -318,7 +338,9 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
         </div>
       </div>
 
-      {/* Add-on rows */}
+      {/* Add-on rows — combo ignores external add-ons (its own discount stack),
+          so the editor is hidden for combo solutions. */}
+      {!isCombo && (<>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           Add-On Items
@@ -409,6 +431,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
           Notes appear on the rendered SOW under their line item.
         </div>
       )}
+      </>)}
 
       {canEdit && (
         <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
