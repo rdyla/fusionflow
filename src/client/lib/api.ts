@@ -1562,6 +1562,7 @@ export const api = {
       scheduled_end: string;
       pay_code_id: string;
       cost_code_id: string;
+      note?: string;
       case_id: string;
       job_id: string;
       account_id?: string | null;

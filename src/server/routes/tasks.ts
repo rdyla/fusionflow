@@ -575,6 +575,9 @@ const logStageTimeSchema = z.object({
   scheduled_end: z.string(),
   pay_code_id: z.string().min(1),
   cost_code_id: z.string().min(1),
+  /** Optional free-text note; combined into the CRM subject as
+   *  "{project} ({stage}) {note}". */
+  note: z.string().max(500).optional(),
   case_id: z.string(),
   job_id: z.string(),
   account_id: z.string().nullable().optional(),
@@ -617,6 +620,11 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
     .first<{ id: string; name: string }>();
   if (!stage) throw new HTTPException(404, { message: "Stage not found" });
 
+  const projectRow = await db
+    .prepare("SELECT name FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ name: string }>();
+
   // PFI users who can edit the project may log time; engineers who are project
   // staff may log time even without full edit rights (mirrors the per-task rule,
   // but stage-level has no single assignee so membership is the gate).
@@ -635,15 +643,20 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
   const parsed = logStageTimeSchema.safeParse(body);
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid time entry data — pay code and cost code are required" });
 
-  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id, account_id } = parsed.data;
+  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, note, case_id, job_id, account_id } = parsed.data;
 
   const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
   if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
 
+  // CRM subject: "{project} ({stage}) {note}" — e.g.
+  // "Zoom UCaaS (Initiate) Kick off meeting with client".
+  const noteTrimmed = (note ?? "").trim();
+  const subject = `${projectRow?.name ?? "Project"} (${stage.name})${noteTrimmed ? ` ${noteTrimmed}` : ""}`;
+
   let crmTimeEntryId: string;
   try {
     crmTimeEntryId = await createTimeEntry(c.env, {
-      subject: stage.name,
+      subject,
       scheduledStart: scheduled_start,
       scheduledEnd: scheduled_end,
       caseId: case_id,

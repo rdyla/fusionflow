@@ -234,7 +234,7 @@ export default function ProjectDetailPage() {
   const [cascadeFromTask, setCascadeFromTask] = useState<Task | null>(null);
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
   const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
-  const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "" });
+  const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", note: "" });
   const [submittingTimeEntry, setSubmittingTimeEntry] = useState(false);
   const [stageTimeEntries, setStageTimeEntries] = useState<Record<string, StageTimeEntry[]>>({});
   // Project-scoped solution-type filter — shared between Gantt and the Tasks tab via localStorage.
@@ -1390,7 +1390,7 @@ export default function ProjectDetailPage() {
                             style={{ fontSize: 11, padding: "2px 10px" }}
                             onClick={() => {
                               const today = new Date().toISOString().slice(0, 10);
-                              setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "" });
+                              setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", note: "" });
                               setTimeEntrySetup(null);
                               setTimeEntryStage(stage);
                               setTimeEntryLoadingSetup(true);
@@ -2854,6 +2854,22 @@ export default function ProjectDetailPage() {
                   </select>
                 </label>
 
+                {/* Note — free text, appended to the CRM subject. */}
+                <label className="ms-label">
+                  <span>Note</span>
+                  <input
+                    type="text"
+                    className="ms-input"
+                    maxLength={500}
+                    placeholder="e.g. Kick off meeting with client"
+                    value={timeEntryForm.note}
+                    onChange={(e) => setTimeEntryForm((f) => ({ ...f, note: e.target.value }))}
+                  />
+                  <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, display: "block" }}>
+                    CRM subject: <span style={{ color: "#64748b" }}>{project?.name ?? "Project"} ({timeEntryStage.name}){timeEntryForm.note.trim() ? ` ${timeEntryForm.note.trim()}` : ""}</span>
+                  </span>
+                </label>
+
                 <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                   <button
                     className="ms-btn-primary"
@@ -2878,6 +2894,7 @@ export default function ProjectDetailPage() {
                           scheduled_end: end,
                           pay_code_id: timeEntryForm.payCodeId,
                           cost_code_id: timeEntryForm.costCodeId,
+                          note: timeEntryForm.note.trim() || undefined,
                           case_id: timeEntrySetup.case_id!,
                           job_id: timeEntrySetup.job_id!,
                           account_id: timeEntrySetup.account_id ?? null,
