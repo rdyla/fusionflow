@@ -17,7 +17,7 @@ import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/a
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
-import { parseCcaasComboInputs, isComboMode } from "../../../shared/ccaasComboPricing";
+import { parseCcaasComboInputs, isComboMode, sowDataToComboInputs, calcCcaasComboBreakdown } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
 import { resolveSowVariant } from "../../../shared/sowTemplate/variants";
 import type { SowBuildContext } from "../../../shared/sowTemplate/types";
@@ -151,6 +151,20 @@ function pickCounts(
   const ciSeats     = num(sd?.ci?.licensed_seats);
   const vaWorkflows = (sd?.va?.voice ? 1 : 0) + (sd?.va?.chat ? 1 : 0) + (sd?.va?.sms ? 1 : 0);
 
+  // Combo (UCaaS+CCaaS Basic): all sizing lives in sow_data.combo (fallback to
+  // legacy basic_inputs). Source the headline counts from it so the SOW shows
+  // the combo's users / agents / sites / go-lives.
+  if (isComboMode(solution.solution_types ?? [])) {
+    const combo = sowDataToComboInputs(sd, parseCcaasComboInputs(solution.basic_inputs));
+    return {
+      locations: combo.sites || locations,
+      users:     combo.users || users,
+      ccaasAgents: combo.ccaas?.agents ?? ccaasAgents,
+      ciSeats, vaWorkflows, dids, meetings,
+      goLives:   combo.go_lives || goLives,
+    };
+  }
+
   return { locations, users, ccaasAgents, ciSeats, vaWorkflows, dids, meetings, goLives };
 }
 
@@ -205,10 +219,12 @@ export default function ScopeOfWorkDocument({
     // fall back to legacy basic_inputs for solutions not yet re-saved.
     const basic = calcUcaasBasicBreakdown(sowDataToBasicInputs(sowData ?? null, solution.basic_inputs), blendedRate);
     feeBreakdown = calcBasicSowTotal(basic.total, addOns, blendedRate);
-  } else if (solution.pricing_mode === "basic" && solution.basic_inputs) {
-    // Basic combo: the CcaasComboCalculator owns the inputs (unchanged).
-    const basic = calcUcaasBasicBreakdown(solution.basic_inputs, blendedRate);
-    feeBreakdown = calcBasicSowTotal(basic.total, addOns, blendedRate);
+  } else if (solution.pricing_mode === "basic" && isComboMode(solution.solution_types ?? [])) {
+    // Basic combo: single source is sow_data.combo (fallback basic_inputs).
+    // Combo owns its PM + bundle/final discounts and does NOT run the add-ons
+    // table — match the server (recomputeSowTotal) exactly.
+    const combo = calcCcaasComboBreakdown(sowDataToComboInputs(sowData ?? null, parseCcaasComboInputs(solution.basic_inputs)), blendedRate);
+    feeBreakdown = { laborSubtotal: combo.finalSowPrice, addOnNet: 0, total: combo.finalSowPrice };
   } else {
     feeBreakdown = calcSowTotal(totalLaborHours, addOns, blendedRate);
   }

@@ -16,9 +16,7 @@
  * remain a valid subset. See PR #306 for the parsing/server side.
  */
 
-import { useEffect, useMemo, useState } from "react";
-import { api, type Solution } from "../../lib/api";
-import { UCAAS_BASIC_DEFAULTS, type UcaasBasicInputs, DEFAULT_BLENDED_RATE } from "../../../shared/ucaasBasicPricing";
+import { useMemo } from "react";
 import {
   APP_KEYS,
   APP_LABELS,
@@ -52,83 +50,33 @@ function num(v: string): number {
 }
 
 type Props = {
-  solution: Solution;
+  /** Controlled inputs (the combo blob). Held by the parent SOW Sizing form in
+   *  sow_data.combo; the form's single Save persists it. */
+  inputs: CcaasComboInputs;
+  /** Blended rate for the live breakdown. */
+  rate: number;
   canEdit: boolean;
-  /** Notify the parent when pricing-mode-related fields change so the
-   *  Scope tab's SowAddOnsEditor sees the new state. Mirrors the
-   *  pattern used by LaborEstimateView's UCaaS basic flow. */
-  onSolutionChange: (next: Partial<Solution>) => void;
+  onChange: (next: CcaasComboInputs) => void;
 };
 
-export default function CcaasComboCalculator({ solution, canEdit, onSolutionChange }: Props) {
-  const rate = solution.blended_rate || DEFAULT_BLENDED_RATE;
-
-  // Seed local state from solution.basic_inputs. The combo shape extends
-  // UcaasBasicInputs additively, so when an existing UCaaS-only blob is
-  // present we keep its users/sites/etc and just default the combo
-  // sub-blocks to zero/false.
-  const seed = (): CcaasComboInputs => {
-    const base: UcaasBasicInputs = solution.basic_inputs ?? { ...UCAAS_BASIC_DEFAULTS };
-    const extended = (solution.basic_inputs ?? {}) as Partial<CcaasComboInputs>;
-    return {
-      ...base,
-      ccaas:     extended.ccaas     ?? { agents: 0, omnichannel: false },
-      apps:      extended.apps      ?? {},
-      zva_voice: extended.zva_voice ?? { ...ZVA_DEFAULTS },
-      zva_chat:  extended.zva_chat  ?? { ...ZVA_DEFAULTS },
-      analog:    extended.analog    ?? { ...ANALOG_DEFAULTS },
-      final_discount_pct: extended.final_discount_pct ?? 0,
-    };
-  };
-
-  const [inputs, setInputs] = useState<CcaasComboInputs>(seed);
-  const [savedSnapshot, setSavedSnapshot] = useState<CcaasComboInputs>(seed);
-  const [saving, setSaving] = useState(false);
-
-  // Re-seed when the solution prop changes (parent refetch after save / external edit)
-  useEffect(() => {
-    const next = seed();
-    setInputs(next);
-    setSavedSnapshot(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [solution.basic_inputs, solution.blended_rate]);
-
-  const dirty = useMemo(() => JSON.stringify(inputs) !== JSON.stringify(savedSnapshot), [inputs, savedSnapshot]);
-
+export default function CcaasComboCalculator({ inputs, rate, canEdit, onChange }: Props) {
   const breakdown = useMemo(() => calcCcaasComboBreakdown(inputs, rate), [inputs, rate]);
 
-  // ── State patch helpers ────────────────────────────────────────────────────
+  // ── Controlled patch helpers — each emits the full next blob via onChange ───
   function patchTop(p: Partial<CcaasComboInputs>) {
-    setInputs((prev) => ({ ...prev, ...p }));
+    onChange({ ...inputs, ...p });
   }
-  function patchCcaas(p: Partial<CcaasComboInputs["ccaas"] & {}>) {
-    setInputs((prev) => ({ ...prev, ccaas: { ...(prev.ccaas ?? { agents: 0, omnichannel: false }), ...p } }));
+  function patchCcaas(p: Partial<NonNullable<CcaasComboInputs["ccaas"]>>) {
+    onChange({ ...inputs, ccaas: { ...(inputs.ccaas ?? { agents: 0, omnichannel: false }), ...p } });
   }
   function patchApp(key: AppKey, p: Partial<AppInputs>) {
-    setInputs((prev) => ({
-      ...prev,
-      apps: { ...(prev.apps ?? {}), [key]: { ...APP_DEFAULT, ...(prev.apps?.[key] ?? {}), ...p } },
-    }));
+    onChange({ ...inputs, apps: { ...(inputs.apps ?? {}), [key]: { ...APP_DEFAULT, ...(inputs.apps?.[key] ?? {}), ...p } } });
   }
   function patchZva(which: "zva_voice" | "zva_chat", p: Partial<ZvaInputs>) {
-    setInputs((prev) => ({ ...prev, [which]: { ...(prev[which] ?? ZVA_DEFAULTS), ...p } }));
+    onChange({ ...inputs, [which]: { ...(inputs[which] ?? ZVA_DEFAULTS), ...p } });
   }
   function patchAnalog(p: Partial<AnalogInputs>) {
-    setInputs((prev) => ({ ...prev, analog: { ...(prev.analog ?? ANALOG_DEFAULTS), ...p } }));
-  }
-
-  async function save() {
-    setSaving(true);
-    try {
-      const updated = await api.updateSolution(solution.id, { basic_inputs: inputs });
-      setSavedSnapshot(inputs);
-      onSolutionChange({
-        basic_inputs: updated.basic_inputs ?? inputs,
-        sow_total_amount: updated.sow_total_amount,
-      });
-    } finally {
-      setSaving(false);
-    }
+    onChange({ ...inputs, analog: { ...(inputs.analog ?? ANALOG_DEFAULTS), ...p } });
   }
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -286,15 +234,6 @@ export default function CcaasComboCalculator({ solution, canEdit, onSolutionChan
           </div>
         </div>
 
-        {canEdit && (
-          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-            <button className="ms-btn-primary" onClick={save} disabled={saving || !dirty}
-              style={{ background: dirty ? accent : "#94a3b8" }}>
-              {saving ? "Saving…" : "Save Pricing"}
-            </button>
-            {dirty && <span style={{ fontSize: 12, color: "#f59e0b" }}>Unsaved changes</span>}
-          </div>
-        )}
       </div>
 
       {/* ── Live breakdown sidebar ────────────────────────────────────────── */}

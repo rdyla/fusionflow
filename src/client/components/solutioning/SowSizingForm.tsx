@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, type Solution, type NeedsAssessment } from "../../lib/api";
 import { calcUcaasBasicBreakdown, sowDataToBasicInputs, TRAINING_SESSION_COST, ONSITE_DEVICE_COST, PM_MULTIPLIER } from "../../../shared/ucaasBasicPricing";
 import { DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
-import { isComboMode } from "../../../shared/ccaasComboPricing";
+import { isComboMode, sowDataToComboInputs, parseCcaasComboInputs, type CcaasComboInputs } from "../../../shared/ccaasComboPricing";
+import CcaasComboCalculator from "./CcaasComboCalculator";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,6 +41,10 @@ export interface SowData {
     onsite_sites: string;
     onsite_devices: string;
   };
+  /** Basic+combo (UCaaS+CCaaS) pricing inputs — the full combo blob, edited by
+   *  the embedded CcaasComboCalculator. Present only for combo solutions; the
+   *  single source for combo sizing + price (was solutions.basic_inputs). */
+  combo?: CcaasComboInputs;
   ccaas: {
     agents: string;
     supervisors: string;
@@ -358,11 +363,18 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
   // tab hides it for tiered + combo). In advanced the UCaaS card shows the
   // hours-driving scoping; in basic it shows the flat-price inputs + breakdown.
   const isBasicNonCombo = solution.pricing_mode === "basic" && !isComboMode(types);
+  const isBasicCombo = solution.pricing_mode === "basic" && isComboMode(types);
   const isAdvancedMode = solution.pricing_mode !== "basic" && solution.pricing_mode !== "tiered";
   const blendedRate = solution.blended_rate || DEFAULT_BLENDED_RATE;
   const basicBreakdown = useMemo(
     () => calcUcaasBasicBreakdown(sowDataToBasicInputs(sow, solution.basic_inputs), blendedRate),
     [sow, solution.basic_inputs, blendedRate],
+  );
+  // Combo inputs for the embedded calculator: sow.combo when present, else the
+  // legacy basic_inputs (so existing combo solutions display + price correctly).
+  const comboInputs = useMemo(
+    () => sowDataToComboInputs(sow, parseCcaasComboInputs(solution.basic_inputs)),
+    [sow, solution.basic_inputs],
   );
   const fmtUsd = (x: number) => "$" + x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -385,8 +397,24 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
         </div>
       )}
 
+      {/* ── Combo (UCaaS + CCaaS) Basic calculator ──
+          One unified place for combo sizing + pricing. Edits the sow.combo
+          blob; the form's Save persists it and the server recomputes the SOW
+          total from it. Replaces the separate UCaaS/CCaaS cards in this mode. */}
+      {isBasicCombo && (
+        <div className="ms-card">
+          <h3 style={SECTION_HEADER}>Combo Sizing &amp; Pricing (UCaaS + CCaaS)</h3>
+          <CcaasComboCalculator
+            inputs={comboInputs}
+            rate={blendedRate}
+            canEdit={canEdit}
+            onChange={(next) => upd("combo", next)}
+          />
+        </div>
+      )}
+
       {/* ── UCaaS ── */}
-      {showUcaas && (
+      {showUcaas && !isBasicCombo && (
         <div className="ms-card">
           <h3 style={SECTION_HEADER}>UCaaS Sizing</h3>
 
@@ -476,7 +504,7 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
       )}
 
       {/* ── CCaaS ── */}
-      {showCcaas && (
+      {showCcaas && !isBasicCombo && (
         <div className="ms-card">
           <h3 style={SECTION_HEADER}>CCaaS Sizing</h3>
 
@@ -576,8 +604,9 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
 
         <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Deployment</p>
         <div style={{ ...GRID4, marginBottom: 20 }}>
-          <Field label="Sites"><Num value={sow.shared.sites_count} onChange={v => upd("shared", { ...sow.shared, sites_count: v })} canEdit={canEdit} /></Field>
-          <Field label="Phases / Go-Lives"><Num value={sow.shared.phases_count} onChange={v => upd("shared", { ...sow.shared, phases_count: v })} canEdit={canEdit} /></Field>
+          {/* Sites & Go-Lives live in the combo calculator for combo solutions. */}
+          {!isBasicCombo && <Field label="Sites"><Num value={sow.shared.sites_count} onChange={v => upd("shared", { ...sow.shared, sites_count: v })} canEdit={canEdit} /></Field>}
+          {!isBasicCombo && <Field label="Phases / Go-Lives"><Num value={sow.shared.phases_count} onChange={v => upd("shared", { ...sow.shared, phases_count: v })} canEdit={canEdit} /></Field>}
           <Field label="Implementation Strategy">
             <Sel value={sow.shared.implementation_strategy} onChange={v => upd("shared", { ...sow.shared, implementation_strategy: v })} canEdit={canEdit} options={[
               { value: "cloudpro", label: "CloudPro" },
