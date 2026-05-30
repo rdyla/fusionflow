@@ -3,7 +3,9 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
+import { sowDataToEngineAnswers } from "../../shared/sowDataToEngineAnswers";
 import { recomputeSowTotal } from "../lib/sowTotal";
+import type { D1Database } from "@cloudflare/workers-types";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -530,6 +532,123 @@ const upsertSchema = z.object({
   direct_inputs: z.record(z.string(), z.unknown()).nullable().optional(),
 });
 
+/**
+ * Resolve answers, compute the estimate, and upsert the labor_estimates row.
+ * Shared by the PUT handler and the sow_data-change recompute (solutions PATCH).
+ *
+ * Answer precedence (highest wins): sow_data-derived sizing → legacy
+ * direct_inputs → needs-assessment answers. sow_data is the single source for
+ * sizing going forward; legacy direct_inputs still fill gaps until a solution
+ * is re-saved; the NA supplies everything else (incl. complexity drivers).
+ * Only UCaaS emits sow_data keys (sowDataToEngineAnswers), so CCaaS/CI/VA stay
+ * exactly NA-driven.
+ */
+export async function applyEstimate(
+  db: D1Database,
+  solutionId: string,
+  solutionType: string,
+  overrides: Record<string, number>,
+  directInputsToPersist: Record<string, unknown> | null,
+): Promise<Record<string, unknown>> {
+  const naRow = await db.prepare(
+    "SELECT answers FROM needs_assessments WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first() as { answers: string } | null;
+  const naAnswers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
+
+  const solRow = await db.prepare(
+    "SELECT sow_data FROM solutions WHERE id = ? LIMIT 1"
+  ).bind(solutionId).first() as { sow_data: string | null } | null;
+  const sowData = parseJson<Record<string, unknown> | null>(solRow?.sow_data ?? null, null);
+  const sowDataAnswers = sowDataToEngineAnswers(sowData, solutionType);
+
+  const legacyDirect = directInputsToPersist && Object.keys(directInputsToPersist).length > 0
+    ? directInputsToPersist
+    : {};
+
+  const answers: Record<string, unknown> = { ...naAnswers, ...legacyDirect, ...sowDataAnswers };
+
+  const category = solutionTypeToCategory(solutionType);
+  const configRow = await db.prepare(
+    "SELECT base_hours FROM labor_config WHERE category = ? LIMIT 1"
+  ).bind(category).first() as { base_hours: string } | null;
+  const baseHoursOverride = configRow ? parseJson<Record<string, number>>(configRow.base_hours, BASE_HOURS[category]) : undefined;
+
+  const estimate = computeEstimate(category, answers, overrides, baseHoursOverride);
+
+  const existing = await db.prepare(
+    "SELECT id FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first();
+
+  const directInputsForDb = directInputsToPersist === null ? null : JSON.stringify(directInputsToPersist);
+
+  if (existing) {
+    await db.prepare(`
+      UPDATE labor_estimates
+      SET solution_type_category = ?, base_hours = ?, driver_adjustments = ?,
+          complexity = ?, pre_override_hours = ?, final_hours = ?, overrides = ?,
+          total_low = ?, total_expected = ?, total_high = ?,
+          confidence_score = ?, confidence_band = ?, risk_flags = ?,
+          direct_inputs = ?,
+          updated_at = datetime('now')
+      WHERE solution_id = ? AND solution_type = ?
+    `).bind(
+      estimate.solutionTypeCategory,
+      JSON.stringify(estimate.baseHours),
+      JSON.stringify(estimate.driverAdjustments),
+      JSON.stringify(estimate.complexity),
+      JSON.stringify(estimate.preOverrideHours),
+      JSON.stringify(estimate.finalHours),
+      JSON.stringify(estimate.overrides),
+      estimate.totals.low, estimate.totals.expected, estimate.totals.high,
+      estimate.confidence.score, estimate.confidence.band,
+      JSON.stringify(estimate.riskFlags),
+      directInputsForDb,
+      solutionId, solutionType
+    ).run();
+  } else {
+    const id = crypto.randomUUID();
+    await db.prepare(`
+      INSERT INTO labor_estimates
+        (id, solution_id, solution_type, solution_type_category, base_hours, driver_adjustments, complexity,
+         pre_override_hours, final_hours, overrides, total_low, total_expected, total_high,
+         confidence_score, confidence_band, risk_flags, direct_inputs)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, solutionId, solutionType, estimate.solutionTypeCategory,
+      JSON.stringify(estimate.baseHours),
+      JSON.stringify(estimate.driverAdjustments),
+      JSON.stringify(estimate.complexity),
+      JSON.stringify(estimate.preOverrideHours),
+      JSON.stringify(estimate.finalHours),
+      JSON.stringify(estimate.overrides),
+      estimate.totals.low, estimate.totals.expected, estimate.totals.high,
+      estimate.confidence.score, estimate.confidence.band,
+      JSON.stringify(estimate.riskFlags),
+      directInputsForDb
+    ).run();
+  }
+
+  return await db.prepare(
+    "SELECT * FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
+  ).bind(solutionId, solutionType).first() as Record<string, unknown>;
+}
+
+/** Recompute the labor estimates that ALREADY EXIST for a solution, preserving
+ *  each row's overrides + legacy direct_inputs. Used after sow_data changes so
+ *  advanced-mode hours track the SOW sizing without the PM revisiting the labor
+ *  tab. Does NOT create new estimates (would mis-categorize types like wfm/qm
+ *  and inflate totals) and does NOT recompute the SOW total — the caller does. */
+export async function recomputeExistingEstimates(db: D1Database, solutionId: string): Promise<void> {
+  const rows = await db.prepare(
+    "SELECT solution_type, overrides, direct_inputs FROM labor_estimates WHERE solution_id = ?"
+  ).bind(solutionId).all() as { results?: Array<{ solution_type: string; overrides: string | null; direct_inputs: string | null }> };
+  for (const r of rows.results ?? []) {
+    const overrides = parseJson<Record<string, number>>(r.overrides ?? null, {});
+    const direct = r.direct_inputs ? parseJson<Record<string, unknown> | null>(r.direct_inputs, null) : null;
+    await applyEstimate(db, solutionId, r.solution_type, overrides, direct);
+  }
+}
+
 app.put("/:id/labor-estimates/:type", async (c) => {
   const auth = c.get("auth");
   if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
@@ -555,101 +674,19 @@ app.put("/:id/labor-estimates/:type", async (c) => {
 
   const { overrides, direct_inputs: directInputsBody } = parsed.data;
 
-  // Resolve answers. If direct_inputs is in the request body, it wins
-  // (and gets persisted). If null is sent explicitly, clear any stored
-  // direct inputs and fall back to NA. If undefined (not in body), keep
-  // whatever was previously stored.
+  // direct_inputs persistence: body value wins (incl. explicit null to clear);
+  // when omitted, keep whatever was previously stored. (The UI no longer sends
+  // direct_inputs — sizing lives in sow_data now — but we still honor stored
+  // values as a fallback layer in applyEstimate.)
   const existingRow = await c.env.DB.prepare(
     "SELECT direct_inputs FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
   ).bind(solutionId, solutionType).first() as { direct_inputs: string | null } | null;
 
-  let directInputsToPersist: Record<string, unknown> | null;
-  if (directInputsBody !== undefined) {
-    directInputsToPersist = directInputsBody;
-  } else {
-    directInputsToPersist = existingRow?.direct_inputs
-      ? parseJson<Record<string, unknown> | null>(existingRow.direct_inputs, null)
-      : null;
-  }
+  const directInputsToPersist: Record<string, unknown> | null = directInputsBody !== undefined
+    ? directInputsBody
+    : (existingRow?.direct_inputs ? parseJson<Record<string, unknown> | null>(existingRow.direct_inputs, null) : null);
 
-  // direct_inputs (if non-empty) supersedes the NA. Empty / null falls back.
-  const hasDirectInputs = directInputsToPersist !== null && Object.keys(directInputsToPersist).length > 0;
-  let answers: Record<string, unknown>;
-  if (hasDirectInputs) {
-    answers = directInputsToPersist as Record<string, unknown>;
-  } else {
-    const naRow = await c.env.DB.prepare(
-      "SELECT answers FROM needs_assessments WHERE solution_id = ? AND solution_type = ? LIMIT 1"
-    ).bind(solutionId, solutionType).first() as { answers: string } | null;
-    answers = parseJson<Record<string, unknown>>(naRow?.answers ?? null, {});
-  }
-
-  const category = solutionTypeToCategory(solutionType);
-
-  // Load base hours config override from DB if present
-  const configRow = await c.env.DB.prepare(
-    "SELECT base_hours FROM labor_config WHERE category = ? LIMIT 1"
-  ).bind(category).first() as { base_hours: string } | null;
-  const baseHoursOverride = configRow ? parseJson<Record<string, number>>(configRow.base_hours, BASE_HOURS[category]) : undefined;
-
-  const estimate = computeEstimate(category, answers, overrides, baseHoursOverride);
-
-  const existing = await c.env.DB.prepare(
-    "SELECT id FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
-  ).bind(solutionId, solutionType).first();
-
-  const directInputsForDb = directInputsToPersist === null ? null : JSON.stringify(directInputsToPersist);
-
-  if (existing) {
-    await c.env.DB.prepare(`
-      UPDATE labor_estimates
-      SET solution_type_category = ?, base_hours = ?, driver_adjustments = ?,
-          complexity = ?, pre_override_hours = ?, final_hours = ?, overrides = ?,
-          total_low = ?, total_expected = ?, total_high = ?,
-          confidence_score = ?, confidence_band = ?, risk_flags = ?,
-          direct_inputs = ?,
-          updated_at = datetime('now')
-      WHERE solution_id = ? AND solution_type = ?
-    `).bind(
-      estimate.solutionTypeCategory,
-      JSON.stringify(estimate.baseHours),
-      JSON.stringify(estimate.driverAdjustments),
-      JSON.stringify(estimate.complexity),
-      JSON.stringify(estimate.preOverrideHours),
-      JSON.stringify(estimate.finalHours),
-      JSON.stringify(estimate.overrides),
-      estimate.totals.low, estimate.totals.expected, estimate.totals.high,
-      estimate.confidence.score, estimate.confidence.band,
-      JSON.stringify(estimate.riskFlags),
-      directInputsForDb,
-      solutionId, solutionType
-    ).run();
-  } else {
-    const id = crypto.randomUUID();
-    await c.env.DB.prepare(`
-      INSERT INTO labor_estimates
-        (id, solution_id, solution_type, solution_type_category, base_hours, driver_adjustments, complexity,
-         pre_override_hours, final_hours, overrides, total_low, total_expected, total_high,
-         confidence_score, confidence_band, risk_flags, direct_inputs)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).bind(
-      id, solutionId, solutionType, estimate.solutionTypeCategory,
-      JSON.stringify(estimate.baseHours),
-      JSON.stringify(estimate.driverAdjustments),
-      JSON.stringify(estimate.complexity),
-      JSON.stringify(estimate.preOverrideHours),
-      JSON.stringify(estimate.finalHours),
-      JSON.stringify(estimate.overrides),
-      estimate.totals.low, estimate.totals.expected, estimate.totals.high,
-      estimate.confidence.score, estimate.confidence.band,
-      JSON.stringify(estimate.riskFlags),
-      directInputsForDb
-    ).run();
-  }
-
-  const row = await c.env.DB.prepare(
-    "SELECT * FROM labor_estimates WHERE solution_id = ? AND solution_type = ? LIMIT 1"
-  ).bind(solutionId, solutionType).first() as Record<string, unknown>;
+  const row = await applyEstimate(c.env.DB, solutionId, solutionType, overrides, directInputsToPersist);
 
   // Hours just changed → keep solutions.sow_total_amount in sync.
   await recomputeSowTotal(c.env.DB, solutionId);

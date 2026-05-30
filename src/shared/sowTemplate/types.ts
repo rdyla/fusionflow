@@ -76,8 +76,18 @@ export type SowBuildContext = {
   isZoomReseller: boolean;
   /** Number of locations / sites in scope — drives snapshot + section 1.3. */
   locationCount: number;
-  /** Primary "seat" count (UCaaS users / CCaaS agents / etc. — variant decides). */
+  /** Primary "seat" count — legacy single number (UCaaS users). Kept as a
+   *  fallback for tiles/rows not yet migrated to a per-type count (e.g. rc_air).
+   *  Prefer the per-type counts below so a combo SOW shows distinct numbers. */
   primarySeatCount: number;
+  /** Per-type headline counts. Each scope row / snapshot tile reads its own so
+   *  a combo SOW (UCaaS + CCaaS + VA …) doesn't print the same number for all.
+   *  Sourced from sow_data: ucaas users sum, ccaas.agents, ci.licensed_seats,
+   *  and VA = count of enabled VA channels (voice + chat + sms). */
+  ucaasSeatCount: number;
+  ccaasAgentCount: number;
+  ciSeatCount: number;
+  vaWorkflowCount: number;
   /** Optional secondary counts that variants may use (DIDs, Meetings, queues, etc.). */
   ditNumbers: number;          // DIDs to port
   meetingsCount: number;       // Zoom Meetings licenses (UCaaS variants)

@@ -13,6 +13,22 @@ export interface SowData {
     ms_teams_type: string;
     additional_did: string;
     additional_toll_free: string;
+    // Scoping inputs that drive advanced-mode hours. These use the exact key
+    // names the labor engine reads (see src/server/routes/laborEstimates.ts),
+    // so sowDataToEngineAnswers() can pass them through 1:1. Moved here from the
+    // old "Calculator Inputs" block on the Labor Estimate tab so SOW sizing has
+    // a single home.
+    deployment_type: string;
+    integrations_required: string;
+    call_flow_components_required: string;
+    number_porting_required: string;
+    sandbox_testing_required: string;
+    analog_fax_count: string;
+    paging_system_count: string;
+    door_phone_count: string;
+    gate_controller_count: string;
+    other_analog_device_count: string;
+    did_porting_blocks: string;
   };
   ccaas: {
     agents: string;
@@ -64,6 +80,10 @@ const DEFAULT_SOW: SowData = {
   ucaas: {
     basic_users: "", advanced_users: "", common_area: "", conference_rooms: "",
     operators: "", ms_teams_type: "", additional_did: "", additional_toll_free: "",
+    deployment_type: "", integrations_required: "", call_flow_components_required: "",
+    number_porting_required: "", sandbox_testing_required: "",
+    analog_fax_count: "", paging_system_count: "", door_phone_count: "",
+    gate_controller_count: "", other_analog_device_count: "", did_porting_blocks: "",
   },
   ccaas: {
     agents: "", supervisors: "", admin_only: "",
@@ -120,6 +140,12 @@ export function seedSowFromAssessment(base: SowData, answers: Record<string, unk
       const match = sites.match(/\d+/);
       if (match) d.shared.sites_count = match[0];
     }
+    // Scoping selects that drive hours — passthrough from the NA when present.
+    const dep = a["deployment_type"] as string | undefined;
+    if (dep && !d.ucaas.deployment_type) d.ucaas.deployment_type = dep;
+    if (portingReq && !d.ucaas.number_porting_required) d.ucaas.number_porting_required = portingReq;
+    const sandbox = a["sandbox_testing_required"] as string | undefined;
+    if (sandbox && !d.ucaas.sandbox_testing_required) d.ucaas.sandbox_testing_required = sandbox;
   }
 
   if (solutionType === "ccaas") {
@@ -342,6 +368,45 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
                 { value: "none", label: "Not Required" },
               ]} />
             </Field>
+          </div>
+
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Scoping (drives hours)</p>
+          <div style={{ ...GRID3, marginBottom: 12 }}>
+            <Field label="Deployment Type">
+              <Sel value={sow.ucaas.deployment_type} onChange={v => upd("ucaas", { ...sow.ucaas, deployment_type: v })} canEdit={canEdit} options={[
+                { value: "new_deployment",        label: "New deployment" },
+                { value: "migration",             label: "Migration from existing platform" },
+                { value: "expansion",             label: "Expansion of existing deployment" },
+                { value: "optimization_redesign", label: "Optimization / redesign" },
+                { value: "replacement",           label: "Like-for-like replacement" },
+              ]} />
+            </Field>
+            <Field label="Number Porting">
+              <Sel value={sow.ucaas.number_porting_required} onChange={v => upd("ucaas", { ...sow.ucaas, number_porting_required: v })} canEdit={canEdit} options={[
+                { value: "no",      label: "Not required" },
+                { value: "partial", label: "Partial — some numbers" },
+                { value: "yes",     label: "Required — most/all numbers" },
+              ]} />
+            </Field>
+            <Field label="Sandbox Testing">
+              <Sel value={sow.ucaas.sandbox_testing_required} onChange={v => upd("ucaas", { ...sow.ucaas, sandbox_testing_required: v })} canEdit={canEdit} options={[
+                { value: "no",    label: "Not required" },
+                { value: "maybe", label: "Maybe / TBD" },
+                { value: "yes",   label: "Required" },
+              ]} />
+            </Field>
+            <Field label="Integrations" hint="# third-party systems"><Num value={sow.ucaas.integrations_required} onChange={v => upd("ucaas", { ...sow.ucaas, integrations_required: v })} canEdit={canEdit} /></Field>
+            <Field label="Call Flow Components" hint="Queues, IVRs, hunt groups"><Num value={sow.ucaas.call_flow_components_required} onChange={v => upd("ucaas", { ...sow.ucaas, call_flow_components_required: v })} canEdit={canEdit} /></Field>
+            <Field label="DID Porting Blocks"><Num value={sow.ucaas.did_porting_blocks} onChange={v => upd("ucaas", { ...sow.ucaas, did_porting_blocks: v })} canEdit={canEdit} /></Field>
+          </div>
+
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Analog endpoints</p>
+          <div style={{ ...GRID3 }}>
+            <Field label="Analog Fax"><Num value={sow.ucaas.analog_fax_count} onChange={v => upd("ucaas", { ...sow.ucaas, analog_fax_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Paging Systems"><Num value={sow.ucaas.paging_system_count} onChange={v => upd("ucaas", { ...sow.ucaas, paging_system_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Door Phones"><Num value={sow.ucaas.door_phone_count} onChange={v => upd("ucaas", { ...sow.ucaas, door_phone_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Gate Controllers"><Num value={sow.ucaas.gate_controller_count} onChange={v => upd("ucaas", { ...sow.ucaas, gate_controller_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Other Analog Devices"><Num value={sow.ucaas.other_analog_device_count} onChange={v => upd("ucaas", { ...sow.ucaas, other_analog_device_count: v })} canEdit={canEdit} /></Field>
           </div>
         </div>
       )}

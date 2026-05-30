@@ -23,6 +23,7 @@ import {
 } from "../../shared/solutionTypes";
 import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
 import { recomputeSowTotal } from "../lib/sowTotal";
+import { recomputeExistingEstimates } from "./laborEstimates";
 import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -575,6 +576,16 @@ app.patch("/:id", async (c) => {
       .prepare(`DELETE FROM labor_estimates WHERE solution_id = ? AND solution_type IN (${placeholders})`)
       .bind(solutionId, ...orphanTypes)
       .run();
+    pricingTouched = true;
+  }
+
+  // SOW sizing lives in sow_data now and drives advanced-mode hours. When it
+  // changes, recompute the solution's existing labor estimates from the new
+  // sizing (preserving overrides) so the SOW total tracks it without the PM
+  // revisiting the Labor Estimate tab. Only affects UCaaS hours (the only type
+  // sow_data feeds); CCaaS/CI/VA estimates recompute to the same NA-driven value.
+  if (updates.sow_data !== undefined) {
+    await recomputeExistingEstimates(db, solutionId);
     pricingTouched = true;
   }
 

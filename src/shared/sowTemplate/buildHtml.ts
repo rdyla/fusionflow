@@ -49,11 +49,15 @@ function bullets(items: string[]): string {
 
 function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
   return q
-    .replace("{locations}", esc(ctx.locationCount))
-    .replace("{primary}",   esc(ctx.primarySeatCount))
-    .replace("{dids}",      esc(ctx.ditNumbers))
-    .replace("{meetings}",  esc(ctx.meetingsCount))
-    .replace("{golives}",   esc(ctx.goLiveCount));
+    .replace("{locations}",    esc(ctx.locationCount))
+    .replace("{primary}",      esc(ctx.primarySeatCount))
+    .replace("{ucaas_seats}",  esc(ctx.ucaasSeatCount))
+    .replace("{ccaas_agents}", esc(ctx.ccaasAgentCount))
+    .replace("{ci_seats}",     esc(ctx.ciSeatCount))
+    .replace("{va_workflows}", esc(ctx.vaWorkflowCount))
+    .replace("{dids}",         esc(ctx.ditNumbers))
+    .replace("{meetings}",     esc(ctx.meetingsCount))
+    .replace("{golives}",      esc(ctx.goLiveCount));
 }
 
 // ── Sections ─────────────────────────────────────────────────────────────────

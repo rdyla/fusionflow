@@ -44,112 +44,6 @@ const CONFIDENCE_COLOR: Record<string, string> = {
   high: "#107c10",
 };
 
-// ── Calculator Inputs (Stage 1: UCaaS only) ────────────────────────────────
-//
-// These are the small set of NA-equivalent fields the calc actually consumes
-// when computing UCaaS hours. When set, the server uses these in place of the
-// per-type needs_assessments answers — letting a user generate a SOW without
-// ever filling out the NA. CCaaS / CI / Virtual Agent stay NA-driven for now.
-
-type InputFieldDef =
-  | { key: string; label: string; type: "select"; options: { value: string; label: string }[]; help?: string }
-  | { key: string; label: string; type: "count"; placeholder?: string; help?: string };
-
-const UCAAS_INPUT_FIELDS: InputFieldDef[] = [
-  // user_count is a direct numeric input. The server bins it into the
-  // band-keyed driver mapping at calc time, so existing band-driven NA
-  // solutions still work unchanged.
-  { key: "user_count", label: "User count", type: "count", placeholder: "e.g. 50", help: "Total seats in scope" },
-  {
-    key: "deployment_type", label: "Deployment type", type: "select",
-    options: [
-      { value: "new_deployment",        label: "New deployment" },
-      { value: "migration",             label: "Migration from existing platform" },
-      { value: "expansion",             label: "Expansion of existing deployment" },
-      { value: "optimization_redesign", label: "Optimization / redesign" },
-      { value: "replacement",           label: "Like-for-like replacement" },
-    ],
-  },
-  { key: "integrations_required",         label: "Integrations",          type: "count", placeholder: "0", help: "How many third-party systems integrate?" },
-  // Per-device-type analog endpoint inputs (replaces the old endpoint_types
-  // banded field). Each one is a fixed hours-per-unit rate.
-  { key: "analog_fax_count",              label: "Analog Fax",            type: "count", placeholder: "0", help: "1h each" },
-  { key: "paging_system_count",           label: "Paging System",         type: "count", placeholder: "0", help: "4h each" },
-  { key: "door_phone_count",              label: "Door Phone",            type: "count", placeholder: "0", help: "3h each" },
-  { key: "gate_controller_count",         label: "Gate Controller",       type: "count", placeholder: "0", help: "3h each" },
-  { key: "other_analog_device_count",     label: "Other Analog Device",   type: "count", placeholder: "0", help: "2h each" },
-  { key: "did_porting_blocks",            label: "DID Porting Blocks",    type: "count", placeholder: "0", help: "15m each" },
-  { key: "call_flow_components_required", label: "Call flow components",  type: "count", placeholder: "0", help: "Queues, IVRs, hunt groups, etc." },
-  {
-    key: "number_porting_required", label: "Number porting", type: "select",
-    options: [
-      { value: "no",      label: "Not required" },
-      { value: "partial", label: "Partial — some numbers" },
-      { value: "yes",     label: "Required — most/all numbers" },
-    ],
-  },
-  {
-    key: "sandbox_testing_required", label: "Sandbox testing", type: "select",
-    options: [
-      { value: "no",    label: "Not required" },
-      { value: "maybe", label: "Maybe / TBD" },
-      { value: "yes",   label: "Required" },
-    ],
-  },
-];
-
-const INPUT_FIELDS_BY_TYPE: Record<string, InputFieldDef[]> = {
-  ucaas: UCAAS_INPUT_FIELDS,
-};
-
-/** Midpoint seat count for each legacy band — used to pre-fill the new
- *  numeric user_count input from existing NA / direct-input data that
- *  only has the banded user_count_band string. */
-const USER_COUNT_BAND_MIDPOINTS: Record<string, string> = {
-  "1_25":     "13",
-  "26_100":   "63",
-  "101_250":  "175",
-  "251_500":  "375",
-  "500_plus": "500",
-};
-
-/** Pull the value for a calculator-input field out of an answer-shaped record.
- *  Handles the NA shape (arrays for count fields) by reducing to length. */
-function readInputValue(field: InputFieldDef, source: Record<string, unknown> | null | undefined): string {
-  if (!source) return "";
-  const raw = source[field.key];
-  if (raw == null) {
-    // user_count: legacy fallback when only the banded value exists.
-    if (field.key === "user_count" && typeof source["user_count_band"] === "string") {
-      return USER_COUNT_BAND_MIDPOINTS[source["user_count_band"]] ?? "";
-    }
-    return "";
-  }
-  if (field.type === "count") {
-    if (Array.isArray(raw)) return String(raw.length);
-    if (typeof raw === "number") return String(raw);
-    return "";
-  }
-  return typeof raw === "string" ? raw : "";
-}
-
-/** Serialize the form state back into the answer-shaped record the server
- *  persists. Empty fields are dropped (the server's calc treats missing
- *  keys as 0 / "not set"). */
-function serializeInputs(fields: InputFieldDef[], state: Record<string, string>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const field of fields) {
-    const v = state[field.key];
-    if (v === undefined || v === "") continue;
-    if (field.type === "count") {
-      const n = parseInt(v, 10);
-      if (Number.isFinite(n) && n >= 0) out[field.key] = n;
-    } else {
-      out[field.key] = v;
-    }
-  }
-  return out;
-}
 
 type PricingMode = "tiered" | "basic" | "advanced";
 
@@ -165,10 +59,6 @@ type Props = {
   solutionType: string;
   estimate: LaborEstimate | null;
   hasAssessment: boolean;
-  /** Per-type NA answers, used to seed the calculator-inputs form on first
-   *  open when the estimate has no direct_inputs of its own. Independent
-   *  thereafter — editing direct inputs doesn't touch the NA. */
-  naAnswers?: Record<string, unknown> | null;
   canEdit: boolean;
   onEstimateChange: (estimate: LaborEstimate | null) => void;
   /** Notify the parent when pricing-mode-related fields on the solution
@@ -176,7 +66,7 @@ type Props = {
   onSolutionChange: (next: Partial<Solution>) => void;
 };
 
-export default function LaborEstimateView({ solution, solutionType, estimate, hasAssessment, naAnswers, canEdit, onEstimateChange, onSolutionChange }: Props) {
+export default function LaborEstimateView({ solution, solutionType, estimate, hasAssessment, canEdit, onEstimateChange, onSolutionChange }: Props) {
   const solutionId = solution.id;
   const [overrides, setOverrides] = useState<Record<string, string>>(
     estimate ? Object.fromEntries(Object.entries(estimate.overrides).map(([k, v]) => [k, String(v)])) : {}
@@ -185,36 +75,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
   const [deleting, setDeleting] = useState(false);
   const [showDrivers, setShowDrivers] = useState(false);
   const [showComplexity, setShowComplexity] = useState(true);
-
-  // Calculator Inputs state — initialize from estimate.direct_inputs if set,
-  // else seed from NA answers (decision: pre-fill once, then independent),
-  // else empty. Re-syncs only when the estimate row identity changes.
-  const inputFields = INPUT_FIELDS_BY_TYPE[solutionType] ?? [];
-  const supportsDirectInputs = inputFields.length > 0;
-  const [directInputs, setDirectInputs] = useState<Record<string, string>>({});
-  const [inputsSavedSnapshot, setInputsSavedSnapshot] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    if (!supportsDirectInputs) return;
-    const seed: Record<string, string> = {};
-    const source = estimate?.direct_inputs ?? naAnswers ?? null;
-    for (const field of inputFields) {
-      seed[field.key] = readInputValue(field, source);
-    }
-    setDirectInputs(seed);
-    setInputsSavedSnapshot(seed);
-  }, [estimate?.id, estimate?.direct_inputs, supportsDirectInputs]);
-
-  const inputsDirty = useMemo(() => {
-    for (const field of inputFields) {
-      if ((directInputs[field.key] ?? "") !== (inputsSavedSnapshot[field.key] ?? "")) return true;
-    }
-    return false;
-  }, [directInputs, inputsSavedSnapshot, inputFields]);
-
-  const inputSource: "direct" | "needs_assessment" | "none" = estimate?.direct_inputs
-    ? "direct"
-    : (hasAssessment ? "needs_assessment" : "none");
 
   // ── Pricing mode (consolidated onto the Labor tab) ─────────────────────────
   // Three modes:
@@ -354,69 +214,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     } finally {
       setDeleting(false);
     }
-  }
-
-  /** Persist the current direct-inputs form to the estimate and recompute.
-   *  If the estimate doesn't exist yet, this also creates it (mirroring
-   *  generate()). Overrides are preserved. */
-  async function saveDirectInputs() {
-    setSaving(true);
-    try {
-      const payloadOverrides: Record<string, number> = {};
-      for (const [ws, val] of Object.entries(overrides)) {
-        const n = parseInt(val);
-        if (!isNaN(n) && n >= 0) payloadOverrides[ws] = n;
-      }
-      const direct = serializeInputs(inputFields, directInputs);
-      const result = await api.upsertLaborEstimate(solutionId, solutionType, {
-        overrides: payloadOverrides,
-        direct_inputs: direct,
-      });
-      onEstimateChange(result);
-      setOverrides(Object.fromEntries(Object.entries(result.overrides).map(([k, v]) => [k, String(v)])));
-      setInputsSavedSnapshot({ ...directInputs });
-    } catch {
-      // ignore
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  /** Clear direct inputs entirely — the next recompute will read from the
-   *  needs assessment (if one exists) or default to base hours. */
-  async function clearDirectInputs() {
-    if (!confirm("Clear the calculator inputs and revert to needs-assessment-driven values?")) return;
-    setSaving(true);
-    try {
-      const payloadOverrides: Record<string, number> = {};
-      for (const [ws, val] of Object.entries(overrides)) {
-        const n = parseInt(val);
-        if (!isNaN(n) && n >= 0) payloadOverrides[ws] = n;
-      }
-      const result = await api.upsertLaborEstimate(solutionId, solutionType, {
-        overrides: payloadOverrides,
-        direct_inputs: null,
-      });
-      onEstimateChange(result);
-      // Reseed form from NA (if present) since the estimate now has no direct_inputs.
-      const seed: Record<string, string> = {};
-      for (const field of inputFields) seed[field.key] = readInputValue(field, naAnswers ?? null);
-      setDirectInputs(seed);
-      setInputsSavedSnapshot(seed);
-    } catch {
-      // ignore
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  /** Re-seed the form from the NA without saving (so the user can review
-   *  before clicking Save). No server round-trip. */
-  function resetToAssessment() {
-    if (!naAnswers) return;
-    const seed: Record<string, string> = {};
-    for (const field of inputFields) seed[field.key] = readInputValue(field, naAnswers);
-    setDirectInputs(seed);
   }
 
   // ── Pricing Mode card (always at top of Labor tab) ────────────────────────
@@ -663,93 +460,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     </div>
   );
 
-  const calcInputsCard = supportsDirectInputs && canEdit ? (
-    <div className="ms-card">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
-        <h3 style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-          Calculator Inputs
-        </h3>
-        <div style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 12, color: "#fff", background: inputSource === "direct" ? "#0891b2" : inputSource === "needs_assessment" ? "#7c3aed" : "#94a3b8" }}>
-          Source: {inputSource === "direct" ? "Direct inputs" : inputSource === "needs_assessment" ? "Needs assessment" : "No inputs yet"}
-        </div>
-      </div>
-      <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 0 14px", lineHeight: 1.5 }}>
-        Use these fields to drive the calculator without filling out the full needs assessment.
-        {hasAssessment && inputSource !== "direct" && " The form is pre-filled from the assessment — saving it locks these values into the estimate, independent of the NA."}
-        {!hasAssessment && " No needs assessment exists yet — fill these in to bypass the NA entirely."}
-      </p>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginBottom: 14 }}>
-        {inputFields.map((field) => (
-          <label key={field.key} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              {field.label}
-            </span>
-            {field.type === "select" ? (
-              <select
-                className="ms-input"
-                value={directInputs[field.key] ?? ""}
-                onChange={(e) => setDirectInputs((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                disabled={!canEdit}
-              >
-                <option value="">— Select —</option>
-                {field.options.map((opt) => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            ) : (
-              <input
-                className="ms-input"
-                type="number"
-                min={0}
-                step={1}
-                placeholder={field.placeholder}
-                value={directInputs[field.key] ?? ""}
-                onChange={(e) => setDirectInputs((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                disabled={!canEdit}
-              />
-            )}
-            {field.help && <span style={{ fontSize: 11, color: "#94a3b8" }}>{field.help}</span>}
-          </label>
-        ))}
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <button
-          className="ms-btn-primary"
-          onClick={saveDirectInputs}
-          disabled={saving || !inputsDirty}
-          style={{ background: inputsDirty ? "#03395f" : "#94a3b8" }}
-        >
-          {saving ? "Saving…" : estimate ? "Save & Recalculate" : "Save & Generate Estimate"}
-        </button>
-        {hasAssessment && (
-          <button
-            type="button"
-            className="ms-btn-secondary"
-            onClick={resetToAssessment}
-            disabled={saving}
-            title="Re-pull values from the needs assessment (does not save)"
-          >
-            ↺ Reset to Assessment
-          </button>
-        )}
-        {estimate?.direct_inputs && (
-          <button
-            type="button"
-            className="ms-btn-secondary"
-            onClick={clearDirectInputs}
-            disabled={saving}
-            style={{ color: "#d13438" }}
-            title="Clear direct inputs and use the needs assessment instead"
-          >
-            Clear Direct Inputs
-          </button>
-        )}
-        {inputsDirty && <span style={{ fontSize: 12, color: "#f59e0b" }}>Unsaved changes</span>}
-      </div>
-    </div>
-  ) : null;
 
   // Tiered and Basic both replace the labor calc entirely — no workstreams,
   // no direct inputs, no NA. Just the pricing card.
@@ -766,16 +476,13 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     return (
       <div style={{ display: "grid", gap: 20 }}>
         {pricingModeCard}
-        {calcInputsCard}
         <div className="ms-card" style={{ textAlign: "center", padding: 48 }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>📊</div>
           <h3 style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", margin: "0 0 8px" }}>No Labor Estimate Yet</h3>
           <p style={{ fontSize: 13, color: "#64748b", margin: "0 0 24px", maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
-            {supportsDirectInputs
-              ? "Fill in the calculator inputs above and save to generate an estimate, or generate a baseline from the needs assessment below."
-              : (hasAssessment
-                ? "Generate a labor estimate based on the completed needs assessment."
-                : "Complete the needs assessment first to get a more accurate estimate, or generate a baseline estimate from scratch.")}
+            {hasAssessment
+              ? "Generate a labor estimate based on the completed needs assessment."
+              : "Fill in the SOW Sizing tab and complete the needs assessment for the most accurate estimate, or generate a baseline now."}
           </p>
           {canEdit && (
             <button className="ms-btn-primary" onClick={() => generate()} disabled={saving}>
@@ -804,7 +511,6 @@ export default function LaborEstimateView({ solution, solutionType, estimate, ha
     <div style={{ display: "grid", gap: 20 }}>
 
       {pricingModeCard}
-      {calcInputsCard}
 
       {/* ── Summary header ── */}
       <div className="ms-card" style={{ background: "linear-gradient(135deg, #f8fafc 0%, #f0f9ff 100%)" }}>

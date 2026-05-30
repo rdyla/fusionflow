@@ -1576,7 +1576,6 @@ export default function SolutionDetailPage() {
             solutionType={effectiveActiveLaborType}
             estimate={laborEstimate}
             hasAssessment={needsAssessments[effectiveActiveLaborType] !== undefined}
-            naAnswers={(needsAssessments[effectiveActiveLaborType]?.answers as Record<string, unknown> | undefined) ?? null}
             canEdit={canEdit}
             onSolutionChange={(next) => setSolution((prev) => prev ? { ...prev, ...next } : prev)}
             onEstimateChange={(le) => {
