@@ -641,10 +641,6 @@ export type Task = {
   pay_code_id: string | null;
   cost_code_id: string | null;
   crm_time_entry_id: string | null;
-  /** When set, the task is treated as a meeting (kickoff / design review /
-   *  go-live / etc.); the stakeholder view's "Next call" picks the earliest
-   *  upcoming task with a join URL. */
-  meeting_join_url: string | null;
   /** Canonical go-live event flag (mirrors template_tasks.is_go_live_event
    *  from migration 0081, carried into tasks by migration 0095). When set,
    *  the task's due_date drives projects.target_go_live_date. */
@@ -662,6 +658,20 @@ export type TimeEntrySetup = {
 export type TaskTimeEntry = {
   id: string;
   task_id: string;
+  project_id: string;
+  crm_time_entry_id: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  pay_code_id: string | null;
+  cost_code_id: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  created_at: string;
+};
+
+export type StageTimeEntry = {
+  id: string;
+  stage_id: string;
   project_id: string;
   crm_time_entry_id: string | null;
   scheduled_start: string | null;
@@ -1173,7 +1183,6 @@ export type StakeholderSummary = {
     phase_id: string | null;
     phase_name: string | null;
     assignee_name: string | null;
-    is_meeting: boolean;
   }>;
   assignee_breakdown: Array<{
     user_id: string;
@@ -1514,7 +1523,6 @@ export const api = {
       completed_at?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
-      meeting_join_url?: string | null;
     }
   ) =>
     request<Task>(`/projects/${projectId}/tasks/${taskId}`, {
@@ -1542,23 +1550,25 @@ export const api = {
   timeEntrySetup: (projectId: string) =>
     request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup`),
 
-  getTaskTimeEntries: (projectId: string, taskId: string) =>
-    request<TaskTimeEntry[]>(`/projects/${projectId}/tasks/${taskId}/time-entries`),
+  getStageTimeEntries: (projectId: string, stageId: string) =>
+    request<StageTimeEntry[]>(`/projects/${projectId}/stages/${stageId}/time-entries`),
 
-  logTaskTime: (
+  // Stage-level time entry. Both pay code (labor) and cost code are required.
+  logStageTime: (
     projectId: string,
-    taskId: string,
+    stageId: string,
     payload: {
       scheduled_start: string;
       scheduled_end: string;
       pay_code_id: string;
-      cost_code_id?: string | null;
+      cost_code_id: string;
+      note?: string;
       case_id: string;
       job_id: string;
       account_id?: string | null;
     }
   ) =>
-    request<TaskTimeEntry>(`/projects/${projectId}/tasks/${taskId}/time-entries`, {
+    request<StageTimeEntry>(`/projects/${projectId}/stages/${stageId}/time-entries`, {
       method: "POST",
       body: JSON.stringify(payload),
     }),
