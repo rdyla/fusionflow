@@ -23,14 +23,14 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     appliesTo: ["ucaas"],
     vendor: ["zoom"],
     label: "Zoom Phone Users",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ucaasSeatCount || 0),
     priority: 90,
   },
   {
     appliesTo: ["ucaas"],
     vendor: ["ringcentral"],
     label: "RingCentral Users",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ucaasSeatCount || 0),
     priority: 90,
   },
   {
@@ -52,14 +52,14 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     appliesTo: ["ccaas"],
     vendor: ["zoom"],
     label: "Zoom Contact Center Agents",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 90,
   },
   {
     appliesTo: ["ccaas"],
     vendor: ["ringcentral"],
     label: "RingCX Agents",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 90,
   },
   // Combo (UCaaS + CCaaS) — both seat counts side-by-side, agents tile
@@ -67,7 +67,7 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
   {
     appliesTo: ["ucaas", "ccaas"],
     label: "CCaaS Agents",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 85,
   },
 
@@ -75,13 +75,13 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
   {
     appliesTo: ["ci"],
     label: "Recorded Seats",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ciSeatCount || 0),
     priority: 90,
   },
   {
     appliesTo: ["va"],
-    label: "Bots",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    label: "Virtual Agent Workflows",
+    value: (ctx) => String(ctx.vaWorkflowCount || 0),
     priority: 90,
   },
   {
@@ -96,13 +96,13 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
   {
     appliesTo: ["wfm"],
     label: "WFM Agents",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 35,
   },
   {
     appliesTo: ["qm"],
     label: "QM-Evaluated Agents",
-    value: (ctx) => String(ctx.primarySeatCount || 0),
+    value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 34,
   },
 

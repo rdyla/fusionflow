@@ -105,7 +105,7 @@ function pickCounts(
   sd: SowData | null | undefined,
   na: NeedsAssessment | null,
   solution: Solution,
-): { locations: number; users: number; dids: number; meetings: number; goLives: number } {
+): { locations: number; users: number; ccaasAgents: number; ciSeats: number; vaWorkflows: number; dids: number; meetings: number; goLives: number } {
   // Advanced-mode source: the SOW Sizing Form blob (sow_data).
   const sdLocations = num(sd?.shared?.sites_count);
   const sdStages    = num(sd?.shared?.phases_count);
@@ -132,7 +132,17 @@ function pickCounts(
   const goLives = sdStages > 0
     ? sdStages
     : (basic && num(basic.go_lives) > 0 ? num(basic.go_lives) : locations);
-  return { locations, users, dids, meetings, goLives };
+
+  // Per-type headline counts (combo SOWs need distinct numbers, not one shared
+  // "primary"). These come straight from the SOW Sizing form (sow_data):
+  //  - CCaaS agents: ccaas.agents
+  //  - CI recorded seats: ci.licensed_seats
+  //  - VA workflows: count of enabled VA channels (voice + chat + sms)
+  const ccaasAgents = num(sd?.ccaas?.agents);
+  const ciSeats     = num(sd?.ci?.licensed_seats);
+  const vaWorkflows = (sd?.va?.voice ? 1 : 0) + (sd?.va?.chat ? 1 : 0) + (sd?.va?.sms ? 1 : 0);
+
+  return { locations, users, ccaasAgents, ciSeats, vaWorkflows, dids, meetings, goLives };
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -223,6 +233,10 @@ export default function ScopeOfWorkDocument({
     isZoomReseller: solution.is_zoom_reseller === 1,
     locationCount:   counts.locations,
     primarySeatCount: counts.users,
+    ucaasSeatCount:  counts.users,
+    ccaasAgentCount: counts.ccaasAgents,
+    ciSeatCount:     counts.ciSeats,
+    vaWorkflowCount: counts.vaWorkflows,
     ditNumbers:      counts.dids,
     meetingsCount:   counts.meetings,
     goLiveCount:     counts.goLives,
