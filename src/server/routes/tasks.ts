@@ -7,7 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
 import {
-  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry,
+  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry, deleteTimeEntry,
 } from "../services/dynamicsService";
 import { syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate, syncProjectStatus } from "../lib/teamUtils";
 
@@ -681,10 +681,10 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
   const entryId = crypto.randomUUID();
   await db
     .prepare(`
-      INSERT INTO stage_time_entries (id, stage_id, project_id, crm_time_entry_id, scheduled_start, scheduled_end, pay_code_id, cost_code_id, user_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO stage_time_entries (id, stage_id, project_id, crm_time_entry_id, scheduled_start, scheduled_end, pay_code_id, cost_code_id, note, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
-    .bind(entryId, stageId, projectId, crmTimeEntryId, scheduled_start, scheduled_end, pay_code_id, cost_code_id, auth.user.id)
+    .bind(entryId, stageId, projectId, crmTimeEntryId, scheduled_start, scheduled_end, pay_code_id, cost_code_id, noteTrimmed || null, auth.user.id)
     .run();
 
   const created = await db
@@ -693,6 +693,42 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
     .first();
 
   return c.json(created, 201);
+});
+
+/** Delete a stage time entry — removes it from Dynamics CRM and locally. */
+app.delete("/:id/stages/:stageId/time-entries/:entryId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const stageId = c.req.param("stageId");
+  const entryId = c.req.param("entryId");
+
+  const entry = await db
+    .prepare("SELECT id, crm_time_entry_id, user_id FROM stage_time_entries WHERE id = ? AND stage_id = ? AND project_id = ? LIMIT 1")
+    .bind(entryId, stageId, projectId)
+    .first<{ id: string; crm_time_entry_id: string | null; user_id: string | null }>();
+  if (!entry) throw new HTTPException(404, { message: "Time entry not found" });
+
+  // PMs (project editors) may remove any entry; an engineer may remove their own.
+  const canEdit = await canEditProject(db, auth.user, projectId);
+  const isOwnEntry = entry.user_id === auth.user.id;
+  if (!canEdit && !isOwnEntry) throw new HTTPException(403, { message: "Forbidden" });
+
+  // Delete the CRM record first so we never leave the local row pointing at a
+  // CRM entry we failed to remove. A 404 in CRM is treated as success.
+  if (entry.crm_time_entry_id) {
+    try {
+      await deleteTimeEntry(c.env, entry.crm_time_entry_id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "CRM delete failed";
+      console.error("deleteTimeEntry error:", message, "entry:", entry.crm_time_entry_id);
+      throw new HTTPException(502, { message: `CRM error: ${message}` });
+    }
+  }
+
+  await db.prepare("DELETE FROM stage_time_entries WHERE id = ?").bind(entryId).run();
+
+  return c.json({ ok: true });
 });
 
 app.delete("/:id/tasks/:taskId", async (c) => {
