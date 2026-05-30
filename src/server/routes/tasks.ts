@@ -15,7 +15,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 const TASK_SELECT = `
   SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority, meeting_join_url, is_go_live_event,
+         completed_at, status, priority, is_go_live_event,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
@@ -134,10 +134,6 @@ const updateTaskSchema = z.object({
   completed_at: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
-  /** When set, the task is treated as a meeting (kickoff / design review /
-   *  go-live / etc.). The stakeholder view computes "Next call" by picking
-   *  the next upcoming task with a join URL. */
-  meeting_join_url: z.string().max(2000).nullable().optional(),
 });
 
 app.patch("/:id/tasks/:taskId", async (c) => {
@@ -562,6 +558,128 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
 
   const created = await db
     .prepare(`SELECT tte.*, u.name AS user_name FROM task_time_entries tte LEFT JOIN users u ON u.id = tte.user_id WHERE tte.id = ? LIMIT 1`)
+    .bind(entryId)
+    .first();
+
+  return c.json(created, 201);
+});
+
+// ── Stage-level time entry ──────────────────────────────────────────────────
+// Time is logged per STAGE (one Log Time action per stage group) rather than
+// per task. The CRM submission is identical to the task path — related to the
+// project's case + job — only the subject (stage name) and local table differ.
+// Both pay code (labor) and cost code are REQUIRED here.
+
+const logStageTimeSchema = z.object({
+  scheduled_start: z.string(),
+  scheduled_end: z.string(),
+  pay_code_id: z.string().min(1),
+  cost_code_id: z.string().min(1),
+  case_id: z.string(),
+  job_id: z.string(),
+  account_id: z.string().nullable().optional(),
+});
+
+/** List time entries for a stage. */
+app.get("/:id/stages/:stageId/time-entries", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const stageId = c.req.param("stageId");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await db
+    .prepare(`
+      SELECT ste.*, u.name AS user_name
+      FROM stage_time_entries ste
+      LEFT JOIN users u ON u.id = ste.user_id
+      WHERE ste.stage_id = ? AND ste.project_id = ?
+      ORDER BY ste.scheduled_start ASC
+    `)
+    .bind(stageId, projectId)
+    .all();
+
+  return c.json(rows.results ?? []);
+});
+
+/** Log a time entry against a stage and ship it to Dynamics CRM. */
+app.post("/:id/stages/:stageId/time-entries", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const stageId = c.req.param("stageId");
+
+  const stage = await db
+    .prepare("SELECT id, name FROM stages WHERE id = ? AND project_id = ? LIMIT 1")
+    .bind(stageId, projectId)
+    .first<{ id: string; name: string }>();
+  if (!stage) throw new HTTPException(404, { message: "Stage not found" });
+
+  // PFI users who can edit the project may log time; engineers who are project
+  // staff may log time even without full edit rights (mirrors the per-task rule,
+  // but stage-level has no single assignee so membership is the gate).
+  const canEdit = await canEditProject(db, auth.user, projectId);
+  let isEngineerOnProject = false;
+  if (!canEdit && auth.role === "pf_engineer") {
+    const staffRow = await db
+      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
+      .bind(projectId, auth.user.id)
+      .first();
+    isEngineerOnProject = !!staffRow;
+  }
+  if (!canEdit && !isEngineerOnProject) throw new HTTPException(403, { message: "Forbidden" });
+
+  const body = await c.req.json();
+  const parsed = logStageTimeSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid time entry data — pay code and cost code are required" });
+
+  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id, account_id } = parsed.data;
+
+  const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
+  if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
+
+  let crmTimeEntryId: string;
+  try {
+    crmTimeEntryId = await createTimeEntry(c.env, {
+      subject: stage.name,
+      scheduledStart: scheduled_start,
+      scheduledEnd: scheduled_end,
+      caseId: case_id,
+      jobId: job_id,
+      payCodeId: pay_code_id,
+      costCodeId: cost_code_id,
+      companyId: account_id ?? null,
+      ownerId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry failed";
+    console.error("createTimeEntry (stage) error:", message);
+    throw new HTTPException(502, { message: `CRM error: ${message}` });
+  }
+
+  // Same create-then-close contract as the task path: payroll only picks up
+  // Completed entries, so a failed close is a hard error (orphan left in CRM).
+  try {
+    await closeTimeEntry(c.env, crmTimeEntryId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry close failed";
+    console.error("closeTimeEntry (stage) error:", message, "orphan entry:", crmTimeEntryId);
+    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
+  }
+
+  const entryId = crypto.randomUUID();
+  await db
+    .prepare(`
+      INSERT INTO stage_time_entries (id, stage_id, project_id, crm_time_entry_id, scheduled_start, scheduled_end, pay_code_id, cost_code_id, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(entryId, stageId, projectId, crmTimeEntryId, scheduled_start, scheduled_end, pay_code_id, cost_code_id, auth.user.id)
+    .run();
+
+  const created = await db
+    .prepare(`SELECT ste.*, u.name AS user_name FROM stage_time_entries ste LEFT JOIN users u ON u.id = ste.user_id WHERE ste.id = ? LIMIT 1`)
     .bind(entryId)
     .first();
 

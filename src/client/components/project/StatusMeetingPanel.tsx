@@ -2,8 +2,8 @@
  * Status meeting cadence panel — lives on the project Overview tab.
  *
  * Captures a recurring weekly cadence (e.g. "Weekly status · Wed 3:30 PM PT
- * · 30 min · join URL") that drives the Dashboard's "Next call" tile when no
- * closer milestone meeting (a task with a meeting_join_url) is upcoming.
+ * · 30 min · join URL") that drives the stakeholder view's "Next call"
+ * computation.
  *
  * All six status_meeting_* columns live on the projects table (migration
  * 0084). This panel reads + writes them via api.updateProject. PMs set it
@@ -147,7 +147,7 @@ export default function StatusMeetingPanel({
 
       {!editing && !hasCadence && (
         <div style={{ fontSize: 12, color: "#64748b" }}>
-          No recurring meeting set. The Dashboard's "Next call" tile will only show milestone meetings (tasks with a join URL).
+          No recurring meeting set.
         </div>
       )}
 
