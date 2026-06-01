@@ -9,46 +9,8 @@ import { sendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
-import { ensureSharePointChildFolder, getSharePointLocations } from "../services/graphService";
-
-/**
- * Resolve a customer's SharePoint root URL, looking it up from Dynamics doc
- * locations on the fly and caching to customers.sharepoint_url when it's
- * not already set. Customers auto-created via CRM linking (project POST
- * with dynamics_account_id) don't get sharepoint_url populated at insert
- * time, so this fills the gap so per-project folder creation works
- * end-to-end without manual customer-record edits.
- *
- * Returns null when both: customer.sharepoint_url is empty AND no Dynamics
- * doc location is linked to the customer's CRM account.
- */
-async function resolveCustomerSharePointUrl(
-  env: Bindings,
-  db: D1Database,
-  customerId: string
-): Promise<string | null> {
-  const customer = await db
-    .prepare("SELECT sharepoint_url, crm_account_id FROM customers WHERE id = ? LIMIT 1")
-    .bind(customerId)
-    .first<{ sharepoint_url: string | null; crm_account_id: string | null }>();
-  if (!customer) return null;
-  if (customer.sharepoint_url) return customer.sharepoint_url;
-  if (!customer.crm_account_id) return null;
-
-  try {
-    const locations = await getSharePointLocations(env, customer.crm_account_id);
-    const first = locations[0]?.absoluteUrl;
-    if (!first) return null;
-    await db
-      .prepare("UPDATE customers SET sharepoint_url = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .bind(first, customerId)
-      .run();
-    return first;
-  } catch (err) {
-    console.warn(`[resolveCustomerSharePointUrl] Dynamics lookup failed for customer ${customerId}:`, err instanceof Error ? err.message : err);
-    return null;
-  }
-}
+import { ensureSharePointChildFolder } from "../services/graphService";
+import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, buildTaggedTitle, parseTaggedTitle, type SolutionType } from "../../shared/solutionTypes";
 import { syncStageStatus, syncProjectStatus, syncProjectGoLiveDate } from "../lib/teamUtils";

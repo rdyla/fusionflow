@@ -1602,7 +1602,14 @@ export default function SolutionDetailPage() {
 
       {/* ── SharePoint Tab ── */}
       {tab === "sharepoint" && solution.dynamics_account_id && (
-        <SharePointDocs recordId={solution.dynamics_account_id} />
+        <SharePointDocs
+          recordId={solution.dynamics_account_id}
+          sharepointUrl={solution.customer_sharepoint_url}
+          folderUrl={solution.sharepoint_folder_url}
+          owner={{ kind: "solution", id: solution.id }}
+          canEdit={canEdit}
+          onFolderCreated={(url) => setSolution((prev) => (prev ? { ...prev, sharepoint_folder_url: url } : prev))}
+        />
       )}
 
     </div>
