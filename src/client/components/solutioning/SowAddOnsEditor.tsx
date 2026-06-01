@@ -172,11 +172,19 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
           value: includedApps.map((r) => APP_LABELS[r.key as AppKey]).join(" · "),
         });
       }
-      if (comboBreakdown!.zvaVoice.workflows > 0) {
-        summaryRows.push({ label: "ZVA Voice", value: `${comboBreakdown!.zvaVoice.workflows} workflow${comboBreakdown!.zvaVoice.workflows === 1 ? "" : "s"}` });
-      }
-      if (comboBreakdown!.zvaChat.workflows > 0) {
-        summaryRows.push({ label: "ZVA Chat", value: `${comboBreakdown!.zvaChat.workflows} workflow${comboBreakdown!.zvaChat.workflows === 1 ? "" : "s"}` });
+      // Virtual Agent — voice + chat share one cell so a single channel
+      // doesn't strand a lone "ZVA Chat" tile on its own row.
+      const zvaVoiceWf = comboBreakdown!.zvaVoice.workflows;
+      const zvaChatWf = comboBreakdown!.zvaChat.workflows;
+      if (zvaVoiceWf > 0 || zvaChatWf > 0) {
+        const channels: string[] = [];
+        if (zvaVoiceWf > 0) channels.push(`${zvaVoiceWf} voice`);
+        if (zvaChatWf > 0) channels.push(`${zvaChatWf} chat`);
+        const totalWf = zvaVoiceWf + zvaChatWf;
+        summaryRows.push({
+          label: `Virtual Agent workflow${totalWf === 1 ? "" : "s"}`,
+          value: channels.join(" · "),
+        });
       }
     } else if (basicInputs) {
       const bi = basicInputs;
@@ -205,7 +213,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
             <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.07em", marginBottom: 6 }}>
               Based on
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, alignItems: "start" }}>
               {summaryRows.map((r) => (
                 <div key={r.label} style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 6, padding: "8px 12px" }}>
                   <div style={{ fontSize: 11, color: "#64748b", fontWeight: 600, marginBottom: 2 }}>{r.label}</div>
