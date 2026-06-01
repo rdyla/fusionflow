@@ -61,11 +61,6 @@ export interface PhdData {
     other: boolean | null; other_notes: string;
   };
 
-  implementation_strategy: {
-    cloudpro: boolean | null; cloudpro_notes: string;
-    advocacy: boolean | null; advocacy_notes: string;
-    cloudcare: boolean | null; cloudcare_notes: string;
-  };
   deployment: {
     sites_count: string; sites_notes: string;
     phases_count: string; phases_notes: string;
@@ -133,11 +128,6 @@ const DEFAULT_PHD: PhdData = {
     zva: null, zva_notes: "",
     workvio: null, workvio_notes: "",
     other: null, other_notes: "",
-  },
-  implementation_strategy: {
-    cloudpro: null, cloudpro_notes: "",
-    advocacy: null, advocacy_notes: "",
-    cloudcare: null, cloudcare_notes: "",
   },
   deployment: { sites_count: "", sites_notes: "", phases_count: "", phases_notes: "" },
   hardware: [
@@ -274,14 +264,6 @@ function seedFromSowData(base: PhdData, sow: SowData): PhdData {
   // Deployment
   if (sow.shared.sites_count  && !d.deployment.sites_count)  d.deployment.sites_count  = sow.shared.sites_count;
   if (sow.shared.phases_count && !d.deployment.phases_count) d.deployment.phases_count = sow.shared.phases_count;
-
-  // Implementation strategy
-  const strat = sow.shared.implementation_strategy;
-  if (strat && d.implementation_strategy.cloudpro === null && d.implementation_strategy.advocacy === null && d.implementation_strategy.cloudcare === null) {
-    if (strat === "cloudpro")  d.implementation_strategy.cloudpro  = true;
-    if (strat === "advocacy")  d.implementation_strategy.advocacy  = true;
-    if (strat === "cloudcare") d.implementation_strategy.cloudcare = true;
-  }
 
   // Porting
   if (sow.shared.porting_carrier   && !d.porting.carrier)   d.porting.carrier   = sow.shared.porting_carrier;
@@ -858,34 +840,9 @@ export default function ProjectHandoffDocument({ solution, needsAssessments, lab
         {/* ══ RIGHT COLUMN ══ */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
 
-          {/* Implementation Strategy */}
+          {/* Project Information */}
           <div className="ms-card" style={{ padding: 0, overflow: "hidden" }}>
             <div style={SECTION_HEADER}>Project Information</div>
-            <table style={tableStyle}>
-              <thead>
-                <tr>
-                  <th style={{ ...TH_STYLE, width: 200 }}>Implementation Strategy</th>
-                  <th style={TH_STYLE}>Yes / No</th>
-                  <th style={TH_STYLE}>Notes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {([["cloudpro", "CloudPro"], ["advocacy", "Advocacy"], ["cloudcare", "CloudCare"]] as const).map(([key, label]) => {
-                  const notesKey = `${key}_notes` as keyof PhdData["implementation_strategy"];
-                  return (
-                    <tr key={key}>
-                      <td style={{ ...TD_LABEL, ...tdBorder }}>{label}</td>
-                      <td style={{ ...TD_INPUT, ...tdBorder }}>
-                        <YesNoCell value={phd.implementation_strategy[key]} onChange={v => update("implementation_strategy", { ...phd.implementation_strategy, [key]: v })} canEdit={canEdit} />
-                      </td>
-                      <td style={{ ...TD_INPUT, ...tdBorder }}>
-                        <Cell value={phd.implementation_strategy[notesKey] as string} onChange={v => update("implementation_strategy", { ...phd.implementation_strategy, [notesKey]: v })} canEdit={canEdit} placeholder="Notes" wide />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
 
             {/* Deployment Info */}
             <table style={tableStyle}>

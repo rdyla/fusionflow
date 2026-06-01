@@ -572,18 +572,33 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // scheduled_end/due_date = stage.end. Matches Timeline Builder's
     // "every task spans its stage window" convention — PMs stagger
     // individual tasks afterward via the Tasks tab.
+    //
+    // The canonical go-live event is the exception: it's a single-day
+    // milestone landing on the exact go-live date the user supplied — NOT the
+    // go-live stage's end. The anchor math (startFromGoLive/chainForward)
+    // leaves the stage end a few workdays past the typed date, so the supplied
+    // date falls inside the stage window; the stage can carry post-go-live
+    // tasks that end after the event. Pinning the event to target_go_live_date
+    // keeps it on the date entered and keeps the derived project go-live date
+    // (synced from this task's due_date) exact. Mirrors taskWindow() in
+    // TimelineBuilder.
     const newTaskId = crypto.randomUUID();
     const insertedTitle = templateSolutionType
       ? buildTaggedTitle([templateSolutionType], normalizedTitle)
       : normalizedTitle;
     const stageDates = mappedStageId ? stageDatesByDestId.get(mappedStageId) : undefined;
-    const taskStart = stageDates?.planned_start ?? null;
-    const taskEnd   = stageDates?.planned_end ?? null;
+    const isGoLiveEvent = (task.is_go_live_event ?? 0) === 1;
+    const taskStart = isGoLiveEvent && target_go_live_date
+      ? target_go_live_date
+      : (stageDates?.planned_start ?? null);
+    const taskEnd = isGoLiveEvent && target_go_live_date
+      ? target_go_live_date
+      : (stageDates?.planned_end ?? null);
     await db
       .prepare(
         "INSERT INTO tasks (id, project_id, stage_id, title, priority, status, assignee_user_id, assignee_contact_id, scheduled_start, scheduled_end, due_date, is_go_live_event) VALUES (?, ?, ?, ?, ?, 'not_started', ?, ?, ?, ?, ?, ?)"
       )
-      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd, task.is_go_live_event ?? 0)
+      .bind(newTaskId, projectId, mappedStageId, insertedTitle, task.priority ?? "medium", userId, contactId, taskStart, taskEnd, taskEnd, isGoLiveEvent ? 1 : 0)
       .run();
     if (mappedStageId) {
       const stageTasks = tasksByStage.get(mappedStageId);

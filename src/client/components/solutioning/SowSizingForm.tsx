@@ -1,5 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { api, type Solution, type NeedsAssessment } from "../../lib/api";
+import { calcUcaasBasicBreakdown, sowDataToBasicInputs, TRAINING_SESSION_COST, ONSITE_DEVICE_COST, PM_MULTIPLIER } from "../../../shared/ucaasBasicPricing";
+import { DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
+import { isComboMode, sowDataToComboInputs, parseCcaasComboInputs, type CcaasComboInputs } from "../../../shared/ccaasComboPricing";
+import CcaasComboCalculator from "./CcaasComboCalculator";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -13,7 +17,34 @@ export interface SowData {
     ms_teams_type: string;
     additional_did: string;
     additional_toll_free: string;
+    // Scoping inputs that drive advanced-mode hours. These use the exact key
+    // names the labor engine reads (see src/server/routes/laborEstimates.ts),
+    // so sowDataToEngineAnswers() can pass them through 1:1. Moved here from the
+    // old "Calculator Inputs" block on the Labor Estimate tab so SOW sizing has
+    // a single home.
+    deployment_type: string;
+    integrations_required: string;
+    call_flow_components_required: string;
+    number_porting_required: string;
+    sandbox_testing_required: string;
+    analog_fax_count: string;
+    paging_system_count: string;
+    door_phone_count: string;
+    gate_controller_count: string;
+    other_analog_device_count: string;
+    did_porting_blocks: string;
+    // Basic-mode pricing inputs (flat-cost add-ons). Used only when the
+    // solution is in Basic pricing mode (non-combo) — the consolidated form is
+    // the single source for Basic sizing + price. Sites / go-lives come from
+    // the shared section; users from the breakdown above.
+    training_sessions: string;
+    onsite_sites: string;
+    onsite_devices: string;
   };
+  /** Basic+combo (UCaaS+CCaaS) pricing inputs — the full combo blob, edited by
+   *  the embedded CcaasComboCalculator. Present only for combo solutions; the
+   *  single source for combo sizing + price (was solutions.basic_inputs). */
+  combo?: CcaasComboInputs;
   ccaas: {
     agents: string;
     supervisors: string;
@@ -64,6 +95,11 @@ const DEFAULT_SOW: SowData = {
   ucaas: {
     basic_users: "", advanced_users: "", common_area: "", conference_rooms: "",
     operators: "", ms_teams_type: "", additional_did: "", additional_toll_free: "",
+    deployment_type: "", integrations_required: "", call_flow_components_required: "",
+    number_porting_required: "", sandbox_testing_required: "",
+    analog_fax_count: "", paging_system_count: "", door_phone_count: "",
+    gate_controller_count: "", other_analog_device_count: "", did_porting_blocks: "",
+    training_sessions: "", onsite_sites: "", onsite_devices: "",
   },
   ccaas: {
     agents: "", supervisors: "", admin_only: "",
@@ -120,6 +156,12 @@ export function seedSowFromAssessment(base: SowData, answers: Record<string, unk
       const match = sites.match(/\d+/);
       if (match) d.shared.sites_count = match[0];
     }
+    // Scoping selects that drive hours — passthrough from the NA when present.
+    const dep = a["deployment_type"] as string | undefined;
+    if (dep && !d.ucaas.deployment_type) d.ucaas.deployment_type = dep;
+    if (portingReq && !d.ucaas.number_porting_required) d.ucaas.number_porting_required = portingReq;
+    const sandbox = a["sandbox_testing_required"] as string | undefined;
+    if (sandbox && !d.ucaas.sandbox_testing_required) d.ucaas.sandbox_testing_required = sandbox;
   }
 
   if (solutionType === "ccaas") {
@@ -282,9 +324,23 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
         base = seedSowFromAssessment(base, na.answers as Record<string, unknown>, t);
       }
     }
+    // Basic mode (non-combo): seed the sizing from the legacy basic_inputs so a
+    // solution priced before the consolidation shows its existing values in the
+    // form (and persists them to sow_data on the next save). Fills blanks only.
+    if (solution.pricing_mode === "basic" && !isComboMode(solution.solution_types) && solution.basic_inputs) {
+      const bi = solution.basic_inputs;
+      const toN = (v: string) => Number(v) || 0;
+      const userSum = toN(base.ucaas.basic_users) + toN(base.ucaas.advanced_users) + toN(base.ucaas.common_area) + toN(base.ucaas.conference_rooms);
+      if (userSum === 0 && bi.users) base.ucaas.basic_users = String(bi.users);
+      if (!base.shared.sites_count && bi.sites) base.shared.sites_count = String(bi.sites);
+      if (!base.shared.phases_count && bi.go_lives) base.shared.phases_count = String(bi.go_lives);
+      if (!base.ucaas.training_sessions && bi.training_sessions) base.ucaas.training_sessions = String(bi.training_sessions);
+      if (!base.ucaas.onsite_sites && bi.onsite_sites) base.ucaas.onsite_sites = String(bi.onsite_sites);
+      if (!base.ucaas.onsite_devices && bi.onsite_devices) base.ucaas.onsite_devices = String(bi.onsite_devices);
+    }
     setSow(base);
     setDirty(false);
-  }, [solution.sow_data, needsAssessments, solution.solution_types]);
+  }, [solution.sow_data, needsAssessments, solution.solution_types, solution.pricing_mode, solution.basic_inputs]);
 
   const upd = useCallback(<K extends keyof SowData>(key: K, val: SowData[K]) => {
     setSow(prev => ({ ...prev, [key]: val }));
@@ -303,6 +359,25 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
   };
 
   const types = solution.solution_types;
+  // Mode flags. The form only renders in advanced or basic-non-combo (the SOW
+  // tab hides it for tiered + combo). In advanced the UCaaS card shows the
+  // hours-driving scoping; in basic it shows the flat-price inputs + breakdown.
+  const isBasicNonCombo = solution.pricing_mode === "basic" && !isComboMode(types);
+  const isBasicCombo = solution.pricing_mode === "basic" && isComboMode(types);
+  const isAdvancedMode = solution.pricing_mode !== "basic" && solution.pricing_mode !== "tiered";
+  const blendedRate = solution.blended_rate || DEFAULT_BLENDED_RATE;
+  const basicBreakdown = useMemo(
+    () => calcUcaasBasicBreakdown(sowDataToBasicInputs(sow, solution.basic_inputs), blendedRate),
+    [sow, solution.basic_inputs, blendedRate],
+  );
+  // Combo inputs for the embedded calculator: sow.combo when present, else the
+  // legacy basic_inputs (so existing combo solutions display + price correctly).
+  const comboInputs = useMemo(
+    () => sowDataToComboInputs(sow, parseCcaasComboInputs(solution.basic_inputs)),
+    [sow, solution.basic_inputs],
+  );
+  const fmtUsd = (x: number) => "$" + x.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
   const journeys: string[] = (() => { try { return solution.journeys ? JSON.parse(solution.journeys) : []; } catch { return []; } })();
   const showUcaas = types.includes("ucaas") || journeys.some(j => j.includes("ucaas"));
   const showCcaas = types.includes("ccaas") || journeys.some(j => j.includes("ccaas"));
@@ -322,8 +397,24 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
         </div>
       )}
 
+      {/* ── Combo (UCaaS + CCaaS) Basic calculator ──
+          One unified place for combo sizing + pricing. Edits the sow.combo
+          blob; the form's Save persists it and the server recomputes the SOW
+          total from it. Replaces the separate UCaaS/CCaaS cards in this mode. */}
+      {isBasicCombo && (
+        <div className="ms-card">
+          <h3 style={SECTION_HEADER}>Combo Sizing &amp; Pricing (UCaaS + CCaaS)</h3>
+          <CcaasComboCalculator
+            inputs={comboInputs}
+            rate={blendedRate}
+            canEdit={canEdit}
+            onChange={(next) => upd("combo", next)}
+          />
+        </div>
+      )}
+
       {/* ── UCaaS ── */}
-      {showUcaas && (
+      {showUcaas && !isBasicCombo && (
         <div className="ms-card">
           <h3 style={SECTION_HEADER}>UCaaS Sizing</h3>
 
@@ -343,11 +434,77 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
               ]} />
             </Field>
           </div>
+
+          {/* Advanced mode: hours-driving scoping (feeds the labor engine). */}
+          {isAdvancedMode && (<>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Scoping (drives hours)</p>
+          <div style={{ ...GRID3, marginBottom: 12 }}>
+            <Field label="Deployment Type">
+              <Sel value={sow.ucaas.deployment_type} onChange={v => upd("ucaas", { ...sow.ucaas, deployment_type: v })} canEdit={canEdit} options={[
+                { value: "new_deployment",        label: "New deployment" },
+                { value: "migration",             label: "Migration from existing platform" },
+                { value: "expansion",             label: "Expansion of existing deployment" },
+                { value: "optimization_redesign", label: "Optimization / redesign" },
+                { value: "replacement",           label: "Like-for-like replacement" },
+              ]} />
+            </Field>
+            <Field label="Number Porting">
+              <Sel value={sow.ucaas.number_porting_required} onChange={v => upd("ucaas", { ...sow.ucaas, number_porting_required: v })} canEdit={canEdit} options={[
+                { value: "no",      label: "Not required" },
+                { value: "partial", label: "Partial — some numbers" },
+                { value: "yes",     label: "Required — most/all numbers" },
+              ]} />
+            </Field>
+            <Field label="Sandbox Testing">
+              <Sel value={sow.ucaas.sandbox_testing_required} onChange={v => upd("ucaas", { ...sow.ucaas, sandbox_testing_required: v })} canEdit={canEdit} options={[
+                { value: "no",    label: "Not required" },
+                { value: "maybe", label: "Maybe / TBD" },
+                { value: "yes",   label: "Required" },
+              ]} />
+            </Field>
+            <Field label="Integrations" hint="# third-party systems"><Num value={sow.ucaas.integrations_required} onChange={v => upd("ucaas", { ...sow.ucaas, integrations_required: v })} canEdit={canEdit} /></Field>
+            <Field label="Call Flow Components" hint="Queues, IVRs, hunt groups"><Num value={sow.ucaas.call_flow_components_required} onChange={v => upd("ucaas", { ...sow.ucaas, call_flow_components_required: v })} canEdit={canEdit} /></Field>
+            <Field label="DID Porting Blocks"><Num value={sow.ucaas.did_porting_blocks} onChange={v => upd("ucaas", { ...sow.ucaas, did_porting_blocks: v })} canEdit={canEdit} /></Field>
+          </div>
+
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Analog endpoints</p>
+          <div style={{ ...GRID3 }}>
+            <Field label="Analog Fax"><Num value={sow.ucaas.analog_fax_count} onChange={v => upd("ucaas", { ...sow.ucaas, analog_fax_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Paging Systems"><Num value={sow.ucaas.paging_system_count} onChange={v => upd("ucaas", { ...sow.ucaas, paging_system_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Door Phones"><Num value={sow.ucaas.door_phone_count} onChange={v => upd("ucaas", { ...sow.ucaas, door_phone_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Gate Controllers"><Num value={sow.ucaas.gate_controller_count} onChange={v => upd("ucaas", { ...sow.ucaas, gate_controller_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Other Analog Devices"><Num value={sow.ucaas.other_analog_device_count} onChange={v => upd("ucaas", { ...sow.ucaas, other_analog_device_count: v })} canEdit={canEdit} /></Field>
+          </div>
+          </>)}
+
+          {/* Basic mode (non-combo): flat-price inputs + live breakdown. Users
+              come from the breakdown above; sites / go-lives from the shared
+              card below. */}
+          {isBasicNonCombo && (<>
+          <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Basic Pricing</p>
+          <div style={{ ...GRID3, marginBottom: 16 }}>
+            <Field label="Training Sessions" hint={`flat $${TRAINING_SESSION_COST} each`}><Num value={sow.ucaas.training_sessions} onChange={v => upd("ucaas", { ...sow.ucaas, training_sessions: v })} canEdit={canEdit} /></Field>
+            <Field label="On-site Travel (sites)" hint="+2h labor per site"><Num value={sow.ucaas.onsite_sites} onChange={v => upd("ucaas", { ...sow.ucaas, onsite_sites: v })} canEdit={canEdit} /></Field>
+            <Field label="On-site Devices" hint={`flat $${ONSITE_DEVICE_COST} each`}><Num value={sow.ucaas.onsite_devices} onChange={v => upd("ucaas", { ...sow.ucaas, onsite_devices: v })} canEdit={canEdit} /></Field>
+          </div>
+          <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 16px", fontSize: 12 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 8 }}>Basic Price ({fmtUsd(blendedRate)}/hr)</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", rowGap: 4, columnGap: 16, color: "#475569" }}>
+              <div>Labor ({basicBreakdown.hours.toFixed(2)}h)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace" }}>{fmtUsd(basicBreakdown.laborSubtotal)}</div>
+              {basicBreakdown.trainingTotal > 0 && (<><div>Training</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace" }}>{fmtUsd(basicBreakdown.trainingTotal)}</div></>)}
+              {basicBreakdown.deviceInstallTotal > 0 && (<><div>On-site device install</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace" }}>{fmtUsd(basicBreakdown.deviceInstallTotal)}</div></>)}
+              <div>Project Management ({(PM_MULTIPLIER * 100).toFixed(0)}%)</div><div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace" }}>{fmtUsd(basicBreakdown.pm)}</div>
+              <div style={{ paddingTop: 6, borderTop: "2px solid #17C662", fontWeight: 800, color: "#1e293b" }}>Total (before add-ons)</div>
+              <div style={{ textAlign: "right", fontFamily: "ui-monospace, monospace", paddingTop: 6, borderTop: "2px solid #17C662", fontWeight: 800, color: "#17C662" }}>{fmtUsd(basicBreakdown.total)}</div>
+            </div>
+            <p style={{ fontSize: 11, color: "#94a3b8", margin: "10px 0 0" }}>Users from the breakdown above; Sites &amp; Go-Lives from Deployment &amp; Infrastructure below. Add-ons apply in the SOW Total section.</p>
+          </div>
+          </>)}
         </div>
       )}
 
       {/* ── CCaaS ── */}
-      {showCcaas && (
+      {showCcaas && !isBasicCombo && (
         <div className="ms-card">
           <h3 style={SECTION_HEADER}>CCaaS Sizing</h3>
 
@@ -406,7 +563,9 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
       )}
 
       {/* ── Virtual Agent ── */}
-      {showVa && (
+      {/* Hidden in basic+combo — the combo calculator's ZVA Voice / ZVA Chat
+          workflows size + price virtual agent there. */}
+      {showVa && !isBasicCombo && (
         <div className="ms-card">
           <h3 style={SECTION_HEADER}>Virtual Agent Sizing</h3>
 
@@ -441,39 +600,19 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
         </div>
       )}
 
-      {/* ── Shared / Infrastructure ── */}
-      <div className="ms-card">
-        <h3 style={SECTION_HEADER}>Deployment & Infrastructure</h3>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Deployment</p>
-        <div style={{ ...GRID4, marginBottom: 20 }}>
-          <Field label="Sites"><Num value={sow.shared.sites_count} onChange={v => upd("shared", { ...sow.shared, sites_count: v })} canEdit={canEdit} /></Field>
-          <Field label="Phases / Go-Lives"><Num value={sow.shared.phases_count} onChange={v => upd("shared", { ...sow.shared, phases_count: v })} canEdit={canEdit} /></Field>
-          <Field label="Implementation Strategy">
-            <Sel value={sow.shared.implementation_strategy} onChange={v => upd("shared", { ...sow.shared, implementation_strategy: v })} canEdit={canEdit} options={[
-              { value: "cloudpro", label: "CloudPro" },
-              { value: "advocacy", label: "Advocacy" },
-              { value: "cloudcare", label: "CloudCare" },
-            ]} />
-          </Field>
+      {/* ── Sites & Go-Lives ──
+          Combo solutions size sites/go-lives in the combo calculator above, so
+          this card is hidden for them. Implementation strategy (always CloudPro,
+          implied) and the free-form notes were dropped as unused. */}
+      {!isBasicCombo && (
+        <div className="ms-card">
+          <h3 style={SECTION_HEADER}>Sites &amp; Go-Lives</h3>
+          <div style={{ ...GRID4 }}>
+            <Field label="Sites"><Num value={sow.shared.sites_count} onChange={v => upd("shared", { ...sow.shared, sites_count: v })} canEdit={canEdit} /></Field>
+            <Field label="Phases / Go-Lives"><Num value={sow.shared.phases_count} onChange={v => upd("shared", { ...sow.shared, phases_count: v })} canEdit={canEdit} /></Field>
+          </div>
         </div>
-
-        <p style={{ fontSize: 12, color: "#64748b", margin: "0 0 14px" }}>Additional Notes</p>
-        {canEdit ? (
-          <textarea
-            className="ms-input"
-            rows={4}
-            style={{ width: "100%", fontSize: 12, resize: "vertical" }}
-            value={sow.additional_notes}
-            onChange={e => { upd("additional_notes", e.target.value); }}
-            placeholder="Exclusions, assumptions, special terms…"
-          />
-        ) : (
-          <span style={{ fontSize: 13, color: sow.additional_notes ? "#e2e8f0" : "#475569", whiteSpace: "pre-wrap" }}>
-            {sow.additional_notes || "—"}
-          </span>
-        )}
-      </div>
+      )}
     </div>
   );
 }

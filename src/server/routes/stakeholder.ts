@@ -74,7 +74,6 @@ app.get("/:id/stakeholder-summary", async (c) => {
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
   const today = new Date();
-  const todayIso = today.toISOString().slice(0, 10);
 
   // ── Parallel: everything scoped to this one project ────────────────────────
   const [
@@ -91,7 +90,6 @@ app.get("/:id/stakeholder-summary", async (c) => {
     primaryContactRow,
     partnerAeRow,
     customerRow,
-    nextMeetingTaskRow,
     docRow,
     projectHealth,
     stageRows,
@@ -133,7 +131,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
     db
       .prepare(
         `SELECT t.id, t.title, t.due_date, t.priority, t.stage_id, t.status,
-                t.meeting_join_url, t.assignee_user_id, u.name AS assignee_name,
+                t.assignee_user_id, u.name AS assignee_name,
                 p.phase_id AS phase_id
          FROM tasks t
          LEFT JOIN users u  ON u.id = t.assignee_user_id
@@ -143,7 +141,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
          LIMIT 8`
       )
       .bind(projectId)
-      .all<{ id: string; title: string; due_date: string | null; priority: string | null; stage_id: string | null; status: string | null; meeting_join_url: string | null; assignee_user_id: string | null; assignee_name: string | null; phase_id: string | null }>(),
+      .all<{ id: string; title: string; due_date: string | null; priority: string | null; stage_id: string | null; status: string | null; assignee_user_id: string | null; assignee_name: string | null; phase_id: string | null }>(),
     // Per-assignee × per-phase pivot. Tasks on shared stages land under a
     // NULL phase_id key and surface in a separate "shared" total.
     db
@@ -236,17 +234,6 @@ app.get("/:id/stakeholder-summary", async (c) => {
       : Promise.resolve(null),
     db
       .prepare(
-        `SELECT id, title, due_date, meeting_join_url FROM tasks
-         WHERE project_id = ?
-           AND meeting_join_url IS NOT NULL AND meeting_join_url != ''
-           AND (status IS NULL OR status != 'completed')
-           AND due_date IS NOT NULL AND due_date >= ?
-         ORDER BY due_date ASC LIMIT 1`
-      )
-      .bind(projectId, todayIso)
-      .first<{ id: string; title: string; due_date: string; meeting_join_url: string }>(),
-    db
-      .prepare(
         `SELECT id, name, created_at, uploaded_by FROM documents
          WHERE project_id = ? ORDER BY created_at DESC LIMIT 4`
       )
@@ -302,20 +289,16 @@ app.get("/:id/stakeholder-summary", async (c) => {
   }
 
   // ── Next call ──────────────────────────────────────────────────────────────
-  const milestoneNext = nextMeetingTaskRow
-    ? { scheduled_at: nextMeetingTaskRow.due_date, title: nextMeetingTaskRow.title, join_url: nextMeetingTaskRow.meeting_join_url, source: "milestone" as const }
-    : null;
-  const statusNext = computeNextStatusOccurrence({
+  // Driven solely by the recurring status-meeting cadence. The per-task
+  // meeting-link ("milestone") source was retired along with the task
+  // meeting-link feature.
+  const nextCall = computeNextStatusOccurrence({
     dow: project.status_meeting_dow,
     time_local: project.status_meeting_time_local,
     timezone: project.status_meeting_timezone,
     title: project.status_meeting_title,
     join_url: project.status_meeting_join_url,
   }, today);
-  const nextCall =
-    milestoneNext && statusNext
-      ? (new Date(milestoneNext.scheduled_at) <= new Date(statusNext.scheduled_at) ? milestoneNext : statusNext)
-      : (milestoneNext ?? statusNext);
 
   // ── Stat tiles ─────────────────────────────────────────────────────────────
   const totalTasks = taskStats?.total ?? 0;
@@ -426,7 +409,6 @@ app.get("/:id/stakeholder-summary", async (c) => {
       phase_id: t.phase_id,
       phase_name: t.phase_id ? (phaseNameMap.get(t.phase_id) ?? null) : null,
       assignee_name: t.assignee_name,
-      is_meeting: !!t.meeting_join_url,
     })),
     assignee_breakdown: assigneeBreakdown,
     assignee_stage_breakdown: {

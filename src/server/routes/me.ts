@@ -19,7 +19,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import type { Bindings, Variables } from "../types";
+import type { AuthContext, Bindings, Variables } from "../types";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -28,15 +28,51 @@ const ALLOWED_AVATAR_MIME = new Set([
 ]);
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024; // 5 MB
 
+/**
+ * Clients sign in via D365-portal OTP and don't get a `users` row at login
+ * time — their AppUser blob is synthesized from the D365 contact record
+ * (id = contact GUID) and cached in KV. Every /me endpoint here does
+ * `UPDATE users WHERE id = ?` though, which silently no-ops for clients
+ * and surfaces as "Profile unavailable" / 404 in the UI.
+ *
+ * Solution: on first call into /me/profile (or /me/avatar) provision a
+ * users row backed by the D365 contact id. Staff and partner-AE users
+ * already have rows so this is a no-op for them. We check by email AND
+ * id so a legacy users row under a different id (rare but possible)
+ * isn't duplicated.
+ */
+async function ensureUserRow(db: D1Database, auth: AuthContext): Promise<void> {
+  const existing = await db
+    .prepare("SELECT id FROM users WHERE id = ? OR email = ? LIMIT 1")
+    .bind(auth.user.id, auth.user.email)
+    .first<{ id: string }>();
+  if (existing) return;
+  await db
+    .prepare(
+      `INSERT INTO users (id, email, name, role, organization_name, dynamics_account_id, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, 1)`
+    )
+    .bind(
+      auth.user.id,
+      auth.user.email,
+      auth.user.name,
+      auth.role,
+      auth.user.organization_name,
+      auth.user.dynamics_account_id ?? null,
+    )
+    .run();
+}
+
 // ── Profile read ────────────────────────────────────────────────────────────
 
 app.get("/profile", async (c) => {
   const auth = c.get("auth");
+  await ensureUserRow(c.env.DB, auth);
   const row = await c.env.DB
     .prepare(
-      "SELECT id, email, name, role, organization_name, title, phone, scheduler_url, avatar_url, avatar_r2_key FROM users WHERE id = ? LIMIT 1"
+      "SELECT id, email, name, role, organization_name, title, phone, scheduler_url, avatar_url, avatar_r2_key FROM users WHERE id = ? OR email = ? LIMIT 1"
     )
-    .bind(auth.user.id)
+    .bind(auth.user.id, auth.user.email)
     .first<{
       id: string; email: string; name: string | null; role: string;
       organization_name: string | null; title: string | null; phone: string | null;
@@ -70,6 +106,7 @@ const profilePatchSchema = z.object({
 
 app.patch("/profile", async (c) => {
   const auth = c.get("auth");
+  await ensureUserRow(c.env.DB, auth);
   const parsed = profilePatchSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
@@ -96,6 +133,7 @@ app.patch("/profile", async (c) => {
 
 app.post("/avatar", async (c) => {
   const auth = c.get("auth");
+  await ensureUserRow(c.env.DB, auth);
   const form = await c.req.formData();
   const file = form.get("file");
   if (!file || !(file instanceof File)) throw new HTTPException(400, { message: "file field required" });
@@ -140,6 +178,7 @@ app.post("/avatar", async (c) => {
 
 app.delete("/avatar", async (c) => {
   const auth = c.get("auth");
+  await ensureUserRow(c.env.DB, auth);
   const row = await c.env.DB
     .prepare("SELECT avatar_r2_key FROM users WHERE id = ? LIMIT 1")
     .bind(auth.user.id)

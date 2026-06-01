@@ -139,7 +139,35 @@ function workdaysThroughGoLive(merged: { working_days: number; tasks: { isGoLive
   return sum;
 }
 
-function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
+/**
+ * Date window a task occupies inside its stage. Every task inherits the full
+ * stage window EXCEPT the canonical go-live event, which is by nature a
+ * single-day milestone landing on the exact go-live date the user supplied.
+ *
+ * We pin it to `goLiveDate` rather than the go-live stage's computed END
+ * because `startFromGoLive` doesn't perfectly invert `chainForward` — the
+ * stage end drifts a few workdays past the typed date (the supplied date
+ * actually falls inside the go-live stage window). Pinning to the supplied
+ * date keeps the event ON the date the PM entered, and `target_go_live_date`
+ * (derived server-side from this task's due_date) then matches it exactly.
+ *
+ * When no go-live date is supplied yet, fall back to the stage end so the
+ * event still collapses to a single day.
+ */
+function taskWindow(
+  task: { isGoLiveEvent: boolean },
+  stageStart: string,
+  stageEnd: string,
+  goLiveDate: string,
+): { start: string; end: string } {
+  if (task.isGoLiveEvent) {
+    const d = goLiveDate || stageEnd;
+    return { start: d, end: d };
+  }
+  return { start: stageStart, end: stageEnd };
+}
+
+function rowsFromTemplates(templates: Template[], anchorStart: string, goLiveDate: string): Row[] {
   const merged = mergeTemplates(templates);
   const inputs: StageInput[] = merged.map((m) => ({ id: m.name, working_days: m.working_days }));
   const computed = chainForward(anchorStart, inputs);
@@ -149,11 +177,11 @@ function rowsFromTemplates(templates: Template[], anchorStart: string): Row[] {
     start: computed[i].start,
     end:   computed[i].end,
     pinned: false,
-    tasks: m.tasks.map((t) => ({ ...t, start: computed[i].start, end: computed[i].end })),
+    tasks: m.tasks.map((t) => ({ ...t, ...taskWindow(t, computed[i].start, computed[i].end, goLiveDate) })),
   }));
 }
 
-function recomputeChain(rows: Row[], anchorStart: string): Row[] {
+function recomputeChain(rows: Row[], anchorStart: string, goLiveDate: string): Row[] {
   const inputs: StageInput[] = rows.map((r) => {
     const latestTaskEnd = r.tasks.reduce((acc, t) => {
       if (!t.pinned) return acc;
@@ -179,7 +207,7 @@ function recomputeChain(rows: Row[], anchorStart: string): Row[] {
   return rows.map((r, i) => {
     const newStage = { ...r, start: computed[i].start, end: computed[i].end };
     newStage.tasks = r.tasks.map((t) => {
-      if (!t.pinned) return { ...t, start: newStage.start, end: newStage.end };
+      if (!t.pinned) return { ...t, ...taskWindow(t, newStage.start, newStage.end, goLiveDate) };
       return t;
     });
     return newStage;
@@ -249,7 +277,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
       const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
       const total = workdaysThroughGoLive(mergeTemplates(selected));
       const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
-      setRows(rowsFromTemplates(selected, anchor));
+      setRows(rowsFromTemplates(selected, anchor, goLive));
       return;
     }
     setLoading(true);
@@ -272,17 +300,19 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
     if (selected.length === 0) return;
     const total = workdaysThroughGoLive(mergeTemplates(selected));
     const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
-    setRows(rowsFromTemplates(selected, anchor));
+    setRows(rowsFromTemplates(selected, anchor, goLive));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goLive]);
 
   const goLiveStageIdx = useMemo(() => findGoLiveStageIdx(rows), [rows]);
   const computedGoLive = useMemo(() => {
     if (!rows.length) return "";
-    // Prefer the flagged go-live stage's end; fall back to last stage end
-    // (legacy behaviour when no template in the selection is flagged).
+    // Prefer the flagged go-live EVENT's date — that's the 1-day milestone the
+    // PM cares about (pinned to the supplied go-live). Fall back to the go-live
+    // stage's end, then the last stage end (legacy, no flagged task).
     const idx = goLiveStageIdx >= 0 ? goLiveStageIdx : rows.length - 1;
-    return rows[idx].end;
+    const event = rows[idx].tasks.find((t) => t.isGoLiveEvent);
+    return event?.end ?? rows[idx].end;
   }, [rows, goLiveStageIdx]);
 
   function toggleTemplate(id: string) {
@@ -298,7 +328,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
       }
       next[idx] = merged;
       const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
-      return recomputeChain(next, anchor);
+      return recomputeChain(next, anchor, goLive);
     });
   }
 
@@ -313,7 +343,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
       task.pinned = true;
       stage.tasks = applyTaskShift(stage.tasks, taskIdx, deltaWd);
       const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
-      return recomputeChain(next, anchor);
+      return recomputeChain(next, anchor, goLive);
     });
   }
 
@@ -322,7 +352,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
     if (selected.length === 0) return;
     const total = workdaysThroughGoLive(mergeTemplates(selected));
     const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
-    setRows(rowsFromTemplates(selected, anchor));
+    setRows(rowsFromTemplates(selected, anchor, goLive));
   }
 
   async function handleApply() {
@@ -434,7 +464,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
         </div>
         {rows.length > 0 && (
           <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
-            Computed go-live ({goLiveStageIdx >= 0 ? `${rows[goLiveStageIdx].name} stage end` : "last stage end"}): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
+            Computed go-live ({goLiveStageIdx >= 0 ? "go-live event" : "last stage end"}): <strong style={{ color: "#1e293b" }}>{computedGoLive ? formatDateForDisplay(computedGoLive) : "—"}</strong>
             {computedGoLive && goLive && computedGoLive !== goLive && (
               <span style={{ marginLeft: 8, color: "#d97706" }}>
                 (differs from target — likely due to manual overrides)

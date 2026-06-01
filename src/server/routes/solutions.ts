@@ -2,9 +2,10 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
+import { requireRole } from "../middleware/requireRole";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
-import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution } from "../lib/teamUtils";
+import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution, syncSolutionStatus } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
@@ -22,6 +23,7 @@ import {
 } from "../../shared/solutionTypes";
 import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
 import { recomputeSowTotal } from "../lib/sowTotal";
+import { recomputeExistingEstimates } from "./laborEstimates";
 import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -379,6 +381,11 @@ const updateSolutionSchema = z.object({
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
   journeys: z.array(z.string()).nullable().optional(),
+  // Solution status auto-derives from NA / LE / SOW artifacts (May-2026) via
+  // teamUtils.syncSolutionStatus, run after every artifact write. SAs can
+  // still set terminal states manually (Mark Lost / Reopen-to-draft via the
+  // existing buttons), so the enum stays open; syncSolutionStatus
+  // short-circuits when status is 'won' or 'lost'.
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   partner_ae_user_id: z.string().nullable().optional(),
   partner_ae_name: z.string().nullable().optional(),
@@ -409,6 +416,40 @@ const updateSolutionSchema = z.object({
     training_sessions: z.number().int().min(0),
     onsite_sites:      z.number().int().min(0),
     onsite_devices:    z.number().int().min(0),
+    // ── Combo (UCaaS + CCaaS) sub-blocks — all optional. UCaaS-only
+    // solutions leave these out; combo solutions populate any subset.
+    // calcCcaasComboBreakdown() in shared/ccaasComboPricing.ts is the
+    // source of truth on what each block drives.
+    ccaas: z.object({
+      agents:      z.number().int().min(0),
+      omnichannel: z.boolean(),
+    }).optional(),
+    apps: z.record(z.string(), z.object({
+      included:         z.boolean(),
+      integrations:     z.number().int().min(0),
+      custom_dev_hours: z.number().min(0),
+    })).optional(),
+    zva_voice: z.object({
+      workflows:            z.number().int().min(0),
+      knowledge_sources:    z.number().int().min(0),
+      large_override_hours: z.number().min(0),
+      custom_dev_hours:     z.number().min(0),
+    }).optional(),
+    zva_chat: z.object({
+      workflows:            z.number().int().min(0),
+      knowledge_sources:    z.number().int().min(0),
+      large_override_hours: z.number().min(0),
+      custom_dev_hours:     z.number().min(0),
+    }).optional(),
+    analog: z.object({
+      did_porting_blocks:   z.number().int().min(0),
+      analog_fax_devices:   z.number().int().min(0),
+      paging_systems:       z.number().int().min(0),
+      door_phones:          z.number().int().min(0),
+      gate_controllers:     z.number().int().min(0),
+      other_analog_devices: z.number().int().min(0),
+    }).optional(),
+    final_discount_pct: z.number().min(0).max(100).optional(),
   }).nullable().optional(),
   /** 1 = SOW renders a "BUDGETARY" diagonal watermark + the solution shows a budgetary banner. */
   is_budgetary: z.number().int().min(0).max(1).optional(),
@@ -543,9 +584,25 @@ app.patch("/:id", async (c) => {
     pricingTouched = true;
   }
 
+  // SOW sizing lives in sow_data now and drives advanced-mode hours. When it
+  // changes, recompute the solution's existing labor estimates from the new
+  // sizing (preserving overrides) so the SOW total tracks it without the PM
+  // revisiting the Labor Estimate tab. Only affects UCaaS hours (the only type
+  // sow_data feeds); CCaaS/CI/VA estimates recompute to the same NA-driven value.
+  if (updates.sow_data !== undefined) {
+    await recomputeExistingEstimates(db, solutionId);
+    pricingTouched = true;
+  }
+
   if (pricingTouched) {
     await recomputeSowTotal(db, solutionId);
   }
+
+  // Pipeline stage auto-derives from the artifacts (NA / LE / SOW). The
+  // PATCH may have touched sow_data, solution_types, or simply nudged fields
+  // that change derivation inputs; safe to re-sync every time. Short-circuits
+  // on terminal won/lost so Mark Lost stays sticky.
+  await syncSolutionStatus(db, solutionId);
 
   // Resync the bound D365 opportunity whenever any field that maps onto
   // the D365 opp could have changed. Includes the pricing path because
@@ -645,7 +702,10 @@ const sowVersionSchema = z.object({
   note: z.string().max(2000).nullable().optional(),
 });
 
-app.post("/:id/sow-version", async (c) => {
+// PF-staff only. Clients view SOWs but never bump revision versions or
+// mutate metadata on them — UI hides the controls and this gate matches
+// it server-side so a determined customer can't curl their way past it.
+app.post("/:id/sow-version", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const solutionId = c.req.param("id");
@@ -674,6 +734,10 @@ app.post("/:id/sow-version", async (c) => {
     .bind(JSON.stringify(meta), solutionId)
     .run();
 
+  // A new SOW revision can flip the solution from "scope" to "handoff" once
+  // NA + LE are also complete. Cheap to re-sync; safe to run unconditionally.
+  await syncSolutionStatus(db, solutionId);
+
   return c.json({ sow_metadata: meta, new_revision: newRev });
 });
 
@@ -684,7 +748,7 @@ const sowMetadataSchema = z.object({
   custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
 });
 
-app.patch("/:id/sow-metadata", async (c) => {
+app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const solutionId = c.req.param("id");

@@ -16,7 +16,8 @@ import { useEffect, useState } from "react";
 import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
-import { calcUcaasBasicBreakdown, getUcaasTieredTier } from "../../../shared/ucaasBasicPricing";
+import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
+import { parseCcaasComboInputs, isComboMode, sowDataToComboInputs, calcCcaasComboBreakdown } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
 import { resolveSowVariant } from "../../../shared/sowTemplate/variants";
 import type { SowBuildContext } from "../../../shared/sowTemplate/types";
@@ -95,25 +96,6 @@ type Props = {
 
 // ── Helpers — pluck counts from sow_data + needs_assessment ──────────────────
 
-/**
- * Fetch an image URL and return it as a base64 data URL. Used by the Word
- * exporter to inline the logo + hero so the resulting .doc is self-
- * contained when the user emails it. Relative / dev-server URLs (e.g.
- * http://localhost:5173/…) wouldn't resolve once the file leaves the
- * browser.
- */
-async function fetchAsDataUrl(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch ${url}: ${res.status}`);
-  const blob = await res.blob();
-  return await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read image"));
-    reader.readAsDataURL(blob);
-  });
-}
-
 function num(v: unknown): number {
   if (v === null || v === undefined || v === "") return 0;
   const n = Number(v);
@@ -124,7 +106,7 @@ function pickCounts(
   sd: SowData | null | undefined,
   na: NeedsAssessment | null,
   solution: Solution,
-): { locations: number; users: number; dids: number; meetings: number; goLives: number } {
+): { locations: number; users: number; ccaasAgents: number; ciSeats: number; vaWorkflows: number; dids: number; meetings: number; goLives: number } {
   // Advanced-mode source: the SOW Sizing Form blob (sow_data).
   const sdLocations = num(sd?.shared?.sites_count);
   const sdStages    = num(sd?.shared?.phases_count);
@@ -151,7 +133,45 @@ function pickCounts(
   const goLives = sdStages > 0
     ? sdStages
     : (basic && num(basic.go_lives) > 0 ? num(basic.go_lives) : locations);
-  return { locations, users, dids, meetings, goLives };
+
+  // Per-type headline counts (combo SOWs need distinct numbers, not one shared
+  // "primary"). Primary source is the SOW Sizing form (sow_data):
+  //  - CCaaS agents: ccaas.agents
+  //  - CI recorded seats: ci.licensed_seats
+  //  - VA workflows: count of enabled VA channels (voice + chat + sms)
+  //
+  // CCaaS fallback: a basic-mode UCaaS+CCaaS combo stores the agent count in
+  // basic_inputs.ccaas.agents (via CcaasComboCalculator), not sow_data. Fall
+  // back to it — like the UCaaS users fallback above — so a combo/basic SOW
+  // that never filled the sizing form doesn't export 0 agents (WFM/QM tiles
+  // inherit this count too).
+  const comboInputs = parseCcaasComboInputs(solution.basic_inputs);
+  const sdCcaasAgents = num(sd?.ccaas?.agents);
+  const ccaasAgents = sdCcaasAgents > 0 ? sdCcaasAgents : num(comboInputs?.ccaas?.agents);
+  const ciSeats     = num(sd?.ci?.licensed_seats);
+  const vaWorkflows = (sd?.va?.voice ? 1 : 0) + (sd?.va?.chat ? 1 : 0) + (sd?.va?.sms ? 1 : 0);
+
+  // Combo (UCaaS+CCaaS Basic): all sizing lives in sow_data.combo (fallback to
+  // legacy basic_inputs). Source the headline counts from it so the SOW shows
+  // the combo's users / agents / sites / go-lives.
+  if (isComboMode(solution.solution_types ?? [])) {
+    const combo = sowDataToComboInputs(sd, parseCcaasComboInputs(solution.basic_inputs));
+    // Combo sizes virtual agent via the calculator's ZVA Voice/Chat workflows,
+    // not the sow.va channel toggles — so VA workflow count = the two ZVA
+    // workflow counts (fall back to the channel-based count if no ZVA entered).
+    const zvaWorkflows = (combo.zva_voice?.workflows ?? 0) + (combo.zva_chat?.workflows ?? 0);
+    return {
+      locations: combo.sites || locations,
+      users:     combo.users || users,
+      ccaasAgents: combo.ccaas?.agents ?? ccaasAgents,
+      ciSeats,
+      vaWorkflows: zvaWorkflows > 0 ? zvaWorkflows : vaWorkflows,
+      dids, meetings,
+      goLives:   combo.go_lives || goLives,
+    };
+  }
+
+  return { locations, users, ccaasAgents, ciSeats, vaWorkflows, dids, meetings, goLives };
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -161,8 +181,11 @@ export default function ScopeOfWorkDocument({
 }: Props) {
   const { showToast } = useToast();
   const [generating, setGenerating] = useState(false);
-  const [downloadingDoc, setDownloadingDoc] = useState(false);
   const [savingMsa, setSavingMsa] = useState(false);
+  // Customers can VIEW a generated SOW (summary + Export/Print PDF) but
+  // shouldn't see any of the metadata-editing controls or version-bump
+  // affordances. Derived once from currentUser.role.
+  const isClient = currentUser?.role === "client";
   const [msaDateDraft, setMsaDateDraft] = useState(sowMetadata?.msa_date ?? "");
   // Drafts for the timeline-derivation inputs. When blank, the renderer
   // falls back to the needs assessment's project_context answers (target
@@ -197,9 +220,17 @@ export default function ScopeOfWorkDocument({
     const tier = getUcaasTieredTier(solution.basic_seat_count);
     const basicSubtotal = tier?.price ?? 0;
     feeBreakdown = calcBasicSowTotal(basicSubtotal, addOns, blendedRate);
-  } else if (solution.pricing_mode === "basic" && solution.basic_inputs) {
-    const basic = calcUcaasBasicBreakdown(solution.basic_inputs, blendedRate);
+  } else if (solution.pricing_mode === "basic" && !isComboMode(solution.solution_types ?? [])) {
+    // Basic (non-combo): the consolidated SOW Sizing form is the source;
+    // fall back to legacy basic_inputs for solutions not yet re-saved.
+    const basic = calcUcaasBasicBreakdown(sowDataToBasicInputs(sowData ?? null, solution.basic_inputs), blendedRate);
     feeBreakdown = calcBasicSowTotal(basic.total, addOns, blendedRate);
+  } else if (solution.pricing_mode === "basic" && isComboMode(solution.solution_types ?? [])) {
+    // Basic combo: single source is sow_data.combo (fallback basic_inputs).
+    // Combo owns its PM + bundle/final discounts and does NOT run the add-ons
+    // table — match the server (recomputeSowTotal) exactly.
+    const combo = calcCcaasComboBreakdown(sowDataToComboInputs(sowData ?? null, parseCcaasComboInputs(solution.basic_inputs)), blendedRate);
+    feeBreakdown = { laborSubtotal: combo.finalSowPrice, addOnNet: 0, total: combo.finalSowPrice };
   } else {
     feeBreakdown = calcSowTotal(totalLaborHours, addOns, blendedRate);
   }
@@ -239,6 +270,10 @@ export default function ScopeOfWorkDocument({
     isZoomReseller: solution.is_zoom_reseller === 1,
     locationCount:   counts.locations,
     primarySeatCount: counts.users,
+    ucaasSeatCount:  counts.users,
+    ccaasAgentCount: counts.ccaasAgents,
+    ciSeatCount:     counts.ciSeats,
+    vaWorkflowCount: counts.vaWorkflows,
     ditNumbers:      counts.dids,
     meetingsCount:   counts.meetings,
     goLiveCount:     counts.goLives,
@@ -263,82 +298,6 @@ export default function ScopeOfWorkDocument({
     win.document.write(html);
     win.document.close();
     win.focus();
-  }
-
-  /**
-   * Export the SOW as a real .docx via server-side LibreOffice conversion.
-   *
-   * Flow:
-   *   1. Build the SOW HTML same as the print path (full hero, all styling)
-   *   2. POST it to /api/sow/word-export
-   *   3. Worker forwards to the LibreOffice Lambda
-   *   4. Lambda runs `libreoffice --headless --convert-to docx`
-   *   5. Binary streams back through the Worker and triggers download
-   *
-   * Prior attempts (PR #242 Word-HTML, PR #244 html-to-docx, PR #245
-   * text-only-cover) all hit ceilings — Word HTML mangles images, the
-   * library produced unopenable files, and the text-only fallback lost
-   * the visual identity. LibreOffice's HTML→DOCX is the same engine Word
-   * itself uses for cross-format conversion; it handles the cover image
-   * + complex tables correctly.
-   *
-   * The conversion service has to be deployed once via
-   * aws/sow-converter/README.md before this works. Until then the
-   * endpoint returns 503 with a clear message.
-   */
-  async function downloadAsWord() {
-    setDownloadingDoc(true);
-    try {
-      const resolveAsset = (url: string) => url.startsWith("http") ? url : `${window.location.origin}${url}`;
-      const heroAsset = variant.heroImageKey ? HERO_URLS[variant.heroImageKey] : null;
-
-      // Inline images so the HTML LibreOffice receives is self-contained.
-      // The Lambda can't fetch resources from the public internet during
-      // conversion (no relative-URL resolution, and pointing it at our
-      // CDN would race with auth + caching).
-      const [logoDataUrl, heroDataUrl] = await Promise.all([
-        fetchAsDataUrl(resolveAsset(logoUrl)),
-        heroAsset ? fetchAsDataUrl(resolveAsset(heroAsset)) : Promise.resolve(null),
-      ]);
-
-      const html = buildSowHtml({
-        variant, ctx,
-        logoUrl: logoDataUrl,
-        heroImageUrl: heroDataUrl,
-        kickoffDate: null,
-        goLiveDate: null,
-        forWordExport: true,
-      });
-
-      const safeName = ctx.customerName.replace(/[\\/:*?"<>|]/g, "_").trim() || "Customer";
-      const filename = `${safeName} - SOW ${ctx.sowNumber}`;
-
-      const res = await fetch("/api/sow/word-export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ html, filename }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => null) as { error?: string; message?: string } | null;
-        const message = body?.error ?? body?.message ?? `Word export failed (HTTP ${res.status})`;
-        throw new Error(message);
-      }
-
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `${filename}.docx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to build Word export", "error");
-    } finally {
-      setDownloadingDoc(false);
-    }
   }
 
   async function saveMsaDate() {
@@ -389,26 +348,10 @@ export default function ScopeOfWorkDocument({
 
   return (
     <div>
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginBottom: 16 }}>
-        <button className="ms-btn-primary" onClick={openPrintWindow} style={{ background: "#03395f" }}>
-          Export / Print SOW
-        </button>
-        <button
-          className="ms-btn-secondary"
-          onClick={downloadAsWord}
-          disabled={downloadingDoc}
-          title="Download a real .docx with full layout + images. Converted server-side via LibreOffice. Edit in Word, send to customer for Track Changes review."
-        >
-          {downloadingDoc ? "Converting…" : "Download for Word (.docx)"}
-        </button>
-        {variant.isStub && (
-          <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
-            ⚠ {variant.productLine} variant is a stub — content pending in a follow-up PR
-          </span>
-        )}
-      </div>
-
-      {/* Metadata + versioning panel */}
+      {/* Metadata + versioning panel — staff only. Customers see only the
+          Export/Print button at the bottom; they have no business poking at
+          the MSA date / duration band / revision-bump controls. */}
+      {!isClient && (
       <div className="ms-section-card" style={{ padding: "16px 18px", marginBottom: 16 }}>
         <div className="ms-section-title" style={{ marginBottom: 12 }}>SOW Metadata</div>
 
@@ -535,16 +478,18 @@ export default function ScopeOfWorkDocument({
           </div>
         )}
       </div>
+      )}
 
-      <div className="ms-card" style={{ padding: "16px 20px", marginBottom: 16 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#03395f", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
-          Variant
-        </div>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#1e293b", marginBottom: 6 }}>{variant.productLine}</div>
-        <div style={{ fontSize: 12, color: "#64748b" }}>
-          Customer <strong>{ctx.customerName}</strong> · Locations <strong>{ctx.locationCount}</strong> ·
-          {" "}Primary seats <strong>{ctx.primarySeatCount}</strong> · DIDs <strong>{ctx.ditNumbers}</strong> · Project total <strong>${ctx.projectTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong>
-        </div>
+      {/* Generate the SOW — bottom of the tab, after sizing / pricing / notes. */}
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12, marginTop: 4 }}>
+        <button className="ms-btn-primary" onClick={openPrintWindow} style={{ background: "#03395f" }}>
+          Export / Print SOW
+        </button>
+        {variant.isStub && (
+          <span style={{ fontSize: 12, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 4, padding: "2px 8px" }}>
+            ⚠ {variant.productLine} variant is a stub — content pending in a follow-up PR
+          </span>
+        )}
       </div>
     </div>
   );

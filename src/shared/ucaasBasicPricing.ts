@@ -43,6 +43,39 @@ export const UCAAS_BASIC_DEFAULTS: UcaasBasicInputs = {
   onsite_devices: 0,
 };
 
+/**
+ * Derive Basic-mode pricing inputs from the SOW Sizing form blob (sow_data).
+ *
+ * In Basic mode the consolidated SOW Sizing form is the single source: users =
+ * sum of the UCaaS user breakdown, sites/go-lives from the shared section, and
+ * training/on-site from the form's UCaaS section. `fallback` (the solution's
+ * legacy `basic_inputs`) fills any field the form hasn't populated yet, so
+ * solutions priced before this consolidation don't drop to $0 until re-saved.
+ * Combo (UCaaS+CCaaS) keeps its own CcaasComboCalculator — this is UCaaS-only.
+ */
+export function sowDataToBasicInputs(sowData: unknown, fallback: UcaasBasicInputs | null): UcaasBasicInputs {
+  const fb = fallback ?? UCAAS_BASIC_DEFAULTS;
+  if (!sowData || typeof sowData !== "object") return { ...fb };
+  const sd = sowData as Record<string, unknown>;
+  const u = (sd.ucaas ?? {}) as Record<string, unknown>;
+  const sh = (sd.shared ?? {}) as Record<string, unknown>;
+  const n = (v: unknown): number | null => {
+    if (v === null || v === undefined || v === "") return null;
+    const x = Number(v);
+    return Number.isFinite(x) ? x : null;
+  };
+  const userSum = (n(u.basic_users) ?? 0) + (n(u.advanced_users) ?? 0)
+                + (n(u.common_area) ?? 0) + (n(u.conference_rooms) ?? 0);
+  return {
+    users:             userSum > 0 ? userSum : fb.users,
+    sites:             Math.max(1, n(sh.sites_count) ?? fb.sites),
+    go_lives:          Math.max(1, n(sh.phases_count) ?? fb.go_lives),
+    training_sessions: n(u.training_sessions) ?? fb.training_sessions,
+    onsite_sites:      n(u.onsite_sites) ?? fb.onsite_sites,
+    onsite_devices:    n(u.onsite_devices) ?? fb.onsite_devices,
+  };
+}
+
 // ── Formula constants ──────────────────────────────────────────────────────
 export const BASE_HOURS            = 20;
 export const HOURS_PER_USER        = 0.05;
@@ -116,7 +149,18 @@ export function calcUcaasBasicBreakdown(
   return { components, hours, laborSubtotal, trainingTotal, deviceInstallTotal, prePmSubtotal, pm, total };
 }
 
-/** Tolerant reader for the basic_inputs JSON column (DB may give us a string or already-parsed object). */
+/** Tolerant reader for the basic_inputs JSON column (DB may give us a string or
+ *  already-parsed object).
+ *
+ *  Spreads the raw object through FIRST, then overlays the cleaned-up base
+ *  fields. The spread preserves any extra keys we didn't know about — most
+ *  notably the combo sub-blocks (ccaas, apps, zva_voice, zva_chat, analog,
+ *  final_discount_pct) added in PR #306. Without this passthrough, every
+ *  read via normalizeSolutionRow stripped combo data, which made the SA's
+ *  combo-calculator save appear to wipe everything on the response. The
+ *  return type stays UcaasBasicInputs (structural — TS allows extras), so
+ *  callers that care about the combo shape cast via parseCcaasComboInputs
+ *  or `as Partial<CcaasComboInputs>`. */
 export function parseBasicInputs(raw: unknown): UcaasBasicInputs | null {
   if (raw == null) return null;
   let obj: unknown = raw;
@@ -128,6 +172,7 @@ export function parseBasicInputs(raw: unknown): UcaasBasicInputs | null {
   if (!obj || typeof obj !== "object") return null;
   const r = obj as Record<string, unknown>;
   return {
+    ...(r as Partial<UcaasBasicInputs>),
     users:             n(r.users),
     sites:             Math.max(1, n(r.sites, 1)),
     go_lives:          Math.max(1, n(r.go_lives, 1)),
@@ -137,10 +182,19 @@ export function parseBasicInputs(raw: unknown): UcaasBasicInputs | null {
   };
 }
 
-/** True iff this solution can use basic pricing — pure UCaaS only (combos use Advanced). */
+/** True iff this solution can use basic / formula-driven pricing.
+ *  Two paths feed this:
+ *    - pure UCaaS  → calcUcaasBasicBreakdown
+ *    - has CCaaS   → calcCcaasComboBreakdown (the combo calculator from
+ *                    PR #306, gated on solution_types containing 'ccaas')
+ *  Anything else (CI, VA, etc. without UCaaS or CCaaS) falls through to
+ *  Advanced mode. The Labor-tab UI picks which form to render based on
+ *  isComboMode() in shared/ccaasComboPricing.ts. */
 export function canUseBasicPricing(solutionTypes: readonly string[] | null | undefined): boolean {
   if (!solutionTypes) return false;
-  return solutionTypes.length === 1 && solutionTypes[0] === "ucaas";
+  if (solutionTypes.length === 1 && solutionTypes[0] === "ucaas") return true;
+  if (solutionTypes.includes("ccaas")) return true;
+  return false;
 }
 
 // ── Tiered mode ────────────────────────────────────────────────────────────
@@ -178,7 +232,12 @@ export function getUcaasTieredTier(seatCount: number | null | undefined): UcaasT
   return null;
 }
 
-/** True iff this solution can use tiered pricing — pure UCaaS, sub-100. */
+/** True iff this solution can use tiered pricing — pure UCaaS only.
+ *  Tiered is the sub-100-seat fixed-ladder shortcut; combos can't use it
+ *  because the tier table doesn't model CCaaS / apps / ZVA at all. Stays
+ *  decoupled from canUseBasicPricing so the combo expansion in PR #306
+ *  doesn't accidentally surface the tiered radio for combos. */
 export function canUseTieredPricing(solutionTypes: readonly string[] | null | undefined): boolean {
-  return canUseBasicPricing(solutionTypes);
+  if (!solutionTypes) return false;
+  return solutionTypes.length === 1 && solutionTypes[0] === "ucaas";
 }

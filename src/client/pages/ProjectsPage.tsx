@@ -91,6 +91,7 @@ export default function ProjectsPage() {
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [currentRole, setCurrentRole] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { demoVendor } = useDemoMode();
@@ -121,6 +122,10 @@ export default function ProjectsPage() {
   // Opportunities for selected account
   const [opportunities, setOpportunities] = useState<DynamicsOpportunity[]>([]);
   const [oppsLoading, setOppsLoading] = useState(false);
+
+  useEffect(() => {
+    api.me().then((me) => setCurrentRole(me.role)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -242,9 +247,15 @@ export default function ProjectsPage() {
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
       <div className="ms-page-header">
         <h1 className="ms-page-title">Projects</h1>
-        <button className="ms-btn-primary" onClick={() => setShowModal(true)}>
-          + New Project
-        </button>
+        {/* Allowlist instead of `!== "client"` so the empty pre-load
+            `currentRole = ""` state doesn't slip the button through. The
+            button materializes only after /me/profile has resolved AND
+            the role is on the staff list. */}
+        {["admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"].includes(currentRole) && (
+          <button className="ms-btn-primary" onClick={() => setShowModal(true)}>
+            + New Project
+          </button>
+        )}
       </div>
 
       {(healthFilter || pfAeIdFilter || partnerAeIdFilter) && (

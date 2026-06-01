@@ -13,6 +13,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { solutionTypeLabel, otherTechnologyLabel, OTHER_TECHNOLOGIES, OTHER_TECHNOLOGY_LABELS } from "../../shared/solutionTypes";
+import { resolveVendorBadge } from "../lib/vendorBadge";
 import otherJourneysSurveyJson from "../assets/other_journeys_needs_assessment_v1.json";
 import {
   composeAssessment,
@@ -278,13 +279,9 @@ export default function SolutionDetailPage() {
     }
   }
 
-  async function advanceStatus() {
-    if (!solution) return;
-    const idx = STATUS_FLOW.indexOf(solution.status);
-    if (idx < 0 || idx >= STATUS_FLOW.length - 1) return;
-    const next = STATUS_FLOW[idx + 1];
-    await save({ status: next });
-  }
+  // advanceStatus retired May-2026 — solution stage now auto-derives
+  // server-side from NA / LE / SOW artifacts (teamUtils.syncSolutionStatus).
+  // SAs only set terminal states manually (Mark Lost / Reopen).
 
   async function markLost() {
     await save({ status: "lost" });
@@ -322,13 +319,16 @@ export default function SolutionDetailPage() {
 
   const isClient = currentRole === "client";
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae" || currentRole === "pf_sa";
-  const canEditNA = canEdit || isClient;
+  // Clients VIEW completed needs assessments via the SOR view but never
+  // edit them or start new ones. Including isClient here was a launch-day
+  // bug — it exposed the wizard + "Start Needs Assessment" buttons in the
+  // customer portal.
+  const canEditNA = canEdit;
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
 
   const statusIdx = STATUS_FLOW.indexOf(solution.status);
-  const canAdvance = canEdit && statusIdx >= 0 && statusIdx < STATUS_FLOW.length - 1;
 
   const solutionJourneys = parseSolutionJourneys(solution);
   const nonUcJourneys = solutionJourneys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
@@ -388,86 +388,97 @@ export default function SolutionDetailPage() {
         </div>
       )}
 
-      {/* Customer Metadata Section */}
-      {solution.customer_id && (
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
-              <Link to={`/customers/${solution.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
-                {solution.customer_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+      {/* Slim solution meta — solution name (with inline rename) + customer
+          link + SharePoint link. Mirrors the Projects detail page's tight
+          meta card (PR #263). The AE / SA / CSM customer team chips render
+          in their own Account Team card below so the header stays read-once. */}
+      <div className="ms-card" style={{ padding: "16px 24px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            {renamingTitle ? (
+              <input
+                className="ms-input"
+                autoFocus
+                value={titleDraft}
+                style={{ fontSize: 22, fontWeight: 700, padding: "4px 8px", margin: "0 0 4px" }}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={async () => {
+                  if (titleDraft.trim() && titleDraft.trim() !== solution.name) {
+                    await save({ name: titleDraft.trim() });
+                  }
+                  setRenamingTitle(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") setRenamingTitle(false);
+                }}
+              />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{solution.name}</h1>
+                {canEdit && (
+                  <button
+                    onClick={() => { setTitleDraft(solution.name); setRenamingTitle(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
+                    title="Rename solution"
+                  >
+                    ✏
+                  </button>
+                )}
+              </div>
+            )}
+            {solution.customer_id && (
+              <Link to={`/customers/${solution.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                {solution.customer_name} <span style={{ fontSize: 11 }}>↗</span>
               </Link>
-            </div>
-            {solution.customer_sharepoint_url && (
-              <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                SharePoint ↗
-              </a>
             )}
           </div>
-          {(solution.customer_pf_ae_name || solution.customer_pf_sa_name || solution.customer_pf_csm_name) && (
-            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {[
-                { role: "Account Executive", name: solution.customer_pf_ae_name, email: solution.customer_pf_ae_email },
-                { role: "Solution Architect", name: solution.customer_pf_sa_name, email: solution.customer_pf_sa_email },
-                { role: "Client Success Manager", name: solution.customer_pf_csm_name, email: solution.customer_pf_csm_email },
-              ].filter(m => m.name).map((m) => {
-                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
-                const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
-                return (
-                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    {photo
-                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                    }
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {solution.customer_sharepoint_url && (
+            <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+              SharePoint ↗
+            </a>
           )}
+        </div>
+      </div>
+
+      {/* Account Team card — was inline on the old customer-meta card; moved
+          here to mirror the Projects Overview "Account Team" treatment. */}
+      {(solution.customer_pf_ae_name || solution.customer_pf_sa_name || solution.customer_pf_csm_name) && (
+        <div className="ms-card" style={{ padding: "14px 20px", marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 10 }}>Account Team</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              { role: "Account Executive", name: solution.customer_pf_ae_name, email: solution.customer_pf_ae_email },
+              { role: "Solution Architect", name: solution.customer_pf_sa_name, email: solution.customer_pf_sa_email },
+              { role: "Client Success Manager", name: solution.customer_pf_csm_name, email: solution.customer_pf_csm_email },
+            ].filter(m => m.name).map((m) => {
+              const photo = m.email ? customerTeamPhotoMap[m.email] : null;
+              const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+              return (
+                <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                  {photo
+                    ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                  }
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — types + status pills, staff-only CRM-sync inputs, and
+          terminal-state actions. The rename UI lives in the slim meta card
+          above; the Advance button was retired with the status
+          auto-derivation (May-2026). */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
-          {renamingTitle ? (
-            <input
-              className="ms-input"
-              autoFocus
-              value={titleDraft}
-              style={{ fontSize: 20, fontWeight: 700, padding: "4px 8px", marginBottom: 0 }}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={async () => {
-                if (titleDraft.trim() && titleDraft.trim() !== solution.name) {
-                  await save({ name: titleDraft.trim() });
-                }
-                setRenamingTitle(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setRenamingTitle(false);
-              }}
-            />
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.name}</h1>
-              {canEdit && (
-                <button
-                  onClick={() => { setTitleDraft(solution.name); setRenamingTitle(true); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
-                  title="Rename solution"
-                >
-                  ✏
-                </button>
-              )}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <SolutionTypePills types={solution.solution_types} emptyFallback={null} />
             {solution.other_technologies.length > 0 && (
               <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6 }}>
@@ -487,10 +498,11 @@ export default function SolutionDetailPage() {
               <span className="ms-badge" style={{ background: "rgba(217,119,6,0.12)", color: "#b45309", border: "1px solid rgba(217,119,6,0.3)" }}>New Logo</span>
             )}
           </div>
-          {/* CRM-sync inputs — always editable. Both feed
-              syncOpportunityFromSolution on the next save() call so the
-              bound D365 opportunity stays current without sales ops having
-              to re-enter anything. */}
+          {/* CRM-sync inputs — staff-only. Both fields drive D365
+              opportunity sync (cr495_dealregistrationid +
+              am_cloudcontractexpiration) and have no meaning in the
+              customer-facing view. */}
+          {!isClient && (
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 10, fontSize: 12, color: "#475569", flexWrap: "wrap" }}>
             <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontWeight: 600, color: "#64748b" }}>Deal Reg ID:</span>
@@ -537,16 +549,14 @@ export default function SolutionDetailPage() {
               />
             </label>
           </div>
+          )}
         </div>
 
-        {/* Status actions */}
+        {/* Status actions — Advance retired May-2026 (stage now auto-derives
+            from NA / LE / SOW artifacts). Only terminal-state controls stay
+            manual. */}
         {canEdit && (
           <div style={{ display: "flex", gap: 8 }}>
-            {canAdvance && (
-              <button className="ms-btn-primary" onClick={advanceStatus} disabled={saving}>
-                Advance → {STATUS_LABELS[STATUS_FLOW[statusIdx + 1]]}
-              </button>
-            )}
             {solution.status !== "lost" && solution.status !== "won" && (
               <button
                 className="ms-btn-ghost"
@@ -682,8 +692,25 @@ export default function SolutionDetailPage() {
                     <option value="other">Other</option>
                   </select>
                 ) : (
-                  <div style={{ fontSize: 14, color: solution.vendor === "tbd" ? "#94a3b8" : "#334155", padding: "8px 0" }}>
-                    {solution.vendor === "tbd" ? "— Not yet assigned —" : solution.vendor}
+                  <div style={{ padding: "8px 0" }}>
+                    {(() => {
+                      if (solution.vendor === "tbd") {
+                        return <span style={{ fontSize: 14, color: "#94a3b8" }}>— Not yet assigned —</span>;
+                      }
+                      // Render as a colored badge so the customer sees a
+                      // recognizable Zoom / RingCentral chip rather than
+                      // raw lowercase column values like "zoom".
+                      const badge = resolveVendorBadge(solution.vendor);
+                      if (!badge) return <span style={{ fontSize: 14, color: "#334155" }}>{solution.vendor}</span>;
+                      return (
+                        <span
+                          className="ms-badge"
+                          style={{ background: `${badge.color}1a`, color: badge.color, border: `1px solid ${badge.color}40`, fontSize: 13, fontWeight: 600, textTransform: "none" }}
+                        >
+                          {badge.label}
+                        </span>
+                      );
+                    })()}
                   </div>
                 )}
               </label>
@@ -697,6 +724,11 @@ export default function SolutionDetailPage() {
                   </div>
                 )}
               </label>
+              {/* "Other Technologies" — hide this row entirely for
+                  clients when the solution has none. Staff still see
+                  the row (with the picker or "None" label) so they
+                  can add. */}
+              {(!isClient || solution.other_technologies.length > 0) && (
               <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
                 <span>Other Technologies</span>
                 {canEdit ? (
@@ -736,6 +768,7 @@ export default function SolutionDetailPage() {
                   </div>
                 )}
               </label>
+              )}
             </div>
             {canEdit && (
               <button className="ms-btn-primary" style={{ marginTop: 16 }} disabled={saving}
@@ -807,10 +840,14 @@ export default function SolutionDetailPage() {
           })()}
 
           {/* ── Customer Contacts ── */}
+          {/* Clients can add + remove customer contacts on their own
+              solution — same CRM-picker + manual-entry affordances as
+              staff. Server endpoint at POST /:id/contacts has no role
+              gate; canEdit alone was over-tight. */}
           <div className="ms-card">
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
               <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Customer Contacts</h3>
-              {canEdit && (
+              {(canEdit || isClient) && (
                 <button
                   className="ms-btn-secondary"
                   onClick={() => {
@@ -850,7 +887,7 @@ export default function SolutionDetailPage() {
                         {[c.job_title, c.email, c.phone].filter(Boolean).join(" · ")}
                       </div>
                     </div>
-                    {canEdit && (
+                    {(canEdit || isClient) && (
                       <button
                         className="ms-btn-ghost"
                         style={{ fontSize: 12, color: "#d13438", borderColor: "rgba(209,52,56,0.3)", flexShrink: 0 }}
@@ -1308,12 +1345,17 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
       <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
-          {/* Sizing confirmation form — hidden in Tiered and Basic modes.
-              Both already collect every input they need on the Labor tab,
-              so the sizing form is redundant there. The SOW document handles
-              the empty sizing case gracefully (skips the Confirmed Solution
-              Sizing section entirely). */}
-          {solution.pricing_mode !== "basic" && solution.pricing_mode !== "tiered" && (
+          {/* Consolidated SOW Sizing form — the single source for sizing in
+              Advanced AND Basic (non-combo) modes. Hidden in Tiered (trivial,
+              not spec'd) and Basic+combo (the CcaasComboCalculator on the Labor
+              tab owns combo sizing). In Advanced it shows hours-driving scoping;
+              in Basic it shows the flat-price inputs + breakdown.
+
+              Staff-only: this is the pricing math (sizing inputs, combo
+              calculator, line-item breakdown). Clients never see how the price
+              is derived — they get the generic pricing summary (SowAddOnsEditor)
+              + the rendered SOW document below. */}
+          {!isClient && solution.pricing_mode !== "tiered" && (
             <SowSizingForm
               solution={solution}
               needsAssessments={needsAssessments}
@@ -1330,6 +1372,7 @@ export default function SolutionDetailPage() {
             solution={solution}
             laborHoursTotal={laborTotals.expected}
             canEdit={canEdit}
+            isClient={isClient}
             onSaved={(next) => {
               setSolution(prev => prev ? { ...prev, ...next } : prev);
             }}
@@ -1337,7 +1380,10 @@ export default function SolutionDetailPage() {
 
           {/* SOW switches — affect both the rendered/printed SOW and the
               solution overview. Both flags are independent: budgetary
-              quotes can also be Zoom Reseller (e.g. SLED). */}
+              quotes can also be Zoom Reseller (e.g. SLED). Hidden from
+              clients — the budgetary watermark + reseller-MSA toggle are
+              internal sales-ops levers and irrelevant to the customer view. */}
+          {!isClient && (
           <div className="ms-card">
             <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
               SOW Switches
@@ -1375,8 +1421,48 @@ export default function SolutionDetailPage() {
               </label>
             </div>
           </div>
+          )}
 
-          {/* SOW document generator */}
+          {/* Additional Scope Notes — feeds into the generated SOW, so it sits
+              ABOVE the SOW document/Generate button. For clients: hidden when
+              empty; read-only display when non-empty. Staff get the textarea. */}
+          {(!isClient || scope.trim().length > 0) && (
+          <div className="ms-card">
+            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+              Additional Scope Notes
+            </h3>
+            {!isClient && (
+              <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
+                Any additional context, exclusions, or special terms. This text is included in the generated SOW document.
+              </p>
+            )}
+            {isClient ? (
+              <div style={{ fontFamily: "monospace", fontSize: 13, lineHeight: 1.6, color: "#1e293b", whiteSpace: "pre-wrap", padding: "8px 0" }}>
+                {scope}
+              </div>
+            ) : (
+              <>
+                <textarea
+                  className="ms-input"
+                  rows={8}
+                  style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6 }}
+                  value={scope}
+                  onChange={(e) => setScope(e.target.value)}
+                  placeholder="Out of scope items, special terms, exclusions…"
+                  disabled={!canEdit}
+                />
+                {canEdit && (
+                  <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ scope_of_work: scope })}>
+                    {saving ? "Saving…" : "Save Notes"}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+          )}
+
+          {/* SOW document generator — last, with the Export / Print SOW button
+              at the bottom of the tab. */}
           <ScopeOfWorkDocument
             solution={solution}
             needsAssessment={needsAssessment}
@@ -1390,30 +1476,6 @@ export default function SolutionDetailPage() {
               setSolution(refreshed);
             }}
           />
-
-          {/* Scope notes textarea — feeds into the generated document */}
-          <div className="ms-card">
-            <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Additional Scope Notes
-            </h3>
-            <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-              Any additional context, exclusions, or special terms. This text is included in the generated SOW document.
-            </p>
-            <textarea
-              className="ms-input"
-              rows={8}
-              style={{ resize: "vertical", fontFamily: "monospace", fontSize: 13, lineHeight: 1.6 }}
-              value={scope}
-              onChange={(e) => setScope(e.target.value)}
-              placeholder="Out of scope items, special terms, exclusions…"
-              disabled={!canEdit}
-            />
-            {canEdit && (
-              <button className="ms-btn-primary" disabled={saving} style={{ marginTop: 12 }} onClick={() => save({ scope_of_work: scope })}>
-                {saving ? "Saving…" : "Save Notes"}
-              </button>
-            )}
-          </div>
         </div>
 
       {/* ── Handoff Tab ── */}
@@ -1522,7 +1584,6 @@ export default function SolutionDetailPage() {
             solutionType={effectiveActiveLaborType}
             estimate={laborEstimate}
             hasAssessment={needsAssessments[effectiveActiveLaborType] !== undefined}
-            naAnswers={(needsAssessments[effectiveActiveLaborType]?.answers as Record<string, unknown> | undefined) ?? null}
             canEdit={canEdit}
             onSolutionChange={(next) => setSolution((prev) => prev ? { ...prev, ...next } : prev)}
             onEstimateChange={(le) => {

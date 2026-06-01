@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
+import { syncSolutionStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -437,8 +438,11 @@ function scoreAndSurveyFor(solutionType: string, answers: Record<string, unknown
 app.put("/:id/needs-assessments/:type", async (c) => {
   const auth = c.get("auth");
   if (!auth) throw new HTTPException(401, { message: "Unauthorized" });
-  const isClient = auth.role === "client";
-  if (!isClient && !EDIT_ROLES.includes(auth.role as typeof EDIT_ROLES[number])) {
+  // Walking back the client carve-out: the customer portal no longer
+  // surfaces NA-edit affordances, and product direction is for SAs to
+  // own the needs assessment. Clients can VIEW completed NAs via the
+  // read-only SOR view but can't PUT new content.
+  if (!EDIT_ROLES.includes(auth.role as typeof EDIT_ROLES[number])) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
@@ -447,20 +451,15 @@ app.put("/:id/needs-assessments/:type", async (c) => {
 
   // Verify solution exists + that this type is one of the solution's selected types.
   const solution = await c.env.DB.prepare(
-    "SELECT id, solution_types, dynamics_account_id FROM solutions WHERE id = ? LIMIT 1"
+    "SELECT id, solution_types FROM solutions WHERE id = ? LIMIT 1"
   )
     .bind(solutionId)
-    .first() as { id: string; solution_types: string; dynamics_account_id: string | null } | null;
+    .first() as { id: string; solution_types: string } | null;
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
 
   const applicableTypes = parseSolutionTypes(solution.solution_types);
   if (!applicableTypes.includes(solutionType as typeof applicableTypes[number])) {
     throw new HTTPException(400, { message: `Solution is not scoped to solution_type '${solutionType}'` });
-  }
-
-  // Clients can only update assessments for their own account's solutions
-  if (isClient && solution.dynamics_account_id !== auth.user.dynamics_account_id) {
-    throw new HTTPException(403, { message: "Forbidden" });
   }
 
   const parsed = upsertSchema.safeParse(await c.req.json().catch(() => ({})));
@@ -501,6 +500,8 @@ app.put("/:id/needs-assessments/:type", async (c) => {
 
   if (!row) throw new HTTPException(500, { message: "Failed to retrieve assessment" });
 
+  await syncSolutionStatus(c.env.DB, solutionId);
+
   return c.json({
     ...row,
     answers: parseAnswers(row.answers as string),
@@ -529,6 +530,8 @@ app.delete("/:id/needs-assessments/:type", async (c) => {
   await c.env.DB.prepare("DELETE FROM needs_assessments WHERE solution_id = ? AND solution_type = ?")
     .bind(solutionId, solutionType)
     .run();
+
+  await syncSolutionStatus(c.env.DB, solutionId);
 
   return c.json({ success: true });
 });
