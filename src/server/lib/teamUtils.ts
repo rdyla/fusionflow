@@ -282,6 +282,9 @@ export async function syncProjectGoLiveDate(db: D1Database, projectId: string): 
 //   am_opportunitytype        — constant 930680038 (PFI - CloudPro). The
 //                               professional-services labor we quote for
 //                               implementation work, regardless of tech type.
+//   cr495_pfiproserv          — constant 737660000 (Yes). Marks the opp as a
+//                               pro-services implementation; always Yes for
+//                               the CloudPro work CloudConnect quotes.
 //   am_revenuesource          — 930680001 (New Logo) when the CRM account
 //                               was created inline during this solution's
 //                               flow (is_new_logo=1), else 930680000
@@ -335,6 +338,11 @@ const VENDOR_GUIDS = {
 const OPP_TYPE_CLOUDPRO = 930680038;
 const REV_SRC_INSTALLED_BASE = 930680000;
 const REV_SRC_NEW_LOGO       = 930680001;
+
+// cr495_pfiproserv option-set (Yes / No / N/A). Everything we quote through
+// CloudConnect is a CloudPro professional-services implementation, so this
+// rides the same constant path as am_opportunitytype = CloudPro above.
+const PROSERV_YES = 737660000;
 
 const SALES_STAGE = {
   prospecting: 930680000,
@@ -397,6 +405,7 @@ export async function syncOpportunityFromSolution(
 
   const patch: Record<string, unknown> = {
     am_opportunitytype:       OPP_TYPE_CLOUDPRO,
+    cr495_pfiproserv:         PROSERV_YES,
     am_revenuesource:         row.is_new_logo === 1 ? REV_SRC_NEW_LOGO : REV_SRC_INSTALLED_BASE,
     am_opportunitysalesstage: salesStageForSolutionStatus(row.status),
     am_mrr:                   0,
