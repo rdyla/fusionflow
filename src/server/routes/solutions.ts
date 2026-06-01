@@ -25,6 +25,8 @@ import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
 import { recomputeSowTotal } from "../lib/sowTotal";
 import { recomputeExistingEstimates } from "./laborEstimates";
 import { getDemoVendor } from "../lib/appSettings";
+import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
+import { ensureSharePointChildFolder } from "../services/graphService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -321,6 +323,28 @@ app.post("/", async (c) => {
       .prepare("INSERT OR IGNORE INTO solution_staff (id, solution_id, user_id, staff_role) VALUES (?, ?, ?, 'partner_ae')")
       .bind(crypto.randomUUID(), id, resolvedPartnerAeUserId)
       .run();
+  }
+
+  // Best-effort: create the solution's SharePoint subfolder under the
+  // customer's SP root (mirrors the project-create path). Becomes the
+  // browsing root on the SharePoint tab, where SAs create subfolders and
+  // mark them client/partner-visible. Failures log and continue — the SA
+  // can retry from the SharePoint tab's "Create solution folder" button.
+  if (resolvedCustomerId) {
+    try {
+      const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, resolvedCustomerId);
+      if (customerSpUrl) {
+        const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, name);
+        if (folder.webUrl) {
+          await db
+            .prepare("UPDATE solutions SET sharepoint_folder_url = ? WHERE id = ?")
+            .bind(folder.webUrl, id)
+            .run();
+        }
+      }
+    } catch (err) {
+      console.warn(`[solutions.create] SharePoint folder creation failed for ${id}:`, err instanceof Error ? err.message : err);
+    }
   }
 
   // Push the just-set vendor / opp-type / revenue-source onto the bound D365
@@ -779,6 +803,62 @@ app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_
     .run();
 
   return c.json({ sow_metadata: meta });
+});
+
+// ── SharePoint folder (retrofit) ───────────────────────────────────────────────
+// POST /api/solutions/:id/sharepoint-folder
+// Idempotent create-or-adopt of the solution's own folder under the customer's
+// SharePoint root. Mirrors the project-side route. Used by the "Create solution
+// folder" button on the SharePoint tab for solutions created before the
+// auto-create (or where the customer SP root wasn't resolvable at create time).
+app.post("/:id/sharepoint-folder", requireRole("admin", "pm", "pf_ae", "pf_sa"), async (c) => {
+  const db = c.env.DB;
+  const solutionId = c.req.param("id");
+
+  const solution = await db
+    .prepare("SELECT name, customer_id, sharepoint_folder_url FROM solutions WHERE id = ? LIMIT 1")
+    .bind(solutionId)
+    .first<{ name: string; customer_id: string | null; sharepoint_folder_url: string | null }>();
+  if (!solution) return c.json({ error: "Solution not found" }, 404);
+
+  // Already wired up — idempotent.
+  if (solution.sharepoint_folder_url) {
+    return c.json({ sharepoint_folder_url: solution.sharepoint_folder_url, reused: true });
+  }
+
+  if (!solution.customer_id) {
+    return c.json({
+      error: "Solution has no linked customer. Link a customer record (CRM account) before creating a SharePoint folder.",
+    }, 400);
+  }
+
+  const customerSpUrl = await resolveCustomerSharePointUrl(c.env, db, solution.customer_id);
+  if (!customerSpUrl) {
+    const cust = await db
+      .prepare("SELECT name, crm_account_id FROM customers WHERE id = ? LIMIT 1")
+      .bind(solution.customer_id)
+      .first<{ name: string; crm_account_id: string | null }>();
+    const detail = cust?.crm_account_id
+      ? `Customer "${cust?.name}" is linked to CRM account ${cust.crm_account_id} but Dynamics returned no SharePoint document locations for it.`
+      : `Customer "${cust?.name ?? "(unknown)"}" has no SharePoint URL set and no CRM account linked.`;
+    return c.json({ error: detail }, 400);
+  }
+
+  try {
+    const folder = await ensureSharePointChildFolder(c.env, customerSpUrl, solution.name);
+    if (!folder.webUrl) {
+      return c.json({ error: "Folder created but no webUrl returned from Graph." }, 500);
+    }
+    await db
+      .prepare("UPDATE solutions SET sharepoint_folder_url = ? WHERE id = ?")
+      .bind(folder.webUrl, solutionId)
+      .run();
+    return c.json({ sharepoint_folder_url: folder.webUrl, reused: folder.reused });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "SharePoint folder create failed";
+    console.error(`[solutions.${solutionId}.sharepoint-folder]`, message);
+    return c.json({ error: `SharePoint folder create failed: ${message}` }, 500);
+  }
 });
 
 // ── Delete ────────────────────────────────────────────────────────────────────

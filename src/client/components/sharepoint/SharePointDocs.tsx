@@ -2,24 +2,29 @@ import { useEffect, useRef, useState } from "react";
 import { api, type SPFile, type SPLocation } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
+/** Which record owns this SharePoint area — a project or a solution. Drives
+ *  the retrofit endpoint and which id is stamped on folder-visibility rows.
+ *  Both sides share the same folder-create + per-folder visibility control. */
+type SharePointOwner = { kind: "project" | "solution"; id: string };
+
 type Props = {
   recordId: string;
   sharepointUrl?: string | null;
   /** When set, this URL is used as the root of the file browser, bypassing
-   *  the CRM-document-location lookup entirely. Set by ProjectDetailPage
-   *  to scope the SharePoint tab to the project's own subfolder under the
-   *  customer's SP root. */
-  projectFolderUrl?: string | null;
-  /** When provided alongside a null projectFolderUrl, the component shows
-   *  a "Create project folder" button that calls the retrofit endpoint to
-   *  create the folder under the customer's SP root. */
-  projectId?: string;
-  /** Gates the "Create project folder" button to editors. */
+   *  the CRM-document-location lookup entirely. Set by the project/solution
+   *  detail page to scope the SharePoint tab to that record's own subfolder
+   *  under the customer's SP root. */
+  folderUrl?: string | null;
+  /** The owning project/solution. When provided alongside a null folderUrl,
+   *  the component shows a "Create {owner} folder" button that calls the
+   *  retrofit endpoint to create the folder under the customer's SP root. */
+  owner?: SharePointOwner;
+  /** Gates the folder-create button + per-folder visibility toggle to editors. */
   canEdit?: boolean;
   /** Called when the retrofit endpoint successfully creates/adopts a folder
-   *  — parent should refresh the project so the URL is persisted on subsequent
+   *  — parent should refresh the record so the URL is persisted on subsequent
    *  renders without another retrofit call. */
-  onProjectFolderCreated?: (url: string) => void;
+  onFolderCreated?: (url: string) => void;
 };
 
 const MIME_ICONS: Record<string, string> = {
@@ -56,9 +61,10 @@ function formatDate(iso: string | null) {
   return iso.slice(0, 10);
 }
 
-export default function SharePointDocs({ recordId, sharepointUrl, projectFolderUrl, projectId, canEdit, onProjectFolderCreated }: Props) {
+export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, owner, canEdit, onFolderCreated }: Props) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const ownerNoun = owner?.kind === "solution" ? "solution" : "project";
 
   const [locations, setLocations] = useState<SPLocation[]>([]);
   const [selectedLocation, setSelectedLocation] = useState<SPLocation | null>(null);
@@ -84,10 +90,10 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
   //   2. Legacy/customer mode: pull document locations from CRM by recordId.
 
   useEffect(() => {
-    if (projectFolderUrl) {
-      // Project-folder mode — synthesize a single location entry so the rest
+    if (folderUrl) {
+      // Owner-folder mode — synthesize a single location entry so the rest
       // of the component (breadcrumbs, file ops) works unchanged.
-      const loc: SPLocation = { id: "__project__", name: "Project folder", absoluteUrl: projectFolderUrl };
+      const loc: SPLocation = { id: "__owner__", name: `${ownerNoun === "solution" ? "Solution" : "Project"} folder`, absoluteUrl: folderUrl };
       setLocations([loc]);
       selectLocation(loc);
       setLoadingLocations(false);
@@ -103,15 +109,17 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
       .catch((err) => setLocError(err instanceof Error ? err.message : "Failed to load SharePoint locations"))
       .finally(() => setLoadingLocations(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordId, projectFolderUrl]);
+  }, [recordId, folderUrl]);
 
-  async function handleCreateProjectFolder() {
-    if (!projectId) return;
+  async function handleCreateOwnerFolder() {
+    if (!owner) return;
     setCreatingFolder(true);
     try {
-      const res = await api.ensureProjectSharePointFolder(projectId);
-      onProjectFolderCreated?.(res.sharepoint_folder_url);
-      showToast(res.reused ? "Adopted existing folder for this project." : "Project folder created.", "success");
+      const res = owner.kind === "solution"
+        ? await api.ensureSolutionSharePointFolder(owner.id)
+        : await api.ensureProjectSharePointFolder(owner.id);
+      onFolderCreated?.(res.sharepoint_folder_url);
+      showToast(res.reused ? `Adopted existing folder for this ${ownerNoun}.` : `${ownerNoun === "solution" ? "Solution" : "Project"} folder created.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create folder", "error");
     } finally {
@@ -158,7 +166,10 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
     try {
       const { file: uploaded } = await api.spUpload(currentUrl, file, {
         description: uploadDescription || null,
-        projectId: projectId ?? null,
+        // Upload attribution is shadowed in sharepoint_uploads (project FK), so
+        // it only applies to project folders; solution uploads fall back to the
+        // Graph identity, same as the legacy customer-root behavior.
+        projectId: owner?.kind === "project" ? owner.id : null,
       });
       setFiles((prev) => {
         const without = prev.filter((f) => f.name !== uploaded.name);
@@ -183,7 +194,9 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
     if (!name || !name.trim()) return;
     setCreatingFolder(true);
     try {
-      await api.spCreateFolder(currentUrl, name.trim(), projectId ?? null);
+      // New folders are hidden from client/partner by default (no visibility
+      // row), so no owner id needs to be threaded into the create itself.
+      await api.spCreateFolder(currentUrl, name.trim());
       showToast(`Folder "${name.trim()}" created.`, "success");
       loadFiles(currentUrl);
     } catch (err) {
@@ -224,20 +237,20 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
       <div className="ms-section-card">
         <div className="ms-section-title">SharePoint Documents</div>
 
-        {/* Retrofit path: this project doesn't have its own folder yet. Show a
-            one-click button to create + adopt one. Only relevant in project
-            context (projectId set + editor). */}
-        {projectId && canEdit && !projectFolderUrl && (
+        {/* Retrofit path: this record doesn't have its own folder yet. Show a
+            one-click button to create + adopt one. Only relevant when an owner
+            (project/solution) is set + editor. */}
+        {owner && canEdit && !folderUrl && (
           <div style={{ marginBottom: sharepointUrl ? 16 : 0 }}>
             <div style={{ color: "#64748b", fontSize: 13, marginBottom: 8 }}>
-              This project doesn't have a SharePoint folder yet. Create one under the customer's SharePoint root — it becomes the upload location for discovery workbooks, customer phone bills, CSRs, and any other project documents.
+              This {ownerNoun} doesn't have a SharePoint folder yet. Create one under the customer's SharePoint root — it becomes the upload location for discovery workbooks, customer phone bills, CSRs, and any other {ownerNoun} documents.
             </div>
             <button
               className="ms-btn-primary"
-              onClick={handleCreateProjectFolder}
+              onClick={handleCreateOwnerFolder}
               disabled={creatingFolder}
             >
-              {creatingFolder ? "Creating…" : "Create project folder"}
+              {creatingFolder ? "Creating…" : `Create ${ownerNoun} folder`}
             </button>
           </div>
         )}
@@ -245,7 +258,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
         {sharepointUrl ? (
           <div>
             <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
-              {projectId && canEdit ? "Or open the customer's SharePoint root directly:" : "No document library linked in Dynamics CRM for this record. Use the SharePoint link directly:"}
+              {owner && canEdit ? "Or open the customer's SharePoint root directly:" : "No document library linked in Dynamics CRM for this record. Use the SharePoint link directly:"}
             </div>
             <a
               href={sharepointUrl}
@@ -256,7 +269,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
               Open SharePoint ↗
             </a>
           </div>
-        ) : !(projectId && canEdit) ? (
+        ) : !(owner && canEdit) ? (
           <div style={{ color: "#a19f9d", fontSize: 14 }}>
             No SharePoint document locations linked to this record in Dynamics CRM.
           </div>
@@ -266,28 +279,28 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
   }
 
   const currentUrl = folderStack.length > 0 ? folderStack[folderStack.length - 1].url : null;
-  const showCreateProjectFolderPrompt = !!projectId && !!canEdit && !projectFolderUrl;
+  const showCreateOwnerFolderPrompt = !!owner && !!canEdit && !folderUrl;
 
   return (
     <div style={{ display: "grid", gap: 16 }}>
 
-      {/* Project-folder upgrade prompt — visible whenever the project doesn't
+      {/* Owner-folder upgrade prompt — visible whenever the record doesn't
           have its own folder yet, regardless of whether CRM has document
-          locations linked. Most projects DO have CRM locations, so the
+          locations linked. Most records DO have CRM locations, so the
           fallback render below never fires and this is the only place the
-          PM gets a chance to opt in. */}
-      {showCreateProjectFolderPrompt && (
+          user gets a chance to opt in. */}
+      {showCreateOwnerFolderPrompt && (
         <div className="ms-section-card" style={{ background: "#fefce8", borderColor: "#fde68a" }}>
           <div style={{ fontSize: 13, color: "#854d0e", marginBottom: 8 }}>
-            <strong>This project doesn't have its own SharePoint folder.</strong> Files below are coming from the customer's shared CRM-linked location. Create a dedicated project folder under the customer's SharePoint root — that's where discovery workbooks, customer phone bills, CSRs, and project documents should land.
+            <strong>This {ownerNoun} doesn't have its own SharePoint folder.</strong> Files below are coming from the customer's shared CRM-linked location. Create a dedicated {ownerNoun} folder under the customer's SharePoint root — that's where discovery workbooks, customer phone bills, CSRs, and {ownerNoun} documents should land.
           </div>
           <button
             className="ms-btn-primary"
-            onClick={handleCreateProjectFolder}
+            onClick={handleCreateOwnerFolder}
             disabled={creatingFolder}
             style={{ fontSize: 13 }}
           >
-            {creatingFolder ? "Creating…" : "Create project folder"}
+            {creatingFolder ? "Creating…" : `Create ${ownerNoun} folder`}
           </button>
         </div>
       )}
@@ -396,7 +409,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
                   key={file.id}
                   file={file}
                   canEdit={!!canEdit}
-                  projectId={projectId ?? null}
+                  owner={owner ?? null}
                   isDeleting={deletingId === file.id}
                   onNavigateInto={() => navigateInto(file)}
                   onDelete={() => handleDelete(file)}
@@ -421,7 +434,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, projectFolderU
 function FileRow({
   file,
   canEdit,
-  projectId,
+  owner,
   isDeleting,
   onNavigateInto,
   onDelete,
@@ -430,7 +443,7 @@ function FileRow({
 }: {
   file: SPFile;
   canEdit: boolean;
-  projectId: string | null;
+  owner: SharePointOwner | null;
   isDeleting: boolean;
   onNavigateInto: () => void;
   onDelete: () => void;
@@ -450,7 +463,8 @@ function FileRow({
       await api.spSetFolderVisibility({
         sp_item_id: file.id,
         web_url: file.webUrl,
-        project_id: projectId,
+        project_id: owner?.kind === "project" ? owner.id : null,
+        solution_id: owner?.kind === "solution" ? owner.id : null,
         visible: next,
       });
       onVisibilityChanged(next);
@@ -570,7 +584,7 @@ function FileRow({
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-        {file.isFolder && canEdit && (
+        {file.isFolder && canEdit && owner && (
           <button
             className="ms-btn-ghost"
             onClick={toggleVisibility}
