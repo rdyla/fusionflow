@@ -1349,8 +1349,13 @@ export default function SolutionDetailPage() {
               Advanced AND Basic (non-combo) modes. Hidden in Tiered (trivial,
               not spec'd) and Basic+combo (the CcaasComboCalculator on the Labor
               tab owns combo sizing). In Advanced it shows hours-driving scoping;
-              in Basic it shows the flat-price inputs + breakdown. */}
-          {solution.pricing_mode !== "tiered" && (
+              in Basic it shows the flat-price inputs + breakdown.
+
+              Staff-only: this is the pricing math (sizing inputs, combo
+              calculator, line-item breakdown). Clients never see how the price
+              is derived — they get the generic pricing summary (SowAddOnsEditor)
+              + the rendered SOW document below. */}
+          {!isClient && solution.pricing_mode !== "tiered" && (
             <SowSizingForm
               solution={solution}
               needsAssessments={needsAssessments}
