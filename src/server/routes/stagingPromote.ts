@@ -249,6 +249,9 @@ app.post("/promote", async (c) => {
     project_contacts_inserted: 0,
     project_staff_inserted: 0,
     project_access_inserted: 0,
+    stage_time_entries_inserted: 0,
+    sharepoint_uploads_inserted: 0,
+    sharepoint_folder_visibility_inserted: 0,
     kv_credentials_moved: 0,
     r2_documents_copied: 0,
     skipped: [] as Array<{ kind: string; id: string; reason: string }>,
@@ -290,7 +293,7 @@ app.post("/promote", async (c) => {
 
   // 3d. Stages / tasks / risks / notes / documents per project.
   for (const projectId of touchedProjectIds) {
-    const [stages, tasks, risks, notes, documents, projectContacts, projectStaff, projectAccess] = await Promise.all([
+    const [stages, tasks, risks, notes, documents, projectContacts, projectStaff, projectAccess, timeEntries, spUploads, spFolderVis] = await Promise.all([
       all<Row>(staging, "SELECT * FROM stages WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM tasks  WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM risks  WHERE project_id = ?", projectId),
@@ -299,6 +302,14 @@ app.post("/promote", async (c) => {
       all<Row>(staging, "SELECT * FROM project_contacts WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM project_staff    WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM project_access   WHERE project_id = ?", projectId),
+      // Stage-level time entries shadow the D365 msdyn_timeentry submissions
+      // (same CRM tenant across envs, so crm_time_entry_id stays valid).
+      all<Row>(staging, "SELECT * FROM stage_time_entries WHERE project_id = ?", projectId).catch(() => [] as Row[]),
+      // SharePoint attribution + per-folder client/partner visibility. Both
+      // are keyed by the Graph driveItem id (sp_item_id), which is identical
+      // across envs since staging + prod hit the same SharePoint tenant.
+      all<Row>(staging, "SELECT * FROM sharepoint_uploads WHERE project_id = ?", projectId).catch(() => [] as Row[]),
+      all<Row>(staging, "SELECT * FROM sharepoint_folder_visibility WHERE project_id = ?", projectId).catch(() => [] as Row[]),
     ]);
     for (const row of stages) {
       if (await insertOrIgnore(prod, "stages", remapFks(row, { users: userIdMap }))) summary.stages_inserted++;
@@ -320,6 +331,17 @@ app.post("/promote", async (c) => {
     }
     for (const row of projectAccess) {
       if (await insertOrIgnore(prod, "project_access", remapFks(row, { users: userIdMap }))) summary.project_access_inserted++;
+    }
+    // stage_time_entries inserts after stages above so the stage_id FK
+    // (ON DELETE CASCADE → stages) is satisfied.
+    for (const row of timeEntries) {
+      if (await insertOrIgnore(prod, "stage_time_entries", remapFks(row, { users: userIdMap }))) summary.stage_time_entries_inserted++;
+    }
+    for (const row of spUploads) {
+      if (await insertOrIgnore(prod, "sharepoint_uploads", remapFks(row, { users: userIdMap }))) summary.sharepoint_uploads_inserted++;
+    }
+    for (const row of spFolderVis) {
+      if (await insertOrIgnore(prod, "sharepoint_folder_visibility", remapFks(row, { users: userIdMap }))) summary.sharepoint_folder_visibility_inserted++;
     }
 
     // Documents — copy each blob from R2_STAGING to R2 first, then insert
@@ -441,7 +463,8 @@ function remapFks(
   const userCols = new Set([
     "pm_user_id", "assignee_user_id", "owner_user_id", "author_user_id",
     "graduated_by", "conducted_by_user_id", "reviewed_by_user_id",
-    "uploaded_by", "user_id", "sender_user_id", "recipient_user_id",
+    "uploaded_by", "uploaded_by_user_id", "set_by_user_id", "user_id",
+    "sender_user_id", "recipient_user_id",
     "manager_id", "created_by", "pf_ae_user_id", "pf_sa_user_id", "pf_csm_user_id",
   ]);
   const customerCols = new Set(["customer_id"]);
