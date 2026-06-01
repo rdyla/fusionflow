@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
+import { syncSolutionStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -499,6 +500,8 @@ app.put("/:id/needs-assessments/:type", async (c) => {
 
   if (!row) throw new HTTPException(500, { message: "Failed to retrieve assessment" });
 
+  await syncSolutionStatus(c.env.DB, solutionId);
+
   return c.json({
     ...row,
     answers: parseAnswers(row.answers as string),
@@ -527,6 +530,8 @@ app.delete("/:id/needs-assessments/:type", async (c) => {
   await c.env.DB.prepare("DELETE FROM needs_assessments WHERE solution_id = ? AND solution_type = ?")
     .bind(solutionId, solutionType)
     .run();
+
+  await syncSolutionStatus(c.env.DB, solutionId);
 
   return c.json({ success: true });
 });

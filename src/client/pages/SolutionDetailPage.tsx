@@ -279,13 +279,9 @@ export default function SolutionDetailPage() {
     }
   }
 
-  async function advanceStatus() {
-    if (!solution) return;
-    const idx = STATUS_FLOW.indexOf(solution.status);
-    if (idx < 0 || idx >= STATUS_FLOW.length - 1) return;
-    const next = STATUS_FLOW[idx + 1];
-    await save({ status: next });
-  }
+  // advanceStatus retired May-2026 — solution stage now auto-derives
+  // server-side from NA / LE / SOW artifacts (teamUtils.syncSolutionStatus).
+  // SAs only set terminal states manually (Mark Lost / Reopen).
 
   async function markLost() {
     await save({ status: "lost" });
@@ -333,7 +329,6 @@ export default function SolutionDetailPage() {
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
 
   const statusIdx = STATUS_FLOW.indexOf(solution.status);
-  const canAdvance = canEdit && statusIdx >= 0 && statusIdx < STATUS_FLOW.length - 1;
 
   const solutionJourneys = parseSolutionJourneys(solution);
   const nonUcJourneys = solutionJourneys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
@@ -393,86 +388,97 @@ export default function SolutionDetailPage() {
         </div>
       )}
 
-      {/* Customer Metadata Section */}
-      {solution.customer_id && (
-        <div style={{ background: "#fff", borderRadius: 10, border: "1px solid rgba(0,0,0,0.07)", marginBottom: 20, overflow: "hidden" }}>
-          <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.06)", background: "rgba(11,154,173,0.03)", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 4 }}>Customer</div>
-              <Link to={`/customers/${solution.customer_id}`} style={{ fontSize: 18, fontWeight: 700, color: "#1e293b", textDecoration: "none" }}>
-                {solution.customer_name} <span style={{ fontSize: 13, color: "#0b9aad" }}>↗</span>
+      {/* Slim solution meta — solution name (with inline rename) + customer
+          link + SharePoint link. Mirrors the Projects detail page's tight
+          meta card (PR #263). The AE / SA / CSM customer team chips render
+          in their own Account Team card below so the header stays read-once. */}
+      <div className="ms-card" style={{ padding: "16px 24px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            {renamingTitle ? (
+              <input
+                className="ms-input"
+                autoFocus
+                value={titleDraft}
+                style={{ fontSize: 22, fontWeight: 700, padding: "4px 8px", margin: "0 0 4px" }}
+                onChange={(e) => setTitleDraft(e.target.value)}
+                onBlur={async () => {
+                  if (titleDraft.trim() && titleDraft.trim() !== solution.name) {
+                    await save({ name: titleDraft.trim() });
+                  }
+                  setRenamingTitle(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                  if (e.key === "Escape") setRenamingTitle(false);
+                }}
+              />
+            ) : (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <h1 style={{ margin: "0 0 4px", fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{solution.name}</h1>
+                {canEdit && (
+                  <button
+                    onClick={() => { setTitleDraft(solution.name); setRenamingTitle(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
+                    title="Rename solution"
+                  >
+                    ✏
+                  </button>
+                )}
+              </div>
+            )}
+            {solution.customer_id && (
+              <Link to={`/customers/${solution.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                {solution.customer_name} <span style={{ fontSize: 11 }}>↗</span>
               </Link>
-            </div>
-            {solution.customer_sharepoint_url && (
-              <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                SharePoint ↗
-              </a>
             )}
           </div>
-          {(solution.customer_pf_ae_name || solution.customer_pf_sa_name || solution.customer_pf_csm_name) && (
-            <div style={{ padding: "14px 20px", display: "flex", gap: 10, flexWrap: "wrap" }}>
-              {[
-                { role: "Account Executive", name: solution.customer_pf_ae_name, email: solution.customer_pf_ae_email },
-                { role: "Solution Architect", name: solution.customer_pf_sa_name, email: solution.customer_pf_sa_email },
-                { role: "Client Success Manager", name: solution.customer_pf_csm_name, email: solution.customer_pf_csm_email },
-              ].filter(m => m.name).map((m) => {
-                const photo = m.email ? customerTeamPhotoMap[m.email] : null;
-                const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
-                return (
-                  <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    {photo
-                      ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                    }
-                    <div>
-                      <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+          {solution.customer_sharepoint_url && (
+            <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+              SharePoint ↗
+            </a>
           )}
+        </div>
+      </div>
+
+      {/* Account Team card — was inline on the old customer-meta card; moved
+          here to mirror the Projects Overview "Account Team" treatment. */}
+      {(solution.customer_pf_ae_name || solution.customer_pf_sa_name || solution.customer_pf_csm_name) && (
+        <div className="ms-card" style={{ padding: "14px 20px", marginBottom: 20 }}>
+          <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#94a3b8", marginBottom: 10 }}>Account Team</div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            {[
+              { role: "Account Executive", name: solution.customer_pf_ae_name, email: solution.customer_pf_ae_email },
+              { role: "Solution Architect", name: solution.customer_pf_sa_name, email: solution.customer_pf_sa_email },
+              { role: "Client Success Manager", name: solution.customer_pf_csm_name, email: solution.customer_pf_csm_email },
+            ].filter(m => m.name).map((m) => {
+              const photo = m.email ? customerTeamPhotoMap[m.email] : null;
+              const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
+              return (
+                <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
+                  {photo
+                    ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                  }
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
-      {/* Header */}
+      {/* Header — types + status pills, staff-only CRM-sync inputs, and
+          terminal-state actions. The rename UI lives in the slim meta card
+          above; the Advance button was retired with the status
+          auto-derivation (May-2026). */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 24, flexWrap: "wrap" }}>
         <div>
-          {renamingTitle ? (
-            <input
-              className="ms-input"
-              autoFocus
-              value={titleDraft}
-              style={{ fontSize: 20, fontWeight: 700, padding: "4px 8px", marginBottom: 0 }}
-              onChange={(e) => setTitleDraft(e.target.value)}
-              onBlur={async () => {
-                if (titleDraft.trim() && titleDraft.trim() !== solution.name) {
-                  await save({ name: titleDraft.trim() });
-                }
-                setRenamingTitle(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-                if (e.key === "Escape") setRenamingTitle(false);
-              }}
-            />
-          ) : (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{solution.name}</h1>
-              {canEdit && (
-                <button
-                  onClick={() => { setTitleDraft(solution.name); setRenamingTitle(true); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: "#94a3b8", fontSize: 14, padding: "2px 4px", lineHeight: 1 }}
-                  title="Rename solution"
-                >
-                  ✏
-                </button>
-              )}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
             <SolutionTypePills types={solution.solution_types} emptyFallback={null} />
             {solution.other_technologies.length > 0 && (
               <span style={{ display: "inline-flex", flexWrap: "wrap", gap: 6 }}>
@@ -546,14 +552,11 @@ export default function SolutionDetailPage() {
           )}
         </div>
 
-        {/* Status actions */}
+        {/* Status actions — Advance retired May-2026 (stage now auto-derives
+            from NA / LE / SOW artifacts). Only terminal-state controls stay
+            manual. */}
         {canEdit && (
           <div style={{ display: "flex", gap: 8 }}>
-            {canAdvance && (
-              <button className="ms-btn-primary" onClick={advanceStatus} disabled={saving}>
-                Advance → {STATUS_LABELS[STATUS_FLOW[statusIdx + 1]]}
-              </button>
-            )}
             {solution.status !== "lost" && solution.status !== "won" && (
               <button
                 className="ms-btn-ghost"
@@ -1346,8 +1349,13 @@ export default function SolutionDetailPage() {
               Advanced AND Basic (non-combo) modes. Hidden in Tiered (trivial,
               not spec'd) and Basic+combo (the CcaasComboCalculator on the Labor
               tab owns combo sizing). In Advanced it shows hours-driving scoping;
-              in Basic it shows the flat-price inputs + breakdown. */}
-          {solution.pricing_mode !== "tiered" && (
+              in Basic it shows the flat-price inputs + breakdown.
+
+              Staff-only: this is the pricing math (sizing inputs, combo
+              calculator, line-item breakdown). Clients never see how the price
+              is derived — they get the generic pricing summary (SowAddOnsEditor)
+              + the rendered SOW document below. */}
+          {!isClient && solution.pricing_mode !== "tiered" && (
             <SowSizingForm
               solution={solution}
               needsAssessments={needsAssessments}

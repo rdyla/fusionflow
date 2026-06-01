@@ -5,6 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { parseSolutionTypes } from "../../shared/solutionTypes";
 import { sowDataToEngineAnswers } from "../../shared/sowDataToEngineAnswers";
 import { recomputeSowTotal } from "../lib/sowTotal";
+import { syncSolutionStatus } from "../lib/teamUtils";
 import type { D1Database } from "@cloudflare/workers-types";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -690,6 +691,7 @@ app.put("/:id/labor-estimates/:type", async (c) => {
 
   // Hours just changed → keep solutions.sow_total_amount in sync.
   await recomputeSowTotal(c.env.DB, solutionId);
+  await syncSolutionStatus(c.env.DB, solutionId);
 
   return c.json(shapeEstimateRow(row));
 });
@@ -709,6 +711,7 @@ app.delete("/:id/labor-estimates/:type", async (c) => {
     .run();
 
   await recomputeSowTotal(c.env.DB, solutionId);
+  await syncSolutionStatus(c.env.DB, solutionId);
 
   return c.json({ success: true });
 });
