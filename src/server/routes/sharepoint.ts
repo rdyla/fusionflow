@@ -133,13 +133,15 @@ app.post("/folder", async (c) => {
 });
 
 // PATCH /api/sharepoint/folder/visibility
-// Body: { sp_item_id, web_url, project_id?, visible: boolean }
+// Body: { sp_item_id, web_url, project_id?, solution_id?, visible: boolean }
 // Upserts a folder's client/partner visibility. Editor-only (clients can't
-// see the toggle; this guards the API regardless).
+// see the toggle; this guards the API regardless). project_id / solution_id
+// just scope ownership — the filtering in /files keys on sp_item_id + web_url
+// regardless, so the same row format serves both project and solution folders.
 app.patch("/folder/visibility", async (c) => {
   const auth = c.get("auth");
   if (isExternalRole(auth?.role)) return c.json({ error: "Forbidden" }, 403);
-  let body: { sp_item_id?: string; web_url?: string; project_id?: string | null; visible?: boolean };
+  let body: { sp_item_id?: string; web_url?: string; project_id?: string | null; solution_id?: string | null; visible?: boolean };
   try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
   if (!body.sp_item_id) return c.json({ error: "sp_item_id required" }, 400);
 
@@ -147,16 +149,17 @@ app.patch("/folder/visibility", async (c) => {
     await c.env.DB
       .prepare(
         `INSERT INTO sharepoint_folder_visibility
-           (sp_item_id, project_id, web_url, visible_to_client, set_by_user_id, updated_at)
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           (sp_item_id, project_id, solution_id, web_url, visible_to_client, set_by_user_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(sp_item_id) DO UPDATE SET
            project_id        = excluded.project_id,
+           solution_id       = excluded.solution_id,
            web_url           = excluded.web_url,
            visible_to_client = excluded.visible_to_client,
            set_by_user_id    = excluded.set_by_user_id,
            updated_at        = CURRENT_TIMESTAMP`
       )
-      .bind(body.sp_item_id, body.project_id ?? null, body.web_url ?? null, body.visible ? 1 : 0, auth?.user?.id ?? null)
+      .bind(body.sp_item_id, body.project_id ?? null, body.solution_id ?? null, body.web_url ?? null, body.visible ? 1 : 0, auth?.user?.id ?? null)
       .run();
     return c.json({ ok: true, visible: !!body.visible });
   } catch (err) {

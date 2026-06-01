@@ -190,6 +190,7 @@ export type Solution = {
   customer_pf_csm_name: string | null;
   customer_pf_csm_email: string | null;
   customer_sharepoint_url: string | null;
+  sharepoint_folder_url: string | null;
   journeys: string | null; // JSON array of journey keys
 };
 
@@ -1709,8 +1710,9 @@ export const api = {
       { method: "POST", body: JSON.stringify({ name }) }
     ),
 
-  /** Toggle whether a folder is visible to client/partner roles. Editor-only. */
-  spSetFolderVisibility: (input: { sp_item_id: string; web_url: string; project_id?: string | null; visible: boolean }) =>
+  /** Toggle whether a folder is visible to client/partner roles. Editor-only.
+   *  Pass project_id OR solution_id depending on which side owns the folder. */
+  spSetFolderVisibility: (input: { sp_item_id: string; web_url: string; project_id?: string | null; solution_id?: string | null; visible: boolean }) =>
     request<{ ok: boolean; visible: boolean }>(`/sharepoint/folder/visibility`, {
       method: "PATCH",
       body: JSON.stringify(input),
@@ -1722,6 +1724,14 @@ export const api = {
    *  on the SharePoint tab for projects created before the auto-create. */
   ensureProjectSharePointFolder: (projectId: string) =>
     request<{ sharepoint_folder_url: string; reused: boolean }>(`/projects/${projectId}/sharepoint-folder`, {
+      method: "POST",
+    }),
+
+  /** Create (or adopt an existing) per-solution SharePoint folder under the
+   *  customer's SP root. Idempotent. Mirrors ensureProjectSharePointFolder for
+   *  the "Create solution folder" button on the SharePoint tab. */
+  ensureSolutionSharePointFolder: (solutionId: string) =>
+    request<{ sharepoint_folder_url: string; reused: boolean }>(`/solutions/${solutionId}/sharepoint-folder`, {
       method: "POST",
     }),
 
