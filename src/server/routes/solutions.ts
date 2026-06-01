@@ -5,7 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
-import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution } from "../lib/teamUtils";
+import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution, syncSolutionStatus } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { notifyZoomChat } from "../lib/notifications";
@@ -381,6 +381,11 @@ const updateSolutionSchema = z.object({
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
   other_technologies: z.array(z.enum(OTHER_TECHNOLOGIES)).optional(),
   journeys: z.array(z.string()).nullable().optional(),
+  // Solution status auto-derives from NA / LE / SOW artifacts (May-2026) via
+  // teamUtils.syncSolutionStatus, run after every artifact write. SAs can
+  // still set terminal states manually (Mark Lost / Reopen-to-draft via the
+  // existing buttons), so the enum stays open; syncSolutionStatus
+  // short-circuits when status is 'won' or 'lost'.
   status: z.enum(["draft", "assessment", "requirements", "scope", "handoff", "won", "lost"]).optional(),
   partner_ae_user_id: z.string().nullable().optional(),
   partner_ae_name: z.string().nullable().optional(),
@@ -593,6 +598,12 @@ app.patch("/:id", async (c) => {
     await recomputeSowTotal(db, solutionId);
   }
 
+  // Pipeline stage auto-derives from the artifacts (NA / LE / SOW). The
+  // PATCH may have touched sow_data, solution_types, or simply nudged fields
+  // that change derivation inputs; safe to re-sync every time. Short-circuits
+  // on terminal won/lost so Mark Lost stays sticky.
+  await syncSolutionStatus(db, solutionId);
+
   // Resync the bound D365 opportunity whenever any field that maps onto
   // the D365 opp could have changed. Includes the pricing path because
   // recomputeSowTotal() above can change sow_total_amount → actualvalue
@@ -722,6 +733,10 @@ app.post("/:id/sow-version", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_cs
     .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .bind(JSON.stringify(meta), solutionId)
     .run();
+
+  // A new SOW revision can flip the solution from "scope" to "handoff" once
+  // NA + LE are also complete. Cheap to re-sync; safe to run unconditionally.
+  await syncSolutionStatus(db, solutionId);
 
   return c.json({ sow_metadata: meta, new_revision: newRev });
 });
