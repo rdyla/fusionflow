@@ -174,6 +174,14 @@ app.post("/promote", async (c) => {
     customerIdMap.set(c2.id, byCrm ?? byName ?? c2.id);
   }
 
+  // Ids that exist (or will be inserted) on prod. remapFks nulls any user/
+  // customer FK whose target isn't in these sets, so we never carry a
+  // dangling staging id into prod (which trips the FK constraint). Seeded
+  // with prod ids; the insert steps below add the staging ids they bring over.
+  const userPresent = new Set<string>(prodUsers.map((u) => u.id));
+  const customerPresent = new Set<string>(prodCustomers.map((c2) => c2.id));
+  const maps: RemapMaps = { users: userIdMap, customers: customerIdMap, userPresent, customerPresent };
+
   // ── Stage 2: gather full rows for the transitive closure ────────────
   // Walk down from the selected items and pull all the dependent rows we'll
   // need to insert. Track the set of project_ids we touch — those drive KV
@@ -209,6 +217,11 @@ app.post("/promote", async (c) => {
   const optAccs = optimize_account_ids.length > 0
     ? await all<Row>(staging, `SELECT * FROM optimize_accounts WHERE id IN (${qs(optimize_account_ids)})`, ...optimize_account_ids)
     : [];
+  // Optimize accounts carry their own customer_id (separate from the project's)
+  // — capture it so 3b inserts that customer and the ref resolves.
+  for (const oa of optAccs) {
+    if (oa.customer_id) touchedCustomerIds.add(oa.customer_id as string);
+  }
   const optProjectIds = optAccs.map((o) => o.project_id as string);
   const optProjects = optProjectIds.length > 0
     ? await all<Row>(staging, `SELECT * FROM projects WHERE id IN (${qs(optProjectIds)})`, ...optProjectIds)
@@ -257,9 +270,30 @@ app.post("/promote", async (c) => {
     skipped: [] as Array<{ kind: string; id: string; reason: string }>,
   };
 
+  // Bring a single staging user over to prod on demand (used for the NOT NULL
+  // assignment tables so "engineer 123 on project xyz" survives the promote).
+  // Idempotent: resolves to an email-matched prod user, an already-inserted
+  // user, or inserts the staging row. After this, remapFks resolves the ref
+  // instead of nulling it. Returns nothing — callers re-run remapFks.
+  const ensuredUsers = new Set<string>();
+  async function ensureUserOnProd(stagingUserId: string): Promise<void> {
+    const mapped = userIdMap.get(stagingUserId) ?? stagingUserId;
+    if (userPresent.has(mapped)) return;       // already resolvable
+    if (ensuredUsers.has(stagingUserId)) return; // tried this one already
+    ensuredUsers.add(stagingUserId);
+    const u = (await all<Row>(staging, "SELECT * FROM users WHERE id = ? LIMIT 1", stagingUserId))[0];
+    if (!u) return;
+    const exists = prodUserByEmail.get((u.email as string).toLowerCase());
+    if (exists) { userIdMap.set(stagingUserId, exists); return; }
+    userPresent.add(u.id as string); // pre-mark so the user's own manager_id remaps rather than nulls
+    if (await insertOrIgnore(prod, "users", remapFks(u, maps))) summary.users_inserted++;
+  }
+
   // 3a. Insert touched users that aren't already on prod.
-  const userIdsToFetch = [...touchedUserIds].filter((id) => userIdMap.get(id) === id && !prodUsers.find((u) => u.id === id));
+  const userIdsToFetch = [...touchedUserIds].filter((id) => userIdMap.get(id) === id && !userPresent.has(id));
   if (userIdsToFetch.length > 0) {
+    // Pre-mark so intra-batch manager_id refs resolve instead of nulling.
+    for (const id of userIdsToFetch) userPresent.add(id);
     const userRows = await all<Row>(staging, `SELECT * FROM users WHERE id IN (${qs(userIdsToFetch)})`, ...userIdsToFetch);
     for (const u of userRows) {
       // Don't migrate as-is if email collides with a different prod user — already remapped above.
@@ -268,17 +302,19 @@ app.post("/promote", async (c) => {
         userIdMap.set(u.id as string, exists);
         continue;
       }
-      const inserted = await insertOrIgnore(prod, "users", u);
+      const inserted = await insertOrIgnore(prod, "users", remapFks(u, maps));
       if (inserted) summary.users_inserted++;
     }
   }
 
   // 3b. Insert touched customers that aren't already on prod.
-  const customerIdsToFetch = [...touchedCustomerIds].filter((id) => customerIdMap.get(id) === id && !prodCustomers.find((c2) => c2.id === id));
+  const customerIdsToFetch = [...touchedCustomerIds].filter((id) => customerIdMap.get(id) === id && !customerPresent.has(id));
   if (customerIdsToFetch.length > 0) {
+    // Pre-mark so dependent rows' customer_id resolves once we insert these.
+    for (const id of customerIdsToFetch) customerPresent.add(id);
     const custRows = await all<Row>(staging, `SELECT * FROM customers WHERE id IN (${qs(customerIdsToFetch)})`, ...customerIdsToFetch);
     for (const cu of custRows) {
-      const remapped = remapFks(cu, { users: userIdMap, customers: customerIdMap });
+      const remapped = remapFks(cu, maps);
       const inserted = await insertOrIgnore(prod, "customers", remapped);
       if (inserted) summary.customers_inserted++;
     }
@@ -286,7 +322,7 @@ app.post("/promote", async (c) => {
 
   // 3c. Insert projects (selected + optimize-linked).
   for (const p of allProjectsToMigrate) {
-    const remapped = remapFks(p, { users: userIdMap, customers: customerIdMap });
+    const remapped = remapFks(p, maps);
     const inserted = await insertOrIgnore(prod, "projects", remapped);
     if (inserted) summary.projects_inserted++;
   }
@@ -312,36 +348,42 @@ app.post("/promote", async (c) => {
       all<Row>(staging, "SELECT * FROM sharepoint_folder_visibility WHERE project_id = ?", projectId).catch(() => [] as Row[]),
     ]);
     for (const row of stages) {
-      if (await insertOrIgnore(prod, "stages", remapFks(row, { users: userIdMap }))) summary.stages_inserted++;
+      if (await insertOrIgnore(prod, "stages", remapFks(row, maps))) summary.stages_inserted++;
     }
     for (const row of tasks) {
-      if (await insertOrIgnore(prod, "tasks", remapFks(row, { users: userIdMap }))) summary.tasks_inserted++;
+      if (await insertOrIgnore(prod, "tasks", remapFks(row, maps))) summary.tasks_inserted++;
     }
     for (const row of risks) {
-      if (await insertOrIgnore(prod, "risks", remapFks(row, { users: userIdMap }))) summary.risks_inserted++;
+      if (await insertOrIgnore(prod, "risks", remapFks(row, maps))) summary.risks_inserted++;
     }
     for (const row of notes) {
-      if (await insertOrIgnore(prod, "notes", remapFks(row, { users: userIdMap }))) summary.notes_inserted++;
+      if (await insertOrIgnore(prod, "notes", remapFks(row, maps))) summary.notes_inserted++;
     }
     for (const row of projectContacts) {
-      if (await insertOrIgnore(prod, "project_contacts", remapFks(row, { users: userIdMap }))) summary.project_contacts_inserted++;
+      if (await insertOrIgnore(prod, "project_contacts", remapFks(row, maps))) summary.project_contacts_inserted++;
     }
     for (const row of projectStaff) {
-      if (await insertOrIgnore(prod, "project_staff", remapFks(row, { users: userIdMap }))) summary.project_staff_inserted++;
+      if (row.user_id) await ensureUserOnProd(row.user_id as string);
+      const r = remapFks(row, maps);
+      if (r.user_id == null) { summary.skipped.push({ kind: "project_staff", id: row.id as string, reason: "assigned user not on prod" }); continue; }
+      if (await insertOrIgnore(prod, "project_staff", r)) summary.project_staff_inserted++;
     }
     for (const row of projectAccess) {
-      if (await insertOrIgnore(prod, "project_access", remapFks(row, { users: userIdMap }))) summary.project_access_inserted++;
+      if (row.user_id) await ensureUserOnProd(row.user_id as string);
+      const r = remapFks(row, maps);
+      if (r.user_id == null) { summary.skipped.push({ kind: "project_access", id: row.id as string, reason: "user not on prod" }); continue; }
+      if (await insertOrIgnore(prod, "project_access", r)) summary.project_access_inserted++;
     }
     // stage_time_entries inserts after stages above so the stage_id FK
     // (ON DELETE CASCADE → stages) is satisfied.
     for (const row of timeEntries) {
-      if (await insertOrIgnore(prod, "stage_time_entries", remapFks(row, { users: userIdMap }))) summary.stage_time_entries_inserted++;
+      if (await insertOrIgnore(prod, "stage_time_entries", remapFks(row, maps))) summary.stage_time_entries_inserted++;
     }
     for (const row of spUploads) {
-      if (await insertOrIgnore(prod, "sharepoint_uploads", remapFks(row, { users: userIdMap }))) summary.sharepoint_uploads_inserted++;
+      if (await insertOrIgnore(prod, "sharepoint_uploads", remapFks(row, maps))) summary.sharepoint_uploads_inserted++;
     }
     for (const row of spFolderVis) {
-      if (await insertOrIgnore(prod, "sharepoint_folder_visibility", remapFks(row, { users: userIdMap }))) summary.sharepoint_folder_visibility_inserted++;
+      if (await insertOrIgnore(prod, "sharepoint_folder_visibility", remapFks(row, maps))) summary.sharepoint_folder_visibility_inserted++;
     }
 
     // Documents — copy each blob from R2_STAGING to R2 first, then insert
@@ -363,7 +405,7 @@ app.post("/promote", async (c) => {
           });
           summary.r2_documents_copied++;
         }
-        if (await insertOrIgnore(prod, "documents", remapFks(row, { users: userIdMap }))) summary.documents_inserted++;
+        if (await insertOrIgnore(prod, "documents", remapFks(row, maps))) summary.documents_inserted++;
       } catch (err) {
         summary.skipped.push({ kind: "document", id: row.id as string, reason: err instanceof Error ? err.message : String(err) });
       }
@@ -372,7 +414,7 @@ app.post("/promote", async (c) => {
 
   // 3e. Solutions + their dependents.
   for (const s of sols) {
-    const remapped = remapFks(s, { users: userIdMap, customers: customerIdMap });
+    const remapped = remapFks(s, maps);
     if (await insertOrIgnore(prod, "solutions", remapped)) summary.solutions_inserted++;
 
     const [needsAss, labor, contacts, staff] = await Promise.all([
@@ -382,22 +424,25 @@ app.post("/promote", async (c) => {
       all<Row>(staging, "SELECT * FROM solution_staff     WHERE solution_id = ?", s.id).catch(() => [] as Row[]),
     ]);
     for (const row of needsAss) {
-      if (await insertOrIgnore(prod, "needs_assessments", remapFks(row, { users: userIdMap }))) summary.needs_assessments_inserted++;
+      if (await insertOrIgnore(prod, "needs_assessments", remapFks(row, maps))) summary.needs_assessments_inserted++;
     }
     for (const row of labor) {
-      if (await insertOrIgnore(prod, "labor_estimates", remapFks(row, { users: userIdMap }))) summary.labor_estimates_inserted++;
+      if (await insertOrIgnore(prod, "labor_estimates", remapFks(row, maps))) summary.labor_estimates_inserted++;
     }
     for (const row of contacts) {
-      if (await insertOrIgnore(prod, "solution_contacts", remapFks(row, { users: userIdMap }))) summary.solution_contacts_inserted++;
+      if (await insertOrIgnore(prod, "solution_contacts", remapFks(row, maps))) summary.solution_contacts_inserted++;
     }
     for (const row of staff) {
-      if (await insertOrIgnore(prod, "solution_staff", remapFks(row, { users: userIdMap }))) summary.solution_staff_inserted++;
+      if (row.user_id) await ensureUserOnProd(row.user_id as string);
+      const r = remapFks(row, maps);
+      if (r.user_id == null) { summary.skipped.push({ kind: "solution_staff", id: row.id as string, reason: "assigned user not on prod" }); continue; }
+      if (await insertOrIgnore(prod, "solution_staff", r)) summary.solution_staff_inserted++;
     }
   }
 
   // 3f. Optimize accounts + their dependents.
   for (const oa of optAccs) {
-    const remapped = remapFks(oa, { users: userIdMap, customers: customerIdMap });
+    const remapped = remapFks(oa, maps);
     if (await insertOrIgnore(prod, "optimize_accounts", remapped)) summary.optimize_accounts_inserted++;
 
     const projectId = oa.project_id as string;
@@ -408,16 +453,16 @@ app.post("/promote", async (c) => {
       all<Row>(staging, "SELECT * FROM utilization_snapshots  WHERE project_id = ?", projectId),
     ]);
     for (const row of impacts) {
-      if (await insertOrIgnore(prod, "impact_assessments", remapFks(row, { users: userIdMap }))) summary.impact_assessments_inserted++;
+      if (await insertOrIgnore(prod, "impact_assessments", remapFks(row, maps))) summary.impact_assessments_inserted++;
     }
     for (const row of tech) {
-      if (await insertOrIgnore(prod, "account_tech_stack", remapFks(row, { users: userIdMap }))) summary.tech_stack_inserted++;
+      if (await insertOrIgnore(prod, "account_tech_stack", remapFks(row, maps))) summary.tech_stack_inserted++;
     }
     for (const row of roadmap) {
-      if (await insertOrIgnore(prod, "roadmap_items", remapFks(row, { users: userIdMap }))) summary.roadmap_inserted++;
+      if (await insertOrIgnore(prod, "roadmap_items", remapFks(row, maps))) summary.roadmap_inserted++;
     }
     for (const row of util) {
-      if (await insertOrIgnore(prod, "utilization_snapshots", row)) summary.utilization_inserted++;
+      if (await insertOrIgnore(prod, "utilization_snapshots", remapFks(row, maps))) summary.utilization_inserted++;
     }
   }
 
@@ -448,32 +493,45 @@ function qs(arr: unknown[]): string {
   return arr.map(() => "?").join(",");
 }
 
+type RemapMaps = {
+  users: Map<string, string>;
+  customers: Map<string, string>;
+  /** ids known to exist (or about to be inserted) on prod. A user/customer
+   *  FK whose resolved target isn't in here is nulled out — keeping a dangling
+   *  staging id would trip the FK constraint on insert. */
+  userPresent: Set<string>;
+  customerPresent: Set<string>;
+};
+
+const USER_FK_COLS = new Set([
+  "pm_user_id", "assignee_user_id", "owner_user_id", "author_user_id",
+  "graduated_by", "conducted_by_user_id", "reviewed_by_user_id",
+  "uploaded_by", "uploaded_by_user_id", "set_by_user_id", "user_id",
+  "sender_user_id", "recipient_user_id",
+  "manager_id", "created_by", "pf_ae_user_id", "pf_sa_user_id", "pf_csm_user_id",
+]);
+const CUSTOMER_FK_COLS = new Set(["customer_id"]);
+
 /**
- * Rewrite FK columns in `row` according to the provided ID maps. Pure data
- * transform — doesn't touch the database. Returns a new row with the same
- * shape, with mapped FK values substituted in.
+ * Rewrite user/customer FK columns in `row` from staging ids to prod ids.
+ * Pure data transform — doesn't touch the database.
  *
- * Map entries: column names like `pm_user_id`, `customer_id`, `author_user_id`.
- * Unrecognized FK columns just pass through unchanged.
+ * A reference is REMAPPED when its target exists on prod (matched user/customer
+ * or one we're bringing over), and NULLED when it doesn't — a staging-only id
+ * carried into prod would fail the foreign-key constraint. The three NOT NULL
+ * join tables (solution_staff / project_staff / project_access) can't take a
+ * null user_id, so their callers skip the row instead (see promote loop).
+ * Non-FK columns (project_id, stage_id, solution_id, …) pass through unchanged.
  */
-function remapFks(
-  row: Row,
-  maps: { users?: Map<string, string>; customers?: Map<string, string> },
-): Row {
-  const userCols = new Set([
-    "pm_user_id", "assignee_user_id", "owner_user_id", "author_user_id",
-    "graduated_by", "conducted_by_user_id", "reviewed_by_user_id",
-    "uploaded_by", "uploaded_by_user_id", "set_by_user_id", "user_id",
-    "sender_user_id", "recipient_user_id",
-    "manager_id", "created_by", "pf_ae_user_id", "pf_sa_user_id", "pf_csm_user_id",
-  ]);
-  const customerCols = new Set(["customer_id"]);
+function remapFks(row: Row, maps: RemapMaps): Row {
   const out: Row = {};
   for (const [k, v] of Object.entries(row)) {
-    if (typeof v === "string" && maps.users && userCols.has(k)) {
-      out[k] = maps.users.get(v) ?? v;
-    } else if (typeof v === "string" && maps.customers && customerCols.has(k)) {
-      out[k] = maps.customers.get(v) ?? v;
+    if (typeof v === "string" && USER_FK_COLS.has(k)) {
+      const mapped = maps.users.get(v) ?? v;
+      out[k] = maps.userPresent.has(mapped) ? mapped : null;
+    } else if (typeof v === "string" && CUSTOMER_FK_COLS.has(k)) {
+      const mapped = maps.customers.get(v) ?? v;
+      out[k] = maps.customerPresent.has(mapped) ? mapped : null;
     } else {
       out[k] = v;
     }
