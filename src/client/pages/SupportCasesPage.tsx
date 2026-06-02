@@ -111,7 +111,7 @@ export default function SupportCasesPage() {
 
   return (
     <div style={{ maxWidth: 1200, margin: "0 auto" }}>
-      {isStaff && (
+      {isStaff && !user?.isPartnerAe && (
         <div style={{ display: "flex", gap: 4, marginBottom: 16, borderBottom: "1px solid #e2e8f0" }}>
           <button onClick={() => navigate("/support/dashboard")}
             style={{ padding: "8px 14px", background: "transparent", border: "none", borderBottom: "2px solid transparent", fontSize: 13, fontWeight: 600, color: "#64748b", cursor: "pointer" }}>
@@ -158,7 +158,7 @@ export default function SupportCasesPage() {
 
       {/* Filters */}
       <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", marginBottom: 16, alignItems: "center" }}>
-        {isStaff && (
+        {isStaff && !user?.isPartnerAe && (
           <>
             <button onClick={() => { setMineOnly(true); setPage(0); }}
               style={{ padding: "0.35rem 0.85rem", border: "1px solid #cbd5e1", borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: "pointer", background: mineOnly ? "#0891b2" : "#fff", color: mineOnly ? "#fff" : "#475569" }}>

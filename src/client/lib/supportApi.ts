@@ -2,6 +2,7 @@ export interface SupportUser {
   email: string;
   name: string | null;
   isInternal: boolean;
+  isPartnerAe: boolean;
   isSupportSupervisor: boolean;
   contactId: string | null;
   accountId: string | null;

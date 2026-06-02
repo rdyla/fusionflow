@@ -39,6 +39,7 @@ function notifTimeAgo(iso: string): string {
 export default function AppShell() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [isPartnerAe, setIsPartnerAe] = useState(false);
   const [canProspect, setCanProspect] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
@@ -86,6 +87,7 @@ export default function AppShell() {
         setCurrentUser(res.user);
         setIsAdmin(res.role === "admin" && !imp);
         setIsClient(res.role === "client");
+        setIsPartnerAe(res.role === "partner_ae");
         setCanProspect(["admin", "executive", "pf_ae", "partner_ae"].includes(res.role));
       })
       .catch(() => {});
@@ -165,7 +167,7 @@ export default function AppShell() {
       <nav style={{ flex: 1, paddingTop: 8, overflowY: "auto" }}>
         {!isClient && (
           <>
-            <SideLink to="/customers" icon={NAV_ICONS.customers} onClick={() => setDrawerOpen(false)}>Customers</SideLink>
+            {!isPartnerAe && <SideLink to="/customers" icon={NAV_ICONS.customers} onClick={() => setDrawerOpen(false)}>Customers</SideLink>}
             <SideLink to="/solutions" icon={NAV_ICONS.solutions} onClick={() => setDrawerOpen(false)}>Solutions</SideLink>
             <SideLink to="/dashboard" icon={NAV_ICONS.projects} onClick={() => setDrawerOpen(false)}>Projects</SideLink>
             <SideLink to="/optimize" icon={NAV_ICONS.optimizations} onClick={() => setDrawerOpen(false)}>Optimizations</SideLink>
