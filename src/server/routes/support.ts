@@ -6,6 +6,7 @@ import { sendEmail } from "../services/emailService";
 import { supportDigestEmail, type DigestEmailData } from "../lib/emailTemplates";
 import { isSupportSupervisor } from "../lib/permissions";
 import { notifyZoomNewCase } from "../lib/notifications";
+import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -13,6 +14,35 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 function isInternal(role: string): boolean {
   return role !== "client";
+}
+
+/**
+ * D365 account ids (GUIDs) where this user is the partner AE — via a solution
+ * (solutions.partner_ae_user_id or a solution_staff partner_ae row) OR a
+ * project (project_staff partner_ae row). Used to scope a partner AE's support
+ * visibility to their own customers' cases. Includes the user's reporting tree
+ * (getTeamUserIds), matching the solutions access model.
+ */
+async function partnerAeAccountIds(db: D1Database, userId: string): Promise<string[]> {
+  const teamIds = await getTeamUserIds(userId, db);
+  if (teamIds.length === 0) return [];
+  const ph = inPlaceholders(teamIds);
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT dynamics_account_id FROM (
+         SELECT dynamics_account_id FROM solutions
+           WHERE dynamics_account_id IS NOT NULL
+             AND (partner_ae_user_id IN (${ph})
+                  OR id IN (SELECT solution_id FROM solution_staff WHERE staff_role = 'partner_ae' AND user_id IN (${ph})))
+         UNION
+         SELECT dynamics_account_id FROM projects
+           WHERE dynamics_account_id IS NOT NULL
+             AND id IN (SELECT project_id FROM project_staff WHERE staff_role = 'partner_ae' AND user_id IN (${ph}))
+       )`
+    )
+    .bind(...teamIds, ...teamIds, ...teamIds)
+    .all<{ dynamics_account_id: string }>();
+  return (rows.results ?? []).map((r) => r.dynamics_account_id).filter(Boolean);
 }
 
 function stripHtml(html: string | null): string | null {
@@ -55,6 +85,7 @@ app.get("/me", (c) => {
     email: auth.user.email,
     name: auth.user.name,
     isInternal: internal,
+    isPartnerAe: auth.role === "partner_ae",
     isSupportSupervisor: isSupportSupervisor(auth),
     contactId: internal ? null : auth.user.id,
     accountId: internal ? null : (auth.user.dynamics_account_id ?? null),
@@ -90,7 +121,9 @@ app.get("/me/contacts", async (c) => {
 // GET /api/support/dashboard
 app.get("/dashboard", async (c) => {
   const auth = c.get("auth");
-  if (!isInternal(auth.role)) throw new HTTPException(403, { message: "Forbidden" });
+  // Partner AEs are "internal" but only see their own accounts' cases — the
+  // global dashboard (all-case aggregates) isn't theirs to see.
+  if (!isInternal(auth.role) || auth.role === "partner_ae") throw new HTTPException(403, { message: "Forbidden" });
 
   const now = Date.now();
   const WINDOW_DAYS = 30;
@@ -466,10 +499,23 @@ app.get("/cases", async (c) => {
   const auth = c.get("auth");
   const search = c.req.query("search")?.trim() ?? "";
   const internal = isInternal(auth.role);
+  const isPartnerAe = auth.role === "partner_ae";
 
   let filter: string;
 
-  if (internal) {
+  if (isPartnerAe) {
+    // Partner AEs see ONLY cases tied to accounts where they're the partner AE
+    // (via a solution or project). No accounts → no cases.
+    const accountIds = await partnerAeAccountIds(c.env.DB, auth.user.id);
+    if (accountIds.length === 0) return c.json([]);
+    const accountClause = accountIds.map((a) => `_customerid_value eq '${a.replace(/'/g, "''")}'`).join(" or ");
+    let baseFilter = `(${accountClause})`;
+    if (search) {
+      const s = search.replace(/'/g, "''");
+      baseFilter = `${baseFilter} and (contains(ticketnumber,'${s}') or contains(title,'${s}') or contains(description,'${s}'))`;
+    }
+    filter = baseFilter;
+  } else if (internal) {
     const mine = c.req.query("mine") === "true";
     const baseFilter = mine
       ? `owninguser/internalemailaddress eq '${auth.user.email.replace(/'/g, "''")}'`
@@ -535,6 +581,7 @@ app.get("/cases", async (c) => {
 
 // GET /api/support/cases/:id
 app.get("/cases/:id", async (c) => {
+  const auth = c.get("auth");
   const { id } = c.req.param();
   if (!isUuid(id)) return c.json({ error: "Invalid case id" }, 400);
 
@@ -549,6 +596,16 @@ app.get("/cases/:id", async (c) => {
   }
 
   const raw = await res.json() as any;
+
+  // Partner AEs may only open cases tied to their own accounts.
+  if (auth.role === "partner_ae") {
+    const accountIds = await partnerAeAccountIds(c.env.DB, auth.user.id);
+    const caseAccountId = (raw._customerid_value as string | null) ?? null;
+    if (!caseAccountId || !accountIds.includes(caseAccountId)) {
+      throw new HTTPException(403, { message: "Forbidden" });
+    }
+  }
+
   const caseData = {
     id: raw.incidentid,
     ticketNumber: raw.ticketnumber,

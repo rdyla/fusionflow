@@ -12,7 +12,10 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // ── Access helpers ─────────────────────────────────────────────────────────────
 
 function canViewCustomers(role: string): boolean {
-  return ["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "partner_ae", "client"].includes(role);
+  // partner_ae intentionally excluded — partner AEs don't get the Customers
+  // feature (they'd see every customer). They work via their assigned
+  // solutions/projects, which have their own per-AE access scoping.
+  return ["admin", "executive", "pm", "pf_ae", "pf_sa", "pf_csm", "pf_engineer", "client"].includes(role);
 }
 
 function canEditCustomer(role: string): boolean {
