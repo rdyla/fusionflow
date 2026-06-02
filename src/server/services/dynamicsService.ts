@@ -465,7 +465,7 @@ const OPP_TSB_DIRECT = 930680003;
 
 export async function createOpportunity(
   env: Env,
-  payload: { name: string; parentAccountId: string; revenueSource?: number },
+  payload: { name: string; parentAccountId: string; revenueSource?: number; estimatedCloseDate?: string },
 ): Promise<DynamicsOpportunity> {
   const body: Record<string, unknown> = {
     name: payload.name,
@@ -478,6 +478,9 @@ export async function createOpportunity(
   // time. syncOpportunityFromSolution deliberately does NOT touch this field,
   // so the selection sticks.
   if (payload.revenueSource != null) body.am_revenuesource = payload.revenueSource;
+  // Estimated close date — DateOnly field, sent as yyyy-MM-dd (D365 displays it
+  // M/d/yyyy). Provided by the SA on the create-opportunity form.
+  if (payload.estimatedCloseDate) body.estimatedclosedate = payload.estimatedCloseDate;
   // Owner = the account's owner (the assigned AE), not the app principal that
   // our Dynamics client-credentials calls authenticate as. Look it up off the
   // account and bind it; best-effort — fall back to the app principal on miss.

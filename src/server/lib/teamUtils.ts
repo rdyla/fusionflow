@@ -379,7 +379,7 @@ export async function syncOpportunityFromSolution(
     .prepare(
       `SELECT crm_opportunity_id, vendor, is_zoom_reseller, is_new_logo,
               deal_registration_id, status, sow_total_amount,
-              cloud_contract_expiration_date
+              cloud_contract_expiration_date, revenue_source, estimated_close_date
        FROM solutions WHERE id = ? LIMIT 1`
     )
     .bind(solutionId)
@@ -392,6 +392,8 @@ export async function syncOpportunityFromSolution(
       status: string | null;
       sow_total_amount: number | null;
       cloud_contract_expiration_date: string | null;
+      revenue_source: number | null;
+      estimated_close_date: string | null;
     }>();
   if (!row?.crm_opportunity_id) return;
 
@@ -410,9 +412,7 @@ export async function syncOpportunityFromSolution(
   const patch: Record<string, unknown> = {
     am_opportunitytype:       OPP_TYPE_CLOUDPRO,
     cr495_pfiproserv:         PROSERV_YES,
-    // am_tsb: Direct, or Carahsoft when this is a Zoom Reseller deal. (Revenue
-    // source is intentionally NOT set here — it's chosen by the SA when the
-    // opportunity is created and we don't want to clobber that selection.)
+    // am_tsb: Direct, or Carahsoft when this is a Zoom Reseller deal.
     am_tsb:                   row.is_zoom_reseller === 1 ? TSB_CARAHSOFT : TSB_DIRECT,
     am_opportunitysalesstage: salesStageForSolutionStatus(row.status),
     am_mrr:                   0,
@@ -423,6 +423,13 @@ export async function syncOpportunityFromSolution(
     am_cloudcontractexpiration: row.cloud_contract_expiration_date ?? null,
     cr495_dealregistrationid: row.deal_registration_id ?? null,
   };
+  // Revenue source + estimated close date: set from the solution's own fields
+  // (chosen at opp-create, editable in the solution overview). Only pushed when
+  // SET — a null solution value must NOT null an existing opp's CRM value
+  // (e.g. when the SA bound an existing opportunity).
+  if (row.revenue_source != null) patch.am_revenuesource = row.revenue_source;
+  const closeDate = (row.estimated_close_date ?? "").trim();
+  if (closeDate) patch.estimatedclosedate = closeDate;
   if (vendorGuid) {
     patch["am_OpportunityVendors@odata.bind"] = `/am_vendoraccounts(${vendorGuid})`;
   }
