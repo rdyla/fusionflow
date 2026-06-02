@@ -163,6 +163,9 @@ export default function SolutionsPage() {
   const [showCreateOpportunity, setShowCreateOpportunity] = useState(false);
   const [creatingOpportunity, setCreatingOpportunity] = useState(false);
   const [newOpportunityName, setNewOpportunityName] = useState("");
+  // am_revenuesource for a newly-created opp: Installed Base (930680000) |
+  // New Logo (930680001). Defaults to Installed Base (the common case).
+  const [newOpportunityRevenueSource, setNewOpportunityRevenueSource] = useState<930680000 | 930680001>(930680000);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -239,6 +242,7 @@ export default function SolutionsPage() {
       const created = await api.createDynamicsOpportunity({
         name: newOpportunityName.trim(),
         parent_account_id: form.dynamics_account_id,
+        revenue_source: newOpportunityRevenueSource,
       });
       // Push the new opp into the picker list AND auto-select it so the
       // SA doesn't have to scroll the dropdown for the row they just made.
@@ -246,6 +250,7 @@ export default function SolutionsPage() {
       setForm((f) => ({ ...f, crm_opportunity_id: created.opportunityid }));
       setShowCreateOpportunity(false);
       setNewOpportunityName("");
+      setNewOpportunityRevenueSource(930680000);
       showToast(`Created opportunity "${created.name}" in CRM.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create opportunity in CRM", "error");
@@ -558,8 +563,20 @@ export default function SolutionsPage() {
                       disabled={creatingOpportunity}
                     />
                   </label>
+                  <label className="ms-label">
+                    <span>Revenue source *</span>
+                    <select
+                      className="ms-input"
+                      value={newOpportunityRevenueSource}
+                      onChange={(e) => setNewOpportunityRevenueSource(Number(e.target.value) as 930680000 | 930680001)}
+                      disabled={creatingOpportunity}
+                    >
+                      <option value={930680000}>Installed Base</option>
+                      <option value={930680001}>New Logo</option>
+                    </select>
+                  </label>
                   <div style={{ fontSize: 11, color: "#64748b" }}>
-                    Bound to <strong>{form.customer_name}</strong>. SOW hours and Solution Architect populate later as the solution progresses.
+                    Bound to <strong>{form.customer_name}</strong>, owned by the account's AE. Revenue source type is set to Net New Revenue and TSB to Direct (Carahsoft for Zoom Reseller deals). SOW hours and Solution Architect populate later.
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button

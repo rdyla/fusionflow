@@ -457,15 +457,38 @@ export async function updateOpportunity(
 // customerid_account because some D365 configs require it on create.
 // pfi_sowhours / pfi_solutionarchitect intentionally left blank — those get
 // populated downstream as the solution progresses (per product direction).
+// am_revenuesourcetype option-set: Net New Revenue. am_tsb option-set: Direct.
+// Both are constants on the pre-sales opps we create here (TSB later flips to
+// Carahsoft via syncOpportunityFromSolution when the solution is Zoom Reseller).
+const OPP_REVENUE_SOURCE_TYPE_NET_NEW = 930680000;
+const OPP_TSB_DIRECT = 930680003;
+
 export async function createOpportunity(
   env: Env,
-  payload: { name: string; parentAccountId: string },
+  payload: { name: string; parentAccountId: string; revenueSource?: number },
 ): Promise<DynamicsOpportunity> {
   const body: Record<string, unknown> = {
     name: payload.name,
     "parentaccountid@odata.bind":    `/accounts(${payload.parentAccountId})`,
     "customerid_account@odata.bind": `/accounts(${payload.parentAccountId})`,
+    am_revenuesourcetype: OPP_REVENUE_SOURCE_TYPE_NET_NEW,
+    am_tsb: OPP_TSB_DIRECT,
   };
+  // Revenue source (Installed Base / New Logo) is chosen by the SA at create
+  // time. syncOpportunityFromSolution deliberately does NOT touch this field,
+  // so the selection sticks.
+  if (payload.revenueSource != null) body.am_revenuesource = payload.revenueSource;
+  // Owner = the account's owner (the assigned AE), not the app principal that
+  // our Dynamics client-credentials calls authenticate as. Look it up off the
+  // account and bind it; best-effort — fall back to the app principal on miss.
+  try {
+    const acct = await dynamicsGet<{ "_ownerid_value": string | null }>(
+      env,
+      `/accounts(${payload.parentAccountId})?$select=_ownerid_value`,
+    );
+    const ownerId = acct?.["_ownerid_value"];
+    if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
+  } catch { /* owner lookup is best-effort */ }
   const raw = await dynamicsPost<DynamicsOpportunity>(env, "/opportunities", body, { prefer: "return=representation" });
   return raw;
 }

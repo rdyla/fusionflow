@@ -1358,7 +1358,7 @@ export const api = {
    *  pfi_solutionarchitect get populated downstream as the solution
    *  progresses. Returns the new row so the caller can push it straight
    *  into the picker. */
-  createDynamicsOpportunity: (payload: { name: string; parent_account_id: string }) =>
+  createDynamicsOpportunity: (payload: { name: string; parent_account_id: string; revenue_source?: 930680000 | 930680001 }) =>
     request<DynamicsOpportunity>("/dynamics/opportunities", {
       method: "POST",
       body: JSON.stringify(payload),

@@ -83,6 +83,8 @@ app.post("/accounts", requireRole("admin", "pf_sa"), async (c) => {
 const createOpportunitySchema = z.object({
   name: z.string().min(1).max(300),
   parent_account_id: z.string().min(1),
+  // am_revenuesource option-set: Installed Base (930680000) | New Logo (930680001).
+  revenue_source: z.union([z.literal(930680000), z.literal(930680001)]).optional(),
 });
 app.post("/opportunities", requireRole("admin", "pf_sa"), async (c) => {
   const parsed = createOpportunitySchema.safeParse(await c.req.json().catch(() => ({})));
@@ -91,10 +93,10 @@ app.post("/opportunities", requireRole("admin", "pf_sa"), async (c) => {
     const detail = firstIssue ? `${firstIssue.path.join(".")}: ${firstIssue.message}` : "Invalid request body";
     throw new HTTPException(400, { message: detail });
   }
-  const { name, parent_account_id } = parsed.data;
+  const { name, parent_account_id, revenue_source } = parsed.data;
 
   try {
-    const opp = await createOpportunity(c.env, { name, parentAccountId: parent_account_id });
+    const opp = await createOpportunity(c.env, { name, parentAccountId: parent_account_id, revenueSource: revenue_source });
     return c.json(opp, 201);
   } catch (err) {
     console.error("Dynamics opportunity create error:", err);
