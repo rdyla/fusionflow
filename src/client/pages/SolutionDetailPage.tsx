@@ -548,6 +548,45 @@ export default function SolutionDetailPage() {
                 style={{ width: 170, padding: "3px 8px", fontSize: 12 }}
               />
             </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, color: "#64748b" }}>Revenue source:</span>
+              <select
+                className="ms-input"
+                value={solution.revenue_source ?? ""}
+                disabled={!canEdit || saving}
+                onChange={(e) => {
+                  const next = e.target.value ? Number(e.target.value) : null;
+                  if (next !== (solution.revenue_source ?? null)) save({ revenue_source: next as 930680000 | 930680001 | null });
+                }}
+                style={{ width: 150, padding: "3px 8px", fontSize: 12 }}
+              >
+                <option value="">—</option>
+                <option value={930680000}>Installed Base</option>
+                <option value={930680001}>New Logo</option>
+              </select>
+            </label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontWeight: 600, color: "#64748b" }}>Est. close date:</span>
+              <input
+                className="ms-input"
+                type="date"
+                defaultValue={solution.estimated_close_date ?? ""}
+                disabled={!canEdit || saving}
+                onBlur={(e) => {
+                  const next = e.target.value || null;
+                  const prev = solution.estimated_close_date ?? null;
+                  if (next !== prev) save({ estimated_close_date: next });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") {
+                    (e.target as HTMLInputElement).value = solution.estimated_close_date ?? "";
+                    (e.target as HTMLInputElement).blur();
+                  }
+                }}
+                style={{ width: 170, padding: "3px 8px", fontSize: 12 }}
+              />
+            </label>
           </div>
           )}
         </div>

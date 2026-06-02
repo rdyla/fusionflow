@@ -136,6 +136,10 @@ const EMPTY_FORM = {
   partner_ae_name: "",
   partner_ae_email: "",
   partner_ae_mode: "existing" as "existing" | "new",
+  // Opportunity fields seeded when an opp is created inline; carried onto the
+  // solution row (synced to the bound opp + editable later in the overview).
+  revenue_source: null as 930680000 | 930680001 | null,
+  estimated_close_date: "",
 };
 
 export default function SolutionsPage() {
@@ -166,6 +170,8 @@ export default function SolutionsPage() {
   // am_revenuesource for a newly-created opp: Installed Base (930680000) |
   // New Logo (930680001). Defaults to Installed Base (the common case).
   const [newOpportunityRevenueSource, setNewOpportunityRevenueSource] = useState<930680000 | 930680001>(930680000);
+  // estimatedclosedate for a newly-created opp (yyyy-MM-dd from the date input).
+  const [newOpportunityCloseDate, setNewOpportunityCloseDate] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [search, setSearch] = useState("");
@@ -237,20 +243,26 @@ export default function SolutionsPage() {
       return;
     }
     if (!newOpportunityName.trim()) return;
+    if (!newOpportunityCloseDate) { showToast("Pick an estimated close date.", "error"); return; }
     setCreatingOpportunity(true);
     try {
       const created = await api.createDynamicsOpportunity({
         name: newOpportunityName.trim(),
         parent_account_id: form.dynamics_account_id,
         revenue_source: newOpportunityRevenueSource,
+        estimated_close_date: newOpportunityCloseDate,
       });
       // Push the new opp into the picker list AND auto-select it so the
       // SA doesn't have to scroll the dropdown for the row they just made.
+      // Also carry the chosen revenue source + close date onto the solution
+      // form so they land on solutions.* (synced to the opp + editable later
+      // in the solution overview).
       setOpportunities((prev) => [created, ...prev]);
-      setForm((f) => ({ ...f, crm_opportunity_id: created.opportunityid }));
+      setForm((f) => ({ ...f, crm_opportunity_id: created.opportunityid, revenue_source: newOpportunityRevenueSource, estimated_close_date: newOpportunityCloseDate }));
       setShowCreateOpportunity(false);
       setNewOpportunityName("");
       setNewOpportunityRevenueSource(930680000);
+      setNewOpportunityCloseDate("");
       showToast(`Created opportunity "${created.name}" in CRM.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to create opportunity in CRM", "error");
@@ -282,6 +294,8 @@ export default function SolutionsPage() {
         payload.partner_ae_name = form.partner_ae_name;
         payload.partner_ae_email = form.partner_ae_email;
       }
+      if (form.revenue_source != null) payload.revenue_source = form.revenue_source;
+      if (form.estimated_close_date) payload.estimated_close_date = form.estimated_close_date;
 
       const created = await api.createSolution(payload);
       setSolutions((prev) => [created, ...prev]);
@@ -575,22 +589,32 @@ export default function SolutionsPage() {
                       <option value={930680001}>New Logo</option>
                     </select>
                   </label>
+                  <label className="ms-label">
+                    <span>Estimated close date *</span>
+                    <input
+                      className="ms-input"
+                      type="date"
+                      value={newOpportunityCloseDate}
+                      onChange={(e) => setNewOpportunityCloseDate(e.target.value)}
+                      disabled={creatingOpportunity}
+                    />
+                  </label>
                   <div style={{ fontSize: 11, color: "#64748b" }}>
-                    Bound to <strong>{form.customer_name}</strong>, owned by the account's AE. Revenue source type is set to Net New Revenue and TSB to Direct (Carahsoft for Zoom Reseller deals). SOW hours and Solution Architect populate later.
+                    Bound to <strong>{form.customer_name}</strong>, owned by the account's AE. Revenue source type is set to Net New Revenue and TSB to Direct (Carahsoft for Zoom Reseller deals). SOW hours and Solution Architect populate later. Revenue source &amp; close date can also be edited later from the solution overview.
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
                     <button
                       type="button"
                       className="ms-btn-primary"
                       onClick={handleCreateOpportunity}
-                      disabled={creatingOpportunity || !newOpportunityName.trim()}
+                      disabled={creatingOpportunity || !newOpportunityName.trim() || !newOpportunityCloseDate}
                     >
                       {creatingOpportunity ? "Creating…" : "Create opportunity"}
                     </button>
                     <button
                       type="button"
                       className="ms-btn-ghost"
-                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); }}
+                      onClick={() => { setShowCreateOpportunity(false); setNewOpportunityName(""); setNewOpportunityCloseDate(""); }}
                       disabled={creatingOpportunity}
                     >
                       Cancel
