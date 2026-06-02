@@ -285,10 +285,11 @@ export async function syncProjectGoLiveDate(db: D1Database, projectId: string): 
 //   cr495_pfiproserv          — constant 737660000 (Yes). Marks the opp as a
 //                               pro-services implementation; always Yes for
 //                               the CloudPro work CloudConnect quotes.
-//   am_revenuesource          — 930680001 (New Logo) when the CRM account
-//                               was created inline during this solution's
-//                               flow (is_new_logo=1), else 930680000
-//                               (Installed Base).
+//   am_tsb                    — 100000002 (Carahsoft) when is_zoom_reseller=1,
+//                               else 930680003 (Direct). NOTE: am_revenuesource
+//                               is intentionally NOT synced — the SA picks it
+//                               when creating the opportunity and we must not
+//                               clobber that choice.
 //   am_OpportunityVendors     — lookup to am_vendoraccount. Resolved from
 //                               solution.vendor + is_zoom_reseller:
 //                                 ringcentral         → Ring Central
@@ -336,8 +337,11 @@ const VENDOR_GUIDS = {
 } as const;
 
 const OPP_TYPE_CLOUDPRO = 930680038;
-const REV_SRC_INSTALLED_BASE = 930680000;
-const REV_SRC_NEW_LOGO       = 930680001;
+
+// am_tsb option-set. Direct for our normal deals; Carahsoft when the solution
+// is flagged Zoom Reseller (e.g. SLED via the Carahsoft paper).
+const TSB_DIRECT = 930680003;
+const TSB_CARAHSOFT = 100000002;
 
 // cr495_pfiproserv option-set (Yes / No / N/A). Everything we quote through
 // CloudConnect is a CloudPro professional-services implementation, so this
@@ -406,7 +410,10 @@ export async function syncOpportunityFromSolution(
   const patch: Record<string, unknown> = {
     am_opportunitytype:       OPP_TYPE_CLOUDPRO,
     cr495_pfiproserv:         PROSERV_YES,
-    am_revenuesource:         row.is_new_logo === 1 ? REV_SRC_NEW_LOGO : REV_SRC_INSTALLED_BASE,
+    // am_tsb: Direct, or Carahsoft when this is a Zoom Reseller deal. (Revenue
+    // source is intentionally NOT set here — it's chosen by the SA when the
+    // opportunity is created and we don't want to clobber that selection.)
+    am_tsb:                   row.is_zoom_reseller === 1 ? TSB_CARAHSOFT : TSB_DIRECT,
     am_opportunitysalesstage: salesStageForSolutionStatus(row.status),
     am_mrr:                   0,
     cr495_crr:                0,

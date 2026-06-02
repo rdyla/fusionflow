@@ -198,8 +198,8 @@ const createSolutionSchema = z.object({
   customer_id: z.string().optional(),
   /** D365 account id. Required: a solution must bind to a real CRM account
    *  so account-team / opportunity / hours-compliance lookups resolve. The
-   *  client now provides a "Create new account in CRM" affordance when none
-   *  exists yet (handled in a follow-up PR). */
+   *  account is created in CRM by the customer's AE — SAs pick an existing
+   *  one from search (no in-app account creation). */
   dynamics_account_id: z.string().min(1),
   /** D365 opportunity id, scoped to dynamics_account_id. Required for the
    *  same reason — pre-sales work without an opportunity has nowhere to
