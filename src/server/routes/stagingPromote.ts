@@ -246,6 +246,7 @@ app.post("/promote", async (c) => {
     solutions_inserted: 0,
     projects_inserted: 0,
     optimize_accounts_inserted: 0,
+    phases_inserted: 0,
     stages_inserted: 0,
     tasks_inserted: 0,
     risks_inserted: 0,
@@ -329,7 +330,8 @@ app.post("/promote", async (c) => {
 
   // 3d. Stages / tasks / risks / notes / documents per project.
   for (const projectId of touchedProjectIds) {
-    const [stages, tasks, risks, notes, documents, projectContacts, projectStaff, projectAccess, timeEntries, spUploads, spFolderVis] = await Promise.all([
+    const [phases, stages, tasks, risks, notes, documents, projectContacts, projectStaff, projectAccess, timeEntries, spUploads, spFolderVis] = await Promise.all([
+      all<Row>(staging, "SELECT * FROM phases WHERE project_id = ?", projectId).catch(() => [] as Row[]),
       all<Row>(staging, "SELECT * FROM stages WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM tasks  WHERE project_id = ?", projectId),
       all<Row>(staging, "SELECT * FROM risks  WHERE project_id = ?", projectId),
@@ -347,8 +349,20 @@ app.post("/promote", async (c) => {
       all<Row>(staging, "SELECT * FROM sharepoint_uploads WHERE project_id = ?", projectId).catch(() => [] as Row[]),
       all<Row>(staging, "SELECT * FROM sharepoint_folder_visibility WHERE project_id = ?", projectId).catch(() => [] as Row[]),
     ]);
+    // Insert in FK-dependency order so structural refs resolve:
+    //   phases → stages (stages.phase_id) → project_contacts → tasks
+    //   (tasks.stage_id, .assignee_contact_id) → risks (.task_id, .owner_contact_id)
+    //   → … → documents last (.task_id, .stage_id). project/customer/user FKs
+    //   are handled by remapFks; these are intra-project structural FKs that
+    //   just need their parent row inserted first.
+    for (const row of phases) {
+      if (await insertOrIgnore(prod, "phases", remapFks(row, maps))) summary.phases_inserted++;
+    }
     for (const row of stages) {
       if (await insertOrIgnore(prod, "stages", remapFks(row, maps))) summary.stages_inserted++;
+    }
+    for (const row of projectContacts) {
+      if (await insertOrIgnore(prod, "project_contacts", remapFks(row, maps))) summary.project_contacts_inserted++;
     }
     for (const row of tasks) {
       if (await insertOrIgnore(prod, "tasks", remapFks(row, maps))) summary.tasks_inserted++;
@@ -358,9 +372,6 @@ app.post("/promote", async (c) => {
     }
     for (const row of notes) {
       if (await insertOrIgnore(prod, "notes", remapFks(row, maps))) summary.notes_inserted++;
-    }
-    for (const row of projectContacts) {
-      if (await insertOrIgnore(prod, "project_contacts", remapFks(row, maps))) summary.project_contacts_inserted++;
     }
     for (const row of projectStaff) {
       if (row.user_id) await ensureUserOnProd(row.user_id as string);
@@ -374,8 +385,6 @@ app.post("/promote", async (c) => {
       if (r.user_id == null) { summary.skipped.push({ kind: "project_access", id: row.id as string, reason: "user not on prod" }); continue; }
       if (await insertOrIgnore(prod, "project_access", r)) summary.project_access_inserted++;
     }
-    // stage_time_entries inserts after stages above so the stage_id FK
-    // (ON DELETE CASCADE → stages) is satisfied.
     for (const row of timeEntries) {
       if (await insertOrIgnore(prod, "stage_time_entries", remapFks(row, maps))) summary.stage_time_entries_inserted++;
     }
