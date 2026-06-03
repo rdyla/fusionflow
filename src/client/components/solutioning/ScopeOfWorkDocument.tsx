@@ -112,7 +112,11 @@ function pickCounts(
   const sdStages    = num(sd?.shared?.phases_count);
   const sdUsers     = num(sd?.ucaas?.basic_users) + num(sd?.ucaas?.advanced_users)
                     + num(sd?.ucaas?.common_area) + num(sd?.ucaas?.conference_rooms);
-  const sdDids      = num(sd?.shared?.porting_did_count);
+  // DIDs to port: the SA enters this in the UCaaS sizing form's "DID Porting
+  // Blocks" field (ucaas.did_porting_blocks). shared.porting_did_count has no
+  // input + is never seeded, so it was always 0 — kept here only as a fallback
+  // for any legacy/NA-seeded value.
+  const sdDids      = num(sd?.ucaas?.did_porting_blocks) || num(sd?.shared?.porting_did_count);
 
   // Basic-mode fallback: PMs entering inputs through the simplified calculator
   // never populate sow_data, so the snapshot tiles + Scope at a Glance would
