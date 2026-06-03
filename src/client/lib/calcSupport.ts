@@ -80,6 +80,9 @@ export interface CsVersion {
 
 export interface CsProposalDetail extends CsProposal {
   versions: CsVersion[];
+  /** Bound D365 CloudCare opportunity id, created on first version save once a
+   *  CRM-linked customer is set. Null until then. */
+  crmOpportunityId: string | null;
 }
 
 export function calcSupport(d: OppFormData): OppCalcResult {

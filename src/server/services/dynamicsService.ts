@@ -496,6 +496,40 @@ export async function createOpportunity(
   return raw;
 }
 
+// PFI CloudCare — opportunity type for Cloud Support (managed-support) contracts,
+// vs PFI CloudPro (930680038) for implementation solutions.
+const OPP_TYPE_CLOUDCARE = 930680036;
+
+// Create a CloudCare opportunity for a Cloud Support proposal. Same base as the
+// solutions opp (owner = account owner, Net New Revenue, Direct TSB) but typed
+// CloudCare and carrying the support-contract fields (term, TCV, expiration).
+// No cr495_pfiproserv — that's pro-services / CloudPro-only.
+export async function createCloudCareOpportunity(
+  env: Env,
+  payload: { name: string; parentAccountId: string; termMonths?: number; combinedRevenue?: number; cloudContractExpiration?: string },
+): Promise<DynamicsOpportunity> {
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    "parentaccountid@odata.bind":    `/accounts(${payload.parentAccountId})`,
+    "customerid_account@odata.bind": `/accounts(${payload.parentAccountId})`,
+    am_opportunitytype: OPP_TYPE_CLOUDCARE,
+    am_revenuesourcetype: OPP_REVENUE_SOURCE_TYPE_NET_NEW,
+    am_tsb: OPP_TSB_DIRECT,
+  };
+  if (payload.termMonths != null) body.am_termmonths = payload.termMonths;
+  if (payload.combinedRevenue != null) body.am_combinedrevenue = payload.combinedRevenue;
+  if (payload.cloudContractExpiration) body.am_cloudcontractexpiration = payload.cloudContractExpiration;
+  try {
+    const acct = await dynamicsGet<{ "_ownerid_value": string | null }>(
+      env,
+      `/accounts(${payload.parentAccountId})?$select=_ownerid_value`,
+    );
+    const ownerId = acct?.["_ownerid_value"];
+    if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
+  } catch { /* owner lookup is best-effort */ }
+  return dynamicsPost<DynamicsOpportunity>(env, "/opportunities", body, { prefer: "return=representation" });
+}
+
 export async function getAccountOpportunities(
   env: Env,
   accountId: string,
