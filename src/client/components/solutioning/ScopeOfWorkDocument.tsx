@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
-import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
+import { calcSowTotal, calcBasicSowTotal, mroundUp, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
 import { parseCcaasComboInputs, isComboMode, sowDataToComboInputs, calcCcaasComboBreakdown } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
@@ -267,8 +267,14 @@ export default function ScopeOfWorkDocument({
     revisions: (sowMetadata?.revisions ?? []).map((r) => ({
       version: r.version, saved_at: r.saved_at, saved_by_name: r.saved_by_name, note: r.note,
     })),
-    feeTotal:    feeBreakdown.laborSubtotal,
-    feeDiscount: feeBreakdown.addOnNet < 0 ? feeBreakdown.addOnNet : null,
+    // Customer sees a single clean (rounded-up) figure — never the raw labor
+    // subtotal. With no discount the fee line == the rounded-up Project Total.
+    // With a Preferred Client Discount, show a rounded-up list price and derive
+    // the discount as the gap to the rounded-up total so the summary foots
+    // exactly. projectTotal is already rounded up for calc/basic/tiered modes;
+    // combo carries its own controlled final price (unchanged → matches CRM).
+    feeTotal:    feeBreakdown.addOnNet < 0 ? mroundUp(feeBreakdown.laborSubtotal) : feeBreakdown.total,
+    feeDiscount: feeBreakdown.addOnNet < 0 ? feeBreakdown.total - mroundUp(feeBreakdown.laborSubtotal) : null,
     projectTotal: feeBreakdown.total,
     isBudgetary:    solution.is_budgetary === 1,
     isZoomReseller: solution.is_zoom_reseller === 1,
