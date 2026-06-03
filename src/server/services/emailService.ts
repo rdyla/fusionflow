@@ -24,11 +24,10 @@ type EmailPayload = {
 };
 
 const PF_DOMAIN = "@packetfusion.com";
-// Temporary staging-only allowlist for customer-POV testing — +alias gmail
-// accounts mapped to D365 portal contacts, plus dyla.net (Ryan's personal
-// domain wired up as a fake customer in CRM). MUST be stripped before the
-// next staging→main promotion (see project_customer_pov_testing memory).
-const STAGING_TEST_DOMAINS = ["@gmail.com", "@dyla.net"];
+// Staging-only allowlist for customer-POV testing — populated on the staging
+// branch, stripped to empty on every staging→main promotion (this is prod).
+// See project_customer_pov_testing memory.
+const STAGING_TEST_DOMAINS: string[] = [];
 
 /**
  * Fire-and-forget email via Microsoft Graph sendMail. Never throws —
