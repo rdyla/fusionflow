@@ -1,3 +1,5 @@
+import { IMPERSONATE_KEY } from "./api";
+
 export interface SupportUser {
   email: string;
   name: string | null;
@@ -104,7 +106,18 @@ export interface UserResult {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+  // Forward the admin impersonation header so the support module respects
+  // "view as" the same way the main api does — otherwise /support/* runs as
+  // the real (admin) user and ignores the impersonated role's scoping.
+  let impersonate: Record<string, string> = {};
+  try {
+    const email = localStorage.getItem(IMPERSONATE_KEY);
+    if (email) impersonate = { "x-impersonate-email": email };
+  } catch { /* localStorage unavailable — no impersonation */ }
+  const res = await fetch(path, {
+    ...init,
+    headers: { ...(init?.headers as Record<string, string> | undefined), ...impersonate },
+  });
   if (res.status === 401) {
     window.location.href = "/login";
     throw new Error("Unauthorized");
