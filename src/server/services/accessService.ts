@@ -24,8 +24,11 @@ export async function canViewProject(
   if (user.role === "pf_ae") {
     const teamIds = await getTeamUserIds(user.id, db);
     const ph = inPlaceholders(teamIds);
+    // A pf_ae's projects are tied through the customer's assigned AE
+    // (customers.pf_ae_user_id) — projects has no ae_user_id column. Mirrors
+    // the projects-list scoping.
     const tiedToProject = await db
-      .prepare(`SELECT id FROM projects WHERE id = ? AND ae_user_id IN (${ph}) LIMIT 1`)
+      .prepare(`SELECT id FROM projects WHERE id = ? AND customer_id IN (SELECT id FROM customers WHERE pf_ae_user_id IN (${ph})) LIMIT 1`)
       .bind(projectId, ...teamIds)
       .first();
     if (tiedToProject) return true;
