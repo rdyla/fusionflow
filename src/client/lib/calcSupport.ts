@@ -9,6 +9,11 @@ export interface OppFormData {
   /** Estimated close date for the bound D365 CloudCare opportunity (yyyy-MM-dd).
    *  Distinct from contract start/end — when the deal is expected to close. */
   estimatedCloseDate: string;
+  /** am_revenuesource on the CloudCare opp: Installed Base (930680000) |
+   *  New Logo (930680001) | null (unset). */
+  revenueSource: number | null;
+  /** Vendor for am_OpportunityVendors on the CloudCare opp. */
+  oppVendor: "" | "zoom" | "zoom_resell" | "ringcentral";
   afterHoursRate: number;
   advancedTaskRate: number;
   msoEnabled: boolean;
@@ -177,6 +182,8 @@ export const DEFAULT_FORM_DATA: OppFormData = {
   contractStart: "",
   contractEnd: "",
   estimatedCloseDate: "",
+  revenueSource: null,
+  oppVendor: "",
   afterHoursRate: 165,
   advancedTaskRate: 145,
   msoEnabled: false,

@@ -500,13 +500,28 @@ export async function createOpportunity(
 // vs PFI CloudPro (930680038) for implementation solutions.
 const OPP_TYPE_CLOUDCARE = 930680036;
 
+// Vendor → am_vendoraccount GUIDs for am_OpportunityVendors (same accounts the
+// solutions opp sync uses).
+const OPPORTUNITY_VENDOR_GUIDS: Record<string, string> = {
+  zoom:        "e34b00ae-7951-ec11-8f8e-000d3a5bc238",
+  zoom_resell: "2b97d3d0-115f-ef11-bfe3-000d3a593ab7",
+  ringcentral: "b84b00ae-7951-ec11-8f8e-000d3a5bc238",
+};
+
+/** Build the am_OpportunityVendors @odata.bind for a vendor key, or null. */
+export function opportunityVendorBind(vendor?: string | null): string | null {
+  if (!vendor) return null;
+  const guid = OPPORTUNITY_VENDOR_GUIDS[vendor];
+  return guid ? `/am_vendoraccounts(${guid})` : null;
+}
+
 // Create a CloudCare opportunity for a Cloud Support proposal. Same base as the
 // solutions opp (owner = account owner, Net New Revenue, Direct TSB) but typed
 // CloudCare and carrying the support-contract fields (term, TCV, expiration).
 // No cr495_pfiproserv — that's pro-services / CloudPro-only.
 export async function createCloudCareOpportunity(
   env: Env,
-  payload: { name: string; parentAccountId: string; termMonths?: number; contractValue?: number; cloudContractExpiration?: string; estimatedCloseDate?: string },
+  payload: { name: string; parentAccountId: string; termMonths?: number; contractValue?: number; cloudContractExpiration?: string; estimatedCloseDate?: string; revenueSource?: number; vendor?: string },
 ): Promise<DynamicsOpportunity> {
   const body: Record<string, unknown> = {
     name: payload.name,
@@ -522,6 +537,9 @@ export async function createCloudCareOpportunity(
   if (payload.contractValue != null) body.actualvalue = payload.contractValue;
   if (payload.cloudContractExpiration) body.am_cloudcontractexpiration = payload.cloudContractExpiration;
   if (payload.estimatedCloseDate) body.estimatedclosedate = payload.estimatedCloseDate;
+  if (payload.revenueSource != null) body.am_revenuesource = payload.revenueSource;
+  const vendorBind = opportunityVendorBind(payload.vendor);
+  if (vendorBind) body["am_OpportunityVendors@odata.bind"] = vendorBind;
   try {
     const acct = await dynamicsGet<{ "_ownerid_value": string | null }>(
       env,
