@@ -68,6 +68,7 @@ const CUSTOMER_CONTACT_ROLES = [
   "Other",
 ];
 const PARTNER_CONTACT_ROLES = [
+  "Partner AE",
   "Porting Coordinator",
 ];
 const isPartnerContactRole = (role: string | null | undefined): boolean =>
