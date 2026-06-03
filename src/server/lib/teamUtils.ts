@@ -418,8 +418,9 @@ export async function syncOpportunityFromSolution(
     am_mrr:                   0,
     cr495_crr:                0,
     am_spiff:                 0,
+    // actualvalue only — am_combinedrevenue is a calculated/rollup field in
+    // D365 (auto-maintained), so we must not write it.
     actualvalue:              sowTotal,
-    am_combinedrevenue:       sowTotal,
     am_cloudcontractexpiration: row.cloud_contract_expiration_date ?? null,
     cr495_dealregistrationid: row.deal_registration_id ?? null,
   };

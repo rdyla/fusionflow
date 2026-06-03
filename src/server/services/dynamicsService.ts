@@ -506,7 +506,7 @@ const OPP_TYPE_CLOUDCARE = 930680036;
 // No cr495_pfiproserv — that's pro-services / CloudPro-only.
 export async function createCloudCareOpportunity(
   env: Env,
-  payload: { name: string; parentAccountId: string; termMonths?: number; combinedRevenue?: number; cloudContractExpiration?: string },
+  payload: { name: string; parentAccountId: string; termMonths?: number; contractValue?: number; cloudContractExpiration?: string; estimatedCloseDate?: string },
 ): Promise<DynamicsOpportunity> {
   const body: Record<string, unknown> = {
     name: payload.name,
@@ -517,8 +517,11 @@ export async function createCloudCareOpportunity(
     am_tsb: OPP_TSB_DIRECT,
   };
   if (payload.termMonths != null) body.am_termmonths = payload.termMonths;
-  if (payload.combinedRevenue != null) body.am_combinedrevenue = payload.combinedRevenue;
+  // Total contract value → actualvalue. am_combinedrevenue is calculated in
+  // D365 (auto-maintained), so we don't write it.
+  if (payload.contractValue != null) body.actualvalue = payload.contractValue;
   if (payload.cloudContractExpiration) body.am_cloudcontractexpiration = payload.cloudContractExpiration;
+  if (payload.estimatedCloseDate) body.estimatedclosedate = payload.estimatedCloseDate;
   try {
     const acct = await dynamicsGet<{ "_ownerid_value": string | null }>(
       env,
