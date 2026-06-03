@@ -333,6 +333,10 @@ export default function SolutionsPage() {
     return new Date(normalized).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   }
 
+  // Partner AEs (Zoom/RC) and clients are view-only on solutions — no creating
+  // new solutions and no Cloud Support tab (that module is internal-only).
+  const canManageSolutions = currentRole !== "client" && currentRole !== "partner_ae";
+
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading...</div>;
 
   return (
@@ -340,7 +344,7 @@ export default function SolutionsPage() {
       <div className="ms-page-header">
         <div>
           <h1 className="ms-page-title">Solutions</h1>
-          {currentRole !== "client" && (
+          {canManageSolutions && (
             <div style={{ display: "flex", gap: 0, marginTop: 8, borderBottom: "1px solid #e2e8f0" }}>
               <span style={{ padding: "8px 18px", fontSize: 13, fontWeight: 600, color: "#03395f", borderBottom: "2px solid #03395f", cursor: "default" }}>
                 Implementation
@@ -355,7 +359,7 @@ export default function SolutionsPage() {
             </div>
           )}
         </div>
-        {currentRole !== "client" && (
+        {canManageSolutions && (
           <button className="ms-btn-primary" onClick={() => {
             setForm({ ...EMPTY_FORM, ucaas_vendor: demoVendor ?? "" });
             setShowCreate(true);
