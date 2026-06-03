@@ -160,6 +160,10 @@ export default function CalculatorForm({ form, calc, canOverride, onChange, cust
             <span>Contract End</span>
             <input className="ms-input" type="date" value={form.contractEnd} onChange={(e) => setField("contractEnd", e.target.value)} />
           </label>
+          <label style={S.label}>
+            <span>Est. Close Date</span>
+            <input className="ms-input" type="date" value={form.estimatedCloseDate} onChange={(e) => setField("estimatedCloseDate", e.target.value)} />
+          </label>
         </div>
       </div>
 

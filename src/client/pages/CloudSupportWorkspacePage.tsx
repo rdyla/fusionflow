@@ -61,7 +61,9 @@ export default function CloudSupportWorkspacePage() {
       // Load latest version if available
       if (p.versions.length > 0) {
         const latest = p.versions[p.versions.length - 1];
-        setForm(latest.data);
+        // Merge over defaults so versions saved before a field existed (e.g.
+        // estimatedCloseDate) still have every key — keeps inputs controlled.
+        setForm({ ...DEFAULT_FORM_DATA, ...latest.data });
         setActiveVersionId(latest.id);
       }
     }).catch(() => showToast("Failed to load proposal", "error"))
@@ -89,7 +91,7 @@ export default function CloudSupportWorkspacePage() {
   }
 
   function loadVersion(v: CsVersion) {
-    setForm(v.data);
+    setForm({ ...DEFAULT_FORM_DATA, ...v.data });
     setActiveVersionId(v.id);
     setDirty(false);
     setTab("calculator");

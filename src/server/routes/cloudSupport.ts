@@ -361,9 +361,10 @@ app.post("/:id/versions", async (c) => {
  * Create or update the PFI CloudCare opportunity bound to a Cloud Support
  * proposal, from the latest saved version. Requires a customer with a CRM
  * account; no-ops if either is missing.
- *   am_termmonths             = form.term (years) × 12
- *   am_combinedrevenue        = calc.tcv (total contract value)
+ *   am_termmonths              = form.term (years) × 12
+ *   actualvalue                = calc.tcv (total contract value)
  *   am_cloudcontractexpiration = form.contractEnd (calculated expiration)
+ *   estimatedclosedate         = form.estimatedCloseDate (SA-entered)
  */
 async function syncCloudCareOpportunity(
   env: Bindings,
@@ -385,20 +386,23 @@ async function syncCloudCareOpportunity(
   const termYears = Number(formData.term);
   const termMonths = Number.isFinite(termYears) && termYears > 0 ? Math.round(termYears * 12) : undefined;
   const tcv = Number(calcResult.tcv);
-  const combinedRevenue = Number.isFinite(tcv) ? tcv : undefined;
+  const contractValue = Number.isFinite(tcv) ? tcv : undefined;
   const contractEnd = typeof formData.contractEnd === "string" && formData.contractEnd ? formData.contractEnd : undefined;
+  const estimatedCloseDate = typeof formData.estimatedCloseDate === "string" && formData.estimatedCloseDate ? formData.estimatedCloseDate : undefined;
 
   const { createCloudCareOpportunity, updateOpportunity } = await import("../services/dynamicsService");
   if (!existingOppId) {
-    const opp = await createCloudCareOpportunity(env, { name, parentAccountId: accountId, termMonths, combinedRevenue, cloudContractExpiration: contractEnd });
+    const opp = await createCloudCareOpportunity(env, { name, parentAccountId: accountId, termMonths, contractValue, cloudContractExpiration: contractEnd, estimatedCloseDate });
     if (opp?.opportunityid) {
       await env.DB.prepare("UPDATE cs_proposals SET crm_opportunity_id = ? WHERE id = ?").bind(opp.opportunityid, proposalId).run();
     }
   } else {
+    // actualvalue (not am_combinedrevenue — that's calculated in D365).
     const patch: Record<string, unknown> = {};
     if (termMonths != null) patch.am_termmonths = termMonths;
-    if (combinedRevenue != null) patch.am_combinedrevenue = combinedRevenue;
+    if (contractValue != null) patch.actualvalue = contractValue;
     if (contractEnd) patch.am_cloudcontractexpiration = contractEnd;
+    if (estimatedCloseDate) patch.estimatedclosedate = estimatedCloseDate;
     if (Object.keys(patch).length > 0) await updateOpportunity(env, existingOppId, patch);
   }
 }

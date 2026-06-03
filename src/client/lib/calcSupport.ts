@@ -6,6 +6,9 @@ export interface OppFormData {
   term: number;
   contractStart: string;
   contractEnd: string;
+  /** Estimated close date for the bound D365 CloudCare opportunity (yyyy-MM-dd).
+   *  Distinct from contract start/end — when the deal is expected to close. */
+  estimatedCloseDate: string;
   afterHoursRate: number;
   advancedTaskRate: number;
   msoEnabled: boolean;
@@ -173,6 +176,7 @@ export const DEFAULT_FORM_DATA: OppFormData = {
   term: 1,
   contractStart: "",
   contractEnd: "",
+  estimatedCloseDate: "",
   afterHoursRate: 165,
   advancedTaskRate: 145,
   msoEnabled: false,
