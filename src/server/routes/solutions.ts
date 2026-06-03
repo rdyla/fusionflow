@@ -186,6 +186,11 @@ app.post("/", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
 
+  // Partner AEs and clients are view-only on solutions — they can't create.
+  if (auth.role === "client" || auth.role === "partner_ae") {
+    throw new HTTPException(403, { message: "Not authorized to create solutions" });
+  }
+
   const parsed = createSolutionSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
