@@ -3,8 +3,6 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
-import { sendEmail } from "../services/emailService";
-import { userInvite } from "../lib/emailTemplates";
 import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution, syncSolutionStatus } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
@@ -27,6 +25,7 @@ import { recomputeExistingEstimates } from "./laborEstimates";
 import { getDemoVendor } from "../lib/appSettings";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { ensureSharePointChildFolder } from "../services/graphService";
+import { findOrCreatePartnerAe } from "../lib/partnerAe";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -108,46 +107,6 @@ function nameFromJourneys(customerName: string, journeys: string[], vendor: stri
  * create-solution endpoint (legacy single-AE field) and the new inline
  * invite endpoint on the solution detail page.
  */
-async function findOrCreatePartnerAe(
-  env: Bindings,
-  db: D1Database,
-  invitedByName: string,
-  payload: {
-    email: string;
-    name: string | null;
-    organization_name: string | null;
-    executionCtx?: { waitUntil: (p: Promise<unknown>) => void };
-  },
-): Promise<string | null> {
-  const email = payload.email.trim().toLowerCase();
-  if (!email) return null;
-  const existing = await db
-    .prepare("SELECT id FROM users WHERE lower(email) = ? LIMIT 1")
-    .bind(email)
-    .first<{ id: string }>();
-  if (existing) return existing.id;
-  if (!payload.name) return null; // can't create a user without at least a name
-
-  const newId = crypto.randomUUID();
-  await db
-    .prepare(
-      "INSERT INTO users (id, email, name, organization_name, role, is_active) VALUES (?, ?, ?, ?, 'partner_ae', 1)",
-    )
-    .bind(newId, email, payload.name, payload.organization_name)
-    .run();
-
-  const appUrl = env.APP_URL ?? "";
-  const sendInvite = sendEmail(env, {
-    to: email,
-    subject: "You've been invited to CloudConnect",
-    html: userInvite({ recipientName: payload.name, invitedByName, role: "partner_ae", appUrl }),
-  });
-  if (payload.executionCtx) payload.executionCtx.waitUntil(sendInvite);
-  else await sendInvite.catch(() => {}); // best-effort if no waitUntil available
-
-  return newId;
-}
-
 function accessClause(role: string, teamIds: string[], accountId?: string | null): { where: string; bindings: string[] } {
   if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
   if (role === "pf_ae") {

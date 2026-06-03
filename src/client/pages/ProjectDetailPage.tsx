@@ -68,7 +68,6 @@ const CUSTOMER_CONTACT_ROLES = [
   "Other",
 ];
 const PARTNER_CONTACT_ROLES = [
-  "Partner AE",
   "Porting Coordinator",
 ];
 const isPartnerContactRole = (role: string | null | undefined): boolean =>
@@ -266,6 +265,12 @@ export default function ProjectDetailPage() {
   const [showPartnerModal, setShowPartnerModal] = useState(false);
   const [addPartnerUserId, setAddPartnerUserId] = useState("");
   const [addingPartner, setAddingPartner] = useState(false);
+  // "existing" picks a partner_ae user already in the system; "new" invites a
+  // net-new partner AE (name + email → created + invited as a partner_ae user).
+  const [partnerMode, setPartnerMode] = useState<"existing" | "new">("existing");
+  const [newPartnerName, setNewPartnerName] = useState("");
+  const [newPartnerEmail, setNewPartnerEmail] = useState("");
+  const [newPartnerOrg, setNewPartnerOrg] = useState("");
 
   // Zoom recordings
   const [recordings, setRecordings] = useState<ZoomRecording[]>([]);
@@ -650,17 +655,30 @@ export default function ProjectDetailPage() {
     }
   }
 
+  function resetPartnerModal() {
+    setShowPartnerModal(false);
+    setAddPartnerUserId("");
+    setPartnerMode("existing");
+    setNewPartnerName("");
+    setNewPartnerEmail("");
+    setNewPartnerOrg("");
+  }
+
   async function handleAddPartner() {
-    if (!addPartnerUserId || !project) return;
+    if (!project) return;
+    if (partnerMode === "existing" && !addPartnerUserId) return;
+    if (partnerMode === "new" && (!newPartnerName.trim() || !newPartnerEmail.trim())) return;
     setAddingPartner(true);
     try {
-      const added = await api.addProjectStaff(project.id, { user_id: addPartnerUserId, staff_role: "partner_ae" });
-      setProjectStaff((prev) => [...prev, added]);
-      setAddPartnerUserId("");
-      setShowPartnerModal(false);
-      showToast("Partner AE added.", "success");
-    } catch {
-      showToast("Failed to add partner AE", "error");
+      const added = partnerMode === "new"
+        ? await api.inviteProjectPartnerAe(project.id, { name: newPartnerName.trim(), email: newPartnerEmail.trim(), organization_name: newPartnerOrg.trim() || null })
+        : await api.addProjectStaff(project.id, { user_id: addPartnerUserId, staff_role: "partner_ae" });
+      // De-dupe: invite-by-email may resolve to a partner AE already on the project.
+      setProjectStaff((prev) => prev.some((s) => s.id === added.id) ? prev : [...prev, added]);
+      resetPartnerModal();
+      showToast(partnerMode === "new" ? "Partner AE invited and added." : "Partner AE added.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to add partner AE", "error");
     } finally {
       setAddingPartner(false);
     }
@@ -1231,8 +1249,9 @@ export default function ProjectDetailPage() {
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                     {(() => {
                       const partnerStaff = projectStaff.filter((s) => s.staff_role === "partner_ae");
-                      const assignablePartners = users.filter((u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id));
-                      return <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); }} disabled={assignablePartners.length === 0}>+ Partner AE</button>;
+                      const hasAssignable = users.some((u) => u.role === "partner_ae" && !partnerStaff.some((s) => s.user_id === u.id));
+                      // Always enabled — even with no existing partner AEs, you can invite a net-new one.
+                      return <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowPartnerModal(true); setAddPartnerUserId(""); setPartnerMode(hasAssignable ? "existing" : "new"); }}>+ Partner AE</button>;
                     })()}
                     <button className="ms-btn-ghost" style={ghostBtn} onClick={() => openAddContactModal("partner")}>+ Add Contact</button>
                   </div>
@@ -3054,28 +3073,71 @@ export default function ProjectDetailPage() {
       {showPartnerModal && (() => {
         const assignablePartners = users.filter(u => u.role === "partner_ae" && !projectStaff.some(s => s.staff_role === "partner_ae" && s.user_id === u.id));
         return (
-          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowPartnerModal(false); }}>
+          <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) resetPartnerModal(); }}>
             <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
                 <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Add Partner AE</h2>
-                <button onClick={() => setShowPartnerModal(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+                <button onClick={resetPartnerModal} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
               </div>
-              <div style={{ padding: "20px 24px" }}>
-                <label className="ms-label">
-                  <span>Partner AE</span>
-                  <select className="ms-input" value={addPartnerUserId} onChange={(e) => setAddPartnerUserId(e.target.value)}>
-                    <option value="">— Select partner AE —</option>
-                    {assignablePartners.map((u) => (
-                      <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
-                    ))}
-                  </select>
-                </label>
+              <div style={{ padding: "20px 24px", display: "grid", gap: 12 }}>
+                {/* Existing vs net-new toggle */}
+                <div style={{ display: "flex", gap: 6 }}>
+                  {(["existing", "new"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setPartnerMode(mode)}
+                      style={{
+                        flex: 1, padding: "6px 0", fontSize: 13, borderRadius: 6,
+                        border: `1px solid ${partnerMode === mode ? "#107c10" : "rgba(0,0,0,0.12)"}`,
+                        background: partnerMode === mode ? "rgba(16,124,16,0.08)" : "transparent",
+                        color: partnerMode === mode ? "#107c10" : "#64748b", cursor: "pointer", fontWeight: 600,
+                      }}
+                    >
+                      {mode === "existing" ? "Select Existing" : "Invite New"}
+                    </button>
+                  ))}
+                </div>
+                {partnerMode === "existing" ? (
+                  <label className="ms-label">
+                    <span>Partner AE</span>
+                    <select className="ms-input" value={addPartnerUserId} onChange={(e) => setAddPartnerUserId(e.target.value)}>
+                      <option value="">— Select partner AE —</option>
+                      {assignablePartners.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name ?? u.email}{u.organization_name ? ` (${u.organization_name})` : ""}</option>
+                      ))}
+                    </select>
+                    {assignablePartners.length === 0 && (
+                      <span style={{ fontSize: 12, color: "#94a3b8" }}>No unassigned partner AEs — use Invite New.</span>
+                    )}
+                  </label>
+                ) : (
+                  <>
+                    <label className="ms-label">
+                      <span>Name *</span>
+                      <input className="ms-input" value={newPartnerName} onChange={(e) => setNewPartnerName(e.target.value)} placeholder="Full name" disabled={addingPartner} />
+                    </label>
+                    <label className="ms-label">
+                      <span>Email *</span>
+                      <input className="ms-input" type="email" value={newPartnerEmail} onChange={(e) => setNewPartnerEmail(e.target.value)} placeholder="ae@partner.com" disabled={addingPartner} />
+                    </label>
+                    <label className="ms-label">
+                      <span>Organization</span>
+                      <input className="ms-input" value={newPartnerOrg} onChange={(e) => setNewPartnerOrg(e.target.value)} placeholder="e.g. Zoom" disabled={addingPartner} />
+                    </label>
+                    <span style={{ fontSize: 12, color: "#94a3b8" }}>Creates a partner AE user and emails them an invite to CloudConnect.</span>
+                  </>
+                )}
               </div>
               <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
-                <button className="ms-btn-primary" disabled={!addPartnerUserId || addingPartner} onClick={handleAddPartner}>
-                  {addingPartner ? "Adding…" : "Add Partner AE"}
+                <button
+                  className="ms-btn-primary"
+                  disabled={addingPartner || (partnerMode === "existing" ? !addPartnerUserId : (!newPartnerName.trim() || !newPartnerEmail.trim()))}
+                  onClick={handleAddPartner}
+                >
+                  {addingPartner ? (partnerMode === "new" ? "Inviting…" : "Adding…") : (partnerMode === "new" ? "Invite & Add" : "Add Partner AE")}
                 </button>
-                <button className="ms-btn-secondary" onClick={() => setShowPartnerModal(false)}>Cancel</button>
+                <button className="ms-btn-secondary" onClick={resetPartnerModal}>Cancel</button>
               </div>
             </div>
           </div>

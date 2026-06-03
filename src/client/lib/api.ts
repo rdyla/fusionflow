@@ -1984,6 +1984,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  /** Invite/create a net-new partner AE user and attach them to the project as
+   *  staff_role 'partner_ae'. Server resolves by email (existing) or creates +
+   *  invites a new partner_ae user. */
+  inviteProjectPartnerAe: (projectId: string, payload: { name: string; email: string; organization_name?: string | null }) =>
+    request<ProjectStaffMember>(`/projects/${projectId}/staff`, {
+      method: "POST",
+      body: JSON.stringify({ new_partner_ae: payload, staff_role: "partner_ae" }),
+    }),
   removeProjectStaff: (projectId: string, staffId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/staff/${staffId}`, { method: "DELETE" }),
   projectCrmSync: (projectId: string) =>
