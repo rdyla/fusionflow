@@ -112,11 +112,6 @@ function pickCounts(
   const sdStages    = num(sd?.shared?.phases_count);
   const sdUsers     = num(sd?.ucaas?.basic_users) + num(sd?.ucaas?.advanced_users)
                     + num(sd?.ucaas?.common_area) + num(sd?.ucaas?.conference_rooms);
-  // DIDs to port: the SA enters this in the UCaaS sizing form's "DID Porting
-  // Blocks" field (ucaas.did_porting_blocks). shared.porting_did_count has no
-  // input + is never seeded, so it was always 0 — kept here only as a fallback
-  // for any legacy/NA-seeded value.
-  const sdDids      = num(sd?.ucaas?.did_porting_blocks) || num(sd?.shared?.porting_did_count);
 
   // Basic-mode fallback: PMs entering inputs through the simplified calculator
   // never populate sow_data, so the snapshot tiles + Scope at a Glance would
@@ -129,7 +124,11 @@ function pickCounts(
   const users     = sdUsers > 0
     ? sdUsers
     : (basic ? num(basic.users) : tieredSeats);
-  const dids      = sdDids; // not collected in basic/tiered modes
+  // DIDs to port = one ported number per user/seat + any additional DIDs on
+  // top (e.g. 23 users + 50 additional = 73). additional_did is the UCaaS
+  // sizing form's "Additional DIDs" field.
+  const additionalDids = num(sd?.ucaas?.additional_did);
+  const dids      = users + additionalDids;
   const a = na?.answers ?? {};
   const meetingsCount = num((a as Record<string, unknown>)["zoom_meetings_count"]);
   const meetings = meetingsCount > 0 ? meetingsCount : 0;
@@ -170,7 +169,8 @@ function pickCounts(
       ccaasAgents: combo.ccaas?.agents ?? ccaasAgents,
       ciSeats,
       vaWorkflows: zvaWorkflows > 0 ? zvaWorkflows : vaWorkflows,
-      dids, meetings,
+      dids:      (combo.users || users) + additionalDids,
+      meetings,
       goLives:   combo.go_lives || goLives,
     };
   }
