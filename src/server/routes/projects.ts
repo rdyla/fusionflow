@@ -12,6 +12,7 @@ import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, g
 import { ensureSharePointChildFolder } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { findOrCreatePartnerAe } from "../lib/partnerAe";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, buildTaggedTitle, parseTaggedTitle, type SolutionType } from "../../shared/solutionTypes";
 import { syncStageStatus, syncProjectStatus, syncProjectGoLiveDate } from "../lib/teamUtils";
 import { canonicalizeVendor } from "../../shared/vendors";
@@ -669,19 +670,35 @@ app.post("/:id/staff", async (c) => {
   const allowed = await canEditProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { user_id, staff_role } = await c.req.json<{ user_id: string; staff_role: string }>();
-  if (!user_id || !staff_role) throw new HTTPException(400, { message: "user_id and staff_role required" });
+  const body = await c.req.json<{ user_id?: string; staff_role?: string; new_partner_ae?: { name: string; email: string; organization_name?: string | null } }>();
+  let userId = body.user_id;
+  let staffRole = body.staff_role;
+
+  // Net-new partner AE: invite/create the partner_ae user, then attach. Mirrors
+  // the solutions "Add New" partner AE flow.
+  if (body.new_partner_ae) {
+    staffRole = "partner_ae";
+    userId = (await findOrCreatePartnerAe(c.env, db, auth.user.name ?? auth.user.email, {
+      email: body.new_partner_ae.email,
+      name: body.new_partner_ae.name?.trim() || null,
+      organization_name: body.new_partner_ae.organization_name ?? null,
+      executionCtx: c.executionCtx,
+    })) ?? undefined;
+    if (!userId) throw new HTTPException(400, { message: "Name and a valid email are required to invite a partner AE." });
+  }
+
+  if (!userId || !staffRole) throw new HTTPException(400, { message: "user_id and staff_role required" });
 
   const id = crypto.randomUUID();
   await db.prepare("INSERT OR IGNORE INTO project_staff (id, project_id, user_id, staff_role) VALUES (?, ?, ?, ?)")
-    .bind(id, projectId, user_id, staff_role).run();
+    .bind(id, projectId, userId, staffRole).run();
 
   const created = await db.prepare(`
     SELECT ps.id, ps.project_id, ps.user_id, ps.staff_role, ps.created_at,
            u.name, u.email, u.phone, u.scheduler_url, u.role, u.avatar_url, u.organization_name
     FROM project_staff ps JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
-  `).bind(projectId, user_id, staff_role).first();
+  `).bind(projectId, userId, staffRole).first();
   return c.json(created, 201);
 });
 
