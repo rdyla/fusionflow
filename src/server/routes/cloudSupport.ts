@@ -175,6 +175,7 @@ app.get("/:id", async (c) => {
     .prepare(`
       SELECT p.id, p.name, p.creator_id, p.created_at, p.updated_at,
         p.customer_id, COALESCE(cust.name, p.customer_name) as customer_name,
+        p.crm_opportunity_id,
         u.name as creator_name, u.email as creator_email
       FROM cs_proposals p
       LEFT JOIN users u ON u.id = p.creator_id
@@ -182,7 +183,7 @@ app.get("/:id", async (c) => {
       WHERE p.id = ?
     `)
     .bind(id)
-    .first<{ id: string; name: string; creator_id: string; created_at: string; updated_at: string; customer_id: string | null; customer_name: string | null; creator_name: string | null; creator_email: string | null }>();
+    .first<{ id: string; name: string; creator_id: string; created_at: string; updated_at: string; customer_id: string | null; customer_name: string | null; crm_opportunity_id: string | null; creator_name: string | null; creator_email: string | null }>();
 
   if (!proposal) return c.json({ error: "Not found" }, 404);
   // Users can only access their own proposals
@@ -207,6 +208,7 @@ app.get("/:id", async (c) => {
     creatorName: proposal.creator_name ?? proposal.creator_email ?? "Unknown",
     customerId: proposal.customer_id,
     customerName: proposal.customer_name,
+    crmOpportunityId: proposal.crm_opportunity_id,
     createdAt: proposal.created_at,
     updatedAt: proposal.updated_at,
     versions: (versions.results ?? []).map((v) => ({
@@ -307,9 +309,9 @@ app.post("/:id/versions", async (c) => {
   if (!parsed.success) return c.json({ error: "Invalid payload" }, 400);
 
   const proposal = await c.env.DB
-    .prepare("SELECT creator_id FROM cs_proposals WHERE id = ?")
+    .prepare("SELECT creator_id, name, customer_id, crm_opportunity_id FROM cs_proposals WHERE id = ?")
     .bind(id)
-    .first<{ creator_id: string }>();
+    .first<{ creator_id: string; name: string; customer_id: string | null; crm_opportunity_id: string | null }>();
   if (!proposal) return c.json({ error: "Not found" }, 404);
 
   if (!canEditProposal(auth, proposal.creator_id)) return c.json({ error: "Forbidden" }, 403);
@@ -344,7 +346,71 @@ app.post("/:id/versions", async (c) => {
     .bind(cachedName, now, id)
     .run();
 
+  // Create (or update) the bound D365 CloudCare opportunity from this version.
+  // Best-effort + backgrounded: D365 hiccups never fail the save. Needs a
+  // CRM-linked customer; no-ops otherwise.
+  c.executionCtx.waitUntil(
+    syncCloudCareOpportunity(c.env, id, proposal.name, proposal.customer_id, proposal.crm_opportunity_id, parsed.data.formData, parsed.data.calcResult)
+      .catch((err) => console.error(`[cloudsupport.${id}] CloudCare opp sync failed:`, err instanceof Error ? err.message : err)),
+  );
+
   return c.json({ id: versionId, versionNum: nextNum, savedAt: now });
 });
+
+/**
+ * Create or update the PFI CloudCare opportunity bound to a Cloud Support
+ * proposal, from the latest saved version. Requires a customer with a CRM
+ * account; no-ops if either is missing.
+ *   am_termmonths              = form.term (years) × 12
+ *   actualvalue                = calc.tcv (total contract value)
+ *   am_cloudcontractexpiration = form.contractEnd (calculated expiration)
+ *   estimatedclosedate         = form.estimatedCloseDate (SA-entered)
+ */
+async function syncCloudCareOpportunity(
+  env: Bindings,
+  proposalId: string,
+  name: string,
+  customerId: string | null,
+  existingOppId: string | null,
+  formData: Record<string, unknown>,
+  calcResult: Record<string, unknown>,
+): Promise<void> {
+  if (!customerId) return;
+  const cust = await env.DB
+    .prepare("SELECT crm_account_id FROM customers WHERE id = ? LIMIT 1")
+    .bind(customerId)
+    .first<{ crm_account_id: string | null }>();
+  const accountId = cust?.crm_account_id ?? null;
+  if (!accountId) return;
+
+  const termYears = Number(formData.term);
+  const termMonths = Number.isFinite(termYears) && termYears > 0 ? Math.round(termYears * 12) : undefined;
+  const tcv = Number(calcResult.tcv);
+  const contractValue = Number.isFinite(tcv) ? tcv : undefined;
+  const contractEnd = typeof formData.contractEnd === "string" && formData.contractEnd ? formData.contractEnd : undefined;
+  const estimatedCloseDate = typeof formData.estimatedCloseDate === "string" && formData.estimatedCloseDate ? formData.estimatedCloseDate : undefined;
+  const rs = Number(formData.revenueSource);
+  const revenueSource = rs === 930680000 || rs === 930680001 ? rs : undefined;
+  const vendor = typeof formData.oppVendor === "string" && formData.oppVendor ? formData.oppVendor : undefined;
+
+  const { createCloudCareOpportunity, updateOpportunity, opportunityVendorBind } = await import("../services/dynamicsService");
+  if (!existingOppId) {
+    const opp = await createCloudCareOpportunity(env, { name, parentAccountId: accountId, termMonths, contractValue, cloudContractExpiration: contractEnd, estimatedCloseDate, revenueSource, vendor });
+    if (opp?.opportunityid) {
+      await env.DB.prepare("UPDATE cs_proposals SET crm_opportunity_id = ? WHERE id = ?").bind(opp.opportunityid, proposalId).run();
+    }
+  } else {
+    // actualvalue (not am_combinedrevenue — that's calculated in D365).
+    const patch: Record<string, unknown> = {};
+    if (termMonths != null) patch.am_termmonths = termMonths;
+    if (contractValue != null) patch.actualvalue = contractValue;
+    if (contractEnd) patch.am_cloudcontractexpiration = contractEnd;
+    if (estimatedCloseDate) patch.estimatedclosedate = estimatedCloseDate;
+    if (revenueSource != null) patch.am_revenuesource = revenueSource;
+    const vendorBind = opportunityVendorBind(vendor);
+    if (vendorBind) patch["am_OpportunityVendors@odata.bind"] = vendorBind;
+    if (Object.keys(patch).length > 0) await updateOpportunity(env, existingOppId, patch);
+  }
+}
 
 export default app;

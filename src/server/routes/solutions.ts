@@ -198,8 +198,8 @@ const createSolutionSchema = z.object({
   customer_id: z.string().optional(),
   /** D365 account id. Required: a solution must bind to a real CRM account
    *  so account-team / opportunity / hours-compliance lookups resolve. The
-   *  client now provides a "Create new account in CRM" affordance when none
-   *  exists yet (handled in a follow-up PR). */
+   *  account is created in CRM by the customer's AE — SAs pick an existing
+   *  one from search (no in-app account creation). */
   dynamics_account_id: z.string().min(1),
   /** D365 opportunity id, scoped to dynamics_account_id. Required for the
    *  same reason — pre-sales work without an opportunity has nowhere to
@@ -216,6 +216,11 @@ const createSolutionSchema = z.object({
    *  solution-create flow (vs. picked from existing search results).
    *  Drives am_revenuesource = New Logo on the bound opportunity. */
   is_new_logo: z.boolean().optional(),
+  /** Opportunity fields carried from the create-opportunity form. Stored on the
+   *  solution and synced to the bound opp; also editable later in the overview.
+   *  am_revenuesource: Installed Base 930680000 | New Logo 930680001. */
+  revenue_source: z.union([z.literal(930680000), z.literal(930680001)]).optional(),
+  estimated_close_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 app.post("/", async (c) => {
@@ -228,6 +233,7 @@ app.post("/", async (c) => {
   const {
     customer_name, customer_id, dynamics_account_id, crm_opportunity_id,
     partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo,
+    revenue_source, estimated_close_date,
   } = parsed.data;
 
   const journeys = parsed.data.journeys ?? [];
@@ -303,13 +309,14 @@ app.post("/", async (c) => {
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, customer_id, dynamics_account_id, crm_opportunity_id, vendor, solution_types, other_technologies, journeys,
-          partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo, revenue_source, estimated_close_date, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, resolvedCustomerId, dynamics_account_id, crm_opportunity_id, vendor,
       serializeSolutionTypes(solution_types), serializeOtherTechnologies(other_technologies), journeysJson,
-      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, is_new_logo ? 1 : 0, auth.user.id
+      resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, is_new_logo ? 1 : 0,
+      revenue_source ?? null, estimated_close_date ?? null, auth.user.id
     )
     .run();
 
@@ -429,6 +436,11 @@ const updateSolutionSchema = z.object({
    *  contract ends — drives renewal-window planning). ISO YYYY-MM-DD.
    *  Maps to am_cloudcontractexpiration on the bound D365 opportunity. */
   cloud_contract_expiration_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
+  /** Opportunity fields, editable any time from the solution overview. Synced
+   *  to the bound D365 opp by syncOpportunityFromSolution.
+   *  revenue_source → am_revenuesource; estimated_close_date → estimatedclosedate. */
+  revenue_source: z.union([z.literal(930680000), z.literal(930680001)]).nullable().optional(),
+  estimated_close_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
   pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
@@ -638,6 +650,8 @@ app.patch("/:id", async (c) => {
     "is_zoom_reseller" in updates ||
     "deal_registration_id" in updates ||
     "cloud_contract_expiration_date" in updates ||
+    "revenue_source" in updates ||
+    "estimated_close_date" in updates ||
     "crm_opportunity_id" in updates ||
     "status" in updates ||
     pricingTouched;

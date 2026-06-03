@@ -285,10 +285,11 @@ export async function syncProjectGoLiveDate(db: D1Database, projectId: string): 
 //   cr495_pfiproserv          — constant 737660000 (Yes). Marks the opp as a
 //                               pro-services implementation; always Yes for
 //                               the CloudPro work CloudConnect quotes.
-//   am_revenuesource          — 930680001 (New Logo) when the CRM account
-//                               was created inline during this solution's
-//                               flow (is_new_logo=1), else 930680000
-//                               (Installed Base).
+//   am_tsb                    — 100000002 (Carahsoft) when is_zoom_reseller=1,
+//                               else 930680003 (Direct). NOTE: am_revenuesource
+//                               is intentionally NOT synced — the SA picks it
+//                               when creating the opportunity and we must not
+//                               clobber that choice.
 //   am_OpportunityVendors     — lookup to am_vendoraccount. Resolved from
 //                               solution.vendor + is_zoom_reseller:
 //                                 ringcentral         → Ring Central
@@ -336,8 +337,11 @@ const VENDOR_GUIDS = {
 } as const;
 
 const OPP_TYPE_CLOUDPRO = 930680038;
-const REV_SRC_INSTALLED_BASE = 930680000;
-const REV_SRC_NEW_LOGO       = 930680001;
+
+// am_tsb option-set. Direct for our normal deals; Carahsoft when the solution
+// is flagged Zoom Reseller (e.g. SLED via the Carahsoft paper).
+const TSB_DIRECT = 930680003;
+const TSB_CARAHSOFT = 100000002;
 
 // cr495_pfiproserv option-set (Yes / No / N/A). Everything we quote through
 // CloudConnect is a CloudPro professional-services implementation, so this
@@ -375,7 +379,7 @@ export async function syncOpportunityFromSolution(
     .prepare(
       `SELECT crm_opportunity_id, vendor, is_zoom_reseller, is_new_logo,
               deal_registration_id, status, sow_total_amount,
-              cloud_contract_expiration_date
+              cloud_contract_expiration_date, revenue_source, estimated_close_date
        FROM solutions WHERE id = ? LIMIT 1`
     )
     .bind(solutionId)
@@ -388,6 +392,8 @@ export async function syncOpportunityFromSolution(
       status: string | null;
       sow_total_amount: number | null;
       cloud_contract_expiration_date: string | null;
+      revenue_source: number | null;
+      estimated_close_date: string | null;
     }>();
   if (!row?.crm_opportunity_id) return;
 
@@ -406,16 +412,25 @@ export async function syncOpportunityFromSolution(
   const patch: Record<string, unknown> = {
     am_opportunitytype:       OPP_TYPE_CLOUDPRO,
     cr495_pfiproserv:         PROSERV_YES,
-    am_revenuesource:         row.is_new_logo === 1 ? REV_SRC_NEW_LOGO : REV_SRC_INSTALLED_BASE,
+    // am_tsb: Direct, or Carahsoft when this is a Zoom Reseller deal.
+    am_tsb:                   row.is_zoom_reseller === 1 ? TSB_CARAHSOFT : TSB_DIRECT,
     am_opportunitysalesstage: salesStageForSolutionStatus(row.status),
     am_mrr:                   0,
     cr495_crr:                0,
     am_spiff:                 0,
+    // actualvalue only — am_combinedrevenue is a calculated/rollup field in
+    // D365 (auto-maintained), so we must not write it.
     actualvalue:              sowTotal,
-    am_combinedrevenue:       sowTotal,
     am_cloudcontractexpiration: row.cloud_contract_expiration_date ?? null,
     cr495_dealregistrationid: row.deal_registration_id ?? null,
   };
+  // Revenue source + estimated close date: set from the solution's own fields
+  // (chosen at opp-create, editable in the solution overview). Only pushed when
+  // SET — a null solution value must NOT null an existing opp's CRM value
+  // (e.g. when the SA bound an existing opportunity).
+  if (row.revenue_source != null) patch.am_revenuesource = row.revenue_source;
+  const closeDate = (row.estimated_close_date ?? "").trim();
+  if (closeDate) patch.estimatedclosedate = closeDate;
   if (vendorGuid) {
     patch["am_OpportunityVendors@odata.bind"] = `/am_vendoraccounts(${vendorGuid})`;
   }

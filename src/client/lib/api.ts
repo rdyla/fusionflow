@@ -172,6 +172,11 @@ export type Solution = {
    *  renewal-window conversation). ISO YYYY-MM-DD. Maps to
    *  am_cloudcontractexpiration on the bound D365 opportunity. */
   cloud_contract_expiration_date: string | null;
+  /** Opportunity fields, editable from the solution overview, synced to the
+   *  bound D365 opp. revenue_source → am_revenuesource (930680000 Installed
+   *  Base | 930680001 New Logo); estimated_close_date → estimatedclosedate. */
+  revenue_source: number | null;
+  estimated_close_date: string | null;
   // SOW pricing
   add_ons: AddOn[];
   blended_rate: number;
@@ -1358,7 +1363,7 @@ export const api = {
    *  pfi_solutionarchitect get populated downstream as the solution
    *  progresses. Returns the new row so the caller can push it straight
    *  into the picker. */
-  createDynamicsOpportunity: (payload: { name: string; parent_account_id: string }) =>
+  createDynamicsOpportunity: (payload: { name: string; parent_account_id: string; revenue_source?: 930680000 | 930680001; estimated_close_date?: string }) =>
     request<DynamicsOpportunity>("/dynamics/opportunities", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -1863,6 +1868,10 @@ export const api = {
      *  affordance — drives am_revenuesource=New Logo on the bound D365
      *  opportunity. Defaults to false (Installed Base) server-side. */
     is_new_logo?: boolean;
+    /** Opportunity fields carried from the create-opportunity form → stored on
+     *  the solution + synced to the bound opp. */
+    revenue_source?: 930680000 | 930680001;
+    estimated_close_date?: string;
   }) =>
     request<Solution>("/solutions", {
       method: "POST",
@@ -1903,6 +1912,10 @@ export const api = {
       deal_registration_id: string | null;
       /** Cloud contract expiration — synced to D365 am_cloudcontractexpiration. */
       cloud_contract_expiration_date: string | null;
+      /** Opportunity revenue source + estimated close date — synced to D365
+       *  am_revenuesource / estimatedclosedate. */
+      revenue_source: 930680000 | 930680001 | null;
+      estimated_close_date: string | null;
       /** If a solution_types update would orphan needs_assessments / labor_estimates rows
        *  for removed types, the server returns 409 unless this flag is set. The client
        *  surfaces the 409 as a confirm dialog and retries with force=true on accept. */

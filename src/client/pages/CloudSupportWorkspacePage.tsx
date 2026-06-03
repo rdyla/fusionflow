@@ -61,7 +61,9 @@ export default function CloudSupportWorkspacePage() {
       // Load latest version if available
       if (p.versions.length > 0) {
         const latest = p.versions[p.versions.length - 1];
-        setForm(latest.data);
+        // Merge over defaults so versions saved before a field existed (e.g.
+        // estimatedCloseDate) still have every key — keeps inputs controlled.
+        setForm({ ...DEFAULT_FORM_DATA, ...latest.data });
         setActiveVersionId(latest.id);
       }
     }).catch(() => showToast("Failed to load proposal", "error"))
@@ -89,7 +91,7 @@ export default function CloudSupportWorkspacePage() {
   }
 
   function loadVersion(v: CsVersion) {
-    setForm(v.data);
+    setForm({ ...DEFAULT_FORM_DATA, ...v.data });
     setActiveVersionId(v.id);
     setDirty(false);
     setTab("calculator");
@@ -179,6 +181,7 @@ export default function CloudSupportWorkspacePage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: "#1e293b", margin: 0 }}>{proposal.name}</h1>
             {dirty && <span style={{ fontSize: 11, background: "rgba(245,158,11,0.15)", color: "#b45309", borderRadius: 4, padding: "2px 7px", fontWeight: 600 }}>Unsaved</span>}
+            {proposal.crmOpportunityId && <span title="A PFI CloudCare opportunity is linked in CRM" style={{ fontSize: 11, background: "rgba(16,124,16,0.12)", color: "#107c10", borderRadius: 4, padding: "2px 7px", fontWeight: 600 }}>✓ CRM opportunity</span>}
             <button
               onClick={() => { setRenameName(proposal.name); setShowRenameModal(true); }}
               style={{ fontSize: 12, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: 0 }}

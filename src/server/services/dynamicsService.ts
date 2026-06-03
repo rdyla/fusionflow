@@ -457,17 +457,98 @@ export async function updateOpportunity(
 // customerid_account because some D365 configs require it on create.
 // pfi_sowhours / pfi_solutionarchitect intentionally left blank — those get
 // populated downstream as the solution progresses (per product direction).
+// am_revenuesourcetype option-set: Net New Revenue. am_tsb option-set: Direct.
+// Both are constants on the pre-sales opps we create here (TSB later flips to
+// Carahsoft via syncOpportunityFromSolution when the solution is Zoom Reseller).
+const OPP_REVENUE_SOURCE_TYPE_NET_NEW = 930680000;
+const OPP_TSB_DIRECT = 930680003;
+
 export async function createOpportunity(
   env: Env,
-  payload: { name: string; parentAccountId: string },
+  payload: { name: string; parentAccountId: string; revenueSource?: number; estimatedCloseDate?: string },
 ): Promise<DynamicsOpportunity> {
   const body: Record<string, unknown> = {
     name: payload.name,
     "parentaccountid@odata.bind":    `/accounts(${payload.parentAccountId})`,
     "customerid_account@odata.bind": `/accounts(${payload.parentAccountId})`,
+    am_revenuesourcetype: OPP_REVENUE_SOURCE_TYPE_NET_NEW,
+    am_tsb: OPP_TSB_DIRECT,
   };
+  // Revenue source (Installed Base / New Logo) is chosen by the SA at create
+  // time. syncOpportunityFromSolution deliberately does NOT touch this field,
+  // so the selection sticks.
+  if (payload.revenueSource != null) body.am_revenuesource = payload.revenueSource;
+  // Estimated close date — DateOnly field, sent as yyyy-MM-dd (D365 displays it
+  // M/d/yyyy). Provided by the SA on the create-opportunity form.
+  if (payload.estimatedCloseDate) body.estimatedclosedate = payload.estimatedCloseDate;
+  // Owner = the account's owner (the assigned AE), not the app principal that
+  // our Dynamics client-credentials calls authenticate as. Look it up off the
+  // account and bind it; best-effort — fall back to the app principal on miss.
+  try {
+    const acct = await dynamicsGet<{ "_ownerid_value": string | null }>(
+      env,
+      `/accounts(${payload.parentAccountId})?$select=_ownerid_value`,
+    );
+    const ownerId = acct?.["_ownerid_value"];
+    if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
+  } catch { /* owner lookup is best-effort */ }
   const raw = await dynamicsPost<DynamicsOpportunity>(env, "/opportunities", body, { prefer: "return=representation" });
   return raw;
+}
+
+// PFI CloudCare — opportunity type for Cloud Support (managed-support) contracts,
+// vs PFI CloudPro (930680038) for implementation solutions.
+const OPP_TYPE_CLOUDCARE = 930680036;
+
+// Vendor → am_vendoraccount GUIDs for am_OpportunityVendors (same accounts the
+// solutions opp sync uses).
+const OPPORTUNITY_VENDOR_GUIDS: Record<string, string> = {
+  zoom:        "e34b00ae-7951-ec11-8f8e-000d3a5bc238",
+  zoom_resell: "2b97d3d0-115f-ef11-bfe3-000d3a593ab7",
+  ringcentral: "b84b00ae-7951-ec11-8f8e-000d3a5bc238",
+};
+
+/** Build the am_OpportunityVendors @odata.bind for a vendor key, or null. */
+export function opportunityVendorBind(vendor?: string | null): string | null {
+  if (!vendor) return null;
+  const guid = OPPORTUNITY_VENDOR_GUIDS[vendor];
+  return guid ? `/am_vendoraccounts(${guid})` : null;
+}
+
+// Create a CloudCare opportunity for a Cloud Support proposal. Same base as the
+// solutions opp (owner = account owner, Net New Revenue, Direct TSB) but typed
+// CloudCare and carrying the support-contract fields (term, TCV, expiration).
+// No cr495_pfiproserv — that's pro-services / CloudPro-only.
+export async function createCloudCareOpportunity(
+  env: Env,
+  payload: { name: string; parentAccountId: string; termMonths?: number; contractValue?: number; cloudContractExpiration?: string; estimatedCloseDate?: string; revenueSource?: number; vendor?: string },
+): Promise<DynamicsOpportunity> {
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    "parentaccountid@odata.bind":    `/accounts(${payload.parentAccountId})`,
+    "customerid_account@odata.bind": `/accounts(${payload.parentAccountId})`,
+    am_opportunitytype: OPP_TYPE_CLOUDCARE,
+    am_revenuesourcetype: OPP_REVENUE_SOURCE_TYPE_NET_NEW,
+    am_tsb: OPP_TSB_DIRECT,
+  };
+  if (payload.termMonths != null) body.am_termmonths = payload.termMonths;
+  // Total contract value → actualvalue. am_combinedrevenue is calculated in
+  // D365 (auto-maintained), so we don't write it.
+  if (payload.contractValue != null) body.actualvalue = payload.contractValue;
+  if (payload.cloudContractExpiration) body.am_cloudcontractexpiration = payload.cloudContractExpiration;
+  if (payload.estimatedCloseDate) body.estimatedclosedate = payload.estimatedCloseDate;
+  if (payload.revenueSource != null) body.am_revenuesource = payload.revenueSource;
+  const vendorBind = opportunityVendorBind(payload.vendor);
+  if (vendorBind) body["am_OpportunityVendors@odata.bind"] = vendorBind;
+  try {
+    const acct = await dynamicsGet<{ "_ownerid_value": string | null }>(
+      env,
+      `/accounts(${payload.parentAccountId})?$select=_ownerid_value`,
+    );
+    const ownerId = acct?.["_ownerid_value"];
+    if (ownerId) body["ownerid@odata.bind"] = `/systemusers(${ownerId})`;
+  } catch { /* owner lookup is best-effort */ }
+  return dynamicsPost<DynamicsOpportunity>(env, "/opportunities", body, { prefer: "return=representation" });
 }
 
 export async function getAccountOpportunities(
