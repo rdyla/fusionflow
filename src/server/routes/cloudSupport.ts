@@ -389,10 +389,13 @@ async function syncCloudCareOpportunity(
   const contractValue = Number.isFinite(tcv) ? tcv : undefined;
   const contractEnd = typeof formData.contractEnd === "string" && formData.contractEnd ? formData.contractEnd : undefined;
   const estimatedCloseDate = typeof formData.estimatedCloseDate === "string" && formData.estimatedCloseDate ? formData.estimatedCloseDate : undefined;
+  const rs = Number(formData.revenueSource);
+  const revenueSource = rs === 930680000 || rs === 930680001 ? rs : undefined;
+  const vendor = typeof formData.oppVendor === "string" && formData.oppVendor ? formData.oppVendor : undefined;
 
-  const { createCloudCareOpportunity, updateOpportunity } = await import("../services/dynamicsService");
+  const { createCloudCareOpportunity, updateOpportunity, opportunityVendorBind } = await import("../services/dynamicsService");
   if (!existingOppId) {
-    const opp = await createCloudCareOpportunity(env, { name, parentAccountId: accountId, termMonths, contractValue, cloudContractExpiration: contractEnd, estimatedCloseDate });
+    const opp = await createCloudCareOpportunity(env, { name, parentAccountId: accountId, termMonths, contractValue, cloudContractExpiration: contractEnd, estimatedCloseDate, revenueSource, vendor });
     if (opp?.opportunityid) {
       await env.DB.prepare("UPDATE cs_proposals SET crm_opportunity_id = ? WHERE id = ?").bind(opp.opportunityid, proposalId).run();
     }
@@ -403,6 +406,9 @@ async function syncCloudCareOpportunity(
     if (contractValue != null) patch.actualvalue = contractValue;
     if (contractEnd) patch.am_cloudcontractexpiration = contractEnd;
     if (estimatedCloseDate) patch.estimatedclosedate = estimatedCloseDate;
+    if (revenueSource != null) patch.am_revenuesource = revenueSource;
+    const vendorBind = opportunityVendorBind(vendor);
+    if (vendorBind) patch["am_OpportunityVendors@odata.bind"] = vendorBind;
     if (Object.keys(patch).length > 0) await updateOpportunity(env, existingOppId, patch);
   }
 }

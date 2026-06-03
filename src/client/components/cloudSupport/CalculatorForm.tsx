@@ -165,6 +165,33 @@ export default function CalculatorForm({ form, calc, canOverride, onChange, cust
             <input className="ms-input" type="date" value={form.estimatedCloseDate} onChange={(e) => setField("estimatedCloseDate", e.target.value)} />
           </label>
         </div>
+        <div style={S.row}>
+          <label style={S.label}>
+            <span>Revenue Source</span>
+            <select
+              className="ms-input"
+              value={form.revenueSource ?? ""}
+              onChange={(e) => setField("revenueSource", e.target.value ? Number(e.target.value) : null)}
+            >
+              <option value="">—</option>
+              <option value={930680000}>Installed Base</option>
+              <option value={930680001}>New Logo</option>
+            </select>
+          </label>
+          <label style={S.label}>
+            <span>Vendor</span>
+            <select
+              className="ms-input"
+              value={form.oppVendor}
+              onChange={(e) => setField("oppVendor", e.target.value as OppFormData["oppVendor"])}
+            >
+              <option value="">—</option>
+              <option value="zoom">Zoom</option>
+              <option value="zoom_resell">Zoom Resell</option>
+              <option value="ringcentral">RingCentral</option>
+            </select>
+          </label>
+        </div>
       </div>
 
       {/* ── UCaaS ────────────────────────────────────────────────────────────── */}
