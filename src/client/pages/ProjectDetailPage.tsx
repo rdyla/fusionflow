@@ -899,17 +899,14 @@ export default function ProjectDetailPage() {
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
-        // Partner AEs (Zoom/RC) see Dashboard + SharePoint only — they use the SP
-        // tab to upload discovery workbooks, phone bills, CSRs, etc. Customer
-        // clients see read-only Timeline/Tasks/Blockers plus an Activity tab
-        // filtered to public-visibility notes, so they can track progress and
-        // post public comments. Internal staff see everything.
-        const isPartnerAe = currentUserRole === "partner_ae";
-        const isClient = currentUserRole === "client";
+        // External roles (Customer clients + Zoom/RC partner AEs) get the same
+        // read-only set: Dashboard/Overview/Timeline/Tasks/Blockers, SharePoint
+        // (upload discovery workbooks, phone bills, CSRs, etc.), and an Activity
+        // tab. The notes endpoint scopes what each sees — clients see public
+        // notes, partner AEs see partner+public. Internal staff see everything.
+        const isExternal = currentUserRole === "partner_ae" || currentUserRole === "client";
         const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
-        const visibleTabs: DetailTab[] = isPartnerAe
-          ? ["dashboard", ...externalSPTab]
-          : isClient
+        const visibleTabs: DetailTab[] = isExternal
           ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
           : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
         return (
@@ -961,9 +958,9 @@ export default function ProjectDetailPage() {
         <ProjectTimeline
           stages={visibleStages}
           tasks={visibleTasks}
-          // Hide recording markers for clients — meeting topics on the Gantt could
-          // surface internal discussion names. Matches the Activity-tab gating.
-          recordings={currentUserRole === "client" ? [] : recordings}
+          // Hide recording markers for external roles (clients + partner AEs) —
+          // meeting topics on the Gantt could surface internal discussion names.
+          recordings={currentUserRole === "client" || currentUserRole === "partner_ae" ? [] : recordings}
           projectId={project.id}
           availableTypes={availableTypes}
           selectedTypes={selectedTypes}
@@ -993,7 +990,10 @@ export default function ProjectDetailPage() {
 
       {/* ── Overview ────────────────────────────────────────────────────── */}
       {tab === "overview" && (() => {
-        const isClient = currentUserRole === "client";
+        // External roles (clients + partner AEs) get the read-only Overview;
+        // internal-only sections (e.g. Status Meeting / Meeting Prep) are gated
+        // on !isExternal so they stay hidden from both.
+        const isExternal = currentUserRole === "client" || currentUserRole === "partner_ae";
 
         // Per-section accent palette. Each contact card gets a left-border stripe
         // + matching avatar-fallback color so the four sections are visually
@@ -1274,8 +1274,8 @@ export default function ProjectDetailPage() {
               }}
             />
 
-            {/* ── Status Meeting │ Meeting Prep (PM/admin only, 2-column) ──── */}
-            {!isClient && (
+            {/* ── Status Meeting │ Meeting Prep (internal only, 2-column) ──── */}
+            {!isExternal && (
               <div style={twoCol}>
                 <StatusMeetingPanel
                   project={project}
