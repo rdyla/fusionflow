@@ -263,6 +263,12 @@ app.post("/", requireRole("admin", "pm", "pf_sa"), async (c) => {
 // on any task or blocker write. PMs can't set it manually anymore
 // (May-2026); a `status` field in the payload is silently dropped by zod.
 const updateProjectSchema = z.object({
+  name: z.string().min(1).max(500).optional(),
+  // CRM (re)link: a picked Dynamics account id + its display name. The handler
+  // resolves/creates the customer row and sets customer_id alongside. Pass
+  // dynamics_account_id: null to unlink.
+  dynamics_account_id: z.string().nullable().optional(),
+  customer_name: z.string().max(500).nullable().optional(),
   health: z.string().min(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),
@@ -312,9 +318,58 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
     .bind(projectId)
     .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null }>();
 
-  const { clear_health_override, cleanup_solution_types, ...updates } = parsed.data;
+  const {
+    clear_health_override, cleanup_solution_types,
+    dynamics_account_id: dynIdInput, customer_name: customerNameInput,
+    ...updates
+  } = parsed.data;
   const fields: string[] = [];
   const values: unknown[] = [];
+
+  // CRM customer (re)link. When a Dynamics account id is supplied, resolve or
+  // create its customer row and set customer_id + customer_name +
+  // dynamics_account_id together (mirrors project creation). Handled outside
+  // the generic loop because customer_id is derived, not sent by the client.
+  // dynamics_account_id: null explicitly unlinks the project.
+  if (dynIdInput !== undefined) {
+    if (dynIdInput) {
+      let linkedCustomerId: string;
+      const existing = await db
+        .prepare(`SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1`)
+        .bind(dynIdInput)
+        .first<{ id: string }>();
+      if (existing) {
+        linkedCustomerId = existing.id;
+      } else {
+        linkedCustomerId = crypto.randomUUID();
+        await db
+          .prepare(`INSERT INTO customers (id, name, crm_account_id) VALUES (?, ?, ?)`)
+          .bind(linkedCustomerId, customerNameInput ?? "Unknown", dynIdInput)
+          .run();
+        // Best-effort CRM team sync, same as project creation.
+        try {
+          const team = await getAccountTeam(c.env, dynIdInput);
+          const [aeId, saId, csmId] = await Promise.all([
+            findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
+            findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
+            findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
+          ]);
+          if (aeId || saId || csmId) {
+            await db
+              .prepare(`UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?`)
+              .bind(aeId ?? null, saId ?? null, csmId ?? null, linkedCustomerId)
+              .run();
+          }
+        } catch { /* sync is best-effort */ }
+      }
+      fields.push("dynamics_account_id = ?"); values.push(dynIdInput);
+      fields.push("customer_id = ?"); values.push(linkedCustomerId);
+      if (customerNameInput) { fields.push("customer_name = ?"); values.push(customerNameInput); }
+    } else {
+      fields.push("dynamics_account_id = ?"); values.push(null);
+      fields.push("customer_id = ?"); values.push(null);
+    }
+  }
 
   // Handle "reset to auto" — clear override and compute health immediately
   if (clear_health_override) {

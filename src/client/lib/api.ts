@@ -1408,6 +1408,11 @@ export const api = {
   updateProject: (
     id: string,
     payload: {
+      name?: string;
+      /** CRM (re)link: picked Dynamics account id + its name. Server resolves
+       *  customer_id. Pass dynamics_account_id: null to unlink. */
+      dynamics_account_id?: string | null;
+      customer_name?: string | null;
       status?: string;
       health?: string;
       clear_health_override?: boolean;

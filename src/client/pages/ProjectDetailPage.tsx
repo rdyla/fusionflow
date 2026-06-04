@@ -272,6 +272,15 @@ export default function ProjectDetailPage() {
   const [newPartnerEmail, setNewPartnerEmail] = useState("");
   const [newPartnerOrg, setNewPartnerOrg] = useState("");
 
+  // Edit project meta — rename + (re)link a CRM customer. Staff-only.
+  const [showEditMeta, setShowEditMeta] = useState(false);
+  const [metaName, setMetaName] = useState("");
+  const [metaCrmQuery, setMetaCrmQuery] = useState("");
+  const [metaCrmResults, setMetaCrmResults] = useState<{ id: string; name: string }[]>([]);
+  const [metaCrmSearching, setMetaCrmSearching] = useState(false);
+  const [metaPickedAccount, setMetaPickedAccount] = useState<{ id: string; name: string } | null>(null);
+  const [savingMeta, setSavingMeta] = useState(false);
+
   // Zoom recordings
   const [recordings, setRecordings] = useState<ZoomRecording[]>([]);
   const [syncingSuggestions, setSyncingSuggestions] = useState(false);
@@ -598,6 +607,56 @@ export default function ProjectDetailPage() {
     }
   }
 
+  function openEditMeta() {
+    if (!project) return;
+    setMetaName(project.name ?? "");
+    setMetaCrmQuery(project.customer_name ?? "");
+    setMetaCrmResults([]);
+    setMetaPickedAccount(null);
+    setShowEditMeta(true);
+  }
+
+  async function handleMetaCrmSearch(q: string) {
+    setMetaCrmQuery(q);
+    setMetaPickedAccount(null);
+    if (q.trim().length < 2) { setMetaCrmResults([]); return; }
+    setMetaCrmSearching(true);
+    try {
+      const results = await api.searchDynamicsAccounts(q);
+      setMetaCrmResults(results.map((r) => ({ id: r.accountid, name: r.name })));
+    } catch {
+      setMetaCrmResults([]);
+    } finally {
+      setMetaCrmSearching(false);
+    }
+  }
+
+  async function saveMeta() {
+    if (!project) return;
+    const payload: Parameters<typeof api.updateProject>[1] = {};
+    const trimmedName = metaName.trim();
+    if (trimmedName && trimmedName !== project.name) payload.name = trimmedName;
+    if (metaPickedAccount && metaPickedAccount.id !== project.dynamics_account_id) {
+      payload.dynamics_account_id = metaPickedAccount.id;
+      payload.customer_name = metaPickedAccount.name;
+    }
+    if (Object.keys(payload).length === 0) { setShowEditMeta(false); return; }
+    setSavingMeta(true);
+    try {
+      await api.updateProject(project.id, payload);
+      // Refetch to pull joined customer fields (display name, SharePoint URL)
+      // that the PATCH response (raw projects row) doesn't include.
+      const refreshed = await api.project(project.id);
+      setProject(refreshed);
+      setShowEditMeta(false);
+      showToast(payload.dynamics_account_id ? "Project updated and linked to CRM customer." : "Project updated.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update project", "error");
+    } finally {
+      setSavingMeta(false);
+    }
+  }
+
   async function saveEditTech() {
     if (!project) return;
     const removed = originalSolutionTypes.filter((t) => !editSolutionTypes.includes(t));
@@ -871,10 +930,16 @@ export default function ProjectDetailPage() {
               )}
               {project.name}
             </h1>
-            {project.customer_id && (
+            {project.customer_id ? (
               <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
                 {project.customer_name ?? project.customer_display_name} <span style={{ fontSize: 11 }}>↗</span>
               </Link>
+            ) : canEdit ? (
+              <button onClick={openEditMeta} style={{ fontSize: 13, color: "#0b9aad", background: "none", border: "none", padding: 0, cursor: "pointer", fontWeight: 600 }}>
+                + Link CRM customer
+              </button>
+            ) : (
+              <span style={{ fontSize: 13, color: "#94a3b8" }}>No CRM customer linked</span>
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
@@ -889,6 +954,11 @@ export default function ProjectDetailPage() {
                 style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
                 SharePoint ↗
               </a>
+            )}
+            {canEdit && (
+              <button onClick={openEditMeta} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}>
+                Edit
+              </button>
             )}
           </div>
         </div>
@@ -3026,6 +3096,58 @@ export default function ProjectDetailPage() {
 
 
       {/* ── Add Staff Modal ──────────────────────────────────────────────── */}
+      {/* ── Edit Project (rename + CRM customer link) ────────────────────── */}
+      {showEditMeta && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowEditMeta(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 520, display: "flex", flexDirection: "column" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 24px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Edit Project</h2>
+              <button onClick={() => setShowEditMeta(false)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1, padding: "0 4px" }}>×</button>
+            </div>
+            <div style={{ padding: "20px 24px", display: "grid", gap: 16 }}>
+              <label className="ms-label">
+                <span>Project Name</span>
+                <input className="ms-input" value={metaName} onChange={(e) => setMetaName(e.target.value)} placeholder="Project name" />
+              </label>
+              <div>
+                <div className="ms-label" style={{ marginBottom: 4 }}><span>CRM Customer</span></div>
+                {project.customer_id && !metaPickedAccount && (
+                  <div style={{ fontSize: 12, color: "#64748b", margin: "0 0 6px" }}>
+                    Currently linked: <strong>{project.customer_name ?? project.customer_display_name}</strong>. Search to change.
+                  </div>
+                )}
+                {metaPickedAccount ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, border: "1px solid #bae6fd", background: "#f0f9ff", borderRadius: 6, padding: "8px 12px" }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#0369a1" }}>{metaPickedAccount.name}</span>
+                    <button onClick={() => { setMetaPickedAccount(null); setMetaCrmQuery(""); }} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12 }}>Change</button>
+                  </div>
+                ) : (
+                  <>
+                    <input className="ms-input" value={metaCrmQuery} onChange={(e) => handleMetaCrmSearch(e.target.value)} placeholder="Search Dynamics accounts…" />
+                    {metaCrmSearching && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>Searching…</div>}
+                    {metaCrmResults.length > 0 && (
+                      <div style={{ marginTop: 6, border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden", maxHeight: 200, overflowY: "auto" }}>
+                        {metaCrmResults.map((r) => (
+                          <button key={r.id} onClick={() => { setMetaPickedAccount(r); setMetaCrmResults([]); }} style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 12px", background: "#fff", border: "none", borderBottom: "1px solid rgba(0,0,0,0.05)", cursor: "pointer", fontSize: 13 }}>
+                            {r.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, padding: "16px 24px", borderTop: "1px solid rgba(0,0,0,0.07)", flexShrink: 0 }}>
+              <button className="ms-btn-primary" disabled={savingMeta} onClick={saveMeta}>
+                {savingMeta ? "Saving…" : "Save"}
+              </button>
+              <button className="ms-btn-secondary" onClick={() => setShowEditMeta(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showStaffModal && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowStaffModal(false); }}>
           <div className="ms-modal" style={{ maxWidth: 480, display: "flex", flexDirection: "column" }}>
