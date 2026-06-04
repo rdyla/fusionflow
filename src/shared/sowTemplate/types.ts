@@ -63,13 +63,20 @@ export type SowBuildContext = {
   /** Revision history rows for the cover-page table. */
   revisions: Array<{ version: string; saved_at: string; saved_by_name: string | null; note?: string | null }>;
   /** Engagement Snapshot tile values — variants drive the labels + computed values via SnapshotField. */
-  /** Total fee in USD (from calcSowTotal). May be 0 for fully-discounted SOWs. */
+  /** Base services fee in USD shown above the add-on lines. Chosen so that
+   *  feeTotal + Σ addOnLines === projectTotal exactly (it absorbs the round-up
+   *  delta), keeping the pricing summary footed. May be 0 for fully-discounted SOWs. */
   feeTotal: number;
-  /** Discount line value (negative). Renders as "($25,017.00)" in the pricing
-   *  summary when non-zero. Use null to omit the discount row. */
-  feeDiscount: number | null;
-  /** Final project total after discount. */
+  /** Itemized add-on / discount lines shown between the base fee and the
+   *  Project Total. Positive = charge (e.g. "Outbound dialing campaigns" +$1,200),
+   *  negative = discount (rendered in parens). Empty array → no extra rows. */
+  addOnLines: Array<{ label: string; amount: number }>;
+  /** Final project total — rounded UP to the next $250. */
   projectTotal: number;
+  /** Free-form Additional Scope Notes from the solution (exclusions, special
+   *  terms, assumptions). Rendered as its own section when non-empty; null to
+   *  omit the section entirely. */
+  additionalScopeNotes: string | null;
   /** Optional zoom-reseller / budgetary flags carried over from the existing
    *  ScopeOfWorkDocument renderer. */
   isBudgetary: boolean;
