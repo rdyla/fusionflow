@@ -19,7 +19,8 @@ app.get("/:id/notes", async (c) => {
 
   let sql = `
     SELECT n.id, n.project_id, n.author_user_id, n.body, n.visibility, n.created_at,
-           u.name AS author_name, u.organization_name AS author_org
+           COALESCE(u.name, n.author_name) AS author_name,
+           COALESCE(u.organization_name, n.author_org) AS author_org
     FROM notes n
     LEFT JOIN users u ON u.id = n.author_user_id
     WHERE n.project_id = ?
@@ -62,16 +63,22 @@ app.post("/:id/notes", async (c) => {
     : auth.role === "client" ? "public"
     : parsed.data.visibility;
 
+  // Clients are synthetic AppUsers (built from a Dynamics portal contact) with
+  // no row in the users table, so author_user_id must be NULL for them — a real
+  // id would violate the FK. Denormalize their name/org onto the note instead.
+  const authorUserId = auth.role === "client" ? null : auth.user.id;
+
   const noteId = crypto.randomUUID();
   await db
-    .prepare("INSERT INTO notes (id, project_id, author_user_id, body, visibility) VALUES (?, ?, ?, ?, ?)")
-    .bind(noteId, projectId, auth.user.id, body, visibility)
+    .prepare("INSERT INTO notes (id, project_id, author_user_id, body, visibility, author_name, author_org) VALUES (?, ?, ?, ?, ?, ?, ?)")
+    .bind(noteId, projectId, authorUserId, body, visibility, auth.user.name ?? null, auth.user.organization_name ?? null)
     .run();
 
   const created = await db
     .prepare(`
       SELECT n.id, n.project_id, n.author_user_id, n.body, n.visibility, n.created_at,
-             u.name AS author_name, u.organization_name AS author_org
+             COALESCE(u.name, n.author_name) AS author_name,
+             COALESCE(u.organization_name, n.author_org) AS author_org
       FROM notes n LEFT JOIN users u ON u.id = n.author_user_id
       WHERE n.id = ? LIMIT 1
     `)
@@ -106,7 +113,7 @@ app.post("/:id/notes", async (c) => {
         entityType: "note",
         entityId: noteId,
         projectId,
-        senderUserId: auth.user.id,
+        senderUserId: authorUserId,
       }));
     }
   }
@@ -145,7 +152,7 @@ app.post("/:id/notes", async (c) => {
         entityType: "note",
         entityId: noteId,
         projectId,
-        senderUserId: auth.user.id,
+        senderUserId: authorUserId,
       }));
     }
   }
