@@ -280,6 +280,7 @@ export default function ProjectDetailPage() {
   const [metaCrmSearching, setMetaCrmSearching] = useState(false);
   const [metaPickedAccount, setMetaPickedAccount] = useState<{ id: string; name: string } | null>(null);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Zoom recordings
   const [recordings, setRecordings] = useState<ZoomRecording[]>([]);
@@ -586,7 +587,8 @@ export default function ProjectDetailPage() {
         payload.cleanup_solution_types = solutionCleanup.removed;
       }
       const updated = await api.updateProject(project.id, payload);
-      setProject(updated);
+      // Merge so joined fields (account team, customer/SharePoint) survive.
+      setProject((prev) => prev ? { ...prev, ...updated } : updated);
       setEditingTech(false);
       setSolutionCleanup(null);
       if (includeCleanup && solutionCleanup) {
@@ -657,6 +659,42 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // Manual refresh — re-pull the project (joined) + its core data and re-sync
+  // from CRM. Gives the user a one-click way to recover from a stale view
+  // (e.g. account team chips after a CRM edit) without a full page reload.
+  async function refreshAll() {
+    if (!id) return;
+    setRefreshing(true);
+    try {
+      const [projectData, stageData, taskData, riskData, noteData, docData, staffData] = await Promise.all([
+        api.project(id), api.stages(id), api.tasks(id), api.risks(id), api.notes(id), api.documents(id), api.projectStaff(id),
+      ]);
+      setProject(projectData);
+      setStages(stageData);
+      setTasks(taskData);
+      setRisks(riskData);
+      setNotes(noteData);
+      setDocuments(docData);
+      setProjectStaff(staffData);
+      api.projectContacts(id).then(setContacts).catch(() => {});
+      api.phases(id).then(setPhases).catch(() => {});
+      api.zoomRecordings(id).then(setRecordings).catch(() => {});
+      if (projectData.dynamics_account_id) {
+        api.projectCrmSync(id)
+          .then(({ staff: freshStaff, project: updatedProject }) => {
+            setProjectStaff(freshStaff);
+            if (updatedProject) setProject((p) => p ? { ...p, ...updatedProject } : updatedProject);
+          })
+          .catch(() => { /* CRM unreachable — keep stored values */ });
+      }
+      showToast("Refreshed.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to refresh", "error");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   async function saveEditTech() {
     if (!project) return;
     const removed = originalSolutionTypes.filter((t) => !editSolutionTypes.includes(t));
@@ -686,7 +724,7 @@ export default function ProjectDetailPage() {
       // When assigning a PM via staff, also set pm_user_id so it surfaces in their project list
       if (addStaffRole === "pm") {
         const updated = await api.updateProject(project.id, { pm_user_id: addStaffUserId });
-        setProject(updated);
+        setProject((prev) => prev ? { ...prev, ...updated } : updated);
       }
       setAddStaffUserId("");
       setAddStaffRole("");
@@ -955,6 +993,9 @@ export default function ProjectDetailPage() {
                 SharePoint ↗
               </a>
             )}
+            <button onClick={refreshAll} disabled={refreshing} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }} title="Refresh this project's data from the server">
+              {refreshing ? "Refreshing…" : "↻ Refresh"}
+            </button>
             {canEdit && (
               <button onClick={openEditMeta} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}>
                 Edit
@@ -1350,7 +1391,7 @@ export default function ProjectDetailPage() {
                 <StatusMeetingPanel
                   project={project}
                   canEdit={canEdit}
-                  onSaved={(updated) => setProject(updated)}
+                  onSaved={(updated) => setProject((prev) => prev ? { ...prev, ...updated } : updated)}
                 />
                 <div className="ms-section-card" style={{ padding: "12px 16px" }}>
                   <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
@@ -2409,7 +2450,10 @@ export default function ProjectDetailPage() {
           setSavingCaseLink(true);
           try {
             const updated = await api.updateProject(p.id, { crm_case_id: caseId });
-            setProject(updated);
+            // Merge, don't replace — the PATCH response is the raw projects row
+            // without joined fields (account team, customer display name,
+            // SharePoint URL). Replacing would blank those until a refresh.
+            setProject((prev) => prev ? { ...prev, ...updated } : updated);
             setCaseSearchResults([]);
             setCaseSearchQuery("");
             // Reload compliance data
@@ -2431,7 +2475,7 @@ export default function ProjectDetailPage() {
           setSavingCaseLink(true);
           try {
             const updated = await api.updateProject(p.id, { crm_case_id: null });
-            setProject(updated);
+            setProject((prev) => prev ? { ...prev, ...updated } : updated);
             setCaseCompliance(null);
             showToast("Case unlinked.", "success");
           } catch {
@@ -2445,7 +2489,7 @@ export default function ProjectDetailPage() {
           setSavingCaseLink(true);
           try {
             const updated = await api.updateProject(p.id, { crm_opportunity_id: opportunityId });
-            setProject(updated);
+            setProject((prev) => prev ? { ...prev, ...updated } : updated);
             setCaseComplianceLoading(true);
             api.projectCaseCompliance(p.id)
               .then(setCaseCompliance)
@@ -2464,7 +2508,7 @@ export default function ProjectDetailPage() {
           setSavingCaseLink(true);
           try {
             const updated = await api.updateProject(p.id, { crm_opportunity_id: null });
-            setProject(updated);
+            setProject((prev) => prev ? { ...prev, ...updated } : updated);
             setCaseComplianceLoading(true);
             api.projectCaseCompliance(p.id)
               .then(setCaseCompliance)
