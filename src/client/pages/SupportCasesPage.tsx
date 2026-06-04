@@ -38,6 +38,7 @@ export default function SupportCasesPage() {
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("Active");
@@ -63,6 +64,18 @@ export default function SupportCasesPage() {
     if (!userReady) return;
     fetchCases();
   }, [mineOnly, isStaff, userReady]);
+
+  // Pull a fresh list from CRM on demand — e.g. after cases are deleted or
+  // edited directly in Dynamics. Uses its own flag so the current list stays
+  // visible while refetching (no full-page Loading… blank).
+  const handleRefresh = () => {
+    setRefreshing(true);
+    const useMine = isStaff && mineOnly;
+    supportApi.getCases(search.trim() || undefined, useMine)
+      .then(setCases)
+      .catch((e) => setError(e.message))
+      .finally(() => setRefreshing(false));
+  };
 
   const handleSearch = (value: string) => {
     setSearch(value);
@@ -131,12 +144,22 @@ export default function SupportCasesPage() {
       )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: deepLinkLabel ? 12 : 24 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: "#1e293b" }}>Support Cases</h1>
-        <button
-          onClick={() => navigate("/support/cases/new")}
-          style={{ padding: "0.5rem 1.1rem", background: "#0891b2", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
-        >
-          + New Case
-        </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh cases from CRM"
+            style={{ padding: "0.5rem 1.1rem", background: "#fff", color: "#0891b2", border: "1px solid #0891b2", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: refreshing ? "default" : "pointer", opacity: refreshing ? 0.6 : 1 }}
+          >
+            {refreshing ? "Refreshing…" : "↻ Refresh"}
+          </button>
+          <button
+            onClick={() => navigate("/support/cases/new")}
+            style={{ padding: "0.5rem 1.1rem", background: "#0891b2", color: "#fff", border: "none", borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: "pointer" }}
+          >
+            + New Case
+          </button>
+        </div>
       </div>
       {deepLinkLabel && (
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
