@@ -180,6 +180,8 @@ export default function SolutionDetailPage() {
     }
   }
 
+  const [refreshing, setRefreshing] = useState(false);
+
   const load = useCallback(async () => {
     if (!id) return;
     setNaView("sor"); // reset on every solution load so stale wizard state doesn't carry over
@@ -234,6 +236,20 @@ export default function SolutionDetailPage() {
   useEffect(() => {
     load().catch(() => showToast("Failed to load solution", "error")).finally(() => setLoading(false));
   }, [load]);
+
+  // Manual refresh — re-runs the full solution load so the user can recover
+  // from a stale view (e.g. CRM-derived fields) without a page reload.
+  async function refreshAll() {
+    setRefreshing(true);
+    try {
+      await load();
+      showToast("Refreshed.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to refresh", "error");
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   async function save(patch: Parameters<typeof api.updateSolution>[1]) {
     if (!id) return;
@@ -433,12 +449,17 @@ export default function SolutionDetailPage() {
               </Link>
             )}
           </div>
-          {solution.customer_sharepoint_url && (
-            <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
-              style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
-              SharePoint ↗
-            </a>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <button onClick={refreshAll} disabled={refreshing} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }} title="Refresh this solution's data from the server">
+              {refreshing ? "Refreshing…" : "↻ Refresh"}
+            </button>
+            {solution.customer_sharepoint_url && (
+              <a href={solution.customer_sharepoint_url} target="_blank" rel="noopener noreferrer"
+                style={{ fontSize: 12, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
+                SharePoint ↗
+              </a>
+            )}
+          </div>
         </div>
       </div>
 
