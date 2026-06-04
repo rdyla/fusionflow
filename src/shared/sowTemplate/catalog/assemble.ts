@@ -107,12 +107,16 @@ function pickSnapshotTiles(
     .filter((t) => matches(t, solutionTypes, vendor))
     .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
 
-  // Dedupe by label (a vendor-tagged tile and an untagged shadow shouldn't both win).
+  // Dedupe by dedupeKey when present (collapses the several "agents" tiles that
+  // share one count but carry different labels — e.g. a CCaaS+WFM deal must not
+  // show "16" three times), else by label (a vendor-tagged tile and its untagged
+  // shadow shouldn't both win). Highest priority wins since `eligible` is sorted.
   const seen = new Set<string>();
   const picked: SnapshotTile[] = [];
   for (const t of eligible) {
-    if (seen.has(t.label)) continue;
-    seen.add(t.label);
+    const key = t.dedupeKey ?? t.label;
+    if (seen.has(key)) continue;
+    seen.add(key);
     picked.push(t);
     if (picked.length === 4) break;
   }

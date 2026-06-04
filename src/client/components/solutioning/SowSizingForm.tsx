@@ -381,7 +381,10 @@ export default function SowSizingForm({ solution, needsAssessments, canEdit, onS
   const journeys: string[] = (() => { try { return solution.journeys ? JSON.parse(solution.journeys) : []; } catch { return []; } })();
   const showUcaas = types.includes("ucaas") || journeys.some(j => j.includes("ucaas"));
   const showCcaas = types.includes("ccaas") || journeys.some(j => j.includes("ccaas"));
-  const showCi    = types.includes("ci")    || journeys.some(j => ["zoom_zra", "rc_ace", "zoom_qm", "zoom_wfm", "zoom_ai_expert_assist"].includes(j));
+  // Only true Conversation Intelligence journeys open the CI sizing card. WFM
+  // (zoom_wfm) and QM (zoom_qm) are distinct products that don't use CI sizing —
+  // they scope off the CCaaS agent count — so they must NOT trigger this form.
+  const showCi    = types.includes("ci")    || journeys.some(j => ["zoom_zra", "rc_ace", "zoom_ai_expert_assist"].includes(j));
   const showVa    = types.includes("va")    || journeys.some(j => ["zoom_zva", "rc_air"].includes(j));
 
   return (

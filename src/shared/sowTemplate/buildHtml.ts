@@ -205,9 +205,7 @@ function snapshotAndPricing(variant: SowVariant, ctx: SowBuildContext): string {
     <table class="data-table pricing-summary">
       <tbody>
         <tr><td>Professional Services</td><td class="num">${esc(fmtMoney(ctx.feeTotal))}</td></tr>
-        ${ctx.feeDiscount !== null && ctx.feeDiscount !== 0
-          ? `<tr><td>Packet Fusion Preferred Client Discount</td><td class="num">(${esc(fmtMoney(Math.abs(ctx.feeDiscount)))})</td></tr>`
-          : ""}
+        ${ctx.addOnLines.map((l) => `<tr><td>${esc(l.label)}</td><td class="num">${l.amount < 0 ? `(${esc(fmtMoney(Math.abs(l.amount)))})` : esc(fmtMoney(l.amount))}</td></tr>`).join("")}
         <tr class="total-row"><td><strong>Project Total</strong></td><td class="num"><strong>${esc(fmtMoney(ctx.projectTotal))}</strong></td></tr>
       </tbody>
     </table>
@@ -432,9 +430,7 @@ function section8Pricing(variant: SowVariant, ctx: SowBuildContext, optServices:
         <thead><tr><th>Service</th><th>Type</th><th>Fee</th></tr></thead>
         <tbody>
           <tr><td>${esc(variant.productLine)} (base scope per Section 2)</td><td>Fixed Fee</td><td class="num">${esc(fmtMoney(ctx.feeTotal))}</td></tr>
-          ${ctx.feeDiscount !== null && ctx.feeDiscount !== 0
-            ? `<tr><td>Packet Fusion Preferred Client Discount</td><td>Credit</td><td class="num">(${esc(fmtMoney(Math.abs(ctx.feeDiscount)))})</td></tr>`
-            : ""}
+          ${ctx.addOnLines.map((l) => `<tr><td>${esc(l.label)}</td><td>${l.amount < 0 ? "Credit" : "Fixed Fee"}</td><td class="num">${l.amount < 0 ? `(${esc(fmtMoney(Math.abs(l.amount)))})` : esc(fmtMoney(l.amount))}</td></tr>`).join("")}
           <tr class="total-row"><td><strong>Project Total</strong></td><td></td><td class="num"><strong>${esc(fmtMoney(ctx.projectTotal))}</strong></td></tr>
         </tbody>
       </table>
@@ -462,6 +458,21 @@ function section8Pricing(variant: SowVariant, ctx: SowBuildContext, optServices:
 
       <h3>8.5  Taxes</h3>
       <p>All fees are exclusive of applicable sales, use, and similar transaction taxes. The Customer is responsible for any such taxes other than taxes based on Packet Fusion's net income.</p>
+    </section>
+  `;
+}
+
+/** Free-form Additional Scope Notes from the solution (exclusions, special
+ *  terms, assumptions). Unnumbered — sits as a callout before the signature
+ *  block. Returns "" when there are no notes so the section disappears
+ *  entirely. Line breaks are preserved via white-space: pre-wrap. */
+function scopeNotesSection(ctx: SowBuildContext): string {
+  const notes = (ctx.additionalScopeNotes ?? "").trim();
+  if (!notes) return "";
+  return `
+    <section class="page-section">
+      <h1>Additional Scope Notes</h1>
+      <div style="white-space: pre-wrap;">${esc(notes)}</div>
     </section>
   `;
 }
@@ -700,6 +711,7 @@ export function buildSowHtml(args: {
     section9ChangeMgmt(),
     section10Acceptance(),
     section11Terms(),
+    scopeNotesSection(ctx),
     section12Signature(ctx),
   ].join("\n");
 

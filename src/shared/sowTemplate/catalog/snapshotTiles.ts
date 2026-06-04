@@ -54,6 +54,7 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     label: "Zoom Contact Center Agents",
     value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 90,
+    dedupeKey: "agents",
   },
   {
     appliesTo: ["ccaas"],
@@ -61,6 +62,7 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     label: "RingCX Agents",
     value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 90,
+    dedupeKey: "agents",
   },
   // Combo (UCaaS + CCaaS) — both seat counts side-by-side, agents tile
   // takes priority 95 so it lands before DIDs in the 4-tile budget.
@@ -69,6 +71,7 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     label: "CCaaS Agents",
     value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 85,
+    dedupeKey: "agents",
   },
 
   // CI / VA / AIR
@@ -98,12 +101,14 @@ export const SNAPSHOT_TILES: SnapshotTile[] = [
     label: "WFM Agents",
     value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 35,
+    dedupeKey: "agents",
   },
   {
     appliesTo: ["qm"],
     label: "QM-Evaluated Agents",
     value: (ctx) => String(ctx.ccaasAgentCount || 0),
     priority: 34,
+    dedupeKey: "agents",
   },
 
   // Go-live count — common across all variants, lower priority so it

@@ -77,17 +77,21 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
   const basicInputs = (isBasic && !isCombo) ? sowDataToBasicInputs(sowData, solution.basic_inputs) : null;
   const basicBreakdown = basicInputs ? calcUcaasBasicBreakdown(basicInputs, rate) : null;
 
-  // Pre-add-on subtotal: tier price (tiered), formula total (basic non-combo).
+  // Pre-add-on subtotal: tier price (tiered), formula total (basic non-combo),
+  // or the combo final price (combo). Add-ons stack on top of whichever it is.
   let flatSubtotal = 0;
   if (isTiered) flatSubtotal = tieredTier?.price ?? 0;
   if (basicBreakdown) flatSubtotal = basicBreakdown.total;
+  if (comboBreakdown) flatSubtotal = comboBreakdown.finalSowPrice;
 
-  // Combo owns its bundle/PM/final-discount stack and ignores external add-ons
-  // (matches the server). Other modes stack add-ons on the subtotal.
+  // All flat modes (tiered / basic / combo) stack external add-ons on the
+  // subtotal and round the total UP; advanced uses labor hours. Combo's own
+  // bundle/PM/final-discount math is baked into finalSowPrice above; add-ons
+  // (e.g. extra dialing campaigns) bill on top of it.
   const breakdown = isFlat
     ? calcBasicSowTotal(flatSubtotal, addOns, rate)
     : calcSowTotal(laborHoursTotal, addOns, rate);
-  const displayedTotal = comboBreakdown ? comboBreakdown.finalSowPrice : breakdown.total;
+  const displayedTotal = breakdown.total;
 
   const flatReady = isCombo ? !!comboBreakdown : (isTiered ? !!tieredTier : !!basicBreakdown);
 
@@ -135,11 +139,11 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
   // Total stands on its own. Whole card returns null only when there's
   // truly nothing — no calculated total AND no add-ons.
   if (isClient) {
-    // Combo (CCaaS + basic) has its own discount/PM/final stack and ignores
-    // external add-ons; its total + line items come from comboBreakdown (sourced
-    // from sow_data above). Other modes use the add-on breakdown total.
+    // Combo (CCaaS + basic) bakes its own discount/PM/final stack into the base
+    // price (comboBreakdown, sourced from sow_data above); external add-ons then
+    // bill on top via `breakdown`, same as every other mode.
     const hasTotal = displayedTotal > 0;
-    const hasAddOns = !isCombo && addOns.length > 0; // combo skips external add-ons entirely
+    const hasAddOns = addOns.length > 0;
     if (!hasTotal && !hasAddOns) return null;
 
     // Build a "based on" line-item list that explains where the total
@@ -282,7 +286,7 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
       </div>
 
       <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>
-        {isCombo && "Combo pricing (UCaaS + CCaaS + apps/ZVA) comes from the sizing form above and includes its own bundle, PM, and final-discount math — external add-ons don't apply."}
+        {isCombo && "Combo pricing comes from the sizing form above (its own bundle, PM, and final-discount math). Add-ons below bill on top of that combo price — use them for separate items like extra dialing campaigns. Blended rate is used only for hours-kind add-ons."}
         {isTiered && "Add-ons stack on top of the tier price. Blended rate is used only for hours-kind add-ons."}
         {isBasic && !isCombo && "Add-ons stack on top of the formula total. Blended rate is used only for hours-kind add-ons."}
         {!isFlat && "Labor hours come from the labor estimate. Add-ons charge or discount against that, then everything is priced at the blended rate."}
@@ -346,9 +350,8 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
         </div>
       </div>
 
-      {/* Add-on rows — combo ignores external add-ons (its own discount stack),
-          so the editor is hidden for combo solutions. */}
-      {!isCombo && (<>
+      {/* Add-on rows — available in every mode, including combo. Add-ons (e.g.
+          extra dialing campaigns) bill on top of the base/combo price. */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
           Add-On Items
@@ -439,7 +442,6 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
           Notes appear on the rendered SOW under their line item.
         </div>
       )}
-      </>)}
 
       {canEdit && (
         <div style={{ marginTop: 16, display: "flex", gap: 10, alignItems: "center" }}>
