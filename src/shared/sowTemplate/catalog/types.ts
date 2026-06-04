@@ -94,6 +94,12 @@ export type SnapshotTile = Applicability & {
   value: (ctx: SowBuildContext) => string | number;
   /** Higher wins when more than 4 tiles are eligible. Default = 0. */
   priority?: number;
+  /** Optional metric-group key. Tiles sharing a dedupeKey collapse to the
+   *  single highest-priority one, even with different labels — e.g. the
+   *  several "agents" tiles (Zoom CC / RingCX / CCaaS / WFM / QM) all read the
+   *  same count and must not stack three identical numbers on one snapshot.
+   *  When omitted, dedupe falls back to the label. */
+  dedupeKey?: string;
 };
 
 /** Variant-level metadata — product line, project reference template, hero,

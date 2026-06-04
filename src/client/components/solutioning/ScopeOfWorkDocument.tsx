@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import type { NeedsAssessment, LaborEstimate, Solution, User } from "../../lib/api";
 import type { SowData } from "./SowSizingForm";
-import { calcSowTotal, calcBasicSowTotal, mroundUp, DEFAULT_BLENDED_RATE } from "../../../shared/sowAddOns";
+import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE, type AddOn } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
 import { parseCcaasComboInputs, isComboMode, sowDataToComboInputs, calcCcaasComboBreakdown } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
@@ -82,9 +82,9 @@ type Props = {
   solution: Solution;
   needsAssessment: NeedsAssessment | null;
   laborEstimates: LaborEstimate[];
-  /** Free-form scope-of-work text from the solution. Currently unused by the
-   *  new renderer (the template's Section 2 is hard-coded per variant) but
-   *  kept on the prop interface for backwards compatibility with callers. */
+  /** Free-form Additional Scope Notes from the solution. Rendered as its own
+   *  "Additional Scope Notes" section in the SOW (via ctx.additionalScopeNotes)
+   *  when non-empty. */
   scopeText: string;
   sowData?: SowData | null;
   sowMetadata?: SowMetadata | null;
@@ -181,7 +181,7 @@ function pickCounts(
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function ScopeOfWorkDocument({
-  solution, needsAssessment, laborEstimates, sowData, sowMetadata, currentUser, onMetadataChanged,
+  solution, needsAssessment, laborEstimates, scopeText, sowData, sowMetadata, currentUser, onMetadataChanged,
 }: Props) {
   const { showToast } = useToast();
   const [generating, setGenerating] = useState(false);
@@ -234,7 +234,10 @@ export default function ScopeOfWorkDocument({
     // Combo owns its PM + bundle/final discounts and does NOT run the add-ons
     // table — match the server (recomputeSowTotal) exactly.
     const combo = calcCcaasComboBreakdown(sowDataToComboInputs(sowData ?? null, parseCcaasComboInputs(solution.basic_inputs)), blendedRate);
-    feeBreakdown = { laborSubtotal: combo.finalSowPrice, addOnNet: 0, total: combo.finalSowPrice };
+    // Combo price is the base; external add-ons stack on top (e.g. "2 outbound
+    // dialing campaigns — $1,200"), then the total rounds UP to the next $250 —
+    // same as every other mode and the server (recomputeSowTotal).
+    feeBreakdown = calcBasicSowTotal(combo.finalSowPrice, addOns, blendedRate);
   } else {
     feeBreakdown = calcSowTotal(totalLaborHours, addOns, blendedRate);
   }
@@ -267,15 +270,26 @@ export default function ScopeOfWorkDocument({
     revisions: (sowMetadata?.revisions ?? []).map((r) => ({
       version: r.version, saved_at: r.saved_at, saved_by_name: r.saved_by_name, note: r.note,
     })),
-    // Customer sees a single clean (rounded-up) figure — never the raw labor
-    // subtotal. With no discount the fee line == the rounded-up Project Total.
-    // With a Preferred Client Discount, show a rounded-up list price and derive
-    // the discount as the gap to the rounded-up total so the summary foots
-    // exactly. projectTotal is already rounded up for calc/basic/tiered modes;
-    // combo carries its own controlled final price (unchanged → matches CRM).
-    feeTotal:    feeBreakdown.addOnNet < 0 ? mroundUp(feeBreakdown.laborSubtotal) : feeBreakdown.total,
-    feeDiscount: feeBreakdown.addOnNet < 0 ? feeBreakdown.total - mroundUp(feeBreakdown.laborSubtotal) : null,
-    projectTotal: feeBreakdown.total,
+    // Customer-facing pricing: a base "Professional Services" line, each add-on
+    // itemized (charge or discount), then the rounded-up Project Total. The base
+    // line is derived as projectTotal − Σ add-ons so the summary always foots to
+    // clean numbers and the raw pre-round subtotal is never shown.
+    ...(() => {
+      const effects = feeBreakdown.addOnEffects ?? [];
+      const addOnLines = (addOns as AddOn[])
+        .map((a, i) => ({
+          label: (a.label && a.label.trim()) || ((effects[i]?.dollar ?? 0) < 0 ? "Discount" : "Additional service"),
+          amount: effects[i]?.dollar ?? 0,
+        }))
+        .filter((l) => l.amount !== 0);
+      const addOnNet = addOnLines.reduce((s, l) => s + l.amount, 0);
+      return {
+        feeTotal: feeBreakdown.total - addOnNet,
+        addOnLines,
+        projectTotal: feeBreakdown.total,
+      };
+    })(),
+    additionalScopeNotes: scopeText && scopeText.trim() ? scopeText.trim() : null,
     isBudgetary:    solution.is_budgetary === 1,
     isZoomReseller: solution.is_zoom_reseller === 1,
     locationCount:   counts.locations,

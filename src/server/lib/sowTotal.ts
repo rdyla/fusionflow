@@ -57,7 +57,11 @@ export async function recomputeSowTotal(db: D1Database, solutionId: string): Pro
     if (!fallback && comboInputs.users === 0 && (comboInputs.ccaas?.agents ?? 0) === 0) {
       total = 0;
     } else {
-      total = calcCcaasComboBreakdown(comboInputs, rate).finalSowPrice;
+      // External add-ons (e.g. extra dialing campaigns) bill on top of the combo
+      // price, then the total rounds UP to the next $250 — matching every other
+      // mode and the client displays. calcBasicSowTotal handles both.
+      const comboPrice = calcCcaasComboBreakdown(comboInputs, rate).finalSowPrice;
+      total = calcBasicSowTotal(comboPrice, addOns, rate).total;
     }
   } else if (solution.pricing_mode === "basic") {
     // Basic (non-combo): the consolidated SOW Sizing form (sow_data) is the
