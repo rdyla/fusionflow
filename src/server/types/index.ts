@@ -62,6 +62,11 @@ export type Bindings = {
   GRAPH_CLIENT_ID?: string;
   GRAPH_CLIENT_SECRET?: string;
   MAIL_SENDER_UPN?: string;
+  // FedEx Track API (OAuth client credentials; tracks any tracking number).
+  // FEDEX_API_BASE defaults to production; set to apis-sandbox.fedex.com for test.
+  FEDEX_CLIENT_ID?: string;
+  FEDEX_CLIENT_SECRET?: string;
+  FEDEX_API_BASE?: string;
   // Apollo.io prospecting API key
   APOLLO_API_KEY?: string;
   // Anthropic API key for AI content generation

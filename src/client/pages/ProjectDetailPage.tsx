@@ -24,6 +24,7 @@ import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
+import ShipmentsPane from "../components/project/ShipmentsPane";
 import PhasesPanel from "../components/project/PhasesPanel";
 import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
@@ -1419,6 +1420,9 @@ export default function ProjectDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* Shipment tracking — internal logistics (FedEx incl. drop-ships). */}
+            {!isExternal && <ShipmentsPane projectId={project.id} canEdit={canEdit} />}
           </div>
         );
       })()}
