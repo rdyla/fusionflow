@@ -2051,7 +2051,7 @@ export default function ProjectDetailPage() {
           sharepointUrl={project.customer_sharepoint_url}
           folderUrl={project.sharepoint_folder_url}
           owner={{ kind: "project", id: project.id }}
-          canEdit={canEdit}
+          canEdit={canEdit || isStaffedEngineer}
           onFolderCreated={(url) => setProject({ ...project, sharepoint_folder_url: url })}
         />
       )}
