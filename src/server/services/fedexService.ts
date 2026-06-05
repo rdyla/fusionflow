@@ -65,6 +65,7 @@ type FedexTrackResponse = {
       trackResults?: Array<{
         latestStatusDetail?: { code?: string; statusByLocale?: string; description?: string };
         dateAndTimes?: Array<{ type?: string; dateTime?: string }>;
+        estimatedDeliveryTimeWindow?: { window?: { begins?: string; ends?: string } };
         error?: { code?: string; message?: string };
       }>;
     }>;
@@ -107,7 +108,10 @@ export async function trackFedexShipment(env: Env, trackingNumber: string): Prom
   const delivered = code === "DL";
   const eta = (result.dateAndTimes ?? []).find(
     (d) => d.type === "ESTIMATED_DELIVERY" || d.type === "ACTUAL_DELIVERY"
-  )?.dateTime ?? null;
+  )?.dateTime
+    ?? result.estimatedDeliveryTimeWindow?.window?.ends
+    ?? result.estimatedDeliveryTimeWindow?.window?.begins
+    ?? null;
 
   return { status, statusDetail, estimatedDelivery: eta, delivered };
 }
