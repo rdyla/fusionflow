@@ -483,6 +483,20 @@ export type ExternalResourceInput = {
   notes?: string | null;
 };
 
+export type ProjectShipment = {
+  id: string;
+  project_id: string;
+  carrier: string;
+  tracking_number: string;
+  item_name: string | null;
+  status: string | null;
+  status_detail: string | null;
+  estimated_delivery: string | null;
+  delivered: number;
+  last_checked_at: string | null;
+  created_at: string;
+};
+
 // ── Prospecting ────────────────────────────────────────────────────────────
 
 export type ProspectList = {
@@ -1431,6 +1445,20 @@ export const api = {
     request<{ ok: boolean }>(`/projects/${projectId}/external-resources/${rid}`, {
       method: "DELETE",
     }),
+
+  projectShipments: (projectId: string) =>
+    request<ProjectShipment[]>(`/projects/${projectId}/shipments`),
+  addShipment: (projectId: string, payload: { tracking_number: string; item_name?: string | null }) =>
+    request<ProjectShipment>(`/projects/${projectId}/shipments`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  refreshShipment: (projectId: string, sid: string) =>
+    request<ProjectShipment>(`/projects/${projectId}/shipments/${sid}/refresh`, { method: "POST" }),
+  refreshAllShipments: (projectId: string) =>
+    request<ProjectShipment[]>(`/projects/${projectId}/shipments/refresh`, { method: "POST" }),
+  deleteShipment: (projectId: string, sid: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/shipments/${sid}`, { method: "DELETE" }),
 
   createProject: (payload: {
     name: string;

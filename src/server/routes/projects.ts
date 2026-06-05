@@ -12,6 +12,7 @@ import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, g
 import { ensureSharePointChildFolder } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { refreshShipmentRow } from "../lib/shipmentTracking";
 import { findOrCreatePartnerAe } from "../lib/partnerAe";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, buildTaggedTitle, parseTaggedTitle, type SolutionType } from "../../shared/solutionTypes";
 import { syncStageStatus, syncProjectStatus, syncProjectGoLiveDate } from "../lib/teamUtils";
@@ -945,6 +946,78 @@ app.delete("/:id/external-resources/:rid", requireRole("admin", "pm"), async (c)
   const rid = c.req.param("rid");
   if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
   await db.prepare("DELETE FROM project_external_resources WHERE id = ? AND project_id = ?").bind(rid, projectId).run();
+  return c.json({ ok: true });
+});
+
+// ── Shipment tracking ────────────────────────────────────────────────────────
+// PMs add FedEx tracking numbers (mostly vendor drop-ships) + item names; the
+// FedEx Track API status is cached on the row and refreshed by a 6h cron + on
+// demand here. Read: any staff who can view the project; write: canEditProject.
+const SHIPMENT_COLS = "id, project_id, carrier, tracking_number, item_name, status, status_detail, estimated_delivery, delivered, last_checked_at, created_at";
+const shipmentSchema = z.object({
+  tracking_number: z.string().min(1).max(64),
+  item_name: z.string().max(255).nullable().optional(),
+});
+
+app.get("/:id/shipments", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canViewProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const rows = await db
+    .prepare(`SELECT ${SHIPMENT_COLS} FROM project_shipments WHERE project_id = ? ORDER BY created_at DESC`)
+    .bind(projectId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+app.post("/:id/shipments", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const parsed = shipmentSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const id = crypto.randomUUID();
+  await db
+    .prepare("INSERT INTO project_shipments (id, project_id, carrier, tracking_number, item_name, created_by_user_id) VALUES (?, ?, 'fedex', ?, ?, ?)")
+    .bind(id, projectId, parsed.data.tracking_number.trim(), parsed.data.item_name?.trim() || null, auth.user.id)
+    .run();
+  // Initial status fetch (best-effort — no-op until FedEx creds are configured).
+  await refreshShipmentRow(c.env, id).catch(() => {});
+  const created = await db.prepare(`SELECT ${SHIPMENT_COLS} FROM project_shipments WHERE id = ? LIMIT 1`).bind(id).first();
+  return c.json(created, 201);
+});
+
+app.post("/:id/shipments/:sid/refresh", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const sid = c.req.param("sid");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  await refreshShipmentRow(c.env, sid).catch(() => {});
+  const row = await db.prepare(`SELECT ${SHIPMENT_COLS} FROM project_shipments WHERE id = ? AND project_id = ? LIMIT 1`).bind(sid, projectId).first();
+  return c.json(row);
+});
+
+app.post("/:id/shipments/refresh", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const ids = await db.prepare("SELECT id FROM project_shipments WHERE project_id = ? AND delivered = 0").bind(projectId).all<{ id: string }>();
+  for (const r of ids.results ?? []) { await refreshShipmentRow(c.env, r.id).catch(() => {}); }
+  const rows = await db.prepare(`SELECT ${SHIPMENT_COLS} FROM project_shipments WHERE project_id = ? ORDER BY created_at DESC`).bind(projectId).all();
+  return c.json(rows.results ?? []);
+});
+
+app.delete("/:id/shipments/:sid", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const sid = c.req.param("sid");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  await db.prepare("DELETE FROM project_shipments WHERE id = ? AND project_id = ?").bind(sid, projectId).run();
   return c.json({ ok: true });
 });
 
