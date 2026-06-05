@@ -28,10 +28,20 @@ const PHASE_COLORS = [
 ];
 
 const VENDOR_COLORS: Record<string, string> = {
-  Zoom:        "#0078d4",
-  RingCentral: "#ff8c00",
-  Unknown:     "#94a3b8",
+  Zoom:            "#0078d4",
+  RingCentral:     "#ff8c00",
+  Mitel:           "#8764b8",
+  Microsoft:       "#107c10",
+  Cisco:           "#038387",
+  "Cato Networks": "#00b7c3",
+  TBD:             "#b146c2",
+  Unknown:         "#94a3b8",
 };
+
+// Fallback palette for vendors without an explicit color above — deliberately
+// omits Zoom-blue and RingCentral-orange so a new/unknown vendor never collides
+// with a known one (Mitel had been rendering the same orange as RingCentral).
+const VENDOR_FALLBACK = ["#8764b8", "#00b7c3", "#107c10", "#e74856", "#038387", "#ca5010", "#b146c2", "#5c2e91"];
 
 // Reverse map: lowercased canonical display label → SolutionType key. Lets us
 // catch legacy rows that stored the display value (e.g. "Workforce Management")
@@ -61,11 +71,19 @@ const TYPE_COLORS = [
 const VENDOR_LABELS: Record<string, string> = {
   zoom:        "Zoom",
   ringcentral: "RingCentral",
+  mitel:       "Mitel",
   cato:        "Cato Networks",
   microsoft:   "Microsoft",
   cisco:       "Cisco",
   tbd:         "TBD",
 };
+
+// Fallback display name for a vendor that isn't in VENDOR_LABELS — title-case
+// it (e.g. raw "mitel" → "Mitel") so the dashboard never shows a bare lowercase
+// vendor. Known multi-case names (RingCentral, Cato Networks) come from the map.
+function titleCaseVendor(raw: string): string {
+  return raw.replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 const PROJECT_STATUS_COLOR: Record<string, string> = {
   completed: "#059669",
@@ -360,7 +378,7 @@ export default function DashboardPage() {
   const vendorData = Object.values(
     vendorDistribution.reduce<Record<string, { label: string; count: number }>>((acc, d) => {
       const key = d.label?.toLowerCase() ?? "unknown";
-      const label = VENDOR_LABELS[key] ?? VENDOR_LABELS[d.label ?? ""] ?? d.label ?? "Unknown";
+      const label = VENDOR_LABELS[key] ?? VENDOR_LABELS[d.label ?? ""] ?? (d.label ? titleCaseVendor(d.label) : "Unknown");
       acc[label] = { label, count: (acc[label]?.count ?? 0) + d.count };
       return acc;
     }, {})
@@ -429,6 +447,7 @@ export default function DashboardPage() {
             <DonutChart
               data={vendorData}
               colorMap={VENDOR_COLORS}
+              fallbackColors={VENDOR_FALLBACK}
               centerLabel="projects"
             />
           )}
@@ -477,7 +496,7 @@ export default function DashboardPage() {
                 : isBlocked
                 ? { background: "rgba(209,52,56,0.04)", borderLeft: "3px solid #d13438" }
                 : {};
-              const vendorLabel = VENDOR_LABELS[p.vendor ?? ""] ?? p.vendor ?? null;
+              const vendorLabel = VENDOR_LABELS[(p.vendor ?? "").toLowerCase()] ?? (p.vendor ? titleCaseVendor(p.vendor) : null);
               const hasTypes = (p.solution_types?.length ?? 0) > 0;
               return (
                 <tr
