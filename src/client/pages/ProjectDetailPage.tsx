@@ -1837,7 +1837,7 @@ export default function ProjectDetailPage() {
                                     <input
                                       type="text"
                                       autoFocus
-                                      placeholder="Task title — Enter to add, Esc to close"
+                                      placeholder="Task title — Enter or Add to save, Esc to close"
                                       value={newTaskTitle}
                                       onChange={(e) => setNewTaskTitle(e.target.value)}
                                       onKeyDown={(e) => {
@@ -1846,6 +1846,13 @@ export default function ProjectDetailPage() {
                                       disabled={creatingTask}
                                       style={{ flex: 1, padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 4, fontSize: 13, background: "#fff", color: "#1e293b" }}
                                     />
+                                    <button
+                                      type="submit"
+                                      disabled={creatingTask || !newTaskTitle.trim()}
+                                      style={{ fontSize: 11, padding: "4px 12px", background: newTaskTitle.trim() ? "#0891b2" : "#94a3b8", border: "none", color: "#fff", borderRadius: 4, cursor: newTaskTitle.trim() ? "pointer" : "default", fontWeight: 600 }}
+                                    >
+                                      {creatingTask ? "Adding…" : "Add"}
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => { setNewTaskTitle(""); setNewTaskStageId(null); }}
