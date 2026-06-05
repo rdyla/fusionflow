@@ -160,6 +160,9 @@ export type Solution = {
    *  Customer Agreement instead of the Packet Fusion MSA. Required for SLED
    *  and other Zoom-reseller-channel deals. */
   is_zoom_reseller: number;
+  /** 1 = SOW + pricing are published for customer review (visible in the client
+   *  portal). 0 = draft — hidden from the customer until a PM/SA publishes. */
+  sow_published: number;
   /** 1 when the CRM account was created via the inline "Create new account
    *  in CRM" form during this solution's New Solution flow (vs. picked from
    *  existing CRM search). Drives am_revenuesource = New Logo on the bound
@@ -1989,6 +1992,7 @@ export const api = {
       basic_inputs: UcaasBasicInputs | null;
       is_budgetary: number;
       is_zoom_reseller: number;
+      sow_published: number;
       /** Partner deal-registration id — synced to D365 cr495_dealregistrationid. */
       deal_registration_id: string | null;
       /** Cloud contract expiration — synced to D365 am_cloudcontractexpiration. */

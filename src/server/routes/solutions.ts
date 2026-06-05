@@ -455,6 +455,8 @@ const updateSolutionSchema = z.object({
   is_budgetary: z.number().int().min(0).max(1).optional(),
   /** 1 = SOW cover-page legal blurb references the Zoom Services Reseller Customer Agreement instead of the MSA. */
   is_zoom_reseller: z.number().int().min(0).max(1).optional(),
+  /** 1 = SOW + pricing are published for customer review (client portal can see them). 0 = draft, hidden from the customer. */
+  sow_published: z.number().int().min(0).max(1).optional(),
   /** Bypass the orphan-cleanup confirm flow — server hard-deletes per-type
    *  needs_assessments + labor_estimates rows for any solution_types being
    *  removed. The picker UI sets this on the retry after the confirm dialog. */
