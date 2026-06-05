@@ -304,6 +304,9 @@ export default function ProjectDetailPage() {
   const [caseSearchResults, setCaseSearchResults] = useState<SupportCase[]>([]);
   const [caseSearching, setCaseSearching] = useState(false);
   const [savingCaseLink, setSavingCaseLink] = useState(false);
+  // Opportunity picker can be long (some accounts have 100+); preview a subset
+  // with a "show more" toggle.
+  const [showAllOpps, setShowAllOpps] = useState(false);
 
   // Apply template
 
@@ -1837,7 +1840,7 @@ export default function ProjectDetailPage() {
                                     <input
                                       type="text"
                                       autoFocus
-                                      placeholder="Task title — Enter to add, Esc to close"
+                                      placeholder="Task title — Enter or Add to save, Esc to close"
                                       value={newTaskTitle}
                                       onChange={(e) => setNewTaskTitle(e.target.value)}
                                       onKeyDown={(e) => {
@@ -1846,6 +1849,13 @@ export default function ProjectDetailPage() {
                                       disabled={creatingTask}
                                       style={{ flex: 1, padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 4, fontSize: 13, background: "#fff", color: "#1e293b" }}
                                     />
+                                    <button
+                                      type="submit"
+                                      disabled={creatingTask || !newTaskTitle.trim()}
+                                      style={{ fontSize: 11, padding: "4px 12px", background: newTaskTitle.trim() ? "#0891b2" : "#94a3b8", border: "none", color: "#fff", borderRadius: 4, cursor: newTaskTitle.trim() ? "pointer" : "default", fontWeight: 600 }}
+                                    >
+                                      {creatingTask ? "Adding…" : "Add"}
+                                    </button>
                                     <button
                                       type="button"
                                       onClick={() => { setNewTaskTitle(""); setNewTaskStageId(null); }}
@@ -2626,8 +2636,8 @@ export default function ProjectDetailPage() {
                     ) : (caseCompliance.accountOpportunities ?? []).length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Select the opportunity this project was sold under:</div>
-                        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden" }}>
-                          {caseCompliance.accountOpportunities.map((opp) => (
+                        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden", maxHeight: 380, overflowY: "auto" }}>
+                          {(showAllOpps ? caseCompliance.accountOpportunities : caseCompliance.accountOpportunities.slice(0, 25)).map((opp) => (
                             <div key={opp.opportunityid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
                               <div style={{ overflow: "hidden" }}>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opp.name}</div>
@@ -2639,6 +2649,15 @@ export default function ProjectDetailPage() {
                             </div>
                           ))}
                         </div>
+                        {caseCompliance.accountOpportunities.length > 25 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllOpps((v) => !v)}
+                            style={{ marginTop: 8, fontSize: 12, color: "#0891b2", background: "none", border: "none", padding: 0, cursor: "pointer", fontWeight: 600 }}
+                          >
+                            {showAllOpps ? "Show fewer" : `Show all ${caseCompliance.accountOpportunities.length} opportunities`}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <div style={{ fontSize: 13, color: "#94a3b8" }}>No opportunities found for this account.</div>
