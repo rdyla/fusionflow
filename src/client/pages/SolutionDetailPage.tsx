@@ -346,6 +346,8 @@ export default function SolutionDetailPage() {
   if (!solution) return <div style={{ color: "#d13438", padding: 32 }}>Solution not found.</div>;
 
   const statusIdx = STATUS_FLOW.indexOf(solution.status);
+  // SOW publish gate — when draft, the customer doesn't see the pricing/SOW.
+  const sowPublished = solution.sow_published === 1;
 
   const solutionJourneys = parseSolutionJourneys(solution);
   const nonUcJourneys = solutionJourneys.filter(j => !UC_CC_PREFIXES.some(p => j.startsWith(p)));
@@ -1406,6 +1408,44 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
       <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
+          {/* SOW publish gate — staff control whether the customer can see the
+              finalized SOW + pricing. Customers see nothing here until published. */}
+          {!isClient && (
+            <div className="ms-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderLeft: `4px solid ${sowPublished ? "#107c10" : "#ff8c00"}` }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>
+                  SOW Visibility: {sowPublished ? "Published" : "Draft"}
+                </div>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {sowPublished
+                    ? "The customer can see the pricing summary and the rendered SOW in their portal."
+                    : "Draft — the customer cannot see the pricing or SOW yet. Publish when it's ready for their review."}
+                </div>
+              </div>
+              {canEdit && (
+                <button
+                  className="ms-btn-primary"
+                  disabled={saving}
+                  style={{ background: sowPublished ? "#64748b" : "#107c10", flexShrink: 0 }}
+                  onClick={() => save({ sow_published: sowPublished ? 0 : 1 })}
+                >
+                  {saving ? "Saving…" : sowPublished ? "Unpublish (back to draft)" : "Publish for customer review"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Customer-facing draft placeholder — replaces the pricing + SOW doc
+              until staff publish. */}
+          {isClient && !sowPublished && (
+            <div className="ms-card" style={{ textAlign: "center", padding: "32px 24px" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b", marginBottom: 6 }}>Your Scope of Work is being finalized</div>
+              <div style={{ fontSize: 13, color: "#64748b" }}>
+                Your Packet Fusion team is putting the finishing touches on your SOW and pricing. It'll appear here once it's ready for your review.
+              </div>
+            </div>
+          )}
+
           {/* Consolidated SOW Sizing form — the single source for sizing in
               Advanced AND Basic (non-combo) modes. Hidden in Tiered (trivial,
               not spec'd) and Basic+combo (the CcaasComboCalculator on the Labor
@@ -1428,7 +1468,9 @@ export default function SolutionDetailPage() {
             />
           )}
 
-          {/* Add-ons + blended rate → SOW total */}
+          {/* Add-ons + blended rate → SOW total. Hidden from the customer until
+              the SOW is published. */}
+          {(!isClient || sowPublished) && (
           <SowAddOnsEditor
             solution={solution}
             laborHoursTotal={laborTotals.expected}
@@ -1438,6 +1480,7 @@ export default function SolutionDetailPage() {
               setSolution(prev => prev ? { ...prev, ...next } : prev);
             }}
           />
+          )}
 
           {/* SOW switches — affect both the rendered/printed SOW and the
               solution overview. Both flags are independent: budgetary
@@ -1487,7 +1530,7 @@ export default function SolutionDetailPage() {
           {/* Additional Scope Notes — feeds into the generated SOW, so it sits
               ABOVE the SOW document/Generate button. For clients: hidden when
               empty; read-only display when non-empty. Staff get the textarea. */}
-          {(!isClient || scope.trim().length > 0) && (
+          {(!isClient || (sowPublished && scope.trim().length > 0)) && (
           <div className="ms-card">
             <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
               Additional Scope Notes
@@ -1523,7 +1566,8 @@ export default function SolutionDetailPage() {
           )}
 
           {/* SOW document generator — last, with the Export / Print SOW button
-              at the bottom of the tab. */}
+              at the bottom of the tab. Hidden from the customer until published. */}
+          {(!isClient || sowPublished) && (
           <ScopeOfWorkDocument
             solution={solution}
             needsAssessment={needsAssessment}
@@ -1537,6 +1581,7 @@ export default function SolutionDetailPage() {
               setSolution(refreshed);
             }}
           />
+          )}
         </div>
 
       {/* ── Handoff Tab ── */}
