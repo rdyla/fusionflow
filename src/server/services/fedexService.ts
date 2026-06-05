@@ -63,7 +63,7 @@ type FedexTrackResponse = {
   output?: {
     completeTrackResults?: Array<{
       trackResults?: Array<{
-        latestStatusDetail?: { code?: string; statusByLocale?: string; description?: string };
+        latestStatusDetail?: { code?: string; derivedCode?: string; statusByLocale?: string; description?: string };
         dateAndTimes?: Array<{ type?: string; dateTime?: string }>;
         estimatedDeliveryTimeWindow?: { window?: { begins?: string; ends?: string } };
         error?: { code?: string; message?: string };
@@ -99,13 +99,16 @@ export async function trackFedexShipment(env: Env, trackingNumber: string): Prom
   }
   const data = (await res.json()) as FedexTrackResponse;
   const result = data.output?.completeTrackResults?.[0]?.trackResults?.[0];
-  if (!result || result.error) return null;
+  // No status detail → invalid/not-found number or data-unavailable alert; the
+  // (kitchen-sink) schema can carry `error` alongside data, so key off status.
+  const latest = result?.latestStatusDetail;
+  if (!result || !latest) return null;
 
-  const latest = result.latestStatusDetail;
-  const status = latest?.statusByLocale ?? latest?.description ?? null;
-  const statusDetail = latest?.description ?? null;
-  const code = (latest?.code ?? "").toUpperCase();
-  const delivered = code === "DL";
+  const status = latest.statusByLocale ?? latest.description ?? null;
+  const statusDetail = latest.description ?? null;
+  const code = (latest.code ?? "").toUpperCase();
+  const derivedCode = (latest.derivedCode ?? "").toUpperCase();
+  const delivered = code === "DL" || derivedCode === "DL";
   const eta = (result.dateAndTimes ?? []).find(
     (d) => d.type === "ESTIMATED_DELIVERY" || d.type === "ACTUAL_DELIVERY"
   )?.dateTime
