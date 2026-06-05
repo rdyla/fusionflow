@@ -597,7 +597,16 @@ app.post("/:id/sharepoint-folder", async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
 
-  if (!(await canEditProject(db, auth.user, projectId))) {
+  // PMs/admins, or an IE staffed on the project, can create the project folder.
+  let allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed && auth.role === "pf_engineer") {
+    const staffed = await db
+      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
+      .bind(projectId, auth.user.id)
+      .first();
+    allowed = !!staffed;
+  }
+  if (!allowed) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
