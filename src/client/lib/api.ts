@@ -1321,10 +1321,11 @@ export const api = {
     if (params.page)     q.set("page",     String(params.page));
     return request<{ items: (Task & { project_name: string; stage_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
   },
-  projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string }) => {
+  projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string; scope?: "mine" | "all" }) => {
     const qs = new URLSearchParams();
     if (filters?.pf_ae_id) qs.set("pf_ae_id", filters.pf_ae_id);
     if (filters?.partner_ae_id) qs.set("partner_ae_id", filters.partner_ae_id);
+    if (filters?.scope) qs.set("scope", filters.scope);
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return request<Project[]>(`/projects${suffix}`);
   },

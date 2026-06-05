@@ -13,6 +13,18 @@ import { syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate, syncProje
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// IEs (pf_engineer) staffed on a project can manage its tasks — create, assign,
+// and complete — even without full project-edit rights. Scoped to projects they
+// are actually staffed on (project_staff membership).
+async function isStaffedEngineer(db: D1Database, auth: { user: { id: string }; role: string }, projectId: string): Promise<boolean> {
+  if (auth.role !== "pf_engineer") return false;
+  const row = await db
+    .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
+    .bind(projectId, auth.user.id)
+    .first();
+  return !!row;
+}
+
 const TASK_SELECT = `
   SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
          completed_at, status, priority, is_go_live_event,
@@ -54,7 +66,7 @@ app.post("/:id/tasks", async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
 
-  const allowed = await canEditProject(db, auth.user, projectId);
+  const allowed = (await canEditProject(db, auth.user, projectId)) || (await isStaffedEngineer(db, auth, projectId));
   if (!allowed) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
@@ -151,11 +163,14 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     throw new HTTPException(404, { message: "Task not found" });
   }
 
-  // pf_engineer may update status of tasks assigned to them
-  const isEngineerOnOwnTask =
-    auth.role === "pf_engineer" && existing.assignee_user_id === auth.user.id;
+  // IEs staffed on the project may fully manage its tasks (assign + complete +
+  // edit). A pf_engineer who isn't staffed but is the task's assignee keeps the
+  // narrower "status only" ability (e.g. marking their own task done).
   const canEdit = await canEditProject(db, auth.user, projectId);
-  if (!canEdit && !isEngineerOnOwnTask) {
+  const staffedEngineer = !canEdit && (await isStaffedEngineer(db, auth, projectId));
+  const isEngineerOnOwnTask =
+    !canEdit && !staffedEngineer && auth.role === "pf_engineer" && existing.assignee_user_id === auth.user.id;
+  if (!canEdit && !staffedEngineer && !isEngineerOnOwnTask) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
@@ -737,7 +752,7 @@ app.delete("/:id/tasks/:taskId", async (c) => {
   const projectId = c.req.param("id");
   const taskId = c.req.param("taskId");
 
-  const allowed = await canEditProject(db, auth.user, projectId);
+  const allowed = (await canEditProject(db, auth.user, projectId)) || (await isStaffedEngineer(db, auth, projectId));
   if (!allowed) {
     throw new HTTPException(403, { message: "Forbidden" });
   }

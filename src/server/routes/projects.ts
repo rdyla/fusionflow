@@ -35,9 +35,20 @@ app.get("/", async (c) => {
   `;
   let bindings: string[] = [];
 
+  // PMs and IEs default to their own projects but can zoom out to the full
+  // portfolio (?scope=all). They already have portfolio read access on the
+  // detail page (canViewProject) — this just controls the default list view.
+  const scope = c.req.query("scope") === "all" ? "all" : "mine";
   if (auth.role === "pm") {
-    sql += " AND (pm_user_id = ? OR id IN (SELECT project_id FROM project_staff WHERE user_id = ? AND staff_role = 'pm'))";
-    bindings = [auth.user.id, auth.user.id];
+    if (scope === "mine") {
+      sql += " AND (pm_user_id = ? OR id IN (SELECT project_id FROM project_staff WHERE user_id = ? AND staff_role = 'pm'))";
+      bindings = [auth.user.id, auth.user.id];
+    }
+  } else if (auth.role === "pf_engineer") {
+    if (scope === "mine") {
+      sql += " AND id IN (SELECT project_id FROM project_staff WHERE user_id = ?)";
+      bindings = [auth.user.id];
+    }
   } else if (auth.role === "pf_ae") {
     const teamIds = await getTeamUserIds(auth.user.id, db);
     const ph = inPlaceholders(teamIds);
