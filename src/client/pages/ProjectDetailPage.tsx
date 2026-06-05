@@ -304,6 +304,9 @@ export default function ProjectDetailPage() {
   const [caseSearchResults, setCaseSearchResults] = useState<SupportCase[]>([]);
   const [caseSearching, setCaseSearching] = useState(false);
   const [savingCaseLink, setSavingCaseLink] = useState(false);
+  // Opportunity picker can be long (some accounts have 100+); preview a subset
+  // with a "show more" toggle.
+  const [showAllOpps, setShowAllOpps] = useState(false);
 
   // Apply template
 
@@ -2633,8 +2636,8 @@ export default function ProjectDetailPage() {
                     ) : (caseCompliance.accountOpportunities ?? []).length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Select the opportunity this project was sold under:</div>
-                        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden" }}>
-                          {caseCompliance.accountOpportunities.map((opp) => (
+                        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden", maxHeight: 380, overflowY: "auto" }}>
+                          {(showAllOpps ? caseCompliance.accountOpportunities : caseCompliance.accountOpportunities.slice(0, 25)).map((opp) => (
                             <div key={opp.opportunityid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
                               <div style={{ overflow: "hidden" }}>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opp.name}</div>
@@ -2646,6 +2649,15 @@ export default function ProjectDetailPage() {
                             </div>
                           ))}
                         </div>
+                        {caseCompliance.accountOpportunities.length > 25 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllOpps((v) => !v)}
+                            style={{ marginTop: 8, fontSize: 12, color: "#0891b2", background: "none", border: "none", padding: 0, cursor: "pointer", fontWeight: 600 }}
+                          >
+                            {showAllOpps ? "Show fewer" : `Show all ${caseCompliance.accountOpportunities.length} opportunities`}
+                          </button>
+                        )}
                       </>
                     ) : (
                       <div style={{ fontSize: 13, color: "#94a3b8" }}>No opportunities found for this account.</div>

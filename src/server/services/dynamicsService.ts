@@ -570,7 +570,11 @@ export async function getAccountOpportunities(
     filterParts.push(`(${stateFilter})`);
   }
   const filter = filterParts.join(" and ");
-  const path = `/opportunities?$select=${select}&$filter=${filter}&$top=50&$orderby=name asc`;
+  // $top=250 — high enough to return every opportunity for accounts with large
+  // pipelines (some have 100+). At $top=50 a valid opp that sorted past the
+  // first 50 by name silently never reached the picker. The client paginates
+  // the display with a "show more" so the long list stays manageable.
+  const path = `/opportunities?$select=${select}&$filter=${filter}&$top=250&$orderby=name asc`;
 
   const data = await dynamicsGet<{ value: DynamicsOpportunity[] }>(env, path);
   return data.value ?? [];
