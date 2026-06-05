@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Bindings, Variables } from "./types";
 import { authMiddleware } from "./middleware/auth";
+import { runShipmentTracking } from "./lib/shipmentTracking";
 import authRoutes from "./routes/auth";
 import dashboardRoutes from "./routes/dashboard";
 import projectRoutes from "./routes/projects";
@@ -230,7 +231,13 @@ async function runUtilizationSnapshots(env: Bindings): Promise<void> {
 
 export default {
   fetch: app.fetch.bind(app),
-  async scheduled(_event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    // Shipment tracking runs on its own 6-hour cron so it doesn't make the daily
+    // email/health jobs fire 4× a day. Everything else is the daily 14:00 cron.
+    if (event.cron === "0 */6 * * *") {
+      ctx.waitUntil(runShipmentTracking(env));
+      return;
+    }
     ctx.waitUntil(Promise.all([
       runGoLiveReminders(env),
       runUtilizationSnapshots(env),

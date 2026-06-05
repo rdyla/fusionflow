@@ -10,7 +10,7 @@
     "run_worker_first": true
   },
   "triggers": {
-    "crons": ["0 14 * * *"]
+    "crons": ["0 14 * * *", "0 */6 * * *"]
   },
   "vars": {
     "APP_URL": "https://cloudconnect.packetfusion.com"
