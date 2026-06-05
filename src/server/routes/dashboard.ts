@@ -131,7 +131,7 @@ app.get("/summary", async (c) => {
 
     // Full project list
     db.prepare(
-        `SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health,
+        `SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health, on_hold,
                 kickoff_date, target_go_live_date, actual_go_live_date, pm_user_id
          FROM projects ${projectFilter}
          ORDER BY
