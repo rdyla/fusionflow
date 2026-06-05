@@ -334,6 +334,7 @@ export default function SolutionDetailPage() {
   }
 
   const isClient = currentRole === "client";
+  const isPartnerAe = currentRole === "partner_ae";
   const canEdit = currentRole === "admin" || currentRole === "pm" || currentRole === "pf_ae" || currentRole === "pf_sa";
   // Clients VIEW completed needs assessments via the SOR view but never
   // edit them or start new ones. Including isClient here was a launch-day
@@ -378,7 +379,7 @@ export default function SolutionDetailPage() {
     { key: "overview",    label: "Overview"         },
     { key: "assessment",  label: hasOther && !hasUcCc ? "Discovery" : "Needs Assessment" },
     ...(hasOther && hasUcCc ? [{ key: "other_discovery" as const, label: "Other Discovery" }] : []),
-    ...(!isClient ? [{ key: "labor" as const, label: "Labor Estimate" }] : []),
+    ...(!isClient && !isPartnerAe ? [{ key: "labor" as const, label: "Labor Estimate" }] : []),
     { key: "scope",       label: "Scope of Work"    },
     ...(!isClient ? [{ key: "handoff" as const, label: "Handoff" }] : []),
     ...(solution?.dynamics_account_id ? [{ key: "sharepoint" as const, label: "SharePoint" }] : []),
@@ -1598,7 +1599,7 @@ export default function SolutionDetailPage() {
 
 
       {/* ── Labor Estimate Tab ── */}
-      {tab === "labor" && (
+      {tab === "labor" && !isClient && !isPartnerAe && (
         <div>
           {/* Sub-tabs when multiple canonical types apply — same UX as Assessment tab. */}
           {canonicalNaTypes.length > 1 && (
