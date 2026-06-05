@@ -307,8 +307,9 @@ export default function ProjectsPage() {
               filteredProjects.map((project) => {
                 const hasTypes = (project.solution_types?.length ?? 0) > 0;
                 const v = resolveVendorBadge(project.vendor);
+                const onHold = project.on_hold === 1;
                 return (
-                <tr key={project.id}>
+                <tr key={project.id} style={onHold ? { opacity: 0.55 } : undefined}>
                   <td>
                     <Link
                       to={`/projects/${project.id}`}
@@ -316,6 +317,9 @@ export default function ProjectsPage() {
                     >
                       {project.name}
                     </Link>
+                    {onHold && (
+                      <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 9, padding: "1px 7px", textTransform: "uppercase", letterSpacing: "0.04em", verticalAlign: "middle" }}>On Hold</span>
+                    )}
                     {project.target_go_live_date && (
                       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
                         Target Go-Live: {project.target_go_live_date}

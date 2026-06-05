@@ -258,6 +258,7 @@ export type Project = {
   status: string | null;
   health: string | null;
   health_override: string | null;
+  on_hold: number | null;
   kickoff_date: string | null;
   target_go_live_date: string | null;
   actual_go_live_date: string | null;
@@ -1486,6 +1487,7 @@ export const api = {
       customer_name?: string | null;
       status?: string;
       health?: string;
+      on_hold?: number;
       clear_health_override?: boolean;
       target_go_live_date?: string;
       actual_go_live_date?: string;
