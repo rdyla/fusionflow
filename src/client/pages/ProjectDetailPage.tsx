@@ -1010,6 +1010,10 @@ export default function ProjectDetailPage() {
 
       {/* Tab navigation */}
       {(() => {
+        // The API-connection tab only shows for vendors with an actual
+        // integration (detectPlatform → zoom | ringcentral). Mitel has no API
+        // connectivity, so the tab is hidden. A future Dialpad connector would
+        // add 'dialpad' to detectPlatform + a tab body, and the tab lights up.
         const platform = detectPlatform(project.vendor);
         const platformLabel = platform === "ringcentral" ? "RingCentral" : "Zoom";
         const hasCrm = !!project.dynamics_account_id;
@@ -1022,7 +1026,7 @@ export default function ProjectDetailPage() {
         const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
         const visibleTabs: DetailTab[] = isExternal
           ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
-          : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", "zoom"];
+          : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(platform ? ["zoom" as const] : [])];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
