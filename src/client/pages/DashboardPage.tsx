@@ -27,21 +27,25 @@ const PHASE_COLORS = [
   "#00b7c3", "#e74856", "#ca5010", "#038387",
 ];
 
+// Explicit per-vendor colors (statically assigned — nothing auto-shifts, so a
+// new vendor needs its own entry or it falls to VENDOR_FALLBACK). Brand-aligned
+// where it matters: Zoom blue, RingCentral orange, Dialpad purple, Cato green.
 const VENDOR_COLORS: Record<string, string> = {
-  Zoom:            "#0078d4",
-  RingCentral:     "#ff8c00",
-  Mitel:           "#8764b8",
-  Microsoft:       "#107c10",
-  Cisco:           "#038387",
-  "Cato Networks": "#00b7c3",
-  TBD:             "#b146c2",
+  Zoom:            "#0078d4",  // brand blue
+  RingCentral:     "#ff8c00",  // brand orange
+  Dialpad:         "#8764b8",  // brand purple
+  "Cato Networks": "#107c10",  // green
+  Mitel:           "#e74856",  // red
+  Microsoft:       "#00b7c3",  // cyan
+  Cisco:           "#038387",  // teal
+  TBD:             "#b146c2",  // magenta
   Unknown:         "#94a3b8",
 };
 
-// Fallback palette for vendors without an explicit color above — deliberately
-// omits Zoom-blue and RingCentral-orange so a new/unknown vendor never collides
-// with a known one (Mitel had been rendering the same orange as RingCentral).
-const VENDOR_FALLBACK = ["#8764b8", "#00b7c3", "#107c10", "#e74856", "#038387", "#ca5010", "#b146c2", "#5c2e91"];
+// Fallback palette for vendors without an explicit color above — distinct hues
+// that avoid the assigned brand colors so a new/unknown vendor never collides
+// with a known one.
+const VENDOR_FALLBACK = ["#ca5010", "#498205", "#a4262c", "#487ca5", "#8e562e", "#5c2e91"];
 
 // Reverse map: lowercased canonical display label → SolutionType key. Lets us
 // catch legacy rows that stored the display value (e.g. "Workforce Management")
@@ -71,6 +75,7 @@ const TYPE_COLORS = [
 const VENDOR_LABELS: Record<string, string> = {
   zoom:        "Zoom",
   ringcentral: "RingCentral",
+  dialpad:     "Dialpad",
   mitel:       "Mitel",
   cato:        "Cato Networks",
   microsoft:   "Microsoft",
