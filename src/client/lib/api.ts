@@ -455,6 +455,32 @@ export type CaseComplianceData = {
   } | null;
   sowQuote: DynamicsQuote | null;
   accountOpportunities: DynamicsOpportunity[];
+  /** Sum of external-resource amounts (USD) on the project. Surfaced on the
+   *  CRM Case tab as extra hours used (total / 165). */
+  externalResourcesTotal: number;
+};
+
+export type ExternalResourceStatus = "new" | "posted" | "assigned" | "in_progress" | "closed" | "billed";
+export type ExternalResource = {
+  id: string;
+  project_id: string;
+  engagement_date: string | null;
+  contractor_name: string;
+  contractor_email: string | null;
+  task_description: string | null;
+  amount: number;
+  status: ExternalResourceStatus;
+  notes: string | null;
+  created_at: string;
+};
+export type ExternalResourceInput = {
+  engagement_date?: string | null;
+  contractor_name: string;
+  contractor_email?: string | null;
+  task_description?: string | null;
+  amount: number;
+  status?: ExternalResourceStatus;
+  notes?: string | null;
 };
 
 // ── Prospecting ────────────────────────────────────────────────────────────
@@ -1388,6 +1414,23 @@ export const api = {
 
   projectCaseCompliance: (projectId: string) =>
     request<CaseComplianceData>(`/projects/${projectId}/case`),
+
+  externalResources: (projectId: string) =>
+    request<ExternalResource[]>(`/projects/${projectId}/external-resources`),
+  addExternalResource: (projectId: string, payload: ExternalResourceInput) =>
+    request<ExternalResource>(`/projects/${projectId}/external-resources`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateExternalResource: (projectId: string, rid: string, payload: Partial<ExternalResourceInput>) =>
+    request<ExternalResource>(`/projects/${projectId}/external-resources/${rid}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteExternalResource: (projectId: string, rid: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/external-resources/${rid}`, {
+      method: "DELETE",
+    }),
 
   createProject: (payload: {
     name: string;

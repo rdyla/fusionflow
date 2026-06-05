@@ -23,6 +23,7 @@ import {
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
+import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import PhasesPanel from "../components/project/PhasesPanel";
 import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
@@ -39,7 +40,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
 
-type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case";
+type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -1026,7 +1027,10 @@ export default function ProjectDetailPage() {
         const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
         const visibleTabs: DetailTab[] = isExternal
           ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
-          : ["dashboard", "overview", "timeline", ...(canEdit ? ["builder" as const] : []), "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(platform ? ["zoom" as const] : [])];
+          // Timeline Builder is hidden now that phase + kickoff date auto-generate
+          // the dated timeline (the builder code is kept, just not surfaced).
+          // External Resources is PM/admin only (canEdit === admin || pm).
+          : ["dashboard", "overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -1035,7 +1039,7 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t === "builder" ? "Timeline Builder" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t === "external" ? "External Resources" : t === "builder" ? "Timeline Builder" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -1058,6 +1062,9 @@ export default function ProjectDetailPage() {
           }}
         />
       )}
+
+      {/* ── External Resources (PM/admin only) ───────────────────────────── */}
+      {tab === "external" && canEdit && <ExternalResourcesTab projectId={project.id} canEdit={canEdit} />}
 
       {/* ── Dashboard (stakeholder view) ─────────────────────────────────── */}
       {tab === "dashboard" && <ProjectDashboardTab projectId={project.id} currentUserRole={currentUserRole} onChangeTab={(t) => setTab(t as DetailTab)} />}
@@ -2537,7 +2544,13 @@ export default function ProjectDetailPage() {
         }
 
         // Compute hours totals
-        const actualHours = (caseCompliance?.timeEntries ?? []).reduce((sum, e) => sum + (e.durationHours ?? 0), 0);
+        const engineerHours = (caseCompliance?.timeEntries ?? []).reduce((sum, e) => sum + (e.durationHours ?? 0), 0);
+        // External-resource spend converts to hours used at the blended rate and
+        // adds to the actual hours (see External Resources tab). $1,650 → 10h.
+        const EXTERNAL_RATE = 165;
+        const externalTotal = caseCompliance?.externalResourcesTotal ?? 0;
+        const externalHours = externalTotal / EXTERNAL_RATE;
+        const actualHours = engineerHours + externalHours;
         const quotedExpected = caseCompliance?.quotedHours?.total_expected ?? null;
         // SOW hours: from the linked quote's am_sow field
         const sowQuote = caseCompliance?.sowQuote ?? null;
@@ -2690,9 +2703,23 @@ export default function ProjectDetailPage() {
                   )}
                   <div className="ms-info-item">
                     <div className="ms-info-label">Hours Logged (CRM)</div>
-                    <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{actualHours.toFixed(1)}</div>
+                    <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{engineerHours.toFixed(1)}</div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{(caseCompliance?.timeEntries ?? []).length} entries</div>
                   </div>
+                  {externalTotal > 0 && (
+                    <div className="ms-info-item">
+                      <div className="ms-info-label">External Resources</div>
+                      <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{externalHours.toFixed(1)}<span style={{ fontSize: 13, fontWeight: 400, color: "#94a3b8" }}> h</span></div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>${externalTotal.toLocaleString("en-US")} @ $165/hr</div>
+                    </div>
+                  )}
+                  {externalTotal > 0 && (
+                    <div className="ms-info-item">
+                      <div className="ms-info-label">Total Hours Used</div>
+                      <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{actualHours.toFixed(1)}</div>
+                      <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>engineer + external</div>
+                    </div>
+                  )}
                   {pctUsed != null && (
                     <div className="ms-info-item">
                       <div className="ms-info-label">% of {sowHours != null ? "SOW" : "Estimate"} Used</div>
