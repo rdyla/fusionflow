@@ -3282,7 +3282,7 @@ export default function ProjectDetailPage() {
                 <select className="ms-input" value={addStaffUserId} onChange={(e) => setAddStaffUserId(e.target.value)}>
                   <option value="">— Select team member —</option>
                   {users.filter((u) => {
-                    if (addStaffRole === "pm") return u.role === "pm" || u.is_project_resource === 1;
+                    if (addStaffRole === "pm") return u.role === "pm" || u.is_project_resource === 1 || u.is_pm_eligible === 1;
                     if (addStaffRole === "engineer") return u.role === "pf_engineer" || u.is_project_resource === 1;
                     if (addStaffRole === "ae")  return u.role === "pf_ae";
                     if (addStaffRole === "sa")  return u.role === "pf_sa";
