@@ -92,6 +92,8 @@ export default function ProjectsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
+  // PMs/IEs default to their own projects but can zoom out to the full portfolio.
+  const [scope, setScope] = useState<"mine" | "all">("mine");
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { demoVendor } = useDemoMode();
@@ -132,11 +134,12 @@ export default function ProjectsPage() {
     api.projects({
       pf_ae_id: pfAeIdFilter ?? undefined,
       partner_ae_id: partnerAeIdFilter ?? undefined,
+      scope,
     })
       .then((p) => { setProjects(p); setError(null); })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
-  }, [pfAeIdFilter, partnerAeIdFilter]);
+  }, [pfAeIdFilter, partnerAeIdFilter, scope]);
 
   useEffect(() => {
     if (projects.length === 0) return;
@@ -257,6 +260,21 @@ export default function ProjectsPage() {
           </button>
         )}
       </div>
+
+      {/* PMs/IEs: default to their own projects, zoom out to the whole portfolio. */}
+      {(currentRole === "pm" || currentRole === "pf_engineer") && (
+        <div style={{ display: "inline-flex", marginBottom: 16, border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
+          {(["mine", "all"] as const).map((s) => (
+            <button
+              key={s}
+              onClick={() => setScope(s)}
+              style={{ padding: "6px 16px", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: scope === s ? "#0891b2" : "#fff", color: scope === s ? "#fff" : "#475569" }}
+            >
+              {s === "mine" ? "My Projects" : "All Projects"}
+            </button>
+          ))}
+        </div>
+      )}
 
       {(healthFilter || pfAeIdFilter || partnerAeIdFilter) && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
