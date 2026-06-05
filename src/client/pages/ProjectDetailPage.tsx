@@ -277,6 +277,7 @@ export default function ProjectDetailPage() {
   // Edit project meta — rename + (re)link a CRM customer. Staff-only.
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [metaName, setMetaName] = useState("");
+  const [metaOnHold, setMetaOnHold] = useState(false);
   const [metaCrmQuery, setMetaCrmQuery] = useState("");
   const [metaCrmResults, setMetaCrmResults] = useState<{ id: string; name: string }[]>([]);
   const [metaCrmSearching, setMetaCrmSearching] = useState(false);
@@ -617,6 +618,7 @@ export default function ProjectDetailPage() {
   function openEditMeta() {
     if (!project) return;
     setMetaName(project.name ?? "");
+    setMetaOnHold(project.on_hold === 1);
     setMetaCrmQuery(project.customer_name ?? "");
     setMetaCrmResults([]);
     setMetaPickedAccount(null);
@@ -643,6 +645,7 @@ export default function ProjectDetailPage() {
     const payload: Parameters<typeof api.updateProject>[1] = {};
     const trimmedName = metaName.trim();
     if (trimmedName && trimmedName !== project.name) payload.name = trimmedName;
+    if (metaOnHold !== (project.on_hold === 1)) payload.on_hold = metaOnHold ? 1 : 0;
     if (metaPickedAccount && metaPickedAccount.id !== project.dynamics_account_id) {
       payload.dynamics_account_id = metaPickedAccount.id;
       payload.customer_name = metaPickedAccount.name;
@@ -972,6 +975,9 @@ export default function ProjectDetailPage() {
                 />
               )}
               {project.name}
+              {project.on_hold === 1 && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 10, padding: "2px 10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>On Hold</span>
+              )}
             </h1>
             {project.customer_id ? (
               <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
@@ -3206,6 +3212,15 @@ export default function ProjectDetailPage() {
               <label className="ms-label">
                 <span>Project Name</span>
                 <input className="ms-input" value={metaName} onChange={(e) => setMetaName(e.target.value)} placeholder="Project name" />
+              </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                <input type="checkbox" checked={metaOnHold} onChange={(e) => setMetaOnHold(e.target.checked)} style={{ marginTop: 3 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>On hold</div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    Greys the project out and shows an <strong>On Hold</strong> badge in the project lists. Doesn't change tasks or dates.
+                  </div>
+                </div>
               </label>
               <div>
                 <div className="ms-label" style={{ marginBottom: 4 }}><span>CRM Customer</span></div>

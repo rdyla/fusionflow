@@ -26,7 +26,7 @@ app.get("/", async (c) => {
   const db = c.env.DB;
 
   let sql = `
-    SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health,
+    SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health, on_hold,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, managed_in_asana, asana_project_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
@@ -107,7 +107,7 @@ app.get("/:id", async (c) => {
   const project = await db
     .prepare(
       `
-      SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health,
+      SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health, p.on_hold,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.sharepoint_folder_url,
@@ -271,6 +271,7 @@ const updateProjectSchema = z.object({
   dynamics_account_id: z.string().nullable().optional(),
   customer_name: z.string().max(500).nullable().optional(),
   health: z.string().min(1).optional(),
+  on_hold: z.number().int().min(0).max(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),

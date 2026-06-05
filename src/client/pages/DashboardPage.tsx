@@ -496,7 +496,10 @@ export default function DashboardPage() {
             {projects.map((p) => {
               const isCompleted = p.status === "completed";
               const isBlocked = p.status === "blocked";
-              const rowStyle: React.CSSProperties = isCompleted
+              const onHold = p.on_hold === 1;
+              const rowStyle: React.CSSProperties = onHold
+                ? { opacity: 0.55, background: "#f8fafc" }
+                : isCompleted
                 ? { opacity: 0.5, background: "#f8fafc" }
                 : isBlocked
                 ? { background: "rgba(209,52,56,0.04)", borderLeft: "3px solid #d13438" }
@@ -510,7 +513,12 @@ export default function DashboardPage() {
                   onClick={() => navigate(`/projects/${p.id}`)}
                 >
                   <td>
-                    <div style={{ fontWeight: 600, color: isCompleted ? "#64748b" : "#1e293b", fontSize: 14 }}>{p.name}</div>
+                    <div style={{ fontWeight: 600, color: isCompleted ? "#64748b" : "#1e293b", fontSize: 14 }}>
+                      {p.name}
+                      {onHold && (
+                        <span style={{ marginLeft: 8, fontSize: 10, fontWeight: 700, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 9, padding: "1px 7px", textTransform: "uppercase", letterSpacing: "0.04em", verticalAlign: "middle" }}>On Hold</span>
+                      )}
+                    </div>
                     {p.target_go_live_date && (
                       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
                         Target Go-Live: {formatDate(p.target_go_live_date)}
