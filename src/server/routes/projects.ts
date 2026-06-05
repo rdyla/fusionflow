@@ -527,8 +527,16 @@ app.get("/:id/case", async (c) => {
     .first<{ crm_case_id: string | null; crm_opportunity_id: string | null; customer_id: string | null }>();
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
+  // External-resource spend (D1, independent of any CRM case) — surfaced on the
+  // CRM Case tab as additional "hours used" (total / 165 blended rate).
+  const extRow = await db
+    .prepare("SELECT COALESCE(SUM(amount), 0) AS total FROM project_external_resources WHERE project_id = ?")
+    .bind(projectId)
+    .first<{ total: number }>();
+  const externalResourcesTotal = extRow?.total ?? 0;
+
   if (!project.crm_case_id) {
-    return c.json({ case: null, timeEntries: [], quotedHours: null, sowQuote: null, accountOpportunities: [] });
+    return c.json({ case: null, timeEntries: [], quotedHours: null, sowQuote: null, accountOpportunities: [], externalResourcesTotal });
   }
 
   // Fetch case and time entries in parallel
@@ -560,7 +568,7 @@ app.get("/:id/case", async (c) => {
     }
   }
 
-  return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities });
+  return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities, externalResourcesTotal });
 });
 
 // ── SharePoint folder (retrofit for projects created before the auto-create) ─
@@ -852,6 +860,92 @@ app.post("/:id/crm-sync", async (c) => {
     crm: { ae_name: team.ae_name, sa_name: team.sa_name, csm_name: team.csm_name },
     project: updatedProject ? normalizeSolutionTypesField(updatedProject) : null,
   });
+});
+
+// ── External Resources ───────────────────────────────────────────────────────
+// Outside vendor / contractor engagements (e.g. a Field Nation tech). PM/admin
+// only. The summed amount surfaces on the CRM Case tab as extra "hours used"
+// (amount / 165) and as a billable total at project close.
+const EXTERNAL_STATUSES = ["new", "posted", "assigned", "in_progress", "closed", "billed"] as const;
+const externalResourceSchema = z.object({
+  engagement_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  contractor_name: z.string().min(1).max(255),
+  contractor_email: z.string().max(320).nullable().optional(),
+  task_description: z.string().max(5000).nullable().optional(),
+  amount: z.number().min(0),
+  status: z.enum(EXTERNAL_STATUSES).optional(),
+  notes: z.string().max(5000).nullable().optional(),
+});
+
+app.get("/:id/external-resources", requireRole("admin", "pm"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canViewProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const rows = await db
+    .prepare("SELECT id, project_id, engagement_date, contractor_name, contractor_email, task_description, amount, status, notes, created_at FROM project_external_resources WHERE project_id = ? ORDER BY created_at DESC")
+    .bind(projectId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+app.post("/:id/external-resources", requireRole("admin", "pm"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const parsed = externalResourceSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const d = parsed.data;
+  const id = crypto.randomUUID();
+  await db
+    .prepare(`INSERT INTO project_external_resources
+      (id, project_id, engagement_date, contractor_name, contractor_email, task_description, amount, status, notes, created_by_user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, projectId, d.engagement_date ?? null, d.contractor_name, d.contractor_email ?? null, d.task_description ?? null, d.amount, d.status ?? "new", d.notes ?? null, auth.user.id)
+    .run();
+  const created = await db
+    .prepare("SELECT id, project_id, engagement_date, contractor_name, contractor_email, task_description, amount, status, notes, created_at FROM project_external_resources WHERE id = ? LIMIT 1")
+    .bind(id)
+    .first();
+  return c.json(created, 201);
+});
+
+app.patch("/:id/external-resources/:rid", requireRole("admin", "pm"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const rid = c.req.param("rid");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const parsed = externalResourceSchema.partial().safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  for (const [key, value] of Object.entries(parsed.data)) {
+    if (value === undefined) continue;
+    fields.push(`${key} = ?`);
+    values.push(value);
+  }
+  if (!fields.length) throw new HTTPException(400, { message: "No valid fields to update" });
+  await db
+    .prepare(`UPDATE project_external_resources SET ${fields.join(", ")} WHERE id = ? AND project_id = ?`)
+    .bind(...values, rid, projectId)
+    .run();
+  const updated = await db
+    .prepare("SELECT id, project_id, engagement_date, contractor_name, contractor_email, task_description, amount, status, notes, created_at FROM project_external_resources WHERE id = ? LIMIT 1")
+    .bind(rid)
+    .first();
+  return c.json(updated);
+});
+
+app.delete("/:id/external-resources/:rid", requireRole("admin", "pm"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const rid = c.req.param("rid");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  await db.prepare("DELETE FROM project_external_resources WHERE id = ? AND project_id = ?").bind(rid, projectId).run();
+  return c.json({ ok: true });
 });
 
 export default app;
