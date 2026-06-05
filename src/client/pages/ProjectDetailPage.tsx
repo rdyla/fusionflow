@@ -544,6 +544,10 @@ export default function ProjectDetailPage() {
   if (!project) return <div style={{ color: "#64748b", padding: 32 }}>Project not found.</div>;
 
   const canEdit = currentUserRole === "admin" || currentUserRole === "pm";
+  // IEs staffed on this project can manage its tasks (assign + complete + edit),
+  // mirrored server-side. Scoped to engineers actually on the project_staff list.
+  const isStaffedEngineer = currentUserRole === "pf_engineer" && projectStaff.some((s) => s.user_id === currentUserId);
+  const canManageTasks = canEdit || isStaffedEngineer;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -1484,7 +1488,7 @@ export default function ProjectDetailPage() {
               const isAddingHere = newTaskStageId === stage.id;
               const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
               const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
-              const cellInputStyle: React.CSSProperties = canEdit ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
+              const cellInputStyle: React.CSSProperties = canManageTasks ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
               return (
               <div key={stage.id}>
                 {/* Stage header with inline editing — unchanged */}
@@ -1503,8 +1507,8 @@ export default function ProjectDetailPage() {
                       <input
                         type="date"
                         value={stage.planned_start ?? ""}
-                        disabled={!canEdit}
-                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
+                        disabled={!canManageTasks}
+                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canManageTasks ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
                           const updated = await api.updateStage(project.id, stage.id, { planned_start: e.target.value || null });
@@ -1517,8 +1521,8 @@ export default function ProjectDetailPage() {
                       <input
                         type="date"
                         value={stage.planned_end ?? ""}
-                        disabled={!canEdit}
-                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canEdit ? "#fff" : "#f8fafc", color: "#1e293b" }}
+                        disabled={!canManageTasks}
+                        style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canManageTasks ? "#fff" : "#f8fafc", color: "#1e293b" }}
                         onChange={async (e) => {
                           if (!project) return;
                           const updated = await api.updateStage(project.id, stage.id, { planned_end: e.target.value || null });
@@ -1570,7 +1574,7 @@ export default function ProjectDetailPage() {
                         </>
                       );
                     })()}
-                    {canEdit && (
+                    {canManageTasks && (
                       <button
                         type="button"
                         title="Delete stage"
@@ -1642,7 +1646,7 @@ export default function ProjectDetailPage() {
                                         <input
                                           type="text"
                                           defaultValue={taskDisplayTitle(task)}
-                                          disabled={!canEdit}
+                                          disabled={!canManageTasks}
                                           style={{ ...cellInputStyle, flex: 1, minWidth: 0 }}
                                           title={task.title}
                                           onBlur={(e) => {
@@ -1685,7 +1689,7 @@ export default function ProjectDetailPage() {
                                         return (
                                           <select
                                             value={currentValue}
-                                            disabled={!canEdit}
+                                            disabled={!canManageTasks}
                                             style={cellInputStyle}
                                             onChange={(e) => {
                                               const v = e.target.value;
@@ -1732,7 +1736,7 @@ export default function ProjectDetailPage() {
                                                 ))}
                                               </optgroup>
                                             )}
-                                            {canEdit && (
+                                            {canManageTasks && (
                                               <option value="__add_contact__">+ Add new contact…</option>
                                             )}
                                             {/* Stale: assigned user no longer on project — surface so PM can see + reassign */}
@@ -1749,7 +1753,7 @@ export default function ProjectDetailPage() {
                                       <input
                                         type="date"
                                         value={task.due_date ?? ""}
-                                        disabled={!canEdit}
+                                        disabled={!canManageTasks}
                                         style={cellInputStyle}
                                         onChange={(e) => patchTask(task.id, { due_date: e.target.value || null })}
                                       />
@@ -1757,7 +1761,7 @@ export default function ProjectDetailPage() {
                                     <td style={cellStyle}>
                                       <select
                                         value={task.status ?? "not_started"}
-                                        disabled={!canEdit}
+                                        disabled={!canManageTasks}
                                         style={{ ...cellInputStyle, color: STATUS_COLOR[task.status ?? "not_started"] ?? "#1e293b", fontWeight: 600 }}
                                         onChange={(e) => patchTask(task.id, { status: e.target.value as "not_started" | "in_progress" | "completed" | "blocked" })}
                                       >
@@ -1770,7 +1774,7 @@ export default function ProjectDetailPage() {
                                     <td style={cellStyle}>
                                       <select
                                         value={task.priority ?? ""}
-                                        disabled={!canEdit}
+                                        disabled={!canManageTasks}
                                         style={cellInputStyle}
                                         onChange={(e) => patchTask(task.id, { priority: (e.target.value || null) as "low" | "medium" | "high" | null })}
                                       >
@@ -1785,16 +1789,16 @@ export default function ProjectDetailPage() {
                                         <input
                                           type="checkbox"
                                           checked={isDone}
-                                          disabled={!canEdit}
+                                          disabled={!canManageTasks}
                                           onChange={(e) => patchTask(task.id, { status: e.target.checked ? "completed" : "not_started" })}
-                                          style={{ cursor: canEdit ? "pointer" : "default" }}
+                                          style={{ cursor: canManageTasks ? "pointer" : "default" }}
                                           title="Toggle status to/from completed"
                                         />
                                         {isDone && (
                                           <input
                                             type="date"
                                             value={task.completed_at?.slice(0, 10) ?? ""}
-                                            disabled={!canEdit}
+                                            disabled={!canManageTasks}
                                             onChange={(e) => patchTask(task.id, { completed_at: e.target.value || null })}
                                             style={{ ...cellInputStyle, color: "#059669", fontWeight: 500, padding: "3px 4px" }}
                                             title="Edit completion date"
@@ -1805,7 +1809,7 @@ export default function ProjectDetailPage() {
                                     <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                                       {/* Time is logged at the stage level now — see the
                                           "Log time" button on each stage header. */}
-                                      {canEdit && task.due_date && (
+                                      {canManageTasks && task.due_date && (
                                         <button
                                           title="Cascade dates downstream from this task"
                                           onClick={() => setCascadeFromTask(task)}
@@ -1819,7 +1823,7 @@ export default function ProjectDetailPage() {
                                           ↪
                                         </button>
                                       )}
-                                      {canEdit && (
+                                      {canManageTasks && (
                                         <button
                                           title="Delete task"
                                           onClick={async () => {
@@ -1893,7 +1897,7 @@ export default function ProjectDetailPage() {
                       </div>
                     )}
 
-                    {canEdit && !isAddingHere && (
+                    {canManageTasks && !isAddingHere && (
                       <button
                         className="ms-btn-ghost"
                         onClick={() => { setNewTaskTitle(""); setNewTaskStageId(stage.id); }}
@@ -1908,7 +1912,7 @@ export default function ProjectDetailPage() {
               );
             })}
 
-            {canEdit && (
+            {canManageTasks && (
               showNewStageInput ? (
                 <div style={{ display: "flex", gap: 8, alignItems: "center", paddingTop: 8, borderTop: stages.length > 0 ? "1px dashed #e2e8f0" : "none" }}>
                   <input
