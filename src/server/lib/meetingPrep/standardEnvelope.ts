@@ -45,7 +45,7 @@ export function renderStandard(data: StandardMeetingPrepData): { subject: string
   const pmName = escapeHtml(data.pmName);
   const noteHtml = escapeHtml(data.pmCustomNote).replace(/\r?\n/g, "<br>");
   const labelHtml = data.label && data.label.trim()
-    ? `<div style="margin:0 0 18px;font-size:13px;color:#7de3f3;font-weight:600;letter-spacing:0.04em;">${escapeHtml(data.label.trim())}</div>`
+    ? `<div style="margin:0 0 18px;font-size:13px;color:#107c10;font-weight:600;letter-spacing:0.04em;">${escapeHtml(data.label.trim())}</div>`
     : "";
 
   const summaryRows = [
@@ -64,16 +64,16 @@ export function renderStandard(data: StandardMeetingPrepData): { subject: string
     .join("");
 
   const html = base(`
-    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#f0f6ff;">${escapeHtml(data.title)} &mdash; ${projectName}</h2>
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#107c10;">${escapeHtml(data.title)} &mdash; ${projectName}</h2>
     ${labelHtml}
-    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.6);line-height:1.6;">
-      A note from <strong style="color:rgba(240,246,255,0.9);">${pmName}</strong>, your Project Manager.
+    <p style="margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.6;">
+      A note from <strong style="color:#0b5394;">${pmName}</strong>, your Project Manager.
     </p>
     ${data.pmCustomNote.trim()
-      ? `<div style="background:rgba(255,255,255,0.04);border-left:3px solid #00c8e0;padding:14px 18px;margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.85);line-height:1.65;">${noteHtml}</div>`
+      ? `<div style="background:#f4f6f9;border-left:3px solid #0b5394;padding:14px 18px;margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.65;">${noteHtml}</div>`
       : ""}
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">Project Summary</div>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:10px;">Project Summary</div>
       <table style="border-collapse:collapse;">${summaryRows}</table>
     </div>
     ${sectionsHtml}

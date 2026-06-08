@@ -13,20 +13,20 @@ export function base(body: string, _appUrl = ""): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${APP_NAME}</title></head>
-<body style="margin:0;padding:0;background:#0d1b2e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:600px;margin:40px auto;background:#142236;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
-    <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);">
-      <div style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;line-height:1.1;">
-        Cloud<span style="color:#00c8e0;">Connect</span>
+<body style="margin:0;padding:0;background:#eef1f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:600px;margin:40px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+    <div style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e2e8f0;">
+      <div style="font-size:20px;font-weight:800;color:#107c10;letter-spacing:-0.02em;line-height:1.1;">
+        Cloud<span style="color:#0b5394;">Connect</span>
       </div>
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:rgba(240,246,255,0.35);margin-top:2px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#94a3b8;margin-top:2px;">
         Intelligence Platform
       </div>
     </div>
     <div style="padding:28px 28px 24px;">
       ${body}
     </div>
-    <div style="padding:14px 28px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(240,246,255,0.3);">
+    <div style="padding:14px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
       CloudConnect by Packet Fusion &middot; This is an automated notification.
     </div>
   </div>
@@ -44,8 +44,8 @@ function pill(label: string, color: string): string {
 
 export function detail(label: string, value: string): string {
   return `<tr>
-    <td style="padding:6px 14px 6px 0;font-size:13px;color:rgba(240,246,255,0.45);white-space:nowrap;vertical-align:top;">${label}</td>
-    <td style="padding:6px 0;font-size:13px;color:rgba(240,246,255,0.9);">${value}</td>
+    <td style="padding:6px 14px 6px 0;font-size:13px;color:#5f7fa6;white-space:nowrap;vertical-align:top;">${label}</td>
+    <td style="padding:6px 0;font-size:13px;color:#0b5394;">${value}</td>
   </tr>`;
 }
 
@@ -70,21 +70,21 @@ export function userInvite(data: {
   const roleDisplay = escapeHtml(roleLabel[data.role] ?? data.role);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Welcome to CloudConnect</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);line-height:1.6;">
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">Welcome to CloudConnect</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;line-height:1.6;">
       Hi ${recipientName},<br><br>
-      <strong style="color:rgba(240,246,255,0.9);">${invitedByName}</strong> has added you to
-      <strong style="color:#00c8e0;">CloudConnect</strong> — Packet Fusion's intelligence platform
+      <strong style="color:#0b5394;">${invitedByName}</strong> has added you to
+      <strong style="color:#0b5394;">CloudConnect</strong> — Packet Fusion's intelligence platform
       for managing projects, tracking risks, and keeping every stakeholder aligned in real time.
     </p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
         ${detail("Your Role", pill(roleDisplay, "#0891b2"))}
         ${detail("Sign In", "Use your Packet Fusion SSO credentials")}
         ${detail("Access", "Available immediately — no additional setup required")}
       </table>
     </div>
-    <p style="margin:12px 0 0;font-size:13px;color:rgba(240,246,255,0.45);">
+    <p style="margin:12px 0 0;font-size:13px;color:#5f7fa6;">
       If you have questions, reach out to ${invitedByName} or your team administrator.
     </p>
     ${ctaButton("Open CloudConnect", data.appUrl)}
@@ -112,10 +112,10 @@ export function taskAssigned(data: {
   const priority = escapeHtml(data.priority ?? "");
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a task</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${assigneeName}, a task has been assigned to you in CloudConnect.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">You've been assigned a task</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${assigneeName}, a task has been assigned to you in CloudConnect.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Due Date", dueDate)}
@@ -143,9 +143,9 @@ export function taskBlocked(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Task Blocked</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a task on your project has been marked as blocked and may need your attention.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a task on your project has been marked as blocked and may need your attention.</p>
     <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Assignee", assigneeName)}
@@ -188,10 +188,10 @@ export function pmTaskUpdate(data: {
   const taskTitle = escapeHtml(data.taskTitle);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Task Updated</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a task on your project <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> was updated by <strong style="color:rgba(240,246,255,0.9);">${updatedByName}</strong>.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${taskTitle}</div>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">Task Updated</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a task on your project <strong style="color:#0b5394;">${projectName}</strong> was updated by <strong style="color:#0b5394;">${updatedByName}</strong>.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Status", data.status ? pill(sl, sc) : "—")}
@@ -222,11 +222,11 @@ export function riskAssigned(data: {
   const riskDescription = escapeHtml(data.riskDescription);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">You've been assigned a risk</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${ownerName}, you have been assigned as the owner of a risk on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> in CloudConnect.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${riskTitle}</div>
-      ${riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${riskDescription}</div>` : ""}
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">You've been assigned a risk</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${ownerName}, you have been assigned as the owner of a risk on <strong style="color:#0b5394;">${projectName}</strong> in CloudConnect.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:6px;">${riskTitle}</div>
+      ${riskDescription ? `<div style="font-size:13px;color:#0b5394;margin-bottom:12px;">${riskDescription}</div>` : ""}
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Severity", data.severity ? pill(data.severity, sc) : "—")}
@@ -251,7 +251,7 @@ export function pmRiskNotification(data: {
 }): string {
   const severityColor: Record<string, string> = { high: "#d13438", medium: "#ff8c00", low: "#0891b2" };
   const sc = data.severity ? severityColor[data.severity] ?? "#94a3b8" : "#94a3b8";
-  const headerColor = data.severity === "high" ? "#ff8c00" : "#f0f6ff";
+  const headerColor = data.severity === "high" ? "#ff8c00" : "#107c10";
   const action = data.isNew ? "logged on" : "updated on";
 
   const pmName = escapeHtml(data.pmName);
@@ -261,10 +261,10 @@ export function pmRiskNotification(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:${headerColor};">Risk ${data.isNew ? "Added" : "Updated"}</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a risk has been ${action} <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong>.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:6px;">${riskTitle}</div>
-      ${riskDescription ? `<div style="font-size:13px;color:rgba(240,246,255,0.6);margin-bottom:12px;">${riskDescription}</div>` : ""}
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a risk has been ${action} <strong style="color:#0b5394;">${projectName}</strong>.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:6px;">${riskTitle}</div>
+      ${riskDescription ? `<div style="font-size:13px;color:#0b5394;margin-bottom:12px;">${riskDescription}</div>` : ""}
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Severity", data.severity ? pill(data.severity, sc) : "—")}
@@ -295,10 +295,10 @@ export function pmNoteAdded(data: {
   const preview = escapeHtml(raw);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">New Note on Your Project</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, <strong style="color:rgba(240,246,255,0.9);">${authorName}</strong> added a note to <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong>.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:13px;color:rgba(240,246,255,0.8);line-height:1.6;margin-bottom:12px;">${preview}</div>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">New Note on Your Project</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, <strong style="color:#0b5394;">${authorName}</strong> added a note to <strong style="color:#0b5394;">${projectName}</strong>.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:13px;color:#0b5394;line-height:1.6;margin-bottom:12px;">${preview}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Visibility", pill(data.visibility, vc))}
@@ -330,8 +330,8 @@ export function goLiveReminder(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:${color};">Go-Live ${data.daysOut === 1 ? "Tomorrow" : `in ${data.daysOut} Days`}</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${recipientName}, this is a reminder that <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> is scheduled to go live ${urgency}.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${recipientName}, this is a reminder that <strong style="color:#0b5394;">${projectName}</strong> is scheduled to go live ${urgency}.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${customerName ? detail("Customer", customerName) : ""}
@@ -358,7 +358,7 @@ export function projectAtRisk(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#ff8c00;">Project Health: At Risk</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${recipientName}, the project <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> has been flagged as <strong style="color:#ff8c00;">At Risk</strong> and may need attention.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${recipientName}, the project <strong style="color:#0b5394;">${projectName}</strong> has been flagged as <strong style="color:#ff8c00;">At Risk</strong> and may need attention.</p>
     <div style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
@@ -387,10 +387,10 @@ export function partnerNotePosted(data: {
   const preview = escapeHtml(raw);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">New Comment on Your Project</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${recipientName}, <strong style="color:rgba(240,246,255,0.9);">${authorName}</strong> posted a comment on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> that is visible to you.</p>
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:13px;color:rgba(240,246,255,0.8);line-height:1.6;margin-bottom:12px;">${preview}</div>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">New Comment on Your Project</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${recipientName}, <strong style="color:#0b5394;">${authorName}</strong> posted a comment on <strong style="color:#0b5394;">${projectName}</strong> that is visible to you.</p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:13px;color:#0b5394;line-height:1.6;margin-bottom:12px;">${preview}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Posted By", authorName)}
@@ -418,9 +418,9 @@ export function milestoneOverdue(data: {
 
   return base(`
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Milestone Overdue</h2>
-    <p style="margin:0 0 20px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${pmName}, a milestone on <strong style="color:rgba(240,246,255,0.9);">${projectName}</strong> is past its target date.</p>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a milestone on <strong style="color:#0b5394;">${projectName}</strong> is past its target date.</p>
     <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#f0f6ff;margin-bottom:12px;">${milestoneName}</div>
+      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${milestoneName}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Target Date", targetDate)}
@@ -452,11 +452,11 @@ const DIGEST_SEVERITY_COLOR: Record<string, string> = {
 };
 
 function digestKpiCell(label: string, value: number, accent: string | null): string {
-  const valueColor = accent ?? "#f0f6ff";
+  const valueColor = accent ?? "#107c10";
   return `
-    <td style="padding:12px;text-align:center;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;width:25%;">
+    <td style="padding:12px;text-align:center;background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;width:25%;">
       <div style="font-size:24px;font-weight:800;color:${valueColor};line-height:1.1;">${value}</div>
-      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin-top:4px;">${label}</div>
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin-top:4px;">${label}</div>
     </td>`;
 }
 
@@ -470,12 +470,12 @@ function digestCaseRow(c: { ticketNumber: string; title: string; severity: strin
       : escapeHtml(c.status);
   return `
     <tr>
-      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);font-size:12px;font-family:monospace;color:rgba(240,246,255,0.7);white-space:nowrap;vertical-align:top;">${escapeHtml(c.ticketNumber)}</td>
-      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);vertical-align:top;">
-        <div style="font-size:13px;color:#f0f6ff;line-height:1.4;">${escapeHtml(c.title)}</div>
-        <div style="font-size:11px;color:rgba(240,246,255,0.45);margin-top:2px;">${meta}</div>
+      <td style="padding:8px 10px;border-top:1px solid #e2e8f0;font-size:12px;font-family:monospace;color:#0b5394;white-space:nowrap;vertical-align:top;">${escapeHtml(c.ticketNumber)}</td>
+      <td style="padding:8px 10px;border-top:1px solid #e2e8f0;vertical-align:top;">
+        <div style="font-size:13px;color:#107c10;line-height:1.4;">${escapeHtml(c.title)}</div>
+        <div style="font-size:11px;color:#5f7fa6;margin-top:2px;">${meta}</div>
       </td>
-      <td style="padding:8px 10px;border-top:1px solid rgba(255,255,255,0.06);text-align:right;vertical-align:top;white-space:nowrap;">${pill(sev, sevColor)}</td>
+      <td style="padding:8px 10px;border-top:1px solid #e2e8f0;text-align:right;vertical-align:top;white-space:nowrap;">${pill(sev, sevColor)}</td>
     </tr>`;
 }
 
@@ -503,17 +503,17 @@ export function supportDigestEmail(data: DigestEmailData): { subject: string; ht
 
   const openRows = data.openCases.length
     ? data.openCases.map(digestCaseRow).join("")
-    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:rgba(240,246,255,0.45);text-align:center;font-style:italic;">No open cases — nice and quiet.</td></tr>`;
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:#5f7fa6;text-align:center;font-style:italic;">No open cases — nice and quiet.</td></tr>`;
 
   const resolvedRows = data.resolvedCases.length
     ? data.resolvedCases.map(digestCaseRow).join("")
-    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:rgba(240,246,255,0.45);text-align:center;font-style:italic;">No cases resolved in the last ${w} days.</td></tr>`;
+    : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:#5f7fa6;text-align:center;font-style:italic;">No cases resolved in the last ${w} days.</td></tr>`;
 
   const html = base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">Support Activity Summary</h2>
-    <p style="margin:0 0 18px;font-size:14px;color:rgba(240,246,255,0.7);line-height:1.6;">
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">Support Activity Summary</h2>
+    <p style="margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.6;">
       ${greeting}<br><br>
-      Here's a snapshot of <strong style="color:#00c8e0;">${accountName}</strong>'s support activity from the last ${w} days.
+      Here's a snapshot of <strong style="color:#0b5394;">${accountName}</strong>'s support activity from the last ${w} days.
     </p>
 
     <table cellpadding="0" cellspacing="6" style="border-collapse:separate;width:100%;margin-bottom:18px;">
@@ -525,17 +525,17 @@ export function supportDigestEmail(data: DigestEmailData): { subject: string; ht
       </tr>
     </table>
 
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin:20px 0 6px;">Open Cases</div>
-    <table style="border-collapse:collapse;width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:6px;">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin:20px 0 6px;">Open Cases</div>
+    <table style="border-collapse:collapse;width:100%;background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;">
       ${openRows}
     </table>
 
-    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:rgba(240,246,255,0.45);margin:20px 0 6px;">Recently Resolved</div>
-    <table style="border-collapse:collapse;width:100%;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.08);border-radius:6px;">
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin:20px 0 6px;">Recently Resolved</div>
+    <table style="border-collapse:collapse;width:100%;background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;">
       ${resolvedRows}
     </table>
 
-    <p style="margin:24px 0 0;font-size:13px;color:rgba(240,246,255,0.55);line-height:1.6;">
+    <p style="margin:24px 0 0;font-size:13px;color:#0b5394;line-height:1.6;">
       Need to open a new case or follow up on an existing one? Use the support portal — it's the fastest way to reach the team.
     </p>
     ${ctaButton("Open Support Portal", `${data.appUrl}/support/cases`)}

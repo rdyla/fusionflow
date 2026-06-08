@@ -26,26 +26,26 @@ function otpEmailHtml(code: string): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="margin:0;padding:0;background:#0d1b2e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#142236;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;">
-    <div style="background:#091525;padding:20px 28px;border-bottom:1px solid rgba(255,255,255,0.07);">
-      <div style="font-size:20px;font-weight:800;color:#f0f6ff;letter-spacing:-0.02em;">
-        Cloud<span style="color:#00c8e0;">Connect</span>
+<body style="margin:0;padding:0;background:#eef1f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+    <div style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e2e8f0;">
+      <div style="font-size:20px;font-weight:800;color:#107c10;letter-spacing:-0.02em;">
+        Cloud<span style="color:#0b5394;">Connect</span>
       </div>
     </div>
     <div style="padding:28px 28px 24px;">
-      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#f0f6ff;">Your sign-in code</h2>
-      <p style="margin:0 0 24px;color:rgba(240,246,255,0.65);font-size:15px;line-height:1.5;">
-        Use the code below to sign in to CloudConnect. It expires in <strong style="color:#f0f6ff;">10 minutes</strong>.
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#107c10;">Your sign-in code</h2>
+      <p style="margin:0 0 24px;color:#0b5394;font-size:15px;line-height:1.5;">
+        Use the code below to sign in to CloudConnect. It expires in <strong style="color:#107c10;">10 minutes</strong>.
       </p>
-      <div style="background:rgba(0,200,224,0.08);border:1px solid rgba(0,200,224,0.25);border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
-        <span style="font-size:40px;font-weight:700;letter-spacing:10px;color:#00c8e0;">${code}</span>
+      <div style="background:rgba(11,83,148,0.08);border:1px solid rgba(11,83,148,0.3);border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
+        <span style="font-size:40px;font-weight:700;letter-spacing:10px;color:#0b5394;">${code}</span>
       </div>
-      <p style="margin:0;color:rgba(240,246,255,0.35);font-size:13px;line-height:1.5;">
+      <p style="margin:0;color:#94a3b8;font-size:13px;line-height:1.5;">
         If you didn't request this code, you can safely ignore this email.
       </p>
     </div>
-    <div style="padding:14px 28px;border-top:1px solid rgba(255,255,255,0.07);font-size:12px;color:rgba(240,246,255,0.3);">
+    <div style="padding:14px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
       CloudConnect by Packet Fusion &middot; This is an automated sign-in notification.
     </div>
   </div>

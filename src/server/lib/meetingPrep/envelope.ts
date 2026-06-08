@@ -30,9 +30,9 @@ export type MeetingPrepTeamSection = {
  *  dark-mode normalization (Zoom web app, Outlook, etc.). */
 export function psCard(heading: string, innerHtml: string): string {
   return `
-    <div style="background:#1a2a3e;border:1px solid #2a3a51;border-radius:6px;padding:16px 18px;margin:18px 0 6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#7de3f3;margin-bottom:10px;">${escapeHtml(heading)}</div>
-      <div style="font-size:13.5px;color:#e8eef7;line-height:1.6;">${innerHtml}</div>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin:18px 0 6px;">
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:10px;">${escapeHtml(heading)}</div>
+      <div style="font-size:13.5px;color:#0b5394;line-height:1.6;">${innerHtml}</div>
     </div>`;
 }
 
@@ -43,7 +43,7 @@ function initialsAvatar(name: string, size = 48): string {
     .slice(0, 2)
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
-  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#0891b2;color:#f0f6ff;font-size:${Math.floor(size * 0.4)}px;font-weight:700;line-height:${size}px;text-align:center;letter-spacing:0.02em;">${escapeHtml(initials || "?")}</div>`;
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:#0b5394;color:#ffffff;font-size:${Math.floor(size * 0.4)}px;font-weight:700;line-height:${size}px;text-align:center;letter-spacing:0.02em;">${escapeHtml(initials || "?")}</div>`;
 }
 
 export function teamMemberRow(m: MeetingPrepTeamMember): string {
@@ -51,13 +51,13 @@ export function teamMemberRow(m: MeetingPrepTeamMember): string {
     ? `<img src="${escapeHtml(m.photoUrl)}" alt="" width="48" height="48" style="display:block;width:48px;height:48px;border-radius:50%;object-fit:cover;">`
     : initialsAvatar(m.name);
   const email = m.email
-    ? `<div style="font-size:12px;color:rgba(240,246,255,0.45);margin-top:1px;"><a href="mailto:${escapeHtml(m.email)}" style="color:#00c8e0;text-decoration:none;">${escapeHtml(m.email)}</a></div>`
+    ? `<div style="font-size:12px;color:#5f7fa6;margin-top:1px;"><a href="mailto:${escapeHtml(m.email)}" style="color:#0b5394;text-decoration:none;">${escapeHtml(m.email)}</a></div>`
     : "";
   return `<tr>
     <td style="padding:8px 14px 8px 0;vertical-align:middle;width:48px;">${photo}</td>
     <td style="padding:8px 0;vertical-align:middle;">
-      <div style="font-size:13px;font-weight:600;color:#f0f6ff;">${escapeHtml(m.name)}</div>
-      <div style="font-size:12px;color:rgba(240,246,255,0.6);">${escapeHtml(m.role)}</div>
+      <div style="font-size:13px;font-weight:600;color:#0b5394;">${escapeHtml(m.name)}</div>
+      <div style="font-size:12px;color:#5f7fa6;">${escapeHtml(m.role)}</div>
       ${email}
     </td>
   </tr>`;
@@ -69,7 +69,7 @@ export function teamBlock(sections: readonly MeetingPrepTeamSection[]): string {
   if (nonEmpty.length === 0) return "";
   return nonEmpty.map((section) => `
     <div style="margin:22px 0 6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:rgba(240,246,255,0.5);margin-bottom:10px;">${escapeHtml(section.label)}</div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:10px;">${escapeHtml(section.label)}</div>
       <table style="border-collapse:collapse;width:100%;">
         ${section.members.map(teamMemberRow).join("")}
       </table>
