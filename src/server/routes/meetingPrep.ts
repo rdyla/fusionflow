@@ -154,7 +154,7 @@ function displayRoleFor(s: StaffRow, vendor: string | null): string {
 }
 
 async function loadRecipientCandidates(db: D1Database, project: ProjectRow) {
-  const [contactsRes, staffRes, pmRes] = await Promise.all([
+  const [contactsRes, staffRes, pmRes, acctTeamRes] = await Promise.all([
     db.prepare("SELECT id, name, email, job_title FROM project_contacts WHERE project_id = ? ORDER BY name")
       .bind(project.id).all<ContactRow>(),
     db.prepare(`SELECT u.id, u.name, u.email, u.role, ps.staff_role
@@ -165,6 +165,15 @@ async function loadRecipientCandidates(db: D1Database, project: ProjectRow) {
       ? db.prepare("SELECT id, name, email, role, NULL as staff_role FROM users WHERE id = ? LIMIT 1")
           .bind(project.pm_user_id).first<StaffRow>()
       : Promise.resolve(null),
+    // Account management team — the customer's assigned PF AE / SA / CSM (on the
+    // customer record, not necessarily project_staff). Lets PMs CC them on sends.
+    project.customer_id
+      ? db.prepare(`SELECT u.id, u.name, u.email, u.role, NULL as staff_role
+                    FROM customers c JOIN users u
+                      ON u.id IN (c.pf_ae_user_id, c.pf_sa_user_id, c.pf_csm_user_id)
+                    WHERE c.id = ?`)
+          .bind(project.customer_id).all<StaffRow>()
+      : Promise.resolve({ results: [] as StaffRow[] }),
   ]);
 
   const contacts = (contactsRes.results ?? []).filter((c) => !!c.email);
@@ -172,6 +181,11 @@ async function loadRecipientCandidates(db: D1Database, project: ProjectRow) {
   const staffById = new Map<string, StaffRow>();
   for (const s of staffRes.results ?? []) staffById.set(s.id, s);
   if (pmRes && !staffById.has(pmRes.id)) staffById.set(pmRes.id, { ...pmRes, staff_role: "pm" });
+  // Add account-team members not already on the project staff (keep their AE/SA/
+  // CSM role label; don't clobber an existing project_staff entry).
+  for (const s of acctTeamRes.results ?? []) {
+    if (s.email && !staffById.has(s.id)) staffById.set(s.id, s);
+  }
 
   const staff = Array.from(staffById.values()).filter((s) => !!s.email);
   return { contacts, staff };
