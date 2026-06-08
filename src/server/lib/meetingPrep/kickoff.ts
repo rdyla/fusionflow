@@ -47,7 +47,7 @@ function renderKickoffSection(
       return psCard(
         meta.label,
         `To configure and support your platform, please grant administrator access in your cloud portal to
-         <a href="mailto:${escapeHtml(ctx.distributionListEmail)}" style="color:#107c10;text-decoration:underline;">${escapeHtml(ctx.distributionListEmail)}</a>.
+         <a href="mailto:${escapeHtml(ctx.distributionListEmail)}" style="color:#22c55e;text-decoration:underline;">${escapeHtml(ctx.distributionListEmail)}</a>.
          This covers the implementation and ongoing support after your transition. We'll walk through the steps with your Implementation Engineer during the first technical meeting.`
       );
     case "porting":
@@ -178,7 +178,7 @@ export function renderKickoff(data: KickoffData): { subject: string; html: strin
     const urlRe = /https?:\/\/[^\s<>"]+/g;
     const escaped = escapeHtml(raw);
     const linkified = escaped.replace(urlRe, (m) =>
-      `<a href="${m}" style="color:#107c10;text-decoration:underline;word-break:break-all;">${m}</a>`
+      `<a href="${m}" style="color:#22c55e;text-decoration:underline;word-break:break-all;">${m}</a>`
     );
     return linkified.replace(/\r?\n/g, "<br>");
   })();
@@ -189,7 +189,7 @@ export function renderKickoff(data: KickoffData): { subject: string; html: strin
 
   const kickoffBlock = (kickoffContent || kickoffWhenLine)
     ? `<div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:14px 18px;margin:18px 0 6px;">
-        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:6px;">Kickoff Meeting</div>
+        <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#22c55e;margin-bottom:6px;">Kickoff Meeting</div>
         ${kickoffWhenLine}
         ${kickoffContent ? `<div style="color:#0b5394;font-size:14px;line-height:1.55;word-break:break-word;">${kickoffContent}</div>` : ""}
       </div>`
@@ -219,7 +219,7 @@ export function renderKickoff(data: KickoffData): { subject: string; html: strin
   const kickoffBlockFallback = !adminAccessRendered ? kickoffBlock : "";
 
   const html = base(`
-    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#107c10;">Welcome to ${projectName}</h2>
+    <h2 style="margin:0 0 6px;font-size:20px;font-weight:700;color:#22c55e;">Welcome to ${projectName}</h2>
     <p style="margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.6;">
       A note from <strong style="color:#0b5394;">${pmName}</strong>, your Project Manager.
     </p>
@@ -227,7 +227,7 @@ export function renderKickoff(data: KickoffData): { subject: string; html: strin
       ? `<div style="background:#f4f6f9;border-left:3px solid #0b5394;padding:14px 18px;margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.65;">${noteHtml}</div>`
       : ""}
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:10px;">Project Summary</div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#22c55e;margin-bottom:10px;">Project Summary</div>
       <table style="border-collapse:collapse;">${summaryRows}</table>
     </div>
     ${kickoffBlockFallback}

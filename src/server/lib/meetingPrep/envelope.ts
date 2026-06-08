@@ -31,7 +31,7 @@ export type MeetingPrepTeamSection = {
 export function psCard(heading: string, innerHtml: string): string {
   return `
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin:18px 0 6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:10px;">${escapeHtml(heading)}</div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#22c55e;margin-bottom:10px;">${escapeHtml(heading)}</div>
       <div style="font-size:13.5px;color:#0b5394;line-height:1.6;">${innerHtml}</div>
     </div>`;
 }
@@ -69,7 +69,7 @@ export function teamBlock(sections: readonly MeetingPrepTeamSection[]): string {
   if (nonEmpty.length === 0) return "";
   return nonEmpty.map((section) => `
     <div style="margin:22px 0 6px;">
-      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#107c10;margin-bottom:10px;">${escapeHtml(section.label)}</div>
+      <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#22c55e;margin-bottom:10px;">${escapeHtml(section.label)}</div>
       <table style="border-collapse:collapse;width:100%;">
         ${section.members.map(teamMemberRow).join("")}
       </table>
