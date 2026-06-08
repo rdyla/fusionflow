@@ -29,14 +29,14 @@ function otpEmailHtml(code: string): string {
 <body style="margin:0;padding:0;background:#eef1f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:560px;margin:40px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
     <div style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-size:20px;font-weight:800;color:#107c10;letter-spacing:-0.02em;">
+      <div style="font-size:20px;font-weight:800;color:#22c55e;letter-spacing:-0.02em;">
         Cloud<span style="color:#0b5394;">Connect</span>
       </div>
     </div>
     <div style="padding:28px 28px 24px;">
-      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#107c10;">Your sign-in code</h2>
+      <h2 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#22c55e;">Your sign-in code</h2>
       <p style="margin:0 0 24px;color:#0b5394;font-size:15px;line-height:1.5;">
-        Use the code below to sign in to CloudConnect. It expires in <strong style="color:#107c10;">10 minutes</strong>.
+        Use the code below to sign in to CloudConnect. It expires in <strong style="color:#22c55e;">10 minutes</strong>.
       </p>
       <div style="background:rgba(11,83,148,0.08);border:1px solid rgba(11,83,148,0.3);border-radius:8px;padding:20px;text-align:center;margin-bottom:24px;">
         <span style="font-size:40px;font-weight:700;letter-spacing:10px;color:#0b5394;">${code}</span>

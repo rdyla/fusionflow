@@ -16,7 +16,7 @@ export function base(body: string, _appUrl = ""): string {
 <body style="margin:0;padding:0;background:#eef1f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <div style="max-width:600px;margin:40px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
     <div style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-size:20px;font-weight:800;color:#107c10;letter-spacing:-0.02em;line-height:1.1;">
+      <div style="font-size:20px;font-weight:800;color:#22c55e;letter-spacing:-0.02em;line-height:1.1;">
         Cloud<span style="color:#0b5394;">Connect</span>
       </div>
       <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#94a3b8;margin-top:2px;">
@@ -70,7 +70,7 @@ export function userInvite(data: {
   const roleDisplay = escapeHtml(roleLabel[data.role] ?? data.role);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">Welcome to CloudConnect</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">Welcome to CloudConnect</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;line-height:1.6;">
       Hi ${recipientName},<br><br>
       <strong style="color:#0b5394;">${invitedByName}</strong> has added you to
@@ -112,10 +112,10 @@ export function taskAssigned(data: {
   const priority = escapeHtml(data.priority ?? "");
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">You've been assigned a task</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">You've been assigned a task</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${assigneeName}, a task has been assigned to you in CloudConnect.</p>
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Due Date", dueDate)}
@@ -145,7 +145,7 @@ export function taskBlocked(data: {
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Task Blocked</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a task on your project has been marked as blocked and may need your attention.</p>
     <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Assignee", assigneeName)}
@@ -188,10 +188,10 @@ export function pmTaskUpdate(data: {
   const taskTitle = escapeHtml(data.taskTitle);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">Task Updated</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">Task Updated</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a task on your project <strong style="color:#0b5394;">${projectName}</strong> was updated by <strong style="color:#0b5394;">${updatedByName}</strong>.</p>
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${taskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:12px;">${taskTitle}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Status", data.status ? pill(sl, sc) : "—")}
@@ -222,10 +222,10 @@ export function riskAssigned(data: {
   const riskDescription = escapeHtml(data.riskDescription);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">You've been assigned a risk</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">You've been assigned a risk</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${ownerName}, you have been assigned as the owner of a risk on <strong style="color:#0b5394;">${projectName}</strong> in CloudConnect.</p>
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:6px;">${riskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:6px;">${riskTitle}</div>
       ${riskDescription ? `<div style="font-size:13px;color:#0b5394;margin-bottom:12px;">${riskDescription}</div>` : ""}
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
@@ -251,7 +251,7 @@ export function pmRiskNotification(data: {
 }): string {
   const severityColor: Record<string, string> = { high: "#d13438", medium: "#ff8c00", low: "#0891b2" };
   const sc = data.severity ? severityColor[data.severity] ?? "#94a3b8" : "#94a3b8";
-  const headerColor = data.severity === "high" ? "#ff8c00" : "#107c10";
+  const headerColor = data.severity === "high" ? "#ff8c00" : "#22c55e";
   const action = data.isNew ? "logged on" : "updated on";
 
   const pmName = escapeHtml(data.pmName);
@@ -263,7 +263,7 @@ export function pmRiskNotification(data: {
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:${headerColor};">Risk ${data.isNew ? "Added" : "Updated"}</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a risk has been ${action} <strong style="color:#0b5394;">${projectName}</strong>.</p>
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:6px;">${riskTitle}</div>
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:6px;">${riskTitle}</div>
       ${riskDescription ? `<div style="font-size:13px;color:#0b5394;margin-bottom:12px;">${riskDescription}</div>` : ""}
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
@@ -295,7 +295,7 @@ export function pmNoteAdded(data: {
   const preview = escapeHtml(raw);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">New Note on Your Project</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">New Note on Your Project</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, <strong style="color:#0b5394;">${authorName}</strong> added a note to <strong style="color:#0b5394;">${projectName}</strong>.</p>
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:13px;color:#0b5394;line-height:1.6;margin-bottom:12px;">${preview}</div>
@@ -387,7 +387,7 @@ export function partnerNotePosted(data: {
   const preview = escapeHtml(raw);
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">New Comment on Your Project</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">New Comment on Your Project</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${recipientName}, <strong style="color:#0b5394;">${authorName}</strong> posted a comment on <strong style="color:#0b5394;">${projectName}</strong> that is visible to you.</p>
     <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
       <div style="font-size:13px;color:#0b5394;line-height:1.6;margin-bottom:12px;">${preview}</div>
@@ -420,7 +420,7 @@ export function milestoneOverdue(data: {
     <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#d13438;">Milestone Overdue</h2>
     <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${pmName}, a milestone on <strong style="color:#0b5394;">${projectName}</strong> is past its target date.</p>
     <div style="background:rgba(209,52,56,0.08);border:1px solid rgba(209,52,56,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
-      <div style="font-size:16px;font-weight:700;color:#107c10;margin-bottom:12px;">${milestoneName}</div>
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:12px;">${milestoneName}</div>
       <table style="border-collapse:collapse;">
         ${detail("Project", projectName)}
         ${detail("Target Date", targetDate)}
@@ -452,7 +452,7 @@ const DIGEST_SEVERITY_COLOR: Record<string, string> = {
 };
 
 function digestKpiCell(label: string, value: number, accent: string | null): string {
-  const valueColor = accent ?? "#107c10";
+  const valueColor = accent ?? "#22c55e";
   return `
     <td style="padding:12px;text-align:center;background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;width:25%;">
       <div style="font-size:24px;font-weight:800;color:${valueColor};line-height:1.1;">${value}</div>
@@ -472,7 +472,7 @@ function digestCaseRow(c: { ticketNumber: string; title: string; severity: strin
     <tr>
       <td style="padding:8px 10px;border-top:1px solid #e2e8f0;font-size:12px;font-family:monospace;color:#0b5394;white-space:nowrap;vertical-align:top;">${escapeHtml(c.ticketNumber)}</td>
       <td style="padding:8px 10px;border-top:1px solid #e2e8f0;vertical-align:top;">
-        <div style="font-size:13px;color:#107c10;line-height:1.4;">${escapeHtml(c.title)}</div>
+        <div style="font-size:13px;color:#22c55e;line-height:1.4;">${escapeHtml(c.title)}</div>
         <div style="font-size:11px;color:#5f7fa6;margin-top:2px;">${meta}</div>
       </td>
       <td style="padding:8px 10px;border-top:1px solid #e2e8f0;text-align:right;vertical-align:top;white-space:nowrap;">${pill(sev, sevColor)}</td>
@@ -510,7 +510,7 @@ export function supportDigestEmail(data: DigestEmailData): { subject: string; ht
     : `<tr><td colspan="3" style="padding:12px;font-size:13px;color:#5f7fa6;text-align:center;font-style:italic;">No cases resolved in the last ${w} days.</td></tr>`;
 
   const html = base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">Support Activity Summary</h2>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">Support Activity Summary</h2>
     <p style="margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.6;">
       ${greeting}<br><br>
       Here's a snapshot of <strong style="color:#0b5394;">${accountName}</strong>'s support activity from the last ${w} days.
