@@ -113,23 +113,23 @@ function renderBatchSummary(entry: RecipientEntry, ctx: BatchSummaryContext): st
   const projectName = escapeHtml(ctx.projectName);
   const intro = ctx.intro ? escapeHtml(ctx.intro) : `${entry.events.length} change${entry.events.length === 1 ? "" : "s"} affecting your work in ${projectName}.`;
   const actorLine = ctx.actorName
-    ? `<p style="margin:0 0 16px;font-size:13px;color:rgba(240,246,255,0.55);">Applied by ${escapeHtml(ctx.actorName)}.</p>`
+    ? `<p style="margin:0 0 16px;font-size:13px;color:#0b5394;">Applied by ${escapeHtml(ctx.actorName)}.</p>`
     : "";
   const goLiveLine = ctx.newTargetGoLive
     ? `<div style="background:rgba(255,140,0,0.08);border:1px solid rgba(255,140,0,0.3);border-radius:6px;padding:10px 14px;margin:14px 0;">
          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#ff8c00;margin-bottom:2px;">New Target Go-Live</div>
-         <div style="font-size:15px;font-weight:600;color:#f0f6ff;">${escapeHtml(ctx.newTargetGoLive)}</div>
+         <div style="font-size:15px;font-weight:600;color:#107c10;">${escapeHtml(ctx.newTargetGoLive)}</div>
        </div>`
     : "";
 
   const rows = entry.events.map((ev) => renderEventRow(ev)).join("");
 
   return base(`
-    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#f0f6ff;">${escapeHtml(ctx.subject)}</h2>
-    <p style="margin:0 0 12px;font-size:14px;color:rgba(240,246,255,0.7);">Hi ${greetingName}, ${intro}</p>
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#107c10;">${escapeHtml(ctx.subject)}</h2>
+    <p style="margin:0 0 12px;font-size:14px;color:#0b5394;">Hi ${greetingName}, ${intro}</p>
     ${actorLine}
     ${goLiveLine}
-    <div style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;padding:14px 16px;">
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:14px 16px;">
       <table style="border-collapse:collapse;width:100%;">
         ${rows}
       </table>
@@ -145,15 +145,15 @@ function renderEventRow(ev: BatchEvent): string {
     const newDue = escapeHtml(ev.newDue ?? "—");
     return detail(
       title,
-      `<span style="color:rgba(240,246,255,0.55);">${oldDue}</span>
-       <span style="color:rgba(240,246,255,0.4);margin:0 6px;">→</span>
-       <span style="color:#00c8e0;font-weight:600;">${newDue}</span>`,
+      `<span style="color:#0b5394;">${oldDue}</span>
+       <span style="color:#5f7fa6;margin:0 6px;">→</span>
+       <span style="color:#0b5394;font-weight:600;">${newDue}</span>`,
     );
   }
   if (ev.kind === "task_assigned") {
     const title = escapeHtml(ev.taskTitle);
     const due = escapeHtml(ev.dueDate ?? "No due date");
-    return detail(title, `<span style="color:rgba(240,246,255,0.7);">Due ${due}</span>`);
+    return detail(title, `<span style="color:#0b5394;">Due ${due}</span>`);
   }
   return "";
 }
