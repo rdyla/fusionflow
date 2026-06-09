@@ -788,7 +788,7 @@ export function buildProposalHtml(_oppName: string, d: OppFormData, calc: OppCal
       </div>
     </div>
     ${buildMsoSection(d, calc)}
-    <div class="price-summary">
+    <div class="price-summary"${calc.totalDiscount > 0 ? ` style="grid-template-columns:1fr 1px 1fr 1px 1fr;"` : ""}>
       <div class="price-summary-cell accent">
         <div class="ps-label">Total Annual Investment</div>
         <div class="ps-value">${fmtFull(calc.annual)}</div>
