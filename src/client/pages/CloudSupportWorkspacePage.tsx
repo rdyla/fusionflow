@@ -73,15 +73,18 @@ export default function CloudSupportWorkspacePage() {
   // Rebuild agreement HTML when switching to those tabs
   useEffect(() => {
     if (!proposal) return;
+    // The doc's "Prepared for" is the linked customer (proposal.customerName),
+    // not the proposal/solution name. Feed it into the form the builders read.
+    const docForm = { ...form, customerName: proposal.customerName ?? form.customerName };
     if (tab === "agreement") {
       const versionNum = proposal.versions.length + 1;
-      setAgreementHtml(buildProposalHtml(proposal.name, form, calc, versionNum));
+      setAgreementHtml(buildProposalHtml(proposal.name, docForm, calc, versionNum));
     } else if (tab === "signature") {
       const versionNum = proposal.versions.length + 1;
-      setSignatureHtml(buildSignatureHtml(proposal.name, form, calc, versionNum));
+      setSignatureHtml(buildSignatureHtml(proposal.name, docForm, calc, versionNum));
     } else if (tab === "mso") {
       const versionNum = proposal.versions.length + 1;
-      setMsoHtml(buildMsoStandaloneHtml(proposal.name, form, calc, versionNum));
+      setMsoHtml(buildMsoStandaloneHtml(proposal.name, docForm, calc, versionNum));
     }
   }, [tab, proposal]);
 

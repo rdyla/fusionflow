@@ -461,9 +461,11 @@ const ADV_APP_GENERAL_NOTES = [
   "Third-party integrations and custom API workflows are supported on a best-effort basis unless otherwise scoped",
 ];
 
-export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
+export function buildProposalHtml(_oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
   const type = d.oppType || "UCaaS + CCaaS";
-  const customer = d.customerName || oppName || "[Customer Name]";
+  // Prepared-for is the CUSTOMER, never the proposal/solution name. oppName is
+  // the internal proposal label and must not stand in for the customer here.
+  const customer = d.customerName || "[Customer Name]";
   const term = d.term || 3;
   const startDate = fmtDate(d.contractStart);
   const endDate = fmtDate(d.contractEnd);
@@ -782,8 +784,10 @@ export function buildProposalHtml(oppName: string, d: OppFormData, calc: OppCalc
 </html>`;
 }
 
-export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
-  const customer = d.customerName || oppName || "[Customer Name]";
+export function buildMsoStandaloneHtml(_oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
+  // Prepared-for is the CUSTOMER, never the proposal/solution name. oppName is
+  // the internal proposal label and must not stand in for the customer here.
+  const customer = d.customerName || "[Customer Name]";
   const term = d.term || 3;
   const startDate = fmtDate(d.contractStart);
   const endDate = fmtDate(d.contractEnd);
@@ -1145,9 +1149,11 @@ export function buildMsoStandaloneHtml(oppName: string, d: OppFormData, calc: Op
 </html>`;
 }
 
-export function buildSignatureHtml(oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
+export function buildSignatureHtml(_oppName: string, d: OppFormData, calc: OppCalcResult, versionNum: number): string {
   const type = d.oppType || "UCaaS + CCaaS";
-  const customer = d.customerName || oppName || "[Customer Name]";
+  // Prepared-for is the CUSTOMER, never the proposal/solution name. oppName is
+  // the internal proposal label and must not stand in for the customer here.
+  const customer = d.customerName || "[Customer Name]";
   const term = d.term || 3;
   const startDate = fmtDate(d.contractStart);
   const endDate = fmtDate(d.contractEnd);
