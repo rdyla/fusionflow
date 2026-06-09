@@ -155,12 +155,27 @@ export default function CloudSupportWorkspacePage() {
     }
   }
 
-  function handlePrint(ref: React.RefObject<HTMLIFrameElement | null>) {
-    ref.current?.contentWindow?.print();
+  // The print/PDF filename comes from the document title. Browsers use the
+  // parent SPA title ("CloudConnect by Packet Fusion") when printing an iframe,
+  // so set it (and the iframe's own title) to the client-named doc, then restore.
+  function handlePrint(ref: React.RefObject<HTMLIFrameElement | null>, docTitle: string) {
+    const frame = ref.current;
+    const win = frame?.contentWindow;
+    if (!win) return;
+    const prevTitle = document.title;
+    document.title = docTitle;
+    try { if (frame?.contentDocument) frame.contentDocument.title = docTitle; } catch { /* ignore */ }
+    win.focus();
+    win.print();
+    window.setTimeout(() => { document.title = prevTitle; }, 1500);
   }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!proposal) return <div style={{ color: "#d13438", padding: 32 }}>Proposal not found.</div>;
+
+  // Client name drives the exported PDF filename (falls back to the proposal
+  // name when no customer is linked).
+  const client = proposal.customerName?.trim() || proposal.name;
 
   const TAB_LABELS: [Tab, string][] = [
     ["calculator", "Calculator"],
@@ -328,7 +343,7 @@ export default function CloudSupportWorkspacePage() {
       {tab === "agreement" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(agreementIframeRef)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(agreementIframeRef, `${client} - Cloud Support Agreement`)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
@@ -345,7 +360,7 @@ export default function CloudSupportWorkspacePage() {
       {tab === "signature" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(signatureIframeRef)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(signatureIframeRef, `${client} - Cloud Support Agreement (Signature)`)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
@@ -362,7 +377,7 @@ export default function CloudSupportWorkspacePage() {
       {tab === "mso" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(msoIframeRef)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(msoIframeRef, `${client} - CloudSupport MSO Add-On`)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
