@@ -58,6 +58,15 @@ export default function CalculatorForm({ form, calc, canOverride, onChange, cust
     onChange({ customLines: (form.customLines ?? []).filter((_, idx) => idx !== i) });
   }
 
+  // Per-year discount schedule: a $ credit applied to a single contract year
+  // (e.g. a provider SPIFF offsets Year 1 only; Years 2+ bill at full price).
+  function setYearDiscount(year: number, value: number) {
+    const term = Math.max(1, Number(form.term) || 1);
+    const next = Array.from({ length: term }, (_, i) => Number(form.yearlyDiscounts?.[i]) || 0);
+    next[year] = value;
+    onChange({ yearlyDiscounts: next });
+  }
+
   const showUcaas = form.oppType === "UCaaS Only" || form.oppType === "UCaaS + CCaaS";
   const showCcaas = form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS";
   const showImpl = form.oppType === "CCaaS Only" || form.oppType === "UCaaS + CCaaS";
@@ -539,6 +548,38 @@ export default function CalculatorForm({ form, calc, canOverride, onChange, cust
             </div>
           );
         })}
+      </div>
+
+      {/* ── Discount by Year ─────────────────────────────────────────────────── */}
+      <div style={S.section}>
+        <div style={{ marginBottom: 4 }}>
+          <div style={S.sectionTitle}>Discount by Year</div>
+        </div>
+        <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 12 }}>
+          One-time credits applied to specific contract years (e.g. a provider SPIFF offsetting Year 1). Each amount reduces only that year — years left at $0 bill at the full annual rate of {fmt(calc.annual)}.
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+          {Array.from({ length: Math.max(1, Number(form.term) || 1) }, (_, y) => {
+            const disc = Number(form.yearlyDiscounts?.[y]) || 0;
+            const net = calc.annual - disc;
+            return (
+              <label key={y} style={{ ...S.label, flex: "1 1 120px", minWidth: 110 }}>
+                <span>Year {y + 1} discount</span>
+                <input
+                  className="ms-input"
+                  type="number"
+                  min={0}
+                  value={form.yearlyDiscounts?.[y] || ""}
+                  onChange={(e) => setYearDiscount(y, Number(e.target.value))}
+                  placeholder="0"
+                />
+                <span style={{ fontSize: 11, color: disc > 0 ? "#16a34a" : "#94a3b8", marginTop: 2 }}>
+                  {disc > 0 ? `Net ${fmt(net)}` : `Full ${fmt(calc.annual)}`}
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Custom Inclusions ────────────────────────────────────────────────── */}

@@ -296,7 +296,7 @@ export default function CloudSupportWorkspacePage() {
                 <SummaryLine label={`MSO — ${getMsoTier(form.msoTier)?.label ?? "Custom"}`} value={calc.msoSup} overridden={calc.msoOverridden} />
               )}
               {(() => {
-                const preCustomAnnual = calc.annual - calc.customTotal;
+                const preCustomAnnual = calc.preCustomAnnual;
                 return (form.customLines ?? []).filter(l => (Number(l.price) || 0) !== 0).map((line, i) => {
                   const kind = line.kind ?? "charge";
                   const effect = customLineDollar(line, preCustomAnnual);
@@ -306,8 +306,8 @@ export default function CloudSupportWorkspacePage() {
                     : (line.label || `Custom Line ${i + 1}`);
                   return (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13 }}>
-                      <span style={{ color: isDiscount ? "#065f46" : "#475569", paddingRight: 8 }}>{label}</span>
-                      <span style={{ fontWeight: 600, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>{fmtSigned(effect)}/yr</span>
+                      <span style={{ color: isDiscount ? "#065f46" : "#475569", paddingRight: 8 }}>{label}{isDiscount ? " · Yr 1" : ""}</span>
+                      <span style={{ fontWeight: 600, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>{fmtSigned(effect)}{isDiscount ? "" : "/yr"}</span>
                     </div>
                   );
                 });
@@ -320,6 +320,12 @@ export default function CloudSupportWorkspacePage() {
                 <span>Annual Total</span>
                 <span>{fmt(calc.annual)}</span>
               </div>
+              {calc.totalDiscount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#16a34a" }}>
+                  <span>Discounts {form.term > 1 ? "(per schedule)" : ""}</span>
+                  <span style={{ fontWeight: 600 }}>−{fmt(calc.totalDiscount)}</span>
+                </div>
+              )}
               {form.term > 1 && (
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#475569" }}>
                   <span>TCV ({form.term}-yr)</span>

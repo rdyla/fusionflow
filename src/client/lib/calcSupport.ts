@@ -35,6 +35,11 @@ export interface OppFormData {
   //   discount_percent → price is a percentage (0-100) applied to the pre-custom
   //                      annual subtotal and subtracted
   customLines: { label: string; price: number; kind?: "charge" | "discount_amount" | "discount_percent" }[];
+  /** Per-year discount schedule, index 0 = Year 1. A value reduces only that
+   *  contract year (e.g. SPIFF offsets Year 1, smaller credit Year 2, full
+   *  price thereafter). Sparse/short arrays are fine — missing years = no
+   *  discount. Entries beyond `term` are ignored by the calc. */
+  yearlyDiscounts?: number[];
   customInclusions: { label: string; blurb: string }[];
   customerName: string;
   notes: string;
@@ -46,7 +51,17 @@ export interface OppCalcResult {
   implSup: number;
   msoSup: number;
   customTotal: number;
+  /** Per-year recurring total before custom lines (the standing service annual). */
+  preCustomAnnual: number;
+  /** Recurring annual investment (preCustomAnnual + recurring custom charges). */
   annual: number;
+  /** Discount applied to each contract year, index 0 = Year 1. Length === term.
+   *  A discount in year N reduces ONLY that year (e.g. a provider SPIFF offsets
+   *  Year 1; a smaller credit in Year 2; full price thereafter). */
+  discountByYear: number[];
+  /** Sum of discountByYear — total promotional credit across the whole term. */
+  totalDiscount: number;
+  /** annual * term − totalDiscount. */
   tcv: number;
   ucaasCalc: number;
   ccaasCalc: number;
@@ -121,18 +136,32 @@ export function calcSupport(d: OppFormData): OppCalcResult {
   const msoSup    = d.ovrMso    != null ? d.ovrMso    : msoCalc;
 
   const preCustomAnnual = ucaasSup + ccaasSup + implSup + advAppSup + (msoEnabled ? msoSup : 0);
-  const customTotal = (d.customLines ?? []).reduce((sum, l) => {
+  // Custom charges recur every year. Discounts are NOT recurring — they apply
+  // per-year via the yearlyDiscounts schedule (e.g. a SPIFF offsets Year 1 only).
+  // Legacy custom-line discounts (discount_amount/percent) fold into Year 1.
+  let chargeTotal = 0;
+  let customLineDiscount = 0;
+  for (const l of d.customLines ?? []) {
     const n = Number(l.price) || 0;
     const kind = l.kind ?? "charge";
-    if (kind === "discount_percent") return sum - preCustomAnnual * (n / 100);
-    if (kind === "discount_amount")  return sum - n;
-    return sum + n;
-  }, 0);
-  const annual = preCustomAnnual + customTotal;
-  const tcv    = annual * term;
+    if (kind === "discount_percent") customLineDiscount += preCustomAnnual * (n / 100);
+    else if (kind === "discount_amount") customLineDiscount += n;
+    else chargeTotal += n;
+  }
+  const annual = preCustomAnnual + chargeTotal;          // recurring (discounts excluded)
+  // Per-year discount schedule: explicit yearly entries plus legacy custom-line
+  // discounts folded into Year 1. Each entry reduces only its own year.
+  const discountByYear: number[] = [];
+  for (let y = 0; y < term; y++) {
+    const yearly = Number(d.yearlyDiscounts?.[y]) || 0;
+    discountByYear.push(yearly + (y === 0 ? customLineDiscount : 0));
+  }
+  const totalDiscount = discountByYear.reduce((a, b) => a + b, 0);
+  const customTotal = chargeTotal;                       // recurring custom charges
+  const tcv = annual * term - totalDiscount;
 
   return {
-    ucaasSup, ccaasSup, implSup, advAppSup, msoSup, customTotal, annual, tcv,
+    ucaasSup, ccaasSup, implSup, advAppSup, msoSup, customTotal, preCustomAnnual, annual, discountByYear, totalDiscount, tcv,
     ucaasCalc, ccaasCalc, implCalc, advAppCalc, msoCalc,
     advAppOverridden: d.ovrAdvApp != null,
     ucaasOverridden:  d.ovrUcaas  != null,
@@ -199,6 +228,7 @@ export const DEFAULT_FORM_DATA: OppFormData = {
   ovrMso:    null,
   ovrAdvApp: null,
   customLines: [],
+  yearlyDiscounts: [],
   customInclusions: [],
   customerName: "",
   notes: "",

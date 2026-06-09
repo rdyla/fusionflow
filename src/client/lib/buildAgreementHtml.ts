@@ -31,11 +31,41 @@ function lineNoteText(l: CustomLine): string {
   return "Custom line item";
 }
 
-/** preCustomAnnual is the annual total before any custom lines — needed so
- *  discount_percent lines can compute their dollar effect. It equals
- *  calc.annual - calc.customTotal. */
+/** Annual total before any custom lines — needed so discount_percent lines can
+ *  compute their dollar effect. */
 function preCustomAnnualFrom(calc: OppCalcResult): number {
-  return calc.annual - calc.customTotal;
+  return calc.preCustomAnnual;
+}
+
+/** Per-year pricing schedule — rendered only when at least one year carries a
+ *  discount, so the customer sees exactly which year each credit lands in.
+ *  Years with no discount show the full annual rate. */
+function pricingScheduleHtml(calc: OppCalcResult, term: number): string {
+  if (calc.totalDiscount <= 0 || term < 1) return "";
+  const rows = calc.discountByYear.slice(0, term).map((disc, i) => {
+    const net = calc.annual - disc;
+    return `<tr>
+      <td style="padding:5px 10px;border-bottom:1px solid #e2e8f0;color:#475569;">Year ${i + 1}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid #e2e8f0;text-align:right;color:#475569;">${fmtFull(calc.annual)}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid #e2e8f0;text-align:right;color:${disc > 0 ? "#16a34a" : "#94a3b8"};">${disc > 0 ? "−" + fmtFull(disc) : "—"}</td>
+      <td style="padding:5px 10px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:700;color:#0d1b2e;">${fmtFull(net)}</td>
+    </tr>`;
+  }).join("");
+  return `
+    <div style="margin:14px 0 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#0d1b2e;">Annual Pricing Schedule</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:4px;">
+      <tr>
+        <th style="padding:5px 10px;text-align:left;border-bottom:2px solid #0d1b2e;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Term Year</th>
+        <th style="padding:5px 10px;text-align:right;border-bottom:2px solid #0d1b2e;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Annual</th>
+        <th style="padding:5px 10px;text-align:right;border-bottom:2px solid #0d1b2e;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Discount</th>
+        <th style="padding:5px 10px;text-align:right;border-bottom:2px solid #0d1b2e;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Net</th>
+      </tr>
+      ${rows}
+      <tr>
+        <td colspan="3" style="padding:7px 10px;text-align:right;font-weight:700;color:#0d1b2e;border-top:2px solid #0d1b2e;">Total Contract Value</td>
+        <td style="padding:7px 10px;text-align:right;font-weight:800;color:#0d1b2e;border-top:2px solid #0d1b2e;">${fmtFull(calc.tcv)}</td>
+      </tr>
+    </table>`;
 }
 
 const MSO_PLATFORM_COVERAGE: Record<string, { area: string; scope: string }[]> = {
@@ -754,7 +784,7 @@ export function buildProposalHtml(_oppName: string, d: OppFormData, calc: OppCal
       </div>
       <div class="term-prose">
         <p>CloudSupport services are sold to align and co-term with the Customer\u2019s Packet Fusion agreement and/or underlying provider subscription term. Unless otherwise stated in writing, CloudSupport will automatically renew for the duration of the applicable renewal term.</p>
-        <p>This <strong>${term}-year</strong> term will be billed annually at <strong>${fmtFull(calc.annual)}</strong> per year, for a total contract value of <strong>${fmtFull(calc.tcv)}</strong>.${term > 1 ? ` Pricing is subject to escalation upon renewal at ${endDate}.` : ""}</p>
+        <p>This <strong>${term}-year</strong> term is billed annually at <strong>${fmtFull(calc.annual)}</strong> per year${calc.totalDiscount > 0 ? `, with promotional discounts totaling <strong>${fmtFull(calc.totalDiscount)}</strong> applied to specific contract years per the Annual Pricing Schedule below` : ""}, for a total contract value of <strong>${fmtFull(calc.tcv)}</strong>.${term > 1 ? ` Pricing is subject to escalation upon renewal at ${endDate}.` : ""}</p>
       </div>
     </div>
     ${buildMsoSection(d, calc)}
@@ -765,12 +795,20 @@ export function buildProposalHtml(_oppName: string, d: OppFormData, calc: OppCal
         <div class="ps-sub">Billed annually \u00b7 Auto-renewing</div>
       </div>
       <div class="price-summary-divider"></div>
+      ${calc.totalDiscount > 0 ? `
+      <div class="price-summary-cell">
+        <div class="ps-label">Promotional Discounts</div>
+        <div class="ps-value" style="color:#16a34a;font-size:22px;">\u2212${fmtFull(calc.totalDiscount)}</div>
+        <div class="ps-sub">Applied per schedule below</div>
+      </div>
+      <div class="price-summary-divider"></div>` : ""}
       <div class="price-summary-cell">
         <div class="ps-label">Total Contract Value \u00b7 ${term}-Year Term</div>
         <div class="ps-value" style="color:#0d1b2e;font-size:26px;">${fmtFull(calc.tcv)}</div>
         <div class="ps-sub">${startDate} \u2013 ${endDate}</div>
       </div>
     </div>
+    ${pricingScheduleHtml(calc, term)}
   </div>
   <div class="sig-band">
     <div class="sig-band-title">Authorization &amp; Agreement</div>
@@ -1052,7 +1090,7 @@ export function buildMsoStandaloneHtml(_oppName: string, d: OppFormData, calc: O
     <div style="display:grid;gap:14px;font-size:13px;color:#374151;line-height:1.8;">
       <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Co-Termination</strong>This MSO Agreement is sold to co-term with ${escHtml(customer)}\u2019s associated CloudSupport Agreement and underlying provider subscription term. The MSO engagement begins and ends concurrent with those agreements unless otherwise specified in writing.</div>
       <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Automatic Renewal</strong>This Agreement automatically renews for successive one-year terms at the end of each term period unless either party provides written notice of cancellation at least <strong>30 days prior to the renewal date</strong>. Pricing is subject to annual escalation upon each renewal.</div>
-      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Billing</strong>MSO services are billed as part of the total annual investment of <strong>${fmtFull(calc.annual)} per year</strong>${showUCaaS ? ", which includes UCaaS CloudSupport" : ""}${showCCaaS ? (showUCaaS ? ", CCaaS CloudSupport" : ", which includes CCaaS CloudSupport") : ""}${hasAdvApp ? ", Advanced Applications Support" : ""}, and the MSO Add-On. For a ${term}-year term, the total contract value is <strong>${fmtFull(calc.tcv)}</strong>. Invoices are issued at the start of each annual period and are due Net 30.</div>
+      <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Billing</strong>MSO services are billed as part of the total annual investment of <strong>${fmtFull(calc.annual)} per year</strong>${showUCaaS ? ", which includes UCaaS CloudSupport" : ""}${showCCaaS ? (showUCaaS ? ", CCaaS CloudSupport" : ", which includes CCaaS CloudSupport") : ""}${hasAdvApp ? ", Advanced Applications Support" : ""}, and the MSO Add-On.${calc.totalDiscount > 0 ? ` Promotional discounts totaling <strong>${fmtFull(calc.totalDiscount)}</strong> are applied to specific contract years per the Annual Pricing Schedule.` : ""} For a ${term}-year term, the total contract value is <strong>${fmtFull(calc.tcv)}</strong>. Invoices are issued at the start of each annual period and are due Net 30.</div>
       <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Modifications to Scope</strong>Changes to the MSO tier, engineering resource model, or covered platforms require a written amendment executed by both parties. Mid-term tier upgrades are available and will be pro-rated to the remaining term. Downgrades take effect at the next renewal date.</div>
       <div><strong style="color:#0d1b2e;display:block;margin-bottom:2px;">Governing Document</strong>This MSO Standalone Agreement governs all managed services terms and takes precedence over any MSO references in the associated CloudSupport Agreement. Both documents are incorporated together as the complete agreement between the parties for CloudSupport + MSO services.</div>
     </div>
@@ -1126,6 +1164,7 @@ export function buildMsoStandaloneHtml(_oppName: string, d: OppFormData, calc: O
         <div style="font-size:11px;color:rgba(255,255,255,0.35);margin-top:4px;">${startDate} \u2013 ${endDate}</div>
       </div>
     </div>
+    ${pricingScheduleHtml(calc, term)}
 
     <!-- Signature block -->
     <div style="border-top:2px solid #0d1b2e;padding-top:28px;">
@@ -1258,8 +1297,10 @@ export function buildSignatureHtml(_oppName: string, d: OppFormData, calc: OppCa
     <div class="sd-totals">
       <div class="sd-total-row"><span class="sd-total-label">${calc.msoEnabled ? "Annual CloudSupport + MSO Investment" : "Annual CloudSupport Investment"}</span><span class="sd-total-val">${fmtFull(calc.annual)}</span></div>
       <div class="sd-total-row"><span class="sd-total-label">Term Length</span><span class="sd-total-val" style="font-family:'IBM Plex Sans',sans-serif;">${term} Year${term > 1 ? "s" : ""} &nbsp;(${startDate} \u2013 ${endDate})</span></div>
+      ${calc.totalDiscount > 0 ? `<div class="sd-total-row"><span class="sd-total-label">Promotional Discounts</span><span class="sd-total-val" style="color:#16a34a;">−${fmtFull(calc.totalDiscount)}</span></div>` : ""}
       <div class="sd-total-row grand"><span class="sd-total-label">Total Contract Value</span><span class="sd-total-val">${fmtFull(calc.tcv)}</span></div>
     </div>
+    ${pricingScheduleHtml(calc, term)}
     <div class="sd-section-label" style="margin-top:18px;">Support Coverage</div>
     <ul class="sd-coverage-list">
       <li><span class="sd-cov-num">01</span><span class="sd-cov-body"><strong>Business Hours MACs (7am\u20135pm PST)</strong> \u2014 Simple adds, moves, and changes at no additional charge during standard business hours.</span></li>
@@ -1293,7 +1334,7 @@ export function buildSignatureHtml(_oppName: string, d: OppFormData, calc: OppCa
     <div class="sd-term">
       <p>This Agreement co-terms with Customer\u2019s Packet Fusion Master Services Agreement and/or underlying provider subscription. Unless cancelled in writing${calc.msoEnabled ? " at least 30 days prior to renewal" : ""}, CloudSupport${calc.msoEnabled ? " and the MSO Add-On" : ""} will automatically renew for successive terms at the then-current renewal rate.</p>
       <div class="sd-term-box">
-        This ${term}-year Agreement is billed annually at <strong>${fmtFull(calc.annual)}</strong> per year, for a total contract value of <strong>${fmtFull(calc.tcv)}</strong>.${calc.msoEnabled ? ` Includes CloudSupport base services plus the MSO Add-On (${escHtml(sigTierMeta?.label ?? "Custom")} \u2014 ${escHtml(sigTierMeta?.engineer ?? "As scoped")}).` : ""} Term: ${startDate} through ${endDate}.${term > 1 ? " Pricing is subject to escalation upon renewal." : ""}
+        This ${term}-year Agreement is billed annually at <strong>${fmtFull(calc.annual)}</strong> per year${calc.totalDiscount > 0 ? `, with promotional discounts totaling <strong>${fmtFull(calc.totalDiscount)}</strong> applied to specific contract years per the Annual Pricing Schedule above` : ""}, for a total contract value of <strong>${fmtFull(calc.tcv)}</strong>.${calc.msoEnabled ? ` Includes CloudSupport base services plus the MSO Add-On (${escHtml(sigTierMeta?.label ?? "Custom")} \u2014 ${escHtml(sigTierMeta?.engineer ?? "As scoped")}).` : ""} Term: ${startDate} through ${endDate}.${term > 1 ? " Pricing is subject to escalation upon renewal." : ""}
       </div>
     </div>
     ${calc.msoEnabled ? `
