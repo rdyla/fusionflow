@@ -73,15 +73,18 @@ export default function CloudSupportWorkspacePage() {
   // Rebuild agreement HTML when switching to those tabs
   useEffect(() => {
     if (!proposal) return;
+    // The doc's "Prepared for" is the linked customer (proposal.customerName),
+    // not the proposal/solution name. Feed it into the form the builders read.
+    const docForm = { ...form, customerName: proposal.customerName ?? form.customerName };
     if (tab === "agreement") {
       const versionNum = proposal.versions.length + 1;
-      setAgreementHtml(buildProposalHtml(proposal.name, form, calc, versionNum));
+      setAgreementHtml(buildProposalHtml(proposal.name, docForm, calc, versionNum));
     } else if (tab === "signature") {
       const versionNum = proposal.versions.length + 1;
-      setSignatureHtml(buildSignatureHtml(proposal.name, form, calc, versionNum));
+      setSignatureHtml(buildSignatureHtml(proposal.name, docForm, calc, versionNum));
     } else if (tab === "mso") {
       const versionNum = proposal.versions.length + 1;
-      setMsoHtml(buildMsoStandaloneHtml(proposal.name, form, calc, versionNum));
+      setMsoHtml(buildMsoStandaloneHtml(proposal.name, docForm, calc, versionNum));
     }
   }, [tab, proposal]);
 
@@ -152,12 +155,27 @@ export default function CloudSupportWorkspacePage() {
     }
   }
 
-  function handlePrint(ref: React.RefObject<HTMLIFrameElement | null>) {
-    ref.current?.contentWindow?.print();
+  // The print/PDF filename comes from the document title. Browsers use the
+  // parent SPA title ("CloudConnect by Packet Fusion") when printing an iframe,
+  // so set it (and the iframe's own title) to the client-named doc, then restore.
+  function handlePrint(ref: React.RefObject<HTMLIFrameElement | null>, docTitle: string) {
+    const frame = ref.current;
+    const win = frame?.contentWindow;
+    if (!win) return;
+    const prevTitle = document.title;
+    document.title = docTitle;
+    try { if (frame?.contentDocument) frame.contentDocument.title = docTitle; } catch { /* ignore */ }
+    win.focus();
+    win.print();
+    window.setTimeout(() => { document.title = prevTitle; }, 1500);
   }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!proposal) return <div style={{ color: "#d13438", padding: 32 }}>Proposal not found.</div>;
+
+  // Client name drives the exported PDF filename (falls back to the proposal
+  // name when no customer is linked).
+  const client = proposal.customerName?.trim() || proposal.name;
 
   const TAB_LABELS: [Tab, string][] = [
     ["calculator", "Calculator"],
@@ -278,7 +296,7 @@ export default function CloudSupportWorkspacePage() {
                 <SummaryLine label={`MSO — ${getMsoTier(form.msoTier)?.label ?? "Custom"}`} value={calc.msoSup} overridden={calc.msoOverridden} />
               )}
               {(() => {
-                const preCustomAnnual = calc.annual - calc.customTotal;
+                const preCustomAnnual = calc.preCustomAnnual;
                 return (form.customLines ?? []).filter(l => (Number(l.price) || 0) !== 0).map((line, i) => {
                   const kind = line.kind ?? "charge";
                   const effect = customLineDollar(line, preCustomAnnual);
@@ -288,8 +306,8 @@ export default function CloudSupportWorkspacePage() {
                     : (line.label || `Custom Line ${i + 1}`);
                   return (
                     <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #e2e8f0", fontSize: 13 }}>
-                      <span style={{ color: isDiscount ? "#065f46" : "#475569", paddingRight: 8 }}>{label}</span>
-                      <span style={{ fontWeight: 600, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>{fmtSigned(effect)}/yr</span>
+                      <span style={{ color: isDiscount ? "#065f46" : "#475569", paddingRight: 8 }}>{label}{isDiscount ? " · Yr 1" : ""}</span>
+                      <span style={{ fontWeight: 600, color: isDiscount ? "#065f46" : "#1e293b", whiteSpace: "nowrap" }}>{fmtSigned(effect)}{isDiscount ? "" : "/yr"}</span>
                     </div>
                   );
                 });
@@ -302,6 +320,12 @@ export default function CloudSupportWorkspacePage() {
                 <span>Annual Total</span>
                 <span>{fmt(calc.annual)}</span>
               </div>
+              {calc.totalDiscount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#16a34a" }}>
+                  <span>Discounts {form.term > 1 ? "(per schedule)" : ""}</span>
+                  <span style={{ fontWeight: 600 }}>−{fmt(calc.totalDiscount)}</span>
+                </div>
+              )}
               {form.term > 1 && (
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#475569" }}>
                   <span>TCV ({form.term}-yr)</span>
@@ -325,7 +349,7 @@ export default function CloudSupportWorkspacePage() {
       {tab === "agreement" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(agreementIframeRef)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(agreementIframeRef, `${client} - Cloud Support Agreement`)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
@@ -342,7 +366,7 @@ export default function CloudSupportWorkspacePage() {
       {tab === "signature" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(signatureIframeRef)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(signatureIframeRef, `${client} - Cloud Support Agreement (Signature)`)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
@@ -359,7 +383,7 @@ export default function CloudSupportWorkspacePage() {
       {tab === "mso" && (
         <div>
           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12, gap: 8 }}>
-            <button className="ms-btn-ghost" onClick={() => handlePrint(msoIframeRef)}>Print / Save PDF</button>
+            <button className="ms-btn-ghost" onClick={() => handlePrint(msoIframeRef, `${client} - CloudSupport MSO Add-On`)}>Print / Save PDF</button>
           </div>
           <div style={{ border: "1px solid #e2e8f0", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
             <iframe
