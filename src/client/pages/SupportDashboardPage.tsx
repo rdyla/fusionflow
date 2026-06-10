@@ -287,7 +287,7 @@ export default function SupportDashboardPage() {
           <table className="ms-table">
             <thead>
               <tr>
-                {["Ticket", "Title", "Severity", "Status", "Owner", "Opened", "Idle"].map((h) => (
+                {["Ticket", "Title", "Customer", "Severity", "Status", "Owner", "Opened", "Idle"].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -301,6 +301,9 @@ export default function SupportDashboardPage() {
                 >
                   <td style={{ fontWeight: 600, color: "#1e293b", fontSize: 13, whiteSpace: "nowrap" }}>{c.ticketNumber}</td>
                   <td style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 380 }}>{c.title}</td>
+                  <td style={{ fontSize: 12, color: c.customer ? "#475569" : "#94a3b8", fontStyle: c.customer ? "normal" : "italic", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 200 }}>
+                    {c.customer ?? "—"}
+                  </td>
                   <td>
                     <span className="ms-badge" style={{
                       background: `${severityColor(c.severity)}1a`,

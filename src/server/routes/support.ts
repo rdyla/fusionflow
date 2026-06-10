@@ -139,7 +139,7 @@ app.get("/dashboard", async (c) => {
   const [openRes, recentRes] = await Promise.all([
     d365FetchSupport(
       c.env,
-      `/incidents?$filter=statecode eq 0 and amc_serviceboard eq ${SUPPORT_BOARD}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
+      `/incidents?$filter=statecode eq 0 and amc_serviceboard eq ${SUPPORT_BOARD}&$select=incidentid,ticketnumber,title,severitycode,statuscode,createdon,modifiedon,_customerid_value&$expand=owninguser($select=fullname)&$orderby=createdon desc&$top=2000`,
       { headers: formattedHeader },
     ),
     d365FetchSupport(
@@ -169,6 +169,7 @@ app.get("/dashboard", async (c) => {
     severity: string;
     status: string;
     owner: string | null;
+    customer: string | null;
     createdOn: string;
     modifiedOn: string;
   };
@@ -180,6 +181,7 @@ app.get("/dashboard", async (c) => {
     severity: r["severitycode@OData.Community.Display.V1.FormattedValue"] ?? "Unknown",
     status:   r["statuscode@OData.Community.Display.V1.FormattedValue"]   ?? "Active",
     owner:    r.owninguser?.fullname ?? null,
+    customer: r["_customerid_value@OData.Community.Display.V1.FormattedValue"] ?? null,
     createdOn: r.createdon,
     modifiedOn: r.modifiedon,
   }));
@@ -285,6 +287,7 @@ app.get("/dashboard", async (c) => {
       severity: c.severity,
       status: c.status,
       owner: isUnassigned(c.owner) ? null : c.owner,
+      customer: c.customer,
       idleDays: Math.floor(idleDays(c.modifiedOn)),
       ageDays: Math.floor(ageDays(c.createdOn)),
       createdOn: c.createdOn,

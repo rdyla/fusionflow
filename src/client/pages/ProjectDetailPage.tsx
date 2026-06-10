@@ -996,6 +996,12 @@ export default function ProjectDetailPage() {
             )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            {project.created_at && (
+              <span style={{ fontSize: 12, color: "#94a3b8" }} title="When this project was created in CloudConnect">
+                <span style={{ fontWeight: 600, marginRight: 4 }}>Created:</span>
+                {formatDate(project.created_at)}
+              </span>
+            )}
             {project.target_go_live_date && (
               <span style={{ fontSize: 12, color: "#64748b" }}>
                 <span style={{ fontWeight: 600, marginRight: 4 }}>Go-Live:</span>
@@ -2086,6 +2092,7 @@ export default function ProjectDetailPage() {
                       value={newNoteBody}
                       onChange={(e) => setNewNoteBody(e.target.value)}
                       rows={4}
+                      spellCheck
                       style={{ resize: "vertical", minHeight: 90 }}
                       placeholder={externalPoster ? "Share an update with the project team..." : "Add a project update..."}
                     />
