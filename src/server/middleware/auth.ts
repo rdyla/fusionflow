@@ -135,6 +135,10 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
       //    CRM portal contact, scoped to everything belonging to their company.
       const company = await resolveContactCompany(env.DB, email);
       if (company) {
+        // Case-opening is governed by CRM, not the contact tables: if this
+        // person is also a portal user with case-opening enabled in D365, honor
+        // it. Ad-hoc contacts not in CRM resolve to null here → view-only.
+        const portal = await getPortalContact(env, email);
         const clientUser: AppUser = {
           id: company.contactId,
           email,
@@ -144,9 +148,7 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
           is_active: 1,
           dynamics_account_id: company.accountId,
           manager_id: null,
-          // These tables carry no case-opening flag — case creation still
-          // requires a CRM portal contact (handled by the fallback below).
-          can_open_cases: false,
+          can_open_cases: portal?.canOpenCases ?? false,
         };
         return { user: clientUser, role: "client", organization: company.organization };
       }
