@@ -6,6 +6,11 @@ export interface OppFormData {
   term: number;
   contractStart: string;
   contractEnd: string;
+  /** When true, prorate Year 1 if the contract dates imply a partial first year
+   *  (customer signing/renewing mid-cycle). No effect when the span is a whole
+   *  number of years. Defaults on for new proposals; the calculator surfaces a
+   *  checkbox when proration is applicable. */
+  prorateFirstYear?: boolean;
   /** Estimated close date for the bound D365 CloudCare opportunity (yyyy-MM-dd).
    *  Distinct from contract start/end — when the deal is expected to close. */
   estimatedCloseDate: string;
@@ -55,13 +60,25 @@ export interface OppCalcResult {
   preCustomAnnual: number;
   /** Recurring annual investment (preCustomAnnual + recurring custom charges). */
   annual: number;
+  /** Recurring amount billed each contract year BEFORE discounts, index 0 = Year 1.
+   *  Length === term. Equals `annual` for every year unless Year 1 is prorated
+   *  (then billedByYear[0] = annual × firstYearFraction). The doc pricing schedule
+   *  renders these as the per-year "Annual" column. */
+  billedByYear: number[];
+  /** True when the contract dates imply a partial first year (the span isn't a
+   *  whole number of years for the given term) — i.e., proration COULD apply. */
+  prorationApplicable: boolean;
+  /** True when proration is both applicable AND enabled (form.prorateFirstYear). */
+  firstYearProrated: boolean;
+  /** Fraction of a full year that Year 1 is billed at (1 when not prorated). */
+  firstYearFraction: number;
   /** Discount applied to each contract year, index 0 = Year 1. Length === term.
    *  A discount in year N reduces ONLY that year (e.g. a provider SPIFF offsets
    *  Year 1; a smaller credit in Year 2; full price thereafter). */
   discountByYear: number[];
   /** Sum of discountByYear — total promotional credit across the whole term. */
   totalDiscount: number;
-  /** annual * term − totalDiscount. */
+  /** sum(billedByYear) − totalDiscount. */
   tcv: number;
   ucaasCalc: number;
   ccaasCalc: number;
@@ -108,6 +125,30 @@ export interface CsProposalDetail extends CsProposal {
   crmOpportunityId: string | null;
 }
 
+/** Parse a yyyy-MM-dd string as a local date (avoids UTC-parse off-by-one). */
+function parseYmd(s: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s || "");
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
+}
+
+/** Calendar-aware span between two dates, in fractional years (whole years +
+ *  the fractional remainder of the trailing partial year). Null if unparseable
+ *  or end <= start. */
+function spanInYears(startStr: string, endStr: string): number | null {
+  const s = parseYmd(startStr);
+  const e = parseYmd(endStr);
+  if (!s || !e || e.getTime() <= s.getTime()) return null;
+  let whole = e.getFullYear() - s.getFullYear();
+  let anniv = new Date(s.getFullYear() + whole, s.getMonth(), s.getDate());
+  if (anniv.getTime() > e.getTime()) {
+    whole -= 1;
+    anniv = new Date(s.getFullYear() + whole, s.getMonth(), s.getDate());
+  }
+  const nextAnniv = new Date(anniv.getFullYear() + 1, anniv.getMonth(), anniv.getDate());
+  const frac = (e.getTime() - anniv.getTime()) / (nextAnniv.getTime() - anniv.getTime());
+  return whole + frac;
+}
+
 export function calcSupport(d: OppFormData): OppCalcResult {
   const type     = d.oppType;
   const users    = Number(d.ucaasUsers)    || 0;
@@ -149,6 +190,26 @@ export function calcSupport(d: OppFormData): OppCalcResult {
     else chargeTotal += n;
   }
   const annual = preCustomAnnual + chargeTotal;          // recurring (discounts excluded)
+
+  // First-year proration: when the contract dates span a non-whole number of
+  // years for the term (customer joining/renewing mid-cycle), Year 1 is a stub.
+  // stub = total span − the (term−1) full years that follow it.
+  const span = spanInYears(d.contractStart, d.contractEnd);
+  const stubYears = span != null ? span - (term - 1) : null;
+  const EPS = 0.02; // treat ~whole-year spans as not partial (rounding tolerance)
+  const prorationApplicable = stubYears != null && stubYears > EPS && stubYears < 1 - EPS;
+  const firstYearProrated = prorationApplicable && d.prorateFirstYear === true;
+  // The detected stub fraction (regardless of whether the toggle is on) so the
+  // UI can show "would prorate to X" even when unchecked. 1 when not applicable.
+  const firstYearFraction = prorationApplicable ? (stubYears as number) : 1;
+
+  // Recurring amount billed per year (before discounts): Year 1 prorated only
+  // when proration is actually enabled; all other years full.
+  const billedByYear: number[] = [];
+  for (let y = 0; y < term; y++) {
+    billedByYear.push(y === 0 && firstYearProrated ? annual * firstYearFraction : annual);
+  }
+
   // Per-year discount schedule: explicit yearly entries plus legacy custom-line
   // discounts folded into Year 1. Each entry reduces only its own year.
   const discountByYear: number[] = [];
@@ -158,10 +219,12 @@ export function calcSupport(d: OppFormData): OppCalcResult {
   }
   const totalDiscount = discountByYear.reduce((a, b) => a + b, 0);
   const customTotal = chargeTotal;                       // recurring custom charges
-  const tcv = annual * term - totalDiscount;
+  const tcv = billedByYear.reduce((a, b) => a + b, 0) - totalDiscount;
 
   return {
-    ucaasSup, ccaasSup, implSup, advAppSup, msoSup, customTotal, preCustomAnnual, annual, discountByYear, totalDiscount, tcv,
+    ucaasSup, ccaasSup, implSup, advAppSup, msoSup, customTotal, preCustomAnnual, annual,
+    billedByYear, prorationApplicable, firstYearProrated, firstYearFraction,
+    discountByYear, totalDiscount, tcv,
     ucaasCalc, ccaasCalc, implCalc, advAppCalc, msoCalc,
     advAppOverridden: d.ovrAdvApp != null,
     ucaasOverridden:  d.ovrUcaas  != null,
@@ -227,6 +290,7 @@ export const DEFAULT_FORM_DATA: OppFormData = {
   ovrImpl:   null,
   ovrMso:    null,
   ovrAdvApp: null,
+  prorateFirstYear: true,
   customLines: [],
   yearlyDiscounts: [],
   customInclusions: [],
