@@ -136,6 +136,7 @@ export interface SupportDashboardStaleCase {
   severity: string;
   status: string;
   owner: string | null;
+  customer: string | null;
   idleDays: number;
   ageDays: number;
   createdOn: string;
