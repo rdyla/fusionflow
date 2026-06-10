@@ -28,6 +28,70 @@ const PARTNER_DOMAINS: Record<string, string> = {
   "ringcentral.com": "RingCentral",
 };
 
+type ContactCompany = {
+  accountId: string;
+  organization: string | null;
+  contactId: string;
+  contactName: string | null;
+};
+
+/**
+ * Resolves a customer contact added anywhere in CloudConnect — a project, a
+ * solution, or their company record — to the company they belong to. This lets
+ * ad-hoc contacts who aren't CRM portal users log in: they're scoped to their
+ * company's CRM account (`dynamics_account_id`), which is how all client-side
+ * scoping already works, so they see every item belonging to their company.
+ *
+ * Returns the most-recently-added match if the email appears in several places.
+ * `email` is expected pre-lowercased (the login routes lowercase it).
+ */
+async function resolveContactCompany(db: D1Database, email: string): Promise<ContactCompany | null> {
+  try {
+    const row = await db
+    .prepare(
+      `
+      SELECT account_id AS accountId, org AS organization, contact_id AS contactId, contact_name AS contactName
+      FROM (
+        SELECT COALESCE(p.dynamics_account_id, c.crm_account_id) AS account_id,
+               COALESCE(c.name, p.customer_name)                 AS org,
+               pc.id AS contact_id, pc.name AS contact_name, pc.added_at AS ts
+        FROM project_contacts pc
+        JOIN projects p       ON p.id = pc.project_id
+        LEFT JOIN customers c ON c.id = p.customer_id
+        WHERE pc.email IS NOT NULL AND lower(pc.email) = lower(?)
+
+        UNION ALL
+        SELECT COALESCE(s.dynamics_account_id, c.crm_account_id),
+               COALESCE(c.name, s.customer_name),
+               sc.id, sc.name, sc.added_at
+        FROM solution_contacts sc
+        JOIN solutions s      ON s.id = sc.solution_id
+        LEFT JOIN customers c ON c.id = s.customer_id
+        WHERE sc.email IS NOT NULL AND lower(sc.email) = lower(?)
+
+        UNION ALL
+        SELECT cu.crm_account_id, cu.name, cc.id, cc.name, cc.added_at
+        FROM customer_contacts cc
+        JOIN customers cu     ON cu.id = cc.customer_id
+        WHERE cc.email IS NOT NULL AND lower(cc.email) = lower(?)
+      )
+      WHERE account_id IS NOT NULL AND account_id != ''
+      ORDER BY ts DESC
+      LIMIT 1
+      `
+    )
+    .bind(email, email, email)
+    .first<ContactCompany>();
+
+    return row ?? null;
+  } catch (err) {
+    // Never let a contact-table issue break login — fall through to the CRM
+    // portal lookup instead of 500ing the verify request.
+    console.error(`[auth] resolveContactCompany failed for ${email}:`, err);
+    return null;
+  }
+}
+
 async function provisionUser(
   db: D1Database,
   email: string,
@@ -66,6 +130,28 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
       await provisionUser(env.DB, email, PARTNER_DOMAINS[domain], "partner_ae", false);
       return "pending";
     } else {
+      // 1) Contact-based access: a customer contact added to a project,
+      //    solution, or their company record can log in even if they aren't a
+      //    CRM portal contact, scoped to everything belonging to their company.
+      const company = await resolveContactCompany(env.DB, email);
+      if (company) {
+        const clientUser: AppUser = {
+          id: company.contactId,
+          email,
+          name: company.contactName,
+          organization_name: company.organization,
+          role: "client",
+          is_active: 1,
+          dynamics_account_id: company.accountId,
+          manager_id: null,
+          // These tables carry no case-opening flag — case creation still
+          // requires a CRM portal contact (handled by the fallback below).
+          can_open_cases: false,
+        };
+        return { user: clientUser, role: "client", organization: company.organization };
+      }
+
+      // 2) Fall back to the CRM portal lookup (portal access defined in D365).
       const contact = await getPortalContact(env, email);
       if (contact) {
         const clientUser: AppUser = {
