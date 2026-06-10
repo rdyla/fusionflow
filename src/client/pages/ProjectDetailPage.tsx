@@ -2092,6 +2092,7 @@ export default function ProjectDetailPage() {
                       value={newNoteBody}
                       onChange={(e) => setNewNoteBody(e.target.value)}
                       rows={4}
+                      spellCheck
                       style={{ resize: "vertical", minHeight: 90 }}
                       placeholder={externalPoster ? "Share an update with the project team..." : "Add a project update..."}
                     />
