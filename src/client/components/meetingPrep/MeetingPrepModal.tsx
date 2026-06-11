@@ -90,9 +90,6 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
 
   const [contactIds, setContactIds] = useState<Set<string>>(new Set());
   const [staffUserIds, setStaffUserIds] = useState<Set<string>>(new Set());
-  const [includeZoomRep, setIncludeZoomRep] = useState(false);
-  const [zoomRepName, setZoomRepName] = useState("");
-  const [zoomRepEmail, setZoomRepEmail] = useState("");
   const [extraEmailsText, setExtraEmailsText] = useState("");
   const [attachmentUrls, setAttachmentUrls] = useState<Set<string>>(new Set());
 
@@ -133,9 +130,6 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
     recipients: {
       contactIds: Array.from(contactIds),
       staffUserIds: Array.from(staffUserIds),
-      zoomRep: includeZoomRep && zoomRepEmail.trim()
-        ? { name: zoomRepName.trim() || zoomRepEmail.trim(), email: zoomRepEmail.trim() }
-        : null,
       extraEmails,
     },
     attachmentUrls: Array.from(attachmentUrls),
@@ -250,19 +244,6 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
                 </>
               );
             })()}
-
-            <div style={{ marginBottom: 18 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 8, cursor: "pointer" }}>
-                <input type="checkbox" checked={includeZoomRep} onChange={(e) => setIncludeZoomRep(e.target.checked)} />
-                Include Zoom Rep
-              </label>
-              {includeZoomRep && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <input className="ms-input" placeholder="Name" value={zoomRepName} onChange={(e) => setZoomRepName(e.target.value)} />
-                  <input className="ms-input" placeholder="email@zoom.us" value={zoomRepEmail} onChange={(e) => setZoomRepEmail(e.target.value)} />
-                </div>
-              )}
-            </div>
 
             <div style={{ marginBottom: 18 }}>
               <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#94a3b8", marginBottom: 6 }}>Additional Emails</div>

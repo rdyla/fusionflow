@@ -2570,7 +2570,6 @@ export type MeetingPrepDraft = {
   recipients: {
     contactIds: string[];
     staffUserIds: string[];
-    zoomRep?: { name: string; email: string } | null;
     extraEmails: string[];
   };
   attachmentUrls: string[];
