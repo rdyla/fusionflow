@@ -300,7 +300,6 @@ const draftSchema = z.object({
   recipients: z.object({
     contactIds: z.array(z.string()).default([]),
     staffUserIds: z.array(z.string()).default([]),
-    zoomRep: z.object({ name: z.string(), email: z.string().email() }).nullable().optional(),
     extraEmails: z.array(z.string().email()).default([]),
   }),
   attachmentUrls: z.array(z.string()).default([]),
@@ -325,7 +324,6 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
   const recipientEmails = [
     ...toContacts.map((c) => c.email!),
     ...toStaff.map((s) => s.email),
-    ...(draft.recipients.zoomRep ? [draft.recipients.zoomRep.email] : []),
     ...draft.recipients.extraEmails,
   ].filter((e) => !!e);
 
@@ -351,14 +349,6 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
       email: s.email,
     }));
 
-  if (draft.recipients.zoomRep) {
-    partnerMembers.push({
-      name: draft.recipients.zoomRep.name,
-      role: project.vendor?.trim() ? `${project.vendor.trim()} Rep` : "Zoom Rep",
-      photoUrl: null,
-      email: draft.recipients.zoomRep.email,
-    });
-  }
 
   const partnerSectionLabel = project.vendor?.trim() ? `${project.vendor.trim()} Team` : "Partner Team";
   const teamSections: MeetingPrepTeamSection[] = [
