@@ -320,6 +320,12 @@ export default function CloudSupportWorkspacePage() {
                 <span>Annual Total</span>
                 <span>{fmt(calc.annual)}</span>
               </div>
+              {calc.firstYearProrated && (
+                <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#0891b2" }}>
+                  <span>Year 1 (prorated {Math.round(calc.firstYearFraction * 100)}%)</span>
+                  <span style={{ fontWeight: 600 }}>{fmt(calc.billedByYear[0])}</span>
+                </div>
+              )}
               {calc.totalDiscount > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 8, fontSize: 13, color: "#16a34a" }}>
                   <span>Discounts {form.term > 1 ? "(per schedule)" : ""}</span>

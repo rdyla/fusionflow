@@ -174,6 +174,25 @@ export default function CalculatorForm({ form, calc, canOverride, onChange, cust
             <input className="ms-input" type="date" value={form.estimatedCloseDate} onChange={(e) => setField("estimatedCloseDate", e.target.value)} />
           </label>
         </div>
+        {calc.prorationApplicable && (
+          <div style={{ marginTop: 4, padding: "10px 12px", background: "#f0f9ff", border: "1px solid #bae6fd", borderRadius: 6 }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, cursor: "pointer", margin: 0 }}>
+              <input
+                type="checkbox"
+                checked={form.prorateFirstYear === true}
+                onChange={(e) => setField("prorateFirstYear", e.target.checked)}
+                style={{ marginTop: 2, accentColor: "#0891b2" }}
+              />
+              <span style={{ fontSize: 13, color: "#0c4a6e", lineHeight: 1.5 }}>
+                <strong>Prorate first year</strong> — the term spans a partial first year
+                (~{Math.round(calc.firstYearFraction * 100)}% · ~{Math.round(calc.firstYearFraction * 12)} mo).
+                {form.prorateFirstYear === true
+                  ? ` Year 1 bills ${fmt(calc.billedByYear[0])} instead of ${fmt(calc.annual)}.`
+                  : ` Year 1 would bill ${fmt(calc.annual * calc.firstYearFraction)} instead of ${fmt(calc.annual)}.`}
+              </span>
+            </label>
+          </div>
+        )}
         <div style={S.row}>
           <label style={S.label}>
             <span>Revenue Source</span>
