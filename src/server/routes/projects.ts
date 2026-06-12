@@ -65,8 +65,13 @@ app.get("/", async (c) => {
     bindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) return c.json([]);
-    sql += " AND dynamics_account_id = ?";
-    bindings = [auth.user.dynamics_account_id];
+    // Account scoping, plus: on a phase-scoped project the client must be
+    // attached to at least one phase (or marked "All phases") to see it at all.
+    sql += ` AND dynamics_account_id = ? AND (phase_scoped_visibility = 0 OR EXISTS (
+      SELECT 1 FROM phase_contacts pc
+      WHERE pc.project_id = projects.id AND pc.email IS NOT NULL AND LOWER(pc.email) = LOWER(?)
+    ))`;
+    bindings = [auth.user.dynamics_account_id, auth.user.email];
   }
   // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
 
@@ -283,6 +288,7 @@ const updateProjectSchema = z.object({
   customer_name: z.string().max(500).nullable().optional(),
   health: z.string().min(1).optional(),
   on_hold: z.number().int().min(0).max(1).optional(),
+  phase_scoped_visibility: z.number().int().min(0).max(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),

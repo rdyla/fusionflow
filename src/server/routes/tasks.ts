@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { canEditProject, canViewProject } from "../services/accessService";
+import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
@@ -42,9 +42,18 @@ app.get("/:id/tasks", async (c) => {
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
+  // Phase-scoped clients see only tasks on their phases' stages (+ shared
+  // stages, + tasks with no stage). Internal roles get vp === "ALL" → no filter.
+  const vp = await visiblePhaseIds(db, auth.user, projectId);
+  const vpIds = vp === "ALL" ? [] : vp;
+  const phaseClause = vp === "ALL"
+    ? ""
+    : ` AND (stage_id IS NULL OR stage_id IN (SELECT id FROM stages WHERE project_id = ? AND (phase_id IS NULL OR phase_id IN (${vpIds.map(() => "?").join(",")}))))`;
+  const phaseBinds = vp === "ALL" ? [] : [projectId, ...vpIds];
+
   const rows = await db
-    .prepare(`${TASK_SELECT} WHERE project_id = ? ORDER BY due_date ASC`)
-    .bind(projectId)
+    .prepare(`${TASK_SELECT} WHERE project_id = ?${phaseClause} ORDER BY due_date ASC`)
+    .bind(projectId, ...phaseBinds)
     .all();
 
   return c.json(rows.results ?? []);

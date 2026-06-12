@@ -263,6 +263,7 @@ export type Project = {
   health: string | null;
   health_override: string | null;
   on_hold: number | null;
+  phase_scoped_visibility: number | null;
   kickoff_date: string | null;
   target_go_live_date: string | null;
   actual_go_live_date: string | null;
@@ -1185,6 +1186,31 @@ export type Phase = {
   updated_at: string;
 };
 
+/** Customer contact attached to a phase. phase_id null = "All phases". */
+export type PhaseContact = {
+  id: string;
+  project_id: string;
+  phase_id: string | null;
+  customer_contact_id: string | null;
+  name: string;
+  email: string | null;
+  job_title: string | null;
+  contact_role: string | null;
+  created_at: string;
+};
+
+/** PF (internal) staff attached to a phase — assignment/display metadata. */
+export type PhaseStaffMember = {
+  id: string;
+  project_id: string;
+  phase_id: string;
+  user_id: string;
+  staff_role: string | null;
+  user_name: string | null;
+  user_email: string | null;
+  created_at: string;
+};
+
 // ── Stakeholder Dashboard ────────────────────────────────────────────────────
 export type StakeholderHealth = "on_track" | "at_risk" | "off_track";
 
@@ -1497,6 +1523,7 @@ export const api = {
       status?: string;
       health?: string;
       on_hold?: number;
+      phase_scoped_visibility?: number;
       clear_health_override?: boolean;
       target_go_live_date?: string;
       actual_go_live_date?: string;
@@ -1855,6 +1882,20 @@ export const api = {
     request<Phase>(`/projects/${projectId}/phases/${phaseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deletePhase: (projectId: string, phaseId: string) =>
     request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
+
+  // Phase-level people (customer contacts + PF staff)
+  phaseContacts: (projectId: string) =>
+    request<PhaseContact[]>(`/projects/${projectId}/phase-contacts`),
+  createPhaseContact: (projectId: string, payload: { phase_id: string | null; name: string; email?: string | null; job_title?: string | null; contact_role?: string | null; customer_contact_id?: string | null }) =>
+    request<PhaseContact>(`/projects/${projectId}/phase-contacts`, { method: "POST", body: JSON.stringify(payload) }),
+  deletePhaseContact: (projectId: string, contactId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/phase-contacts/${contactId}`, { method: "DELETE" }),
+  phaseStaff: (projectId: string) =>
+    request<PhaseStaffMember[]>(`/projects/${projectId}/phase-staff`),
+  createPhaseStaff: (projectId: string, payload: { phase_id: string; user_id: string; staff_role?: string | null }) =>
+    request<PhaseStaffMember>(`/projects/${projectId}/phase-staff`, { method: "POST", body: JSON.stringify(payload) }),
+  deletePhaseStaff: (projectId: string, rowId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/phase-staff/${rowId}`, { method: "DELETE" }),
 
   // Staging → Prod promotion (prod-only; staging worker returns 503)
   adminStagingInventory: () =>

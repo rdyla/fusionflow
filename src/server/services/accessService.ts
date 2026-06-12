@@ -1,6 +1,34 @@
 import type { AppRole, AppUser } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
+/**
+ * For a client on a phase-scoped project, which phases may they see?
+ *  - "ALL"  → no phase restriction (non-client role, project not phase-scoped,
+ *             or the contact is marked "All phases" via a phase_id=NULL row).
+ *  - string[] → the explicit set of attached phase ids (empty ⇒ sees nothing).
+ * Shared stages (stages.phase_id IS NULL) are always visible to anyone who can
+ * see the project; callers add that allowance themselves.
+ */
+export async function visiblePhaseIds(
+  db: D1Database,
+  user: AppUser,
+  projectId: string
+): Promise<"ALL" | string[]> {
+  if (user.role !== "client") return "ALL";
+  const proj = await db
+    .prepare("SELECT phase_scoped_visibility FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ phase_scoped_visibility: number | null }>();
+  if (!proj || !proj.phase_scoped_visibility) return "ALL";
+  const rows = await db
+    .prepare("SELECT phase_id FROM phase_contacts WHERE project_id = ? AND email IS NOT NULL AND LOWER(email) = LOWER(?)")
+    .bind(projectId, user.email)
+    .all<{ phase_id: string | null }>();
+  const list = rows.results ?? [];
+  if (list.some((r) => r.phase_id === null)) return "ALL";
+  return list.map((r) => r.phase_id).filter((x): x is string => !!x);
+}
+
 export async function canViewProject(
   db: D1Database,
   user: AppUser,
@@ -15,10 +43,15 @@ export async function canViewProject(
 
   if (user.role === "client" && user.dynamics_account_id) {
     const owned = await db
-      .prepare("SELECT id FROM projects WHERE id = ? AND dynamics_account_id = ? LIMIT 1")
+      .prepare("SELECT phase_scoped_visibility FROM projects WHERE id = ? AND dynamics_account_id = ? LIMIT 1")
       .bind(projectId, user.dynamics_account_id)
-      .first();
-    return !!owned;
+      .first<{ phase_scoped_visibility: number | null }>();
+    if (!owned) return false;
+    if (!owned.phase_scoped_visibility) return true;
+    // Phase-scoped project: the client may view it only if they're attached to
+    // at least one phase (or marked "All phases"). Fail closed otherwise.
+    const vp = await visiblePhaseIds(db, user, projectId);
+    return vp === "ALL" || vp.length > 0;
   }
 
   if (user.role === "pf_ae") {
