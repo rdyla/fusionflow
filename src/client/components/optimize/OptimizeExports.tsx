@@ -56,6 +56,7 @@ const TIME_LABELS: Record<string, string> = {
   eliminate: "Eliminate",
 };
 const TECH_AREA_LABELS: Record<string, string> = {
+  ai:         "AI / Automation",
   uc:         "Unified Communications",
   security:   "Security",
   network:    "Network",
@@ -273,10 +274,35 @@ function openPrintWindow(html: string): void {
   win.document.write(html);
   win.document.close();
   win.focus();
-  // Give the new doc a tick to parse CSS + load the logo before showing the
-  // print dialog. Without this, Chrome occasionally renders the dialog over
-  // an unstyled page.
-  setTimeout(() => win.print(), 400);
+
+  // Wait for the logo image(s) to finish decoding before opening the print
+  // dialog. Printing too early makes the browser lay images out in a default
+  // (squished) box because their intrinsic aspect ratio isn't known yet — the
+  // old fixed 400ms timer lost that race whenever the logo wasn't cached.
+  let printed = false;
+  const triggerPrint = () => {
+    if (printed) return;
+    printed = true;
+    try { win.focus(); win.print(); } catch { /* window closed */ }
+  };
+
+  const imgs = Array.from(win.document.images);
+  if (imgs.length === 0) {
+    setTimeout(triggerPrint, 250);
+    return;
+  }
+
+  let remaining = imgs.length;
+  const onSettled = () => { remaining -= 1; if (remaining <= 0) setTimeout(triggerPrint, 120); };
+  for (const img of imgs) {
+    if (img.complete) onSettled();
+    else {
+      img.addEventListener("load", onSettled);
+      img.addEventListener("error", onSettled);
+    }
+  }
+  // Safety net: never block the dialog indefinitely if a load event misfires.
+  setTimeout(triggerPrint, 2500);
 }
 
 function logoAbsoluteUrl(): string {
