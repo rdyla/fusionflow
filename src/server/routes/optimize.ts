@@ -8,6 +8,7 @@ import { fetchRCUtilizationSnapshot } from "../services/ringCentralService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
 import { scoreAssessment } from "../lib/scoringEngine";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { deriveTimeRating } from "../../shared/timeFramework";
 import { getDemoVendor } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -475,10 +476,14 @@ app.get("/accounts/:projectId/tech-stack", async (c) => {
 });
 
 const techStackSchema = z.object({
-  tech_area: z.enum(["uc", "security", "network", "datacenter", "backup_dr", "tem", "other"]),
+  tech_area: z.enum(["ai", "uc", "security", "network", "datacenter", "backup_dr", "tem", "other"]),
   tech_area_label: z.string().nullable().optional(),
   current_vendor: z.string().nullable().optional(),
   current_solution: z.string().nullable().optional(),
+  functional_fit: z.number().int().min(1).max(5).nullable().optional(),
+  technical_fit: z.number().int().min(1).max(5).nullable().optional(),
+  contract_expiration: z.string().nullable().optional(),
+  initiative_start: z.string().nullable().optional(),
   time_rating: z.enum(["tolerate", "invest", "migrate", "eliminate"]).nullable().optional(),
   notes: z.string().nullable().optional(),
   last_reviewed: z.string().nullable().optional(),
@@ -495,14 +500,19 @@ app.post("/accounts/:projectId/tech-stack", async (c) => {
 
   const d = parsed.data;
   const id = crypto.randomUUID();
+  // TIME letter is auto-derived from the two fit scores; an explicit time_rating
+  // in the payload (a manual override) wins.
+  const timeRating = d.time_rating ?? deriveTimeRating(d.functional_fit, d.technical_fit);
   await db.prepare(`
     INSERT INTO account_tech_stack
       (id, project_id, tech_area, tech_area_label, current_vendor, current_solution,
+       functional_fit, technical_fit, contract_expiration, initiative_start,
        time_rating, notes, last_reviewed, reviewed_by_user_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(id, projectId, d.tech_area, d.tech_area_label ?? null, d.current_vendor ?? null,
-    d.current_solution ?? null, d.time_rating ?? null, d.notes ?? null,
-    d.last_reviewed ?? null, auth.user.id).run();
+    d.current_solution ?? null, d.functional_fit ?? null, d.technical_fit ?? null,
+    d.contract_expiration ?? null, d.initiative_start ?? null, timeRating ?? null,
+    d.notes ?? null, d.last_reviewed ?? null, auth.user.id).run();
 
   return c.json(await db.prepare("SELECT * FROM account_tech_stack WHERE id = ? LIMIT 1").bind(id).first(), 201);
 });
@@ -513,17 +523,29 @@ app.patch("/accounts/:projectId/tech-stack/:areaId", async (c) => {
   const { projectId, areaId } = c.req.param();
   const auth = c.get("auth");
 
-  const existing = await db.prepare("SELECT id FROM account_tech_stack WHERE id = ? AND project_id = ? LIMIT 1")
-    .bind(areaId, projectId).first();
+  const existing = await db.prepare(
+    "SELECT functional_fit, technical_fit FROM account_tech_stack WHERE id = ? AND project_id = ? LIMIT 1"
+  ).bind(areaId, projectId).first<{ functional_fit: number | null; technical_fit: number | null }>();
   if (!existing) throw new HTTPException(404, { message: "Tech stack area not found" });
 
   const parsed = techStackSchema.partial().safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
+  const d = parsed.data;
   const fields: string[] = [], values: unknown[] = [];
-  for (const [k, v] of Object.entries(parsed.data)) {
+  for (const [k, v] of Object.entries(d)) {
     if (v !== undefined) { fields.push(`${k} = ?`); values.push(v); }
   }
+
+  // When a fit score changes but the caller didn't explicitly set time_rating,
+  // recompute the derived TIME letter from the merged (existing + patched) scores.
+  if ((d.functional_fit !== undefined || d.technical_fit !== undefined) && d.time_rating === undefined) {
+    const func = d.functional_fit !== undefined ? d.functional_fit : existing.functional_fit;
+    const tech = d.technical_fit !== undefined ? d.technical_fit : existing.technical_fit;
+    fields.push("time_rating = ?");
+    values.push(deriveTimeRating(func, tech));
+  }
+
   fields.push("reviewed_by_user_id = ?", "updated_at = CURRENT_TIMESTAMP");
   values.push(auth.user.id);
 

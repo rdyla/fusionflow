@@ -20,6 +20,15 @@ import {
 } from "../components/optimize/OptimizeExports";
 import { solutionTypeLabel } from "../../shared/solutionTypes";
 import { canonicalizeVendor } from "../../shared/vendors";
+import { FitFactorPicker } from "../components/ui/FitFactorPicker";
+import {
+  deriveTimeRating,
+  TIME_META,
+  TIME_RATINGS,
+  FUNCTIONAL_FIT_LABELS,
+  TECHNICAL_FIT_LABELS,
+  type TimeRating,
+} from "../../shared/timeFramework";
 
 type Tab = "assessments" | "tech-stack" | "roadmap" | "utilization";
 
@@ -62,7 +71,8 @@ export default function OptimizeAccountPage() {
   // Tech Stack
   const [techStack, setTechStack] = useState<TechStackItem[]>([]);
   const [showTechForm, setShowTechForm] = useState(false);
-  const [techForm, setTechForm] = useState({ tech_area: "uc", tech_area_label: "", current_vendor: "", current_solution: "", time_rating: "", notes: "" });
+  const [editingTechId, setEditingTechId] = useState<string | null>(null);
+  const [techForm, setTechForm] = useState(EMPTY_TECH_FORM);
   const [savingTech, setSavingTech] = useState(false);
 
   // Roadmap
@@ -176,23 +186,63 @@ export default function OptimizeAccountPage() {
     return assessments[idx + 1];
   }
 
-  async function handleCreateTech(e: React.FormEvent) {
+  function openTechCreate() {
+    setEditingTechId(null);
+    setTechForm(EMPTY_TECH_FORM);
+    setShowTechForm(true);
+  }
+
+  function openTechEdit(t: TechStackItem) {
+    const derived = deriveTimeRating(t.functional_fit, t.technical_fit);
+    setEditingTechId(t.id);
+    setTechForm({
+      tech_area: t.tech_area,
+      tech_area_label: t.tech_area_label ?? "",
+      current_vendor: t.current_vendor ?? "",
+      current_solution: t.current_solution ?? "",
+      functional_fit: t.functional_fit,
+      technical_fit: t.technical_fit,
+      contract_expiration: t.contract_expiration ?? "",
+      initiative_start: t.initiative_start ?? "",
+      // Treat a stored rating that differs from the derived one as a manual override.
+      time_rating_override: t.time_rating && t.time_rating !== derived ? t.time_rating : null,
+      notes: t.notes ?? "",
+    });
+    setShowTechForm(true);
+  }
+
+  function closeTechForm() {
+    setShowTechForm(false);
+    setEditingTechId(null);
+    setTechForm(EMPTY_TECH_FORM);
+  }
+
+  async function handleSaveTech(e: React.FormEvent) {
     e.preventDefault();
     if (!projectId) return;
     setSavingTech(true);
+    const payload = {
+      tech_area: techForm.tech_area,
+      tech_area_label: techForm.tech_area === "other" ? (techForm.tech_area_label || null) : null,
+      current_vendor: techForm.current_vendor || null,
+      current_solution: techForm.current_solution || null,
+      functional_fit: techForm.functional_fit,
+      technical_fit: techForm.technical_fit,
+      contract_expiration: techForm.contract_expiration || null,
+      initiative_start: techForm.initiative_start || null,
+      // Override wins; otherwise the auto-derived TIME letter.
+      time_rating: techForm.time_rating_override ?? deriveTimeRating(techForm.functional_fit, techForm.technical_fit),
+      notes: techForm.notes || null,
+    };
     try {
-      const created = await api.optimizeCreateTechStack({
-        project_id: projectId,
-        tech_area: techForm.tech_area,
-        tech_area_label: techForm.tech_area_label || null,
-        current_vendor: techForm.current_vendor || null,
-        current_solution: techForm.current_solution || null,
-        time_rating: techForm.time_rating || null,
-        notes: techForm.notes || null,
-      });
-      setTechStack((prev) => [...prev, created]);
-      setShowTechForm(false);
-      setTechForm({ tech_area: "uc", tech_area_label: "", current_vendor: "", current_solution: "", time_rating: "", notes: "" });
+      if (editingTechId) {
+        const updated = await api.optimizeUpdateTechStack(projectId, editingTechId, payload);
+        setTechStack((prev) => prev.map((t) => (t.id === editingTechId ? updated : t)));
+      } else {
+        const created = await api.optimizeCreateTechStack({ project_id: projectId, ...payload });
+        setTechStack((prev) => [...prev, created]);
+      }
+      closeTechForm();
       showToast("Tech area saved.", "success");
     } catch {
       showToast("Failed to save tech area", "error");
@@ -496,7 +546,7 @@ export default function OptimizeAccountPage() {
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               {techStack.length > 0 && <ExportTechStackButton items={techStack} account={account} />}
-              <button className="ms-btn-primary" onClick={() => setShowTechForm(true)}>+ Add Area</button>
+              <button className="ms-btn-primary" onClick={openTechCreate}>+ Add Area</button>
             </div>
           </div>
 
@@ -510,28 +560,34 @@ export default function OptimizeAccountPage() {
                 <thead>
                   <tr>
                     <th>Area</th>
-                    <th>Vendor</th>
+                    <th>Provider</th>
                     <th>Solution</th>
-                    <th>TIME Rating</th>
-                    <th>Notes</th>
+                    <th style={{ textAlign: "center" }}>Func</th>
+                    <th style={{ textAlign: "center" }}>Tech</th>
+                    <th>TIME</th>
+                    <th>Contract Exp</th>
+                    <th>Initiative</th>
                     <th></th>
                   </tr>
                 </thead>
                 <tbody>
                   {techStack.map((t) => (
-                    <tr key={t.id}>
+                    <tr key={t.id} style={{ cursor: "pointer" }} onClick={() => openTechEdit(t)} title="Edit">
                       <td style={{ fontWeight: 600 }}>{t.tech_area_label ?? TECH_AREA_LABELS[t.tech_area] ?? t.tech_area}</td>
                       <td style={{ color: "#475569" }}>{t.current_vendor ?? "—"}</td>
                       <td style={{ color: "#475569" }}>{t.current_solution ?? "—"}</td>
+                      <td style={{ textAlign: "center" }}>{fitCell(t.functional_fit)}</td>
+                      <td style={{ textAlign: "center" }}>{fitCell(t.technical_fit)}</td>
                       <td>
                         {t.time_rating ? (
-                          <span className="ms-badge" style={{ background: (TIME_COLORS[t.time_rating] ?? "#94a3b8") + "1a", color: TIME_COLORS[t.time_rating] ?? "#94a3b8", border: `1px solid ${(TIME_COLORS[t.time_rating] ?? "#94a3b8")}40`, textTransform: "capitalize" }}>
-                            {t.time_rating}
+                          <span className="ms-badge" style={{ background: TIME_META[t.time_rating].color + "1a", color: TIME_META[t.time_rating].color, border: `1px solid ${TIME_META[t.time_rating].color}40` }}>
+                            {TIME_META[t.time_rating].label}
                           </span>
                         ) : "—"}
                       </td>
-                      <td style={{ color: "#475569", fontSize: 12, maxWidth: 200 }}>{t.notes ?? "—"}</td>
-                      <td>
+                      <td style={{ color: "#475569", fontSize: 12 }}>{t.contract_expiration ?? "—"}</td>
+                      <td style={{ color: "#475569", fontSize: 12 }}>{t.initiative_start ?? "—"}</td>
+                      <td onClick={(e) => e.stopPropagation()}>
                         <button className="ms-btn-ghost" onClick={() => handleDeleteTech(t.id)} style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}>Delete</button>
                       </td>
                     </tr>
@@ -542,10 +598,10 @@ export default function OptimizeAccountPage() {
           )}
 
           {showTechForm && (
-            <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowTechForm(false); }}>
-              <div className="ms-modal" style={{ maxWidth: 520 }}>
-                <h2>Add Tech Area</h2>
-                <form onSubmit={handleCreateTech} style={{ display: "grid", gap: 14 }}>
+            <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeTechForm(); }}>
+              <div className="ms-modal" style={{ maxWidth: 560 }}>
+                <h2>{editingTechId ? "Edit Tech Area" : "Add Tech Area"}</h2>
+                <form onSubmit={handleSaveTech} style={{ display: "grid", gap: 16 }}>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                     <label className="ms-label">
                       <span>Area</span>
@@ -556,22 +612,8 @@ export default function OptimizeAccountPage() {
                       </select>
                     </label>
                     <label className="ms-label">
-                      <span>TIME Rating</span>
-                      <select className="ms-input" value={techForm.time_rating} onChange={(e) => setTechForm({ ...techForm, time_rating: e.target.value })}>
-                        <option value="">— None —</option>
-                        <option value="tolerate">Tolerate</option>
-                        <option value="invest">Invest</option>
-                        <option value="migrate">Migrate</option>
-                        <option value="eliminate">Eliminate</option>
-                      </select>
-                    </label>
-                    <label className="ms-label">
-                      <span>Current Vendor</span>
-                      <input className="ms-input" value={techForm.current_vendor} onChange={(e) => setTechForm({ ...techForm, current_vendor: e.target.value })} placeholder="e.g. Cisco" />
-                    </label>
-                    <label className="ms-label">
-                      <span>Current Solution</span>
-                      <input className="ms-input" value={techForm.current_solution} onChange={(e) => setTechForm({ ...techForm, current_solution: e.target.value })} placeholder="e.g. CUCM" />
+                      <span>Provider</span>
+                      <input className="ms-input" value={techForm.current_vendor} onChange={(e) => setTechForm({ ...techForm, current_vendor: e.target.value })} placeholder="e.g. OpenAI, Cisco" />
                     </label>
                     {techForm.tech_area === "other" && (
                       <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
@@ -579,14 +621,86 @@ export default function OptimizeAccountPage() {
                         <input className="ms-input" value={techForm.tech_area_label} onChange={(e) => setTechForm({ ...techForm, tech_area_label: e.target.value })} placeholder="e.g. SD-WAN" />
                       </label>
                     )}
+                    <label className="ms-label" style={{ gridColumn: "1 / -1" }}>
+                      <span>Current Solution</span>
+                      <input className="ms-input" value={techForm.current_solution} onChange={(e) => setTechForm({ ...techForm, current_solution: e.target.value })} placeholder="e.g. Copilot pilot, on-prem CUCM" />
+                    </label>
+                    <label className="ms-label">
+                      <span>Contract Expiration</span>
+                      <input type="date" className="ms-input" value={techForm.contract_expiration} onChange={(e) => setTechForm({ ...techForm, contract_expiration: e.target.value })} />
+                    </label>
+                    <label className="ms-label">
+                      <span>Initiative Start</span>
+                      <input className="ms-input" value={techForm.initiative_start} onChange={(e) => setTechForm({ ...techForm, initiative_start: e.target.value })} placeholder="e.g. Q1 27, 3/1/2027, 2027, TBD" />
+                    </label>
                   </div>
+
+                  {/* Fit factors */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+                    <div className="ms-label">
+                      <span>Functional Fit <span style={{ fontWeight: 400, color: "#94a3b8" }}>· business value</span></span>
+                      <FitFactorPicker value={techForm.functional_fit} onChange={(n) => setTechForm({ ...techForm, functional_fit: n })} labels={FUNCTIONAL_FIT_LABELS} />
+                    </div>
+                    <div className="ms-label">
+                      <span>Technical Fit <span style={{ fontWeight: 400, color: "#94a3b8" }}>· technical health</span></span>
+                      <FitFactorPicker value={techForm.technical_fit} onChange={(n) => setTechForm({ ...techForm, technical_fit: n })} labels={TECHNICAL_FIT_LABELS} />
+                    </div>
+                  </div>
+
+                  {/* Derived TIME rating + manual override */}
+                  {(() => {
+                    const derived = deriveTimeRating(techForm.functional_fit, techForm.technical_fit);
+                    const effective = techForm.time_rating_override ?? derived;
+                    return (
+                      <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "12px 14px" }}>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8" }}>TIME Rating</span>
+                            {effective ? (
+                              <span className="ms-badge" style={{ background: TIME_META[effective].color + "1a", color: TIME_META[effective].color, border: `1px solid ${TIME_META[effective].color}40`, fontWeight: 700 }}>
+                                {TIME_META[effective].letter} · {TIME_META[effective].label}
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: 13, color: "#94a3b8" }}>Score both factors to derive</span>
+                            )}
+                            {techForm.time_rating_override && <span style={{ fontSize: 11, color: "#94a3b8" }}>(overridden)</span>}
+                          </div>
+                          {techForm.time_rating_override && (
+                            <button type="button" onClick={() => setTechForm({ ...techForm, time_rating_override: null })}
+                              style={{ background: "none", border: "none", color: "#0b9aad", fontSize: 12, cursor: "pointer", padding: 0 }}>
+                              Reset to auto
+                            </button>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                          {TIME_RATINGS.map((r) => {
+                            const active = effective === r;
+                            const m = TIME_META[r];
+                            return (
+                              <button key={r} type="button" title={m.label}
+                                onClick={() => setTechForm({ ...techForm, time_rating_override: r })}
+                                style={{
+                                  flex: 1, padding: "6px 0", borderRadius: 7, fontSize: 12, fontWeight: 700, cursor: "pointer",
+                                  border: `1.5px solid ${active ? m.color : "#e2e8f0"}`,
+                                  background: active ? m.color + "1a" : "#fff",
+                                  color: active ? m.color : "#94a3b8",
+                                }}>
+                                {m.letter}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                   <label className="ms-label">
                     <span>Notes</span>
                     <textarea className="ms-input" rows={2} value={techForm.notes} onChange={(e) => setTechForm({ ...techForm, notes: e.target.value })} style={{ resize: "vertical" }} />
                   </label>
                   <div style={{ display: "flex", gap: 10 }}>
-                    <button type="submit" className="ms-btn-primary" disabled={savingTech}>{savingTech ? "Saving..." : "Add Area"}</button>
-                    <button type="button" className="ms-btn-secondary" onClick={() => setShowTechForm(false)}>Cancel</button>
+                    <button type="submit" className="ms-btn-primary" disabled={savingTech}>{savingTech ? "Saving..." : (editingTechId ? "Save Changes" : "Add Area")}</button>
+                    <button type="button" className="ms-btn-secondary" onClick={closeTechForm}>Cancel</button>
                   </div>
                 </form>
               </div>
@@ -1062,6 +1176,7 @@ export default function OptimizeAccountPage() {
 
 
 const TECH_AREA_LABELS: Record<string, string> = {
+  ai: "AI / Automation",
   uc: "Unified Communications",
   security: "Security",
   network: "Network",
@@ -1070,3 +1185,23 @@ const TECH_AREA_LABELS: Record<string, string> = {
   tem: "TEM",
   other: "Other",
 };
+
+const EMPTY_TECH_FORM = {
+  tech_area: "ai",
+  tech_area_label: "",
+  current_vendor: "",
+  current_solution: "",
+  functional_fit: null as number | null,
+  technical_fit: null as number | null,
+  contract_expiration: "",
+  initiative_start: "",
+  time_rating_override: null as TimeRating | null,
+  notes: "",
+};
+
+/** Small colored fit score for the tech-stack table (— when unrated). */
+function fitCell(n: number | null) {
+  if (n == null) return <span style={{ color: "#cbd5e1" }}>—</span>;
+  const color = n >= 4 ? "#22c55e" : n === 3 ? "#f59e0b" : "#d13438";
+  return <span style={{ fontWeight: 700, color }}>{n}</span>;
+}

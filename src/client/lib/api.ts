@@ -1000,10 +1000,14 @@ export type ImpactAssessment = {
 export type TechStackItem = {
   id: string;
   project_id: string;
-  tech_area: "uc" | "security" | "network" | "datacenter" | "backup_dr" | "tem" | "other";
+  tech_area: "ai" | "uc" | "security" | "network" | "datacenter" | "backup_dr" | "tem" | "other";
   tech_area_label: string | null;
   current_vendor: string | null;
   current_solution: string | null;
+  functional_fit: number | null;
+  technical_fit: number | null;
+  contract_expiration: string | null;
+  initiative_start: string | null;
   time_rating: "tolerate" | "invest" | "migrate" | "eliminate" | null;
   notes: string | null;
   last_reviewed: string | null;
@@ -2183,6 +2187,10 @@ export const api = {
     tech_area_label?: string | null;
     current_vendor?: string | null;
     current_solution?: string | null;
+    functional_fit?: number | null;
+    technical_fit?: number | null;
+    contract_expiration?: string | null;
+    initiative_start?: string | null;
     time_rating?: string | null;
     notes?: string | null;
   }) =>
@@ -2195,6 +2203,10 @@ export const api = {
     tech_area_label: string | null;
     current_vendor: string | null;
     current_solution: string | null;
+    functional_fit: number | null;
+    technical_fit: number | null;
+    contract_expiration: string | null;
+    initiative_start: string | null;
     time_rating: string | null;
     notes: string | null;
   }>) =>
