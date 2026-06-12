@@ -22,7 +22,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { canViewProject } from "../services/accessService";
+import { canViewProject, visiblePhaseIds } from "../services/accessService";
 import { computeProjectHealth, computePhaseHealth, type HealthValue } from "../lib/healthScore";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -73,6 +73,17 @@ app.get("/:id/stakeholder-summary", async (c) => {
 
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
+  // Phase-scoped clients see only their attached phases (+ shared stages).
+  // For everyone else vp === "ALL" → the clauses below are empty strings and
+  // `vpIds` is empty, so the queries are unchanged. (canViewProject already
+  // 403'd a scoped client with zero visible phases, so vpIds.length >= 1 here.)
+  const vp = await visiblePhaseIds(db, auth.user, projectId);
+  const vpIds = vp === "ALL" ? [] : vp;
+  const inVp = vpIds.map(() => "?").join(",");
+  const phaseIdClause   = vp === "ALL" ? "" : ` AND id IN (${inVp})`;
+  const stagePhaseClause = vp === "ALL" ? "" : ` AND (p.phase_id IS NULL OR p.phase_id IN (${inVp}))`;
+  const taskStageClause  = vp === "ALL" ? "" : ` AND (stage_id IS NULL OR stage_id IN (SELECT id FROM stages WHERE phase_id IS NULL OR phase_id IN (${inVp})))`;
+
   const today = new Date();
 
   // ── Parallel: everything scoped to this one project ────────────────────────
@@ -97,10 +108,10 @@ app.get("/:id/stakeholder-summary", async (c) => {
     db
       .prepare(
         `SELECT id, name, target_go_live_date, display_order
-         FROM phases WHERE project_id = ?
+         FROM phases WHERE project_id = ?${phaseIdClause}
          ORDER BY display_order ASC, COALESCE(target_go_live_date, '9999-12-31') ASC, name ASC`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .all<PhaseRow>(),
     db
       .prepare(
@@ -109,9 +120,9 @@ app.get("/:id/stakeholder-summary", async (c) => {
            SUM(CASE WHEN status = 'completed'   THEN 1 ELSE 0 END) AS done,
            SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
            SUM(CASE WHEN status IS NULL OR status NOT IN ('completed','in_progress') THEN 1 ELSE 0 END) AS not_started
-         FROM tasks WHERE project_id = ?`
+         FROM tasks WHERE project_id = ?${taskStageClause}`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .first<{ total: number; done: number; in_progress: number; not_started: number }>(),
     // Per-phase task counts joined through stages.phase_id. Tasks on shared
     // stages (phase_id IS NULL) land under a NULL key and aren't rolled into
@@ -123,10 +134,10 @@ app.get("/:id/stakeholder-summary", async (c) => {
                 SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done
          FROM tasks t
          JOIN stages p ON p.id = t.stage_id
-         WHERE t.project_id = ?
+         WHERE t.project_id = ?${stagePhaseClause}
          GROUP BY p.phase_id`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .all<{ phase_id: string | null; total: number; done: number }>(),
     db
       .prepare(
@@ -136,11 +147,11 @@ app.get("/:id/stakeholder-summary", async (c) => {
          FROM tasks t
          LEFT JOIN users u  ON u.id = t.assignee_user_id
          LEFT JOIN stages p ON p.id = t.stage_id
-         WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
+         WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')${stagePhaseClause}
          ORDER BY COALESCE(t.due_date, '9999-12-31') ASC
          LIMIT 8`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .all<{ id: string; title: string; due_date: string | null; priority: string | null; stage_id: string | null; status: string | null; assignee_user_id: string | null; assignee_name: string | null; phase_id: string | null }>(),
     // Per-assignee × per-phase pivot. Tasks on shared stages land under a
     // NULL phase_id key and surface in a separate "shared" total.
@@ -152,10 +163,10 @@ app.get("/:id/stakeholder-summary", async (c) => {
          LEFT JOIN users u  ON u.id = t.assignee_user_id
          LEFT JOIN stages p ON p.id = t.stage_id
          WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
-           AND t.assignee_user_id IS NOT NULL
+           AND t.assignee_user_id IS NOT NULL${stagePhaseClause}
          GROUP BY t.assignee_user_id, p.phase_id`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .all<{ assignee_user_id: string; assignee_name: string | null; phase_id: string | null; cnt: number }>(),
     // Per-assignee × stage-name pivot for the "By assignee" breakdown on
     // the Open Tasks panel. Stages are grouped by NAME so multi-phase
@@ -172,10 +183,10 @@ app.get("/:id/stakeholder-summary", async (c) => {
          LEFT JOIN stages p ON p.id = t.stage_id
          WHERE t.project_id = ? AND (t.status IS NULL OR t.status != 'completed')
            AND t.assignee_user_id IS NOT NULL
-           AND p.name IS NOT NULL
+           AND p.name IS NOT NULL${stagePhaseClause}
          GROUP BY t.assignee_user_id, p.name`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .all<{ assignee_user_id: string; assignee_name: string | null; stage_name: string; sort_order: number | null; cnt: number }>(),
     db
       .prepare(
@@ -250,10 +261,10 @@ app.get("/:id/stakeholder-summary", async (c) => {
                 SUM(CASE WHEN t.status = 'completed' THEN 1 ELSE 0 END) AS done_tasks
          FROM stages p
          LEFT JOIN tasks t ON t.stage_id = p.id
-         WHERE p.project_id = ?
+         WHERE p.project_id = ?${stagePhaseClause}
          GROUP BY p.id`
       )
-      .bind(projectId)
+      .bind(projectId, ...vpIds)
       .all<{ id: string; name: string; sort_order: number | null; status: string | null; phase_id: string | null; planned_start: string | null; planned_end: string | null; total_tasks: number; done_tasks: number }>(),
   ]);
 

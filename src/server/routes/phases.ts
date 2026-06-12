@@ -22,7 +22,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { canViewProject, canEditProject } from "../services/accessService";
+import { canViewProject, canEditProject, visiblePhaseIds } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -46,13 +46,18 @@ app.get("/:id/phases", async (c) => {
   if (!(await canViewProject(c.env.DB, auth.user, projectId))) {
     throw new HTTPException(403, { message: "Forbidden" });
   }
+  // Phase-scoped clients see only the phases they're attached to.
+  const vp = await visiblePhaseIds(c.env.DB, auth.user, projectId);
+  const vpIds = vp === "ALL" ? [] : vp;
+  const phaseClause = vp === "ALL" ? "" : ` AND id IN (${vpIds.map(() => "?").join(",")})`;
+
   const rows = await c.env.DB
     .prepare(
       `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
-       FROM phases WHERE project_id = ?
+       FROM phases WHERE project_id = ?${phaseClause}
        ORDER BY display_order ASC, COALESCE(target_go_live_date, '9999-12-31') ASC, name ASC`
     )
-    .bind(projectId)
+    .bind(projectId, ...vpIds)
     .all<PhaseRow>();
   return c.json(rows.results ?? []);
 });
@@ -281,6 +286,143 @@ app.delete("/:id/phases/:phaseId", async (c) => {
   }
 
   return c.json({ success: true, deleted_stage_count: stageIds.length });
+});
+
+// ── Phase contacts (customer-side) ───────────────────────────────────────────
+// phase_id NULL = "All phases" (the college/district tier). Email drives the
+// client-visibility match in accessService.visiblePhaseIds().
+
+app.get("/:id/phase-contacts", async (c) => {
+  const projectId = c.req.param("id");
+  const auth = c.get("auth");
+  if (!(await canViewProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT id, project_id, phase_id, customer_contact_id, name, email, job_title, contact_role, created_at
+       FROM phase_contacts WHERE project_id = ? ORDER BY created_at ASC`
+    )
+    .bind(projectId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+const phaseContactSchema = z.object({
+  phase_id: z.string().nullable().optional(),     // null/omitted = All phases
+  customer_contact_id: z.string().nullable().optional(),
+  name: z.string().min(1).max(255),
+  email: z.string().max(320).nullable().optional(),
+  job_title: z.string().max(255).nullable().optional(),
+  contact_role: z.string().max(255).nullable().optional(),
+});
+
+app.post("/:id/phase-contacts", async (c) => {
+  const projectId = c.req.param("id");
+  const auth = c.get("auth");
+  if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const parsed = phaseContactSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const d = parsed.data;
+
+  if (d.phase_id) {
+    const ok = await c.env.DB.prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1").bind(d.phase_id, projectId).first();
+    if (!ok) throw new HTTPException(400, { message: "phase_id does not belong to this project" });
+  }
+
+  const id = crypto.randomUUID();
+  await c.env.DB
+    .prepare(
+      `INSERT INTO phase_contacts (id, project_id, phase_id, customer_contact_id, name, email, job_title, contact_role)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(id, projectId, d.phase_id ?? null, d.customer_contact_id ?? null, d.name, d.email ?? null, d.job_title ?? null, d.contact_role ?? null)
+    .run();
+  const created = await c.env.DB.prepare("SELECT * FROM phase_contacts WHERE id = ?").bind(id).first();
+  return c.json(created, 201);
+});
+
+app.delete("/:id/phase-contacts/:contactId", async (c) => {
+  const { id: projectId, contactId } = c.req.param();
+  const auth = c.get("auth");
+  if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  await c.env.DB.prepare("DELETE FROM phase_contacts WHERE id = ? AND project_id = ?").bind(contactId, projectId).run();
+  return c.json({ success: true });
+});
+
+// ── Phase staff (PF-side) — assignment/display metadata, no visibility gate ──
+
+app.get("/:id/phase-staff", async (c) => {
+  const projectId = c.req.param("id");
+  const auth = c.get("auth");
+  if (!(await canViewProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT ps.id, ps.project_id, ps.phase_id, ps.user_id, ps.staff_role, ps.created_at,
+              u.name AS user_name, u.email AS user_email
+       FROM phase_staff ps JOIN users u ON u.id = ps.user_id
+       WHERE ps.project_id = ? ORDER BY ps.created_at ASC`
+    )
+    .bind(projectId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+const phaseStaffSchema = z.object({
+  phase_id: z.string().min(1),
+  user_id: z.string().min(1),
+  staff_role: z.string().max(40).nullable().optional(),
+});
+
+app.post("/:id/phase-staff", async (c) => {
+  const projectId = c.req.param("id");
+  const auth = c.get("auth");
+  if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const parsed = phaseStaffSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const d = parsed.data;
+
+  const ok = await c.env.DB.prepare("SELECT id FROM phases WHERE id = ? AND project_id = ? LIMIT 1").bind(d.phase_id, projectId).first();
+  if (!ok) throw new HTTPException(400, { message: "phase_id does not belong to this project" });
+
+  const id = crypto.randomUUID();
+  await c.env.DB
+    .prepare(
+      `INSERT INTO phase_staff (id, project_id, phase_id, user_id, staff_role)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(phase_id, user_id, staff_role) DO NOTHING`
+    )
+    .bind(id, projectId, d.phase_id, d.user_id, d.staff_role ?? null)
+    .run();
+  const created = await c.env.DB
+    .prepare(
+      `SELECT ps.id, ps.project_id, ps.phase_id, ps.user_id, ps.staff_role, ps.created_at,
+              u.name AS user_name, u.email AS user_email
+       FROM phase_staff ps JOIN users u ON u.id = ps.user_id
+       WHERE ps.phase_id = ? AND ps.user_id = ? AND (ps.staff_role IS ? OR ps.staff_role = ?)
+       ORDER BY ps.created_at DESC LIMIT 1`
+    )
+    .bind(d.phase_id, d.user_id, d.staff_role ?? null, d.staff_role ?? null)
+    .first();
+  return c.json(created, 201);
+});
+
+app.delete("/:id/phase-staff/:rowId", async (c) => {
+  const { id: projectId, rowId } = c.req.param();
+  const auth = c.get("auth");
+  if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  await c.env.DB.prepare("DELETE FROM phase_staff WHERE id = ? AND project_id = ?").bind(rowId, projectId).run();
+  return c.json({ success: true });
 });
 
 export default app;

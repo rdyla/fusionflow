@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { canViewProject, canEditProject } from "../services/accessService";
+import { canViewProject, canEditProject, visiblePhaseIds } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -14,15 +14,20 @@ app.get("/:id/stages", async (c) => {
   const allowed = await canViewProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
+  // Phase-scoped clients see only their phases' stages (+ shared phase_id NULL).
+  const vp = await visiblePhaseIds(db, auth.user, projectId);
+  const vpIds = vp === "ALL" ? [] : vp;
+  const phaseClause = vp === "ALL" ? "" : ` AND (phase_id IS NULL OR phase_id IN (${vpIds.map(() => "?").join(",")}))`;
+
   const rows = await db
     .prepare(
       `SELECT id, project_id, name, sort_order, planned_start, planned_end,
               actual_start, actual_end, status, phase_id
        FROM stages
-       WHERE project_id = ?
+       WHERE project_id = ?${phaseClause}
        ORDER BY sort_order ASC`
     )
-    .bind(projectId)
+    .bind(projectId, ...vpIds)
     .all();
 
   return c.json(rows.results ?? []);
