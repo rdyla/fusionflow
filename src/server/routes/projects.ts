@@ -27,6 +27,7 @@ app.get("/", async (c) => {
 
   let sql = `
     SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health, on_hold,
+           phase_scoped_visibility,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, managed_in_asana, asana_project_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
@@ -124,6 +125,7 @@ app.get("/:id", async (c) => {
     .prepare(
       `
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health, p.on_hold,
+             p.phase_scoped_visibility,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.sharepoint_folder_url,
