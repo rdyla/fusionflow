@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember } from "../../lib/api";
+import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 export default function PhasesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
@@ -25,6 +25,7 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
   const [contacts, setContacts] = useState<PhaseContact[]>([]);
   const [staff, setStaff] = useState<PhaseStaffMember[]>([]);
   const [pfUsers, setPfUsers] = useState<User[]>([]);
+  const [dynamicsAccountId, setDynamicsAccountId] = useState<string | null>(null);
   const [peoplePhase, setPeoplePhase] = useState<Phase | "all" | null>(null);
 
   useEffect(() => { void load(); }, [projectId]);
@@ -40,6 +41,7 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
       ]);
       setPhases(ph);
       setScoped(!!proj.phase_scoped_visibility);
+      setDynamicsAccountId(proj.dynamics_account_id);
       setContacts(pc);
       setStaff(ps);
     } catch (err) {
@@ -52,7 +54,8 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
   // PF users for the staff picker — loaded lazily on first People modal open.
   async function ensureUsers() {
     if (pfUsers.length > 0) return;
-    try { setPfUsers((await api.users()).filter((u) => u.role !== "client")); } catch { /* ignore */ }
+    // PF staff for phases are PMs or implementation engineers only.
+    try { setPfUsers((await api.users()).filter((u) => u.role === "pm" || u.role === "pf_engineer")); } catch { /* ignore */ }
   }
 
   async function reloadPeople() {
@@ -163,6 +166,7 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
           contacts={contacts.filter((c) => c.phase_id === (peoplePhase === "all" ? null : peoplePhase.id))}
           staff={peoplePhase === "all" ? [] : staff.filter((st) => st.phase_id === peoplePhase.id)}
           pfUsers={pfUsers}
+          dynamicsAccountId={dynamicsAccountId}
           onClose={() => setPeoplePhase(null)}
           onChanged={reloadPeople}
         />
@@ -488,13 +492,14 @@ function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectI
  * see the whole project); PF staff is phase-specific so it's hidden in that case.
  */
 function PhasePeopleModal({
-  projectId, phase, contacts, staff, pfUsers, onClose, onChanged,
+  projectId, phase, contacts, staff, pfUsers, dynamicsAccountId, onClose, onChanged,
 }: {
   projectId: string;
   phase: Phase | null;
   contacts: PhaseContact[];
   staff: PhaseStaffMember[];
   pfUsers: User[];
+  dynamicsAccountId: string | null;
   onClose: () => void;
   onChanged: () => Promise<void> | void;
 }) {
@@ -503,6 +508,43 @@ function PhasePeopleModal({
   const [cEmail, setCEmail] = useState("");
   const [cRole, setCRole] = useState("");
   const [savingContact, setSavingContact] = useState(false);
+  const [crm, setCrm] = useState<DynamicsContact[]>([]);
+  const [crmLoading, setCrmLoading] = useState(false);
+  const [crmSel, setCrmSel] = useState("");
+  const [addingCrm, setAddingCrm] = useState(false);
+
+  useEffect(() => {
+    if (!dynamicsAccountId) return;
+    setCrmLoading(true);
+    api.getDynamicsContacts(dynamicsAccountId)
+      .then(setCrm)
+      .catch(() => setCrm([]))
+      .finally(() => setCrmLoading(false));
+  }, [dynamicsAccountId]);
+
+  const crmName = (k: DynamicsContact) => `${k.firstname ?? ""} ${k.lastname ?? ""}`.trim() || (k.emailaddress1 ?? "Unnamed");
+  const takenEmails = new Set(contacts.map((c) => (c.email ?? "").toLowerCase()).filter(Boolean));
+  const crmAvailable = crm.filter((k) => !k.emailaddress1 || !takenEmails.has(k.emailaddress1.toLowerCase()));
+
+  async function addFromCrm() {
+    const picked = crm.find((k) => k.contactid === crmSel);
+    if (!picked) return;
+    setAddingCrm(true);
+    try {
+      await api.createPhaseContact(projectId, {
+        phase_id: phase?.id ?? null,
+        name: crmName(picked),
+        email: picked.emailaddress1 ?? null,
+        contact_role: picked.jobtitle ?? null,
+      });
+      setCrmSel("");
+      await onChanged();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to add contact", "error");
+    } finally {
+      setAddingCrm(false);
+    }
+  }
   const [sUserId, setSUserId] = useState("");
   const [sRole, setSRole] = useState("");
   const [savingStaff, setSavingStaff] = useState(false);
@@ -572,7 +614,24 @@ function PhasePeopleModal({
             </div>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+        {/* Add from CRM */}
+        {dynamicsAccountId && (
+          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="ms-input" value={crmSel} onChange={(e) => setCrmSel(e.target.value)} disabled={crmLoading || addingCrm} style={{ flex: "1 1 260px", fontSize: 13, padding: "4px 8px" }}>
+              <option value="">{crmLoading ? "Loading CRM contacts…" : crmAvailable.length ? "Add from CRM…" : "No more CRM contacts"}</option>
+              {crmAvailable.map((k) => (
+                <option key={k.contactid} value={k.contactid}>
+                  {crmName(k)}{k.emailaddress1 ? ` — ${k.emailaddress1}` : ""}{k.jobtitle ? ` (${k.jobtitle})` : ""}
+                </option>
+              ))}
+            </select>
+            <button className="ms-btn-secondary" onClick={addFromCrm} disabled={!crmSel || addingCrm} style={{ fontSize: 12, padding: "4px 12px" }}>{addingCrm ? "…" : "Add from CRM"}</button>
+          </div>
+        )}
+
+        {/* Add net-new */}
+        <div style={{ marginTop: 10, fontSize: 11, color: "#94a3b8" }}>{dynamicsAccountId ? "…or add a contact not in CRM:" : "Add a contact:"}</div>
+        <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
           <input className="ms-input" value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Name" style={{ flex: "1 1 130px", fontSize: 13, padding: "4px 8px" }} />
           <input className="ms-input" value={cEmail} onChange={(e) => setCEmail(e.target.value)} placeholder="Email (used for access)" style={{ flex: "1 1 170px", fontSize: 13, padding: "4px 8px" }} />
           <input className="ms-input" value={cRole} onChange={(e) => setCRole(e.target.value)} placeholder="Role" style={{ flex: "0 1 110px", fontSize: 13, padding: "4px 8px" }} />
