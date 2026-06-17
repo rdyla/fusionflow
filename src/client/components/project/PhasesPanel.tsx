@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact } from "../../lib/api";
+import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact, type SupportCase } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 export default function PhasesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
@@ -148,7 +148,9 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
               key={s.id}
               phase={s}
               canEdit={canEdit}
+              scoped={scoped}
               projectId={projectId}
+              dynamicsAccountId={dynamicsAccountId}
               contactCount={contacts.filter((c) => c.phase_id === s.id).length}
               staffCount={staff.filter((st) => st.phase_id === s.id).length}
               onPeople={() => { void ensureUsers(); setPeoplePhase(s); }}
@@ -187,13 +189,14 @@ export default function PhasesPanel({ projectId, canEdit, onChange }: { projectI
   );
 }
 
-function PhaseRow({ phase, canEdit, projectId, contactCount, staffCount, onPeople, onChanged, onDelete }: { phase: Phase; canEdit: boolean; projectId: string; contactCount: number; staffCount: number; onPeople: () => void; onChanged: () => void; onDelete: () => void }) {
+function PhaseRow({ phase, canEdit, scoped, projectId, dynamicsAccountId, contactCount, staffCount, onPeople, onChanged, onDelete }: { phase: Phase; canEdit: boolean; scoped: boolean; projectId: string; dynamicsAccountId: string | null; contactCount: number; staffCount: number; onPeople: () => void; onChanged: () => void; onDelete: () => void }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(phase.name);
   const [target, setTarget] = useState(phase.target_go_live_date ?? "");
   const [saving, setSaving] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
+  const [integrationsOpen, setIntegrationsOpen] = useState(false);
 
   async function save() {
     if (!name.trim()) {
@@ -255,6 +258,15 @@ function PhaseRow({ phase, canEdit, projectId, contactCount, staffCount, onPeopl
           <span style={{ color: "#64748b", fontSize: 12, minWidth: 110, textAlign: "right" }}>
             {phase.target_go_live_date ? `Go-live ${fmtDate(phase.target_go_live_date)}` : "No date"}
           </span>
+          {canEdit && scoped && (
+            <button
+              onClick={() => setIntegrationsOpen(true)}
+              style={{ ...iconBtn, padding: "2px 10px" }}
+              title="Phase-level CRM case + SharePoint folder"
+            >
+              {phase.crm_case_id || phase.sharepoint_folder_url ? "🔗 Linked" : "Link"}
+            </button>
+          )}
           {canEdit && (
             <>
               <button onClick={onPeople} style={{ ...iconBtn, padding: "2px 10px" }} title="Manage people for this phase">
@@ -281,6 +293,184 @@ function PhaseRow({ phase, canEdit, projectId, contactCount, staffCount, onPeopl
           }}
         />
       )}
+
+      {integrationsOpen && (
+        <PhaseIntegrationsModal
+          projectId={projectId}
+          phase={phase}
+          dynamicsAccountId={dynamicsAccountId}
+          onClose={() => setIntegrationsOpen(false)}
+          onChanged={onChanged}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase-level integrations: pick the Dynamics 365 case that time entries on
+ * stages under this phase submit against, plus surface / retro-fit the
+ * SharePoint sub-folder. Only opened when phase-level visibility is on.
+ *
+ * The CRM case picker mirrors the project-level inline picker in
+ * ProjectDetailPage; the SharePoint section just shows the auto-created
+ * folder URL (or a "Create folder" button when it didn't get one — e.g.
+ * the project folder wasn't set when the phase was created).
+ */
+function PhaseIntegrationsModal({ projectId, phase, dynamicsAccountId, onClose, onChanged }: { projectId: string; phase: Phase; dynamicsAccountId: string | null; onClose: () => void; onChanged: () => void }) {
+  const { showToast } = useToast();
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SupportCase[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [linkingCase, setLinkingCase] = useState(false);
+  const [creatingFolder, setCreatingFolder] = useState(false);
+  const [currentCaseId, setCurrentCaseId] = useState<string | null>(phase.crm_case_id);
+  const [currentFolderUrl, setCurrentFolderUrl] = useState<string | null>(phase.sharepoint_folder_url);
+
+  async function runSearch() {
+    if (!searchQuery.trim()) return;
+    setSearching(true);
+    setSearchResults([]);
+    try {
+      const results = await api.searchDynamicsCases({
+        q: searchQuery.trim(),
+        accountId: dynamicsAccountId ?? undefined,
+      });
+      setSearchResults(results);
+    } catch {
+      showToast("Failed to search cases", "error");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  async function linkCase(caseId: string, ticketNumber: string | null) {
+    setLinkingCase(true);
+    try {
+      await api.updatePhase(projectId, phase.id, { crm_case_id: caseId });
+      setCurrentCaseId(caseId);
+      setSearchResults([]);
+      setSearchQuery("");
+      onChanged();
+      showToast(`Linked to case ${ticketNumber ?? caseId}`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to link case", "error");
+    } finally {
+      setLinkingCase(false);
+    }
+  }
+
+  async function unlinkCase() {
+    if (!window.confirm("Unlink this case from the phase? Time entries on its stages will fall back to the project-level case.")) return;
+    setLinkingCase(true);
+    try {
+      await api.updatePhase(projectId, phase.id, { crm_case_id: null });
+      setCurrentCaseId(null);
+      onChanged();
+      showToast("Case unlinked.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to unlink case", "error");
+    } finally {
+      setLinkingCase(false);
+    }
+  }
+
+  async function createFolder() {
+    setCreatingFolder(true);
+    try {
+      const res = await api.createPhaseSharePointFolder(projectId, phase.id);
+      setCurrentFolderUrl(res.sharepoint_folder_url);
+      onChanged();
+      showToast("Phase folder created.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to create folder", "error");
+    } finally {
+      setCreatingFolder(false);
+    }
+  }
+
+  return (
+    <div style={modalOverlayStyle} onClick={onClose}>
+      <div style={{ ...modalCardStyle, maxWidth: 540 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: "#1e293b" }}>
+            {phase.name} — integrations
+          </h3>
+          <button onClick={onClose} style={iconBtn} title="Close">✕</button>
+        </div>
+
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+            CRM Case
+          </div>
+          {currentCaseId ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: 6, fontSize: 13 }}>
+              <span style={{ flex: 1, color: "#065f46" }}>
+                Linked to <code style={{ background: "rgba(0,0,0,0.05)", padding: "1px 6px", borderRadius: 3 }}>{currentCaseId}</code>
+              </span>
+              <button onClick={unlinkCase} disabled={linkingCase} className="ms-btn-secondary" style={{ fontSize: 11, padding: "2px 10px" }}>
+                Unlink
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <input
+                  className="ms-input"
+                  placeholder="Search by case # (CAS-XXXXX) or keyword"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void runSearch(); } }}
+                  style={{ flex: 1, fontSize: 12, padding: "4px 8px" }}
+                />
+                <button onClick={runSearch} disabled={searching || !searchQuery.trim()} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}>
+                  {searching ? "…" : "Search"}
+                </button>
+              </div>
+              {searchResults.length > 0 && (
+                <div style={{ maxHeight: 180, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+                  {searchResults.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => linkCase(r.id, r.ticketNumber)}
+                      disabled={linkingCase}
+                      style={{ display: "block", width: "100%", textAlign: "left", padding: "6px 10px", background: "#fff", border: "none", borderBottom: "1px solid #f1f5f9", cursor: "pointer", fontSize: 12 }}
+                    >
+                      <div style={{ fontWeight: 600, color: "#1e293b" }}>{r.ticketNumber ?? "(no ticket #)"} — {r.title}</div>
+                      <div style={{ color: "#64748b", fontSize: 11 }}>{r.status}{r.accountName ? ` · ${r.accountName}` : ""}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize: 11, color: "#64748b", marginTop: 6 }}>
+                Time entries on stages under this phase will submit against the linked case. Falls back to the project-level case when unset.
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>
+            SharePoint folder
+          </div>
+          {currentFolderUrl ? (
+            <div style={{ padding: "8px 10px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, fontSize: 12 }}>
+              <a href={currentFolderUrl} target="_blank" rel="noopener noreferrer" style={{ color: "#1d4ed8", textDecoration: "none", wordBreak: "break-all" }}>
+                {currentFolderUrl}
+              </a>
+            </div>
+          ) : (
+            <div style={{ padding: "8px 10px", background: "#fef9c3", border: "1px solid #fde047", borderRadius: 6, fontSize: 12, color: "#854d0e" }}>
+              <div style={{ marginBottom: 6 }}>
+                No folder created yet. Auto-creation needs the project's own SharePoint folder set first.
+              </div>
+              <button onClick={createFolder} disabled={creatingFolder} className="ms-btn-secondary" style={{ fontSize: 11, padding: "2px 10px" }}>
+                {creatingFolder ? "Creating…" : "Create folder now"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -683,6 +873,16 @@ function PhasePeopleModal({
 const iconBtn: React.CSSProperties = {
   border: "1px solid #cbd5e1", background: "#fff", color: "#64748b",
   borderRadius: 4, padding: "2px 8px", fontSize: 12, cursor: "pointer", lineHeight: 1.2,
+};
+
+const modalOverlayStyle: React.CSSProperties = {
+  position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 1000,
+  display: "flex", alignItems: "center", justifyContent: "center",
+};
+
+const modalCardStyle: React.CSSProperties = {
+  background: "#fff", borderRadius: 10, padding: 24, width: 480, maxWidth: "90vw",
+  boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
 };
 
 function fmtDate(iso: string): string {

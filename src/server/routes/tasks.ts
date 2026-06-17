@@ -432,15 +432,39 @@ app.get("/time-entry/metadata", async (c) => {
 app.get("/:id/time-entry/setup", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.param("id");
+  // Optional: when the client passes ?stage_id=… we use the stage's parent
+  // phase CRM case (if set) instead of the project-level case. This is how
+  // phase-scoped projects (LACCD-style) route time entries to per-campus
+  // Dynamics cases. Falls back to the project's case when the phase has
+  // no override OR the stage has no parent phase.
+  const stageId = c.req.query("stage_id") ?? null;
   const allowed = await canViewProject(c.env.DB, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await c.env.DB
-    .prepare("SELECT crm_case_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT crm_case_id, phase_scoped_visibility FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ crm_case_id: string | null }>();
+    .first<{ crm_case_id: string | null; phase_scoped_visibility: number | null }>();
 
-  console.log("[time-entry/setup] crm_case_id:", project?.crm_case_id ?? "(null)");
+  // Resolve phase case override if a stage was supplied AND the project
+  // currently has phase-scoped visibility on. Without the visibility gate,
+  // a PM could enable scoping, link per-phase cases, then disable scoping —
+  // and time entries would silently keep routing to the now-hidden phase
+  // cases. The flag is the source of truth for "this project tracks per
+  // phase"; without it we always use the project-level case.
+  let phaseCaseId: string | null = null;
+  if (stageId && project?.phase_scoped_visibility) {
+    const stageRow = await c.env.DB
+      .prepare(`SELECT p.crm_case_id AS phase_case_id
+                FROM stages s LEFT JOIN phases p ON p.id = s.phase_id
+                WHERE s.id = ? AND s.project_id = ? LIMIT 1`)
+      .bind(stageId, projectId)
+      .first<{ phase_case_id: string | null }>();
+    phaseCaseId = stageRow?.phase_case_id ?? null;
+  }
+
+  const effectiveCaseId = phaseCaseId ?? project?.crm_case_id ?? null;
+  console.log("[time-entry/setup] case_id:", effectiveCaseId ?? "(null)", "source:", phaseCaseId ? "phase" : "project");
 
   let payCodes: Awaited<ReturnType<typeof getPayCodes>> = [];
   let caseAndJob: Awaited<ReturnType<typeof getCaseAndJob>> = null;
@@ -449,7 +473,7 @@ app.get("/:id/time-entry/setup", async (c) => {
   try {
     [payCodes, caseAndJob] = await Promise.all([
       getPayCodes(c.env),
-      project?.crm_case_id ? getCaseAndJob(c.env, project.crm_case_id) : Promise.resolve(null),
+      effectiveCaseId ? getCaseAndJob(c.env, effectiveCaseId) : Promise.resolve(null),
     ]);
   } catch (err) {
     caseError = err instanceof Error ? err.message : String(err);
@@ -471,7 +495,8 @@ app.get("/:id/time-entry/setup", async (c) => {
     job_id: caseAndJob?.jobId ?? null,
     account_id: caseAndJob?.accountId ?? null,
     _debug: {
-      crm_case_id: project?.crm_case_id ?? null,
+      crm_case_id: effectiveCaseId,
+      case_source: phaseCaseId ? "phase" : "project",
       case_found: !!caseAndJob,
       case_error: caseError,
     },
