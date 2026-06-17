@@ -522,8 +522,25 @@ export async function ensurePhaseSharePointFolder(
   if (!phase) return null;
   if (phase.sharepoint_folder_url) return phase.sharepoint_folder_url; // idempotent
 
+  // Duplicate-name protection. ensureSharePointChildFolder adopts an
+  // existing same-named child folder when one exists — fine for projects
+  // (one folder per project) but unsafe across phases: a second phase with
+  // the same name as a first would silently end up sharing the first's
+  // folder. PHASE_NAME has no uniqueness constraint at the DB level, so we
+  // detect collisions ourselves and append a short phase-id suffix when a
+  // sibling phase already holds the same name.
+  const sibling = await db
+    .prepare(`SELECT id FROM phases
+              WHERE project_id = ? AND id != ? AND LOWER(TRIM(name)) = LOWER(TRIM(?))
+              LIMIT 1`)
+    .bind(projectId, phaseId, phase.name)
+    .first();
+  const folderName = sibling
+    ? `${phase.name} (${phaseId.slice(0, 8)})`
+    : phase.name;
+
   try {
-    const folder = await ensureSharePointChildFolder(env, project.sharepoint_folder_url, phase.name);
+    const folder = await ensureSharePointChildFolder(env, project.sharepoint_folder_url, folderName);
     await db
       .prepare(`UPDATE phases SET sharepoint_folder_url = ? WHERE id = ?`)
       .bind(folder.webUrl, phaseId)

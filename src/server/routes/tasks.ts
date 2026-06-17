@@ -442,13 +442,18 @@ app.get("/:id/time-entry/setup", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await c.env.DB
-    .prepare("SELECT crm_case_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT crm_case_id, phase_scoped_visibility FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ crm_case_id: string | null }>();
+    .first<{ crm_case_id: string | null; phase_scoped_visibility: number | null }>();
 
-  // Resolve phase case override if a stage was supplied.
+  // Resolve phase case override if a stage was supplied AND the project
+  // currently has phase-scoped visibility on. Without the visibility gate,
+  // a PM could enable scoping, link per-phase cases, then disable scoping —
+  // and time entries would silently keep routing to the now-hidden phase
+  // cases. The flag is the source of truth for "this project tracks per
+  // phase"; without it we always use the project-level case.
   let phaseCaseId: string | null = null;
-  if (stageId) {
+  if (stageId && project?.phase_scoped_visibility) {
     const stageRow = await c.env.DB
       .prepare(`SELECT p.crm_case_id AS phase_case_id
                 FROM stages s LEFT JOIN phases p ON p.id = s.phase_id
