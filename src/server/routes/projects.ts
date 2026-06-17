@@ -27,6 +27,7 @@ app.get("/", async (c) => {
 
   let sql = `
     SELECT id, name, customer_name, customer_id, vendor, solution_types, status, health, on_hold,
+           phase_scoped_visibility,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, managed_in_asana, asana_project_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
@@ -65,8 +66,13 @@ app.get("/", async (c) => {
     bindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
     if (!auth.user.dynamics_account_id) return c.json([]);
-    sql += " AND dynamics_account_id = ?";
-    bindings = [auth.user.dynamics_account_id];
+    // Account scoping, plus: on a phase-scoped project the client must be
+    // attached to at least one phase (or marked "All phases") to see it at all.
+    sql += ` AND dynamics_account_id = ? AND (phase_scoped_visibility = 0 OR EXISTS (
+      SELECT 1 FROM phase_contacts pc
+      WHERE pc.project_id = projects.id AND pc.email IS NOT NULL AND LOWER(pc.email) = LOWER(?)
+    ))`;
+    bindings = [auth.user.dynamics_account_id, auth.user.email];
   }
   // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
 
@@ -119,6 +125,7 @@ app.get("/:id", async (c) => {
     .prepare(
       `
       SELECT p.id, p.name, p.customer_name, p.customer_id, p.vendor, p.solution_types, p.status, p.health, p.on_hold,
+             p.phase_scoped_visibility,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.sharepoint_folder_url,
@@ -283,6 +290,7 @@ const updateProjectSchema = z.object({
   customer_name: z.string().max(500).nullable().optional(),
   health: z.string().min(1).optional(),
   on_hold: z.number().int().min(0).max(1).optional(),
+  phase_scoped_visibility: z.number().int().min(0).max(1).optional(),
   clear_health_override: z.boolean().optional(),
   target_go_live_date: z.string().optional(),
   actual_go_live_date: z.string().optional(),
