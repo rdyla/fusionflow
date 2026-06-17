@@ -1562,7 +1562,10 @@ export default function ProjectDetailPage() {
                               setTimeEntrySetup(null);
                               setTimeEntryStage(stage);
                               setTimeEntryLoadingSetup(true);
-                              api.timeEntrySetup(project!.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                              // Pass stage.id so the server picks the phase-level CRM case
+                              // (via stage.phase_id → phases.crm_case_id) when the parent
+                              // phase has one set; falls back to project case otherwise.
+                              api.timeEntrySetup(project!.id, stage.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
                             }}
                           >
                             ⏱ Log time

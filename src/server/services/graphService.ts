@@ -485,6 +485,58 @@ export async function ensureSharePointChildFolder(
   return { webUrl: item.webUrl ?? "", id: item.id, reused: false };
 }
 
+/**
+ * Auto-create a phase-level SharePoint sub-folder under its project's
+ * main folder. Idempotent — returns the existing URL when already set.
+ *
+ * Gates:
+ *   - Project must have phase_scoped_visibility = 1 (single-phase
+ *     projects keep using the project-level folder).
+ *   - Project must already have its own sharepoint_folder_url set;
+ *     otherwise we have no parent to nest under and skip.
+ *
+ * Returns the phase's webUrl when created/reused, or null when
+ * skipped. Persists to phases.sharepoint_folder_url on success.
+ *
+ * Designed for fire-and-forget use via ctx.waitUntil() at phase
+ * creation time so the API response isn't blocked on Graph latency.
+ */
+export async function ensurePhaseSharePointFolder(
+  env: GraphEnv,
+  db: D1Database,
+  projectId: string,
+  phaseId: string,
+): Promise<string | null> {
+  const project = await db
+    .prepare(`SELECT phase_scoped_visibility, sharepoint_folder_url FROM projects WHERE id = ? LIMIT 1`)
+    .bind(projectId)
+    .first<{ phase_scoped_visibility: number | null; sharepoint_folder_url: string | null }>();
+  if (!project) return null;
+  if (!project.phase_scoped_visibility) return null;
+  if (!project.sharepoint_folder_url) return null;
+
+  const phase = await db
+    .prepare(`SELECT name, sharepoint_folder_url FROM phases WHERE id = ? AND project_id = ? LIMIT 1`)
+    .bind(phaseId, projectId)
+    .first<{ name: string; sharepoint_folder_url: string | null }>();
+  if (!phase) return null;
+  if (phase.sharepoint_folder_url) return phase.sharepoint_folder_url; // idempotent
+
+  try {
+    const folder = await ensureSharePointChildFolder(env, project.sharepoint_folder_url, phase.name);
+    await db
+      .prepare(`UPDATE phases SET sharepoint_folder_url = ? WHERE id = ?`)
+      .bind(folder.webUrl, phaseId)
+      .run();
+    return folder.webUrl;
+  } catch (err) {
+    // Don't fail phase creation if Graph is unreachable; the per-phase
+    // "Create folder" retro-fit endpoint can pick it up later.
+    console.warn(`[phaseSharePoint] Failed to create folder for phase ${phaseId}:`, err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
 export async function deleteSharePointFile(
   env: GraphEnv,
   fileWebUrl: string
