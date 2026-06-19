@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import {
   api,
   type CaseComplianceData,
+  type CaseTimeEntry,
   type Document,
   type DynamicsContact,
   type Note,
@@ -83,6 +84,60 @@ function formatDate(d: string | null) {
   if (!d) return "—";
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T00:00:00" : d;
   return new Date(normalized).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+// CRM time-entries table for a single case. Footer subtotal = sum of this
+// table's own entries (external-resource hours are accounted separately in the
+// Hours Compliance card). Reused for the project case and each phase case.
+function CaseTimeEntriesTable({ entries }: { entries: CaseTimeEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
+        No time entries found on this case in Dynamics 365.
+      </p>
+    );
+  }
+  const subtotal = entries.reduce((s, e) => s + (e.durationHours ?? 0), 0);
+  const th: React.CSSProperties = { textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" };
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+        <thead>
+          <tr style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
+            <th style={th}>Date</th>
+            <th style={th}>Resource</th>
+            <th style={th}>Description / Cost Code</th>
+            <th style={{ ...th, textAlign: "right" }}>Hours</th>
+            <th style={th}>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry) => (
+            <tr key={entry.id} style={{ borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
+              <td style={{ padding: "8px 10px", color: "#475569", whiteSpace: "nowrap" }}>{entry.date ? formatDate(entry.date) : "—"}</td>
+              <td style={{ padding: "8px 10px", color: "#1e293b", fontWeight: 500, whiteSpace: "nowrap" }}>{entry.resourceName ?? "—"}</td>
+              <td style={{ padding: "8px 10px", color: "#64748b", maxWidth: 380 }}>{entry.description ?? "—"}</td>
+              <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{entry.durationHours?.toFixed(2) ?? "—"}</td>
+              <td style={{ padding: "8px 10px" }}>
+                {entry.entryStatus && (
+                  <span className="ms-badge" style={{ fontSize: 11, background: entry.entryStatus === "Completed" ? "#05966926" : "rgba(0,0,0,0.06)", color: entry.entryStatus === "Completed" ? "#059669" : "#64748b", border: "none" }}>
+                    {entry.entryStatus}
+                  </span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr style={{ borderTop: "2px solid rgba(0,0,0,0.08)" }}>
+            <td colSpan={3} style={{ padding: "8px 10px", fontSize: 12, color: "#94a3b8" }}>Total logged</td>
+            <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{subtotal.toFixed(2)}h</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
 }
 
 function Badge({ label, color, style }: { label: string; color: string; style?: React.CSSProperties }) {
@@ -2568,7 +2623,16 @@ export default function ProjectDetailPage() {
         }
 
         // Compute hours totals
-        const engineerHours = (caseCompliance?.timeEntries ?? []).reduce((sum, e) => sum + (e.durationHours ?? 0), 0);
+        // Phase-scoped projects roll up every phase case alongside the project
+        // case (if any) so the total accounts against the one opportunity SOW.
+        const phaseCases = caseCompliance?.phaseCases ?? [];
+        const isPhaseScoped = !!p.phase_scoped_visibility && phaseCases.length > 0;
+        const projectEngineerHours = (caseCompliance?.timeEntries ?? []).reduce((sum, e) => sum + (e.durationHours ?? 0), 0);
+        const phaseEngineerHours = phaseCases.reduce((sum, pc) => sum + (pc.loggedHours ?? 0), 0);
+        const engineerHours = projectEngineerHours + phaseEngineerHours;
+        const totalEntryCount =
+          (caseCompliance?.timeEntries ?? []).length +
+          phaseCases.reduce((n, pc) => n + (pc.timeEntries ?? []).length, 0);
         // External-resource spend converts to hours used at the blended rate and
         // adds to the actual hours (see External Resources tab). $1,650 → 10h.
         const EXTERNAL_RATE = 165;
@@ -2578,6 +2642,7 @@ export default function ProjectDetailPage() {
         const quotedExpected = caseCompliance?.quotedHours?.total_expected ?? null;
         // SOW hours: from the linked quote's am_sow field
         const sowQuote = caseCompliance?.sowQuote ?? null;
+        const accountOpps = caseCompliance?.accountOpportunities ?? [];
         const sowHours = sowQuote?.am_sow ?? null;
         const referenceHours = sowHours ?? quotedExpected;
         const pctUsed = referenceHours && referenceHours > 0 ? Math.round((actualHours / referenceHours) * 100) : null;
@@ -2650,8 +2715,10 @@ export default function ProjectDetailPage() {
                   )}
                 </div>
 
-                {/* Opportunity tile — only visible once a case is linked */}
-                {caseCompliance?.case && (
+                {/* Opportunity tile — visible once a project case is linked, or
+                    whenever the project is phase-scoped (so phase-only projects
+                    can still pin the SOW to account their phase totals against). */}
+                {(caseCompliance?.case || isPhaseScoped) && (
                   <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px 12px", background: "#f8fafc" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Opportunity</span>
@@ -2663,7 +2730,7 @@ export default function ProjectDetailPage() {
                       <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 10, rowGap: 5, alignItems: "baseline" }}>
                         <span style={{ fontSize: 11, color: "#94a3b8" }}>Name</span>
                         <span style={{ fontSize: 13, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {(caseCompliance.accountOpportunities.find(o => o.opportunityid === p.crm_opportunity_id)?.name) ?? "—"}
+                          {(accountOpps.find(o => o.opportunityid === p.crm_opportunity_id)?.name) ?? "—"}
                         </span>
                         <span style={{ fontSize: 11, color: "#94a3b8" }}>Status</span>
                         <span className="ms-badge" style={{ fontSize: 11, width: "fit-content", background: sowQuote.statecode === 2 ? "#05966926" : "rgba(0,0,0,0.06)", color: sowQuote.statecode === 2 ? "#059669" : "#64748b", border: "none" }}>
@@ -2674,11 +2741,11 @@ export default function ProjectDetailPage() {
                       </div>
                     ) : p.crm_opportunity_id && !sowQuote ? (
                       <div style={{ fontSize: 13, color: "#64748b" }}>Linked — no quote with SOW hours found.</div>
-                    ) : (caseCompliance.accountOpportunities ?? []).length > 0 ? (
+                    ) : accountOpps.length > 0 ? (
                       <>
                         <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>Select the opportunity this project was sold under:</div>
                         <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 6, overflow: "hidden", maxHeight: 380, overflowY: "auto" }}>
-                          {(showAllOpps ? caseCompliance.accountOpportunities : caseCompliance.accountOpportunities.slice(0, 25)).map((opp) => (
+                          {(showAllOpps ? accountOpps : accountOpps.slice(0, 25)).map((opp) => (
                             <div key={opp.opportunityid} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 10px", borderBottom: "1px solid rgba(0,0,0,0.05)", background: "#fff" }}>
                               <div style={{ overflow: "hidden" }}>
                                 <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{opp.name}</div>
@@ -2690,13 +2757,13 @@ export default function ProjectDetailPage() {
                             </div>
                           ))}
                         </div>
-                        {caseCompliance.accountOpportunities.length > 25 && (
+                        {accountOpps.length > 25 && (
                           <button
                             type="button"
                             onClick={() => setShowAllOpps((v) => !v)}
                             style={{ marginTop: 8, fontSize: 12, color: "#0891b2", background: "none", border: "none", padding: 0, cursor: "pointer", fontWeight: 600 }}
                           >
-                            {showAllOpps ? "Show fewer" : `Show all ${caseCompliance.accountOpportunities.length} opportunities`}
+                            {showAllOpps ? "Show fewer" : `Show all ${accountOpps.length} opportunities`}
                           </button>
                         )}
                       </>
@@ -2728,7 +2795,9 @@ export default function ProjectDetailPage() {
                   <div className="ms-info-item">
                     <div className="ms-info-label">Hours Logged (CRM)</div>
                     <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{engineerHours.toFixed(1)}</div>
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{(caseCompliance?.timeEntries ?? []).length} entries</div>
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                      {totalEntryCount} entries{isPhaseScoped ? ` · ${phaseCases.length} phase case${phaseCases.length !== 1 ? "s" : ""}` : ""}
+                    </div>
                   </div>
                   {externalTotal > 0 && (
                     <div className="ms-info-item">
@@ -2786,56 +2855,56 @@ export default function ProjectDetailPage() {
             )}
 
             {/* ── Time Entries ── */}
-            {caseCompliance?.case && (
+            {/* Single project case (non-phase-scoped, unchanged behavior) */}
+            {!isPhaseScoped && caseCompliance?.case && (
               <div className="ms-section-card">
                 <div className="ms-section-title">
                   Time Entries
                   <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries</span>
                 </div>
-                {(caseCompliance.timeEntries ?? []).length === 0 ? (
-                  <p style={{ color: "#64748b", fontSize: 13, margin: 0 }}>
-                    No time entries found on this case in Dynamics 365.
-                  </p>
-                ) : (
-                  <div style={{ overflowX: "auto" }}>
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                      <thead>
-                        <tr style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
-                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Date</th>
-                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Resource</th>
-                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Description / Cost Code</th>
-                          <th style={{ textAlign: "right", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Hours</th>
-                          <th style={{ textAlign: "left", padding: "6px 10px", color: "#94a3b8", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: "0.05em" }}>Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {caseCompliance.timeEntries.map((entry) => (
-                          <tr key={entry.id} style={{ borderBottom: "1px solid rgba(0,0,0,0.04)" }}>
-                            <td style={{ padding: "8px 10px", color: "#475569", whiteSpace: "nowrap" }}>{entry.date ? formatDate(entry.date) : "—"}</td>
-                            <td style={{ padding: "8px 10px", color: "#1e293b", fontWeight: 500, whiteSpace: "nowrap" }}>{entry.resourceName ?? "—"}</td>
-                            <td style={{ padding: "8px 10px", color: "#64748b", maxWidth: 380 }}>{entry.description ?? "—"}</td>
-                            <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 600, color: "#1e293b" }}>{entry.durationHours?.toFixed(2) ?? "—"}</td>
-                            <td style={{ padding: "8px 10px" }}>
-                              {entry.entryStatus && (
-                                <span className="ms-badge" style={{ fontSize: 11, background: entry.entryStatus === "Completed" ? "#05966926" : "rgba(0,0,0,0.06)", color: entry.entryStatus === "Completed" ? "#059669" : "#64748b", border: "none" }}>
-                                  {entry.entryStatus}
-                                </span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr style={{ borderTop: "2px solid rgba(0,0,0,0.08)" }}>
-                          <td colSpan={3} style={{ padding: "8px 10px", fontSize: 12, color: "#94a3b8" }}>Total logged</td>
-                          <td style={{ padding: "8px 10px", textAlign: "right", fontWeight: 700, color: "#1e293b" }}>{actualHours.toFixed(2)}h</td>
-                          <td />
-                        </tr>
-                      </tfoot>
-                    </table>
+                <CaseTimeEntriesTable entries={caseCompliance.timeEntries ?? []} />
+              </div>
+            )}
+
+            {/* Phase-scoped: one time-entries view per case, all accounting
+                against the single opportunity SOW shown above. */}
+            {isPhaseScoped && (
+              <>
+                {caseCompliance?.case && (
+                  <div className="ms-section-card">
+                    <div className="ms-section-title">
+                      Project Case
+                      {caseCompliance.case.ticketNumber && (
+                        <span style={{ fontWeight: 400, fontSize: 12, fontFamily: "monospace", color: "#0891b2", marginLeft: 8 }}>{caseCompliance.case.ticketNumber}</span>
+                      )}
+                      <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries · {projectEngineerHours.toFixed(1)}h</span>
+                    </div>
+                    <CaseTimeEntriesTable entries={caseCompliance.timeEntries ?? []} />
                   </div>
                 )}
-              </div>
+
+                {phaseCases.map((pc) => (
+                  <div key={pc.phaseId} className="ms-section-card">
+                    <div className="ms-section-title">
+                      {pc.phaseName}
+                      {pc.case?.ticketNumber && (
+                        <span style={{ fontWeight: 400, fontSize: 12, fontFamily: "monospace", color: "#0891b2", marginLeft: 8 }}>{pc.case.ticketNumber}</span>
+                      )}
+                      <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(pc.timeEntries ?? []).length} entries · {(pc.loggedHours ?? 0).toFixed(1)}h</span>
+                    </div>
+                    <CaseTimeEntriesTable entries={pc.timeEntries ?? []} />
+                  </div>
+                ))}
+
+                {/* Grand total across every case, to compare with SOW above. */}
+                <div className="ms-section-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
+                    Total logged across all cases
+                    <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>{totalEntryCount} entries</span>
+                  </span>
+                  <span style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{engineerHours.toFixed(1)}h</span>
+                </div>
+              </>
             )}
 
           </div>
