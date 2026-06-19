@@ -2626,7 +2626,12 @@ export default function ProjectDetailPage() {
         // Phase-scoped projects roll up every phase case alongside the project
         // case (if any) so the total accounts against the one opportunity SOW.
         const phaseCases = caseCompliance?.phaseCases ?? [];
-        const isPhaseScoped = !!p.phase_scoped_visibility && phaseCases.length > 0;
+        // phaseScoped = the project flag (gates the Opportunity tile so a PM can
+        // pin the SOW during setup, before any phase case is linked).
+        // hasPhaseCases = at least one phase case linked (gates the per-phase
+        // time-entries rollup view).
+        const phaseScoped = !!p.phase_scoped_visibility;
+        const hasPhaseCases = phaseScoped && phaseCases.length > 0;
         const projectEngineerHours = (caseCompliance?.timeEntries ?? []).reduce((sum, e) => sum + (e.durationHours ?? 0), 0);
         const phaseEngineerHours = phaseCases.reduce((sum, pc) => sum + (pc.loggedHours ?? 0), 0);
         const engineerHours = projectEngineerHours + phaseEngineerHours;
@@ -2717,8 +2722,9 @@ export default function ProjectDetailPage() {
 
                 {/* Opportunity tile — visible once a project case is linked, or
                     whenever the project is phase-scoped (so phase-only projects
-                    can still pin the SOW to account their phase totals against). */}
-                {(caseCompliance?.case || isPhaseScoped) && (
+                    can still pin the SOW to account their phase totals against),
+                    even before the first phase case is linked. */}
+                {(caseCompliance?.case || phaseScoped) && (
                   <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 8, padding: "10px 12px", background: "#f8fafc" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>Opportunity</span>
@@ -2796,7 +2802,7 @@ export default function ProjectDetailPage() {
                     <div className="ms-info-label">Hours Logged (CRM)</div>
                     <div className="ms-info-value" style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{engineerHours.toFixed(1)}</div>
                     <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
-                      {totalEntryCount} entries{isPhaseScoped ? ` · ${phaseCases.length} phase case${phaseCases.length !== 1 ? "s" : ""}` : ""}
+                      {totalEntryCount} entries{hasPhaseCases ? ` · ${phaseCases.length} phase case${phaseCases.length !== 1 ? "s" : ""}` : ""}
                     </div>
                   </div>
                   {externalTotal > 0 && (
@@ -2855,8 +2861,8 @@ export default function ProjectDetailPage() {
             )}
 
             {/* ── Time Entries ── */}
-            {/* Single project case (non-phase-scoped, unchanged behavior) */}
-            {!isPhaseScoped && caseCompliance?.case && (
+            {/* Single project case (no phase cases to roll up — unchanged behavior) */}
+            {!hasPhaseCases && caseCompliance?.case && (
               <div className="ms-section-card">
                 <div className="ms-section-title">
                   Time Entries
@@ -2866,9 +2872,9 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            {/* Phase-scoped: one time-entries view per case, all accounting
+            {/* Phase cases linked: one time-entries view per case, all accounting
                 against the single opportunity SOW shown above. */}
-            {isPhaseScoped && (
+            {hasPhaseCases && (
               <>
                 {caseCompliance?.case && (
                   <div className="ms-section-card">
