@@ -450,6 +450,17 @@ export type DynamicsQuote = {
   opportunityId: string | null;
 };
 
+/** One phase's linked Dynamics case + its time entries, rolled up on the CRM
+ *  Case tab for phase-scoped projects (phase_scoped_visibility=1). */
+export type PhaseCaseCompliance = {
+  phaseId: string;
+  phaseName: string;
+  caseId: string;
+  case: SupportCase | null;
+  timeEntries: CaseTimeEntry[];
+  loggedHours: number;
+};
+
 export type CaseComplianceData = {
   case: SupportCase | null;
   timeEntries: CaseTimeEntry[];
@@ -464,6 +475,8 @@ export type CaseComplianceData = {
   /** Sum of external-resource amounts (USD) on the project. Surfaced on the
    *  CRM Case tab as extra hours used (total / 165). */
   externalResourcesTotal: number;
+  /** Per-phase cases on phase-scoped projects. Empty otherwise. */
+  phaseCases: PhaseCaseCompliance[];
 };
 
 export type ExternalResourceStatus = "new" | "posted" | "assigned" | "in_progress" | "closed" | "billed";
