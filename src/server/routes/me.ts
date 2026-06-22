@@ -70,13 +70,13 @@ app.get("/profile", async (c) => {
   await ensureUserRow(c.env.DB, auth);
   const row = await c.env.DB
     .prepare(
-      "SELECT id, email, name, role, organization_name, title, phone, scheduler_url, avatar_url, avatar_r2_key FROM users WHERE id = ? OR email = ? LIMIT 1"
+      "SELECT id, email, name, role, organization_name, title, phone, scheduler_url, email_notifications, avatar_url, avatar_r2_key FROM users WHERE id = ? OR email = ? LIMIT 1"
     )
     .bind(auth.user.id, auth.user.email)
     .first<{
       id: string; email: string; name: string | null; role: string;
       organization_name: string | null; title: string | null; phone: string | null;
-      scheduler_url: string | null; avatar_url: string | null; avatar_r2_key: string | null;
+      scheduler_url: string | null; email_notifications: string | null; avatar_url: string | null; avatar_r2_key: string | null;
     }>();
   if (!row) throw new HTTPException(404, { message: "User not found" });
   return c.json({
@@ -88,6 +88,7 @@ app.get("/profile", async (c) => {
     title: row.title,
     phone: row.phone,
     scheduler_url: row.scheduler_url,
+    email_notifications: row.email_notifications ?? "all",
     avatar_url: row.avatar_url,
     has_custom_avatar: !!row.avatar_r2_key,
   });
@@ -102,6 +103,7 @@ const profilePatchSchema = z.object({
   // Schedule link is vendor-neutral — Zoom Scheduler, RingCentral's
   // scheduler app, Calendly, etc. We don't whitelist domains.
   scheduler_url: z.string().max(2000).nullable().optional(),
+  email_notifications: z.enum(["all", "important", "off"]).optional(),
 });
 
 app.patch("/profile", async (c) => {

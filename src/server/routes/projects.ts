@@ -5,7 +5,7 @@ import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject, canViewProject } from "../services/accessService";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
-import { sendEmail } from "../services/emailService";
+import { maybeSendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
@@ -499,14 +499,14 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
       .bind(projectId)
       .all<{ id: string; email: string; name: string }>();
 
-    const recipients: { email: string; name: string }[] = [];
+    const recipients: { id: string; email: string; name: string }[] = [];
 
     if (before.pm_user_id) {
       const pm = await db
         .prepare("SELECT email, name FROM users WHERE id = ? AND is_active = 1 LIMIT 1")
         .bind(before.pm_user_id)
         .first<{ email: string; name: string }>();
-      if (pm) recipients.push(pm);
+      if (pm) recipients.push({ id: before.pm_user_id, ...pm });
     }
 
     for (const ae of partnerAes.results ?? []) {
@@ -521,7 +521,7 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
         appUrl,
         projectId,
       });
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, recipient.id, "important", {
         to: recipient.email,
         subject: `Project at risk: ${before.name}`,
         html,

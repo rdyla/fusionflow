@@ -1,0 +1,16 @@
+-- Per-user email notification preference. Controls how many project
+-- notification emails a user receives. The gate reads the RECIPIENT's
+-- preference fresh from D1 at send time, so changes take effect immediately
+-- (no re-login needed, unlike session-cached flags).
+--
+--   all       — every notification email (default; preserves prior behavior)
+--   important — only high-signal emails (assigned to you, task blocked,
+--               project at-risk, risk assigned to you, partner notes); skips
+--               routine FYI emails such as the PM "task updated" email that
+--               fires on every field edit
+--   off       — no project notification emails (transactional account-invite
+--               and login OTP emails still send)
+--
+-- Both the user (self-service profile) and admins (Admin Users edit modal) can
+-- set it. Soft override: last writer wins.
+ALTER TABLE users ADD COLUMN email_notifications TEXT NOT NULL DEFAULT 'all';

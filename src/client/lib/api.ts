@@ -72,6 +72,7 @@ export type User = {
   zoom_user_id?: string | null;
   can_open_cases?: boolean;
   cs_permission?: "none" | "user" | "power_user";
+  email_notifications?: "all" | "important" | "off";
 };
 
 export type MyProfile = {
@@ -83,6 +84,7 @@ export type MyProfile = {
   title: string | null;
   phone: string | null;
   scheduler_url: string | null;
+  email_notifications: "all" | "important" | "off";
   avatar_url: string | null;
   has_custom_avatar: boolean;
 };
@@ -1949,6 +1951,7 @@ export const api = {
       manager_id?: string | null;
       zoom_user_id?: string | null;
       cs_permission?: "none" | "user" | "power_user";
+      email_notifications?: "all" | "important" | "off";
     }
   ) =>
     request<User>(`/admin/users/${id}`, {
@@ -2525,6 +2528,7 @@ export const api = {
     title?: string | null;
     phone?: string | null;
     scheduler_url?: string | null;
+    email_notifications?: "all" | "important" | "off";
   }) =>
     request<{ ok: true }>("/me/profile", {
       method: "PATCH",
