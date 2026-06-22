@@ -2513,10 +2513,10 @@ export const api = {
     ),
 
   // ── Settings ─────────────────────────────────────────────────────────────────
-  publicSettings: () => request<{ demoVendor: "zoom" | "ringcentral" | null }>("/settings/public"),
-  adminGetDemoMode: () => request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode"),
-  adminSetDemoMode: (vendor: "zoom" | "ringcentral" | null) =>
-    request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode", {
+  publicSettings: () => request<{ demoVendor: "zoom" | "ringcentral" | "webex" | null }>("/settings/public"),
+  adminGetDemoMode: () => request<{ vendor: "zoom" | "ringcentral" | "webex" | null }>("/admin/settings/demo-mode"),
+  adminSetDemoMode: (vendor: "zoom" | "ringcentral" | "webex" | null) =>
+    request<{ vendor: "zoom" | "ringcentral" | "webex" | null }>("/admin/settings/demo-mode", {
       method: "PUT",
       body: JSON.stringify({ vendor }),
     }),

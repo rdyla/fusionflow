@@ -26,6 +26,7 @@ const PARTNER_DOMAINS: Record<string, string> = {
   "zoom.com": "Zoom",
   "zoom.us": "Zoom",
   "ringcentral.com": "RingCentral",
+  "cisco.com": "Cisco",
 };
 
 type ContactCompany = {
