@@ -116,6 +116,7 @@ const updateUserSchema = z.object({
   manager_id: z.string().nullable().optional(),
   zoom_user_id: z.string().nullable().optional(),
   cs_permission: z.enum(["none", "user", "power_user"]).optional(),
+  email_notifications: z.enum(["all", "important", "off"]).optional(),
 });
 
 app.patch("/users/:id", requireRole("admin"), async (c) => {

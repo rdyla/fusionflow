@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
-import { sendEmail } from "../services/emailService";
+import { maybeSendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
 import {
@@ -118,7 +118,7 @@ app.post("/:id/tasks", async (c) => {
     ]);
     if (assignee && project) {
       const appUrl = c.env.APP_URL ?? "";
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, created.assignee_user_id, "important", {
         to: assignee.email,
         subject: `You've been assigned: ${created.title}`,
         html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: created.title, projectName: project.name, dueDate: created.due_date, priority: created.priority, appUrl, projectId }),
@@ -257,7 +257,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   if (assigneeChanged && updated?.assignee_user_id) {
     const assignee = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(updated.assignee_user_id).first<{ email: string; name: string }>();
     if (assignee && project) {
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, updated.assignee_user_id, "important", {
         to: assignee.email,
         subject: `You've been assigned: ${updated.title}`,
         html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: updated.title, projectName: project.name, dueDate: updated.due_date, priority: updated.priority, appUrl, projectId }),
@@ -280,7 +280,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   if (!justBlocked && project?.pm_user_id && project.pm_user_id !== auth.user.id && updated) {
     const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
     if (pm) {
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, project.pm_user_id, "routine", {
         to: pm.email,
         subject: `Task updated on ${project.name}: ${updated.title}`,
         html: pmTaskUpdate({ pmName: pm.name ?? pm.email, taskTitle: updated.title, projectName: project.name, updatedByName: auth.user.name ?? auth.user.email, status: updated.status, appUrl, projectId }),
@@ -304,7 +304,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
       assigneeName = a?.name ?? null;
     }
     if (pm && project) {
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, project.pm_user_id, "important", {
         to: pm.email,
         subject: `Task blocked: ${updated?.title ?? ""}`,
         html: taskBlocked({ pmName: pm.name ?? pm.email, taskTitle: updated?.title ?? "", projectName: project.name, assigneeName, appUrl, projectId }),
