@@ -12,7 +12,8 @@
 import { useEffect, useState } from "react";
 import { api } from "./api";
 
-export type DemoVendor = "zoom" | "ringcentral" | null;
+// "webex" is the underlying vendor value for the Cisco demo lens.
+export type DemoVendor = "zoom" | "ringcentral" | "webex" | null;
 
 let current: DemoVendor = null;
 let loaded = false;

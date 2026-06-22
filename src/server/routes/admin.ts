@@ -629,14 +629,15 @@ app.get("/settings/demo-mode", requireRole("admin"), async (c) => {
 });
 
 const demoModeSchema = z.object({
-  vendor: z.enum(["zoom", "ringcentral"]).nullable(),
+  // "webex" backs the Cisco demo (Cisco Webex Calling).
+  vendor: z.enum(["zoom", "ringcentral", "webex"]).nullable(),
 });
 
 app.put("/settings/demo-mode", requireRole("admin"), async (c) => {
   const auth = c.get("auth");
   const parsed = demoModeSchema.safeParse(await c.req.json());
   if (!parsed.success) {
-    throw new HTTPException(400, { message: "vendor must be 'zoom', 'ringcentral', or null" });
+    throw new HTTPException(400, { message: "vendor must be 'zoom', 'ringcentral', 'webex', or null" });
   }
   await setDemoVendor(c.env.DB, parsed.data.vendor, auth.user.id);
   return c.json({ vendor: parsed.data.vendor });

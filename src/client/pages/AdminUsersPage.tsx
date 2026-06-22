@@ -34,7 +34,7 @@ const ROLE_COLOR: Record<Role, string> = {
   client: "#d97706",
 };
 
-const ORGS = ["Packet Fusion", "Zoom", "RingCentral"] as const;
+const ORGS = ["Packet Fusion", "Zoom", "RingCentral", "Cisco"] as const;
 type Org = (typeof ORGS)[number];
 
 // Email domain → org auto-detection (mirrors server-side PARTNER_DOMAINS)
@@ -43,6 +43,7 @@ const ORG_DOMAINS: Record<string, Org> = {
   "zoom.com": "Zoom",
   "zoom.us": "Zoom",
   "ringcentral.com": "RingCentral",
+  "cisco.com": "Cisco",
 };
 
 const EMPTY_CREATE_FORM = { email: "", name: "", organization_name: "" as Org | "", role: "pm" as Role };
@@ -239,6 +240,7 @@ export default function AdminUsersPage() {
     "Packet Fusion": users.filter((u) => u.organization_name === "Packet Fusion").length,
     Zoom: users.filter((u) => u.organization_name === "Zoom").length,
     RingCentral: users.filter((u) => u.organization_name === "RingCentral").length,
+    Cisco: users.filter((u) => u.organization_name === "Cisco").length,
   };
 
   const visibleUsers =

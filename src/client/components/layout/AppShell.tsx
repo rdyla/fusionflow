@@ -522,6 +522,7 @@ function DemoModeRow() {
         <option value="off">Off</option>
         <option value="zoom">Zoom</option>
         <option value="ringcentral">RingCentral</option>
+        <option value="webex">Cisco</option>
       </select>
     </div>
   );
