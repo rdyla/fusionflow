@@ -1258,19 +1258,37 @@ export default function ProjectDetailPage() {
         );
 
         // ── Account Team: PF AE / SA / CSM tied to the customer record ─────────────
-        const accountTeamRows: PersonRow[] = ([
-          { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email,  phone: project.customer_pf_ae_phone,  scheduler: project.customer_pf_ae_scheduler_url  },
-          { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email,  phone: project.customer_pf_sa_phone,  scheduler: project.customer_pf_sa_scheduler_url  },
-          { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email, phone: project.customer_pf_csm_phone, scheduler: project.customer_pf_csm_scheduler_url },
-        ] as const).filter((m) => !!m.name).map((m) => ({
-          key: m.role,
-          name: m.name!,
-          label: m.role,
-          email: m.email,
-          phone: m.phone,
-          scheduler: m.scheduler,
-          photo: m.email ? customerTeamPhotoMap[m.email] : null,
-        }));
+        // CRM-pulled primaries (read-only) followed by any ad-hoc AEs added on
+        // THIS project. The ad-hoc ones live on project_staff (role 'ae'), are
+        // local-only, and are never synced to/from CRM — the CRM AE lives on the
+        // customer record, so crm-sync leaves these untouched.
+        const accountTeamRows: PersonRow[] = [
+          ...([
+            { role: "AE",  name: project.customer_pf_ae_name,  email: project.customer_pf_ae_email,  phone: project.customer_pf_ae_phone,  scheduler: project.customer_pf_ae_scheduler_url  },
+            { role: "SA",  name: project.customer_pf_sa_name,  email: project.customer_pf_sa_email,  phone: project.customer_pf_sa_phone,  scheduler: project.customer_pf_sa_scheduler_url  },
+            { role: "CSM", name: project.customer_pf_csm_name, email: project.customer_pf_csm_email, phone: project.customer_pf_csm_phone, scheduler: project.customer_pf_csm_scheduler_url },
+          ] as const).filter((m) => !!m.name).map((m) => ({
+            key: m.role,
+            name: m.name!,
+            label: m.role,
+            email: m.email,
+            phone: m.phone,
+            scheduler: m.scheduler,
+            photo: m.email ? customerTeamPhotoMap[m.email] : null,
+          })),
+          ...projectStaff
+            .filter((s) => s.staff_role === "ae")
+            .map((s) => ({
+              key: s.id,
+              name: s.name ?? s.email,
+              label: "AE",
+              email: s.email,
+              phone: s.phone,
+              scheduler: s.scheduler_url,
+              photo: staffPhotoMap[s.email] ?? s.avatar_url,
+              onRemove: canEdit ? () => handleRemoveStaff(s.id) : undefined,
+            })),
+        ];
 
         // ── Project Team: PM + internal staff + partner AEs ────────────────────────
         const pmRow: PersonRow | null = (() => {
@@ -1410,6 +1428,9 @@ export default function ProjectDetailPage() {
                 accent: ACCENT_TEAL,
                 rows: accountTeamRows,
                 empty: "No customer Account Team set in CRM.",
+                action: canEdit ? (
+                  <button className="ms-btn-ghost" style={ghostBtn} onClick={() => { setShowStaffModal(true); setAddStaffUserId(""); setAddStaffRole("ae"); }}>+ AE</button>
+                ) : undefined,
               })}
               {renderSection({
                 title: "Project Team",
@@ -2116,6 +2137,7 @@ export default function ProjectDetailPage() {
           folderUrl={project.sharepoint_folder_url}
           owner={{ kind: "project", id: project.id }}
           canEdit={canEdit || isStaffedEngineer}
+          isExternal={currentUserRole === "client" || currentUserRole === "partner_ae"}
           onFolderCreated={(url) => setProject({ ...project, sharepoint_folder_url: url })}
         />
       )}
@@ -3362,6 +3384,7 @@ export default function ProjectDetailPage() {
                 <span>Role on Project</span>
                 <select className="ms-input" value={addStaffRole} onChange={(e) => { setAddStaffRole(e.target.value); setAddStaffUserId(""); }}>
                   <option value="">— Select role —</option>
+                  <option value="ae">Account Executive (Account Team)</option>
                   <option value="engineer">Implementation Engineer</option>
                   <option value="pm">Project Manager</option>
                 </select>

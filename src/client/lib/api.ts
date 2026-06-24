@@ -72,6 +72,7 @@ export type User = {
   zoom_user_id?: string | null;
   can_open_cases?: boolean;
   cs_permission?: "none" | "user" | "power_user";
+  email_notifications?: "all" | "important" | "off";
 };
 
 export type MyProfile = {
@@ -83,6 +84,7 @@ export type MyProfile = {
   title: string | null;
   phone: string | null;
   scheduler_url: string | null;
+  email_notifications: "all" | "important" | "off";
   avatar_url: string | null;
   has_custom_avatar: boolean;
 };
@@ -1979,6 +1981,7 @@ export const api = {
       manager_id?: string | null;
       zoom_user_id?: string | null;
       cs_permission?: "none" | "user" | "power_user";
+      email_notifications?: "all" | "important" | "off";
     }
   ) =>
     request<User>(`/admin/users/${id}`, {
@@ -2540,10 +2543,10 @@ export const api = {
     ),
 
   // ── Settings ─────────────────────────────────────────────────────────────────
-  publicSettings: () => request<{ demoVendor: "zoom" | "ringcentral" | null }>("/settings/public"),
-  adminGetDemoMode: () => request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode"),
-  adminSetDemoMode: (vendor: "zoom" | "ringcentral" | null) =>
-    request<{ vendor: "zoom" | "ringcentral" | null }>("/admin/settings/demo-mode", {
+  publicSettings: () => request<{ demoVendor: "zoom" | "ringcentral" | "webex" | null }>("/settings/public"),
+  adminGetDemoMode: () => request<{ vendor: "zoom" | "ringcentral" | "webex" | null }>("/admin/settings/demo-mode"),
+  adminSetDemoMode: (vendor: "zoom" | "ringcentral" | "webex" | null) =>
+    request<{ vendor: "zoom" | "ringcentral" | "webex" | null }>("/admin/settings/demo-mode", {
       method: "PUT",
       body: JSON.stringify({ vendor }),
     }),
@@ -2555,6 +2558,7 @@ export const api = {
     title?: string | null;
     phone?: string | null;
     scheduler_url?: string | null;
+    email_notifications?: "all" | "important" | "off";
   }) =>
     request<{ ok: true }>("/me/profile", {
       method: "PATCH",

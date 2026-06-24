@@ -21,6 +21,13 @@ type Props = {
   owner?: SharePointOwner;
   /** Gates the folder-create button + per-folder visibility toggle to editors. */
   canEdit?: boolean;
+  /** External roles (client / partner_ae) authenticate to native SharePoint
+   *  URLs with their own Microsoft identity, which Entra rejects unless they're
+   *  a guest in the Packet Fusion tenant. When true, the browser never links to
+   *  SharePoint Online: file names use the pre-authenticated download URL and
+   *  the "Open SharePoint" shortcut is suppressed, so everything stays inside
+   *  the app's app-only access model. */
+  isExternal?: boolean;
   /** Called when the retrofit endpoint successfully creates/adopts a folder
    *  — parent should refresh the record so the URL is persisted on subsequent
    *  renders without another retrofit call. */
@@ -61,7 +68,7 @@ function formatDate(iso: string | null) {
   return iso.slice(0, 10);
 }
 
-export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, owner, canEdit, onFolderCreated }: Props) {
+export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, owner, canEdit, isExternal, onFolderCreated }: Props) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ownerNoun = owner?.kind === "solution" ? "solution" : "project";
@@ -255,7 +262,14 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
           </div>
         )}
 
-        {sharepointUrl ? (
+        {isExternal ? (
+          /* External roles can't open SharePoint Online directly (Entra rejects
+             non-guest accounts). Don't expose the native link — documents are
+             surfaced in-app once a portal folder is shared. */
+          <div style={{ color: "#a19f9d", fontSize: 14 }}>
+            No documents have been shared in the portal for this {ownerNoun} yet. Your Packet Fusion contact can share them here.
+          </div>
+        ) : sharepointUrl ? (
           <div>
             <div style={{ color: "#64748b", fontSize: 13, marginBottom: 12 }}>
               {owner && canEdit ? "Or open the customer's SharePoint root directly:" : "No document library linked in Dynamics CRM for this record. Use the SharePoint link directly:"}
@@ -409,6 +423,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                   key={file.id}
                   file={file}
                   canEdit={!!canEdit}
+                  isExternal={!!isExternal}
                   owner={owner ?? null}
                   isDeleting={deletingId === file.id}
                   onNavigateInto={() => navigateInto(file)}
@@ -434,6 +449,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
 function FileRow({
   file,
   canEdit,
+  isExternal,
   owner,
   isDeleting,
   onNavigateInto,
@@ -443,6 +459,7 @@ function FileRow({
 }: {
   file: SPFile;
   canEdit: boolean;
+  isExternal: boolean;
   owner: SharePointOwner | null;
   isDeleting: boolean;
   onNavigateInto: () => void;
@@ -505,6 +522,22 @@ function FileRow({
           >
             {file.name}
           </button>
+        ) : isExternal ? (
+          /* External roles can't open the native SharePoint URL (Entra rejects
+             non-guest accounts). Use the pre-authenticated download URL so the
+             file opens/downloads without a Packet Fusion tenant sign-in. Fall
+             back to plain text on the rare file with no download URL. */
+          file.downloadUrl ? (
+            <a
+              href={file.downloadUrl}
+              download={file.name}
+              style={{ color: "#1e293b", fontWeight: 600, fontSize: 14, textDecoration: "none" }}
+            >
+              {file.name}
+            </a>
+          ) : (
+            <span style={{ color: "#1e293b", fontWeight: 600, fontSize: 14 }}>{file.name}</span>
+          )
         ) : (
           <a
             href={file.webUrl}

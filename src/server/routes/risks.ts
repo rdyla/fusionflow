@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject } from "../services/accessService";
-import { sendEmail } from "../services/emailService";
+import { maybeSendEmail } from "../services/emailService";
 import { riskAssigned, pmRiskNotification } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
 import { syncProjectStatus } from "../lib/teamUtils";
@@ -78,7 +78,7 @@ app.post("/:id/risks", async (c) => {
     if (created.owner_user_id) {
       const owner = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(created.owner_user_id).first<{ email: string; name: string }>();
       if (owner) {
-        c.executionCtx.waitUntil(sendEmail(c.env, {
+        c.executionCtx.waitUntil(maybeSendEmail(c.env, db, created.owner_user_id, "important", {
           to: owner.email,
           subject: `You've been assigned a risk: ${created.title}`,
           html: riskAssigned({ ownerName: owner.name ?? owner.email, riskTitle: created.title, riskDescription: created.description, projectName: project?.name ?? "", severity: created.severity, appUrl, projectId }),
@@ -100,7 +100,7 @@ app.post("/:id/risks", async (c) => {
     if (project?.pm_user_id && project.pm_user_id !== auth.user.id) {
       const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
       if (pm) {
-        c.executionCtx.waitUntil(sendEmail(c.env, {
+        c.executionCtx.waitUntil(maybeSendEmail(c.env, db, project.pm_user_id, "routine", {
           to: pm.email,
           subject: `Risk added on ${project.name}: ${created.title}`,
           html: pmRiskNotification({ pmName: pm.name ?? pm.email, riskTitle: created.title, riskDescription: created.description, projectName: project.name, severity: created.severity, status: "open", isNew: true, appUrl, projectId }),
@@ -195,7 +195,7 @@ app.patch("/:id/risks/:riskId", async (c) => {
   if (project?.pm_user_id && project.pm_user_id !== auth.user.id && updated) {
     const pm = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ email: string; name: string }>();
     if (pm) {
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, project.pm_user_id, "routine", {
         to: pm.email,
         subject: `Risk updated on ${project.name}: ${updated.title}`,
         html: pmRiskNotification({ pmName: pm.name ?? pm.email, riskTitle: updated.title, riskDescription: updated.description, projectName: project.name, severity: updated.severity, status: updated.status, isNew: false, appUrl, projectId }),

@@ -34,6 +34,7 @@ export default function ProfilePage() {
   const [title, setTitle] = useState("");
   const [phone, setPhone] = useState("");
   const [schedulerUrl, setSchedulerUrl] = useState("");
+  const [emailNotifications, setEmailNotifications] = useState<"all" | "important" | "off">("all");
 
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -45,6 +46,7 @@ export default function ProfilePage() {
         setTitle(p.title ?? "");
         setPhone(p.phone ?? "");
         setSchedulerUrl(p.scheduler_url ?? "");
+        setEmailNotifications(p.email_notifications ?? "all");
       })
       .catch((err) => showToast(err instanceof Error ? err.message : "Failed to load profile", "error"))
       .finally(() => setLoading(false));
@@ -60,6 +62,7 @@ export default function ProfilePage() {
         title: title.trim() ? title.trim() : null,
         phone: phone.trim() ? phone.trim() : null,
         scheduler_url: schedulerUrl.trim() ? schedulerUrl.trim() : null,
+        email_notifications: emailNotifications,
       });
       showToast("Profile saved", "success");
       const fresh = await api.getMyProfile();
@@ -267,6 +270,21 @@ export default function ProfilePage() {
               className="ms-input"
               style={{ width: "100%" }}
             />
+          </Field>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <Field label="Email notifications" hint="Important only skips routine FYI emails (e.g. every task edit). Off stops project notification emails; account & login emails still send.">
+            <select
+              value={emailNotifications}
+              onChange={(e) => setEmailNotifications(e.target.value as "all" | "important" | "off")}
+              className="ms-input"
+              style={{ width: "100%" }}
+            >
+              <option value="all">All — every notification</option>
+              <option value="important">Important only</option>
+              <option value="off">Off</option>
+            </select>
           </Field>
         </div>
 

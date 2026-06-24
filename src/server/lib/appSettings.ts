@@ -4,14 +4,16 @@
  * keyed row); we hit D1 once per request from the endpoints that care.
  */
 
-export type DemoVendor = "zoom" | "ringcentral" | null;
+// "webex" is the underlying vendor value for Cisco (Cisco Webex Calling) — the
+// Cisco demo lens filters projects/customers with vendor=webex.
+export type DemoVendor = "zoom" | "ringcentral" | "webex" | null;
 
 export async function getDemoVendor(db: D1Database): Promise<DemoVendor> {
   const row = await db
     .prepare("SELECT value FROM app_settings WHERE key = 'demo_mode' LIMIT 1")
     .first<{ value: string | null }>();
   const v = row?.value?.toLowerCase().trim() ?? null;
-  if (v === "zoom" || v === "ringcentral") return v;
+  if (v === "zoom" || v === "ringcentral" || v === "webex") return v;
   return null;
 }
 

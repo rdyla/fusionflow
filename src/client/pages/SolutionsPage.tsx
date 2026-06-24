@@ -179,6 +179,9 @@ export default function SolutionsPage() {
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { demoVendor } = useDemoMode();
+  // The UCaaS solution journey picker only models zoom/ringcentral/agnostic, so
+  // the Cisco (webex) demo lens doesn't constrain it — null leaves it unfiltered.
+  const journeyDemoVendor = demoVendor === "zoom" || demoVendor === "ringcentral" ? demoVendor : null;
 
   useEffect(() => {
     api.me().then((me) => setCurrentRole(me.role)).catch(() => {});
@@ -361,7 +364,7 @@ export default function SolutionsPage() {
         </div>
         {canManageSolutions && (
           <button className="ms-btn-primary" onClick={() => {
-            setForm({ ...EMPTY_FORM, ucaas_vendor: demoVendor ?? "" });
+            setForm({ ...EMPTY_FORM, ucaas_vendor: journeyDemoVendor ?? "" });
             setShowCreate(true);
           }}>+ New Solution</button>
         )}
@@ -668,7 +671,7 @@ export default function SolutionsPage() {
                   {/* Vendor tabs */}
                   <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
                     {(["zoom", "ringcentral", "agnostic"] as const)
-                      .filter((v) => !demoVendor || v === demoVendor)
+                      .filter((v) => !journeyDemoVendor || v === journeyDemoVendor)
                       .map((v) => {
                       const labels: Record<string, string> = { zoom: "Zoom", ringcentral: "RingCentral", agnostic: "Agnostic" };
                       const active = form.ucaas_vendor === v;
