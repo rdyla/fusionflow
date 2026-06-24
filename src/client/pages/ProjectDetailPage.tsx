@@ -733,8 +733,8 @@ export default function ProjectDetailPage() {
     try {
       const added = await api.addProjectStaff(project.id, { user_id: addStaffUserId, staff_role: addStaffRole });
       setProjectStaff((prev) => [...prev, added]);
-      // When assigning a PM via staff, also set pm_user_id so it surfaces in their project list
-      if (addStaffRole === "pm") {
+      // Only promote to lead PM if there is no lead PM yet — additional PMs stay as staff
+      if (addStaffRole === "pm" && !project.pm_user_id) {
         const updated = await api.updateProject(project.id, { pm_user_id: addStaffUserId });
         setProject((prev) => prev ? { ...prev, ...updated } : updated);
       }
@@ -755,12 +755,28 @@ export default function ProjectDetailPage() {
 
   async function handleRemoveStaff(staffId: string) {
     if (!project) return;
+    const removing = projectStaff.find((s) => s.id === staffId);
     try {
       await api.removeProjectStaff(project.id, staffId);
       setProjectStaff((prev) => prev.filter((s) => s.id !== staffId));
+      if (removing?.staff_role === "pm" && removing.user_id === project.pm_user_id) {
+        const updated = await api.updateProject(project.id, { pm_user_id: null });
+        setProject((prev) => prev ? { ...prev, ...updated } : updated);
+      }
       showToast("Staff member removed.", "success");
     } catch {
       showToast("Failed to remove staff member", "error");
+    }
+  }
+
+  async function handleMakeLeadPm(userId: string) {
+    if (!project) return;
+    try {
+      const updated = await api.updateProject(project.id, { pm_user_id: userId });
+      setProject((prev) => prev ? { ...prev, ...updated } : updated);
+      showToast("Lead PM updated.", "success");
+    } catch {
+      showToast("Failed to update Lead PM", "error");
     }
   }
 
@@ -1162,6 +1178,7 @@ export default function ProjectDetailPage() {
           photo?: string | null;
           accent?: Accent;
           onRemove?: () => void;
+          onMakeLead?: () => void;
         };
 
         const renderPerson = (p: PersonRow, accent: Accent) => {
@@ -1183,6 +1200,9 @@ export default function ProjectDetailPage() {
                 {p.jobTitle && <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>{p.jobTitle}</div>}
               </div>
               <ContactIcons email={p.email} phone={p.phone} schedulerUrl={p.scheduler} accent={accent.fg} />
+              {p.onMakeLead && (
+                <button onClick={p.onMakeLead} title="Make Lead PM" style={{ background: "none", border: "none", color: "#f59e0b", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "4px 8px", flexShrink: 0 }}>★</button>
+              )}
               {p.onRemove && (
                 <button onClick={p.onRemove} title="Remove" style={{ background: "none", border: "none", color: "rgba(209,52,56,0.5)", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "4px 8px", flexShrink: 0 }}>✕</button>
               )}
@@ -1227,7 +1247,7 @@ export default function ProjectDetailPage() {
           return {
             key: "pm",
             name: pmName ?? pmEmail ?? "",
-            label: "PM",
+            label: "Lead PM",
             email: pmEmail,
             phone: pmFromMap?.phone ?? project.pm_phone ?? null,
             scheduler: pmFromMap?.scheduler_url ?? project.pm_scheduler_url ?? null,
@@ -1247,6 +1267,7 @@ export default function ProjectDetailPage() {
             phone: s.phone,
             scheduler: s.scheduler_url,
             photo: staffPhotoMap[s.email] ?? s.avatar_url,
+            onMakeLead: (canEdit && s.staff_role === "pm") ? () => handleMakeLeadPm(s.user_id) : undefined,
             onRemove: canEdit ? () => handleRemoveStaff(s.id) : undefined,
           }));
         const partnerAeRows: PersonRow[] = projectStaff
