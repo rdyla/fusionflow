@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
-import { canEditProject, canViewProject } from "../services/accessService";
+import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { maybeSendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
@@ -543,9 +543,9 @@ app.get("/:id/case", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await db
-    .prepare("SELECT crm_case_id, crm_opportunity_id, customer_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT crm_case_id, crm_opportunity_id, customer_id, phase_scoped_visibility FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ crm_case_id: string | null; crm_opportunity_id: string | null; customer_id: string | null }>();
+    .first<{ crm_case_id: string | null; crm_opportunity_id: string | null; customer_id: string | null; phase_scoped_visibility: number | null }>();
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
   // External-resource spend (D1, independent of any CRM case) — surfaced on the
@@ -556,21 +556,76 @@ app.get("/:id/case", async (c) => {
     .first<{ total: number }>();
   const externalResourcesTotal = extRow?.total ?? 0;
 
-  if (!project.crm_case_id) {
-    return c.json({ case: null, timeEntries: [], quotedHours: null, sowQuote: null, accountOpportunities: [], externalResourcesTotal });
+  // Phase-level cases (LACCD-style phase-scoped projects): each phase may track
+  // its own Dynamics case. Roll them all up so the CRM Case tab can account
+  // total logged hours across every phase against the project's opportunity SOW.
+  // Only meaningful when phase_scoped_visibility=1 (mirrors the time-entry
+  // routing gate in tasks.ts).
+  type PhaseCaseCompliance = {
+    phaseId: string;
+    phaseName: string;
+    caseId: string;
+    case: Awaited<ReturnType<typeof getCase>>;
+    timeEntries: Awaited<ReturnType<typeof getCaseTimeEntries>>;
+    loggedHours: number;
+  };
+  let phaseCases: PhaseCaseCompliance[] = [];
+  if (project.phase_scoped_visibility) {
+    // Respect phase-scoped visibility: a client attached to only some phases
+    // must not receive other phases' case ids / metadata / time entries through
+    // this rollup. Internal roles resolve to "ALL". Mirrors the visiblePhaseIds
+    // filter already applied by the tasks/phases routes.
+    const vp = await visiblePhaseIds(db, auth.user, projectId);
+    const vpIds = vp === "ALL" ? [] : vp;
+    const phaseClause = vp === "ALL" ? "" : ` AND id IN (${vpIds.map(() => "?").join(",")})`;
+    // vp is a non-ALL empty array only if the caller can see no phases — skip
+    // the query entirely (canViewProject already fails closed in that case).
+    const phaseRows = vp !== "ALL" && vpIds.length === 0
+      ? []
+      : (await db
+          .prepare(
+            `SELECT id, name, crm_case_id FROM phases WHERE project_id = ? AND crm_case_id IS NOT NULL AND TRIM(crm_case_id) <> ''${phaseClause} ORDER BY display_order ASC, name ASC`
+          )
+          .bind(projectId, ...vpIds)
+          .all<{ id: string; name: string; crm_case_id: string }>()).results ?? [];
+
+    phaseCases = await Promise.all(
+      phaseRows.map(async (ph) => {
+        const [caseData, entries] = await Promise.all([
+          getCase(c.env, ph.crm_case_id),
+          getCaseTimeEntries(c.env, ph.crm_case_id),
+        ]);
+        return {
+          phaseId: ph.id,
+          phaseName: ph.name,
+          caseId: ph.crm_case_id,
+          case: caseData,
+          timeEntries: entries,
+          loggedHours: entries.reduce((s, e) => s + (e.durationHours ?? 0), 0),
+        };
+      })
+    );
   }
 
-  // Fetch case and time entries in parallel
-  const [caseData, timeEntries] = await Promise.all([
-    getCase(c.env, project.crm_case_id),
-    getCaseTimeEntries(c.env, project.crm_case_id),
-  ]);
+  // Project-level case (may be absent on a phase-scoped project that tracks all
+  // time on its phases). Fetched independently of the phase rollup above.
+  let caseData: Awaited<ReturnType<typeof getCase>> = null;
+  let timeEntries: Awaited<ReturnType<typeof getCaseTimeEntries>> = [];
+  if (project.crm_case_id) {
+    [caseData, timeEntries] = await Promise.all([
+      getCase(c.env, project.crm_case_id),
+      getCaseTimeEntries(c.env, project.crm_case_id),
+    ]);
+  }
 
-  // SOW hours: use pinned opportunity if set, otherwise return account opps for the PM to pick
+  // SOW hours: use pinned opportunity if set, otherwise return account opps for
+  // the PM to pick. Available whenever a project case is linked OR the project
+  // is phase-scoped (so phase-only projects can still pin the SOW to compare
+  // their phase totals against).
   let sowQuote: import("../services/dynamicsService").DynamicsQuote | null = null;
   let accountOpportunities: import("../services/dynamicsService").DynamicsOpportunity[] = [];
 
-  if (project.customer_id) {
+  if (project.customer_id && (project.crm_case_id || project.phase_scoped_visibility)) {
     const customer = await db
       .prepare("SELECT crm_account_id FROM customers WHERE id = ? LIMIT 1")
       .bind(project.customer_id)
@@ -589,7 +644,7 @@ app.get("/:id/case", async (c) => {
     }
   }
 
-  return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities, externalResourcesTotal });
+  return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities, externalResourcesTotal, phaseCases });
 });
 
 // ── SharePoint folder (retrofit for projects created before the auto-create) ─

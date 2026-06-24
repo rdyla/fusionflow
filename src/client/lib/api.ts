@@ -452,6 +452,17 @@ export type DynamicsQuote = {
   opportunityId: string | null;
 };
 
+/** One phase's linked Dynamics case + its time entries, rolled up on the CRM
+ *  Case tab for phase-scoped projects (phase_scoped_visibility=1). */
+export type PhaseCaseCompliance = {
+  phaseId: string;
+  phaseName: string;
+  caseId: string;
+  case: SupportCase | null;
+  timeEntries: CaseTimeEntry[];
+  loggedHours: number;
+};
+
 export type CaseComplianceData = {
   case: SupportCase | null;
   timeEntries: CaseTimeEntry[];
@@ -466,6 +477,8 @@ export type CaseComplianceData = {
   /** Sum of external-resource amounts (USD) on the project. Surfaced on the
    *  CRM Case tab as extra hours used (total / 165). */
   externalResourcesTotal: number;
+  /** Per-phase cases on phase-scoped projects. Empty otherwise. */
+  phaseCases: PhaseCaseCompliance[];
 };
 
 export type ExternalResourceStatus = "new" | "posted" | "assigned" | "in_progress" | "closed" | "billed";
@@ -1184,6 +1197,15 @@ export type Phase = {
   name: string;
   target_go_live_date: string | null;
   display_order: number;
+  /** Phase-scoped projects only: links the phase to its own Dynamics 365 case.
+   *  Time entries against stages under this phase submit against this case
+   *  instead of the project-level case. Null = inherit project's case. */
+  crm_case_id: string | null;
+  /** Phase-scoped projects only: auto-created SharePoint sub-folder under
+   *  the project's main folder. Provisioned at phase-creation time when
+   *  the project has phase_scoped_visibility=1 + its own folder set;
+   *  retro-fitable via POST /api/projects/:id/phases/:phaseId/sharepoint-folder. */
+  sharepoint_folder_url: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1673,8 +1695,10 @@ export const api = {
       { method: "POST", body: JSON.stringify(payload) }
     ),
 
-  timeEntrySetup: (projectId: string) =>
-    request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup`),
+  timeEntrySetup: (projectId: string, stageId?: string) => {
+    const qs = stageId ? `?stage_id=${encodeURIComponent(stageId)}` : "";
+    return request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup${qs}`);
+  },
 
   getStageTimeEntries: (projectId: string, stageId: string) =>
     request<StageTimeEntry[]>(`/projects/${projectId}/stages/${stageId}/time-entries`),
@@ -1880,10 +1904,16 @@ export const api = {
     request<Phase[]>(`/projects/${projectId}/phases`),
   createPhase: (projectId: string, payload: { name: string; target_go_live_date?: string | null }) =>
     request<Phase>(`/projects/${projectId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
-  updatePhase: (projectId: string, phaseId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number }) =>
+  updatePhase: (projectId: string, phaseId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number; crm_case_id?: string | null }) =>
     request<Phase>(`/projects/${projectId}/phases/${phaseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deletePhase: (projectId: string, phaseId: string) =>
     request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
+  /** Retro-fit endpoint: create the phase's SharePoint sub-folder if it
+   *  wasn't auto-created at phase POST time (e.g., the project's main
+   *  folder wasn't set yet). 400 if gates fail (not phase-scoped, no
+   *  project folder). */
+  createPhaseSharePointFolder: (projectId: string, phaseId: string) =>
+    request<{ sharepoint_folder_url: string }>(`/projects/${projectId}/phases/${phaseId}/sharepoint-folder`, { method: "POST" }),
 
   // Phase-level people (customer contacts + PF staff)
   phaseContacts: (projectId: string) =>

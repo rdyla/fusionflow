@@ -23,6 +23,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject, visiblePhaseIds } from "../services/accessService";
+import { ensurePhaseSharePointFolder } from "../services/graphService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -32,9 +33,19 @@ type PhaseRow = {
   name: string;
   target_go_live_date: string | null;
   display_order: number;
+  /** Manually-linked Dynamics 365 case for time entries against this
+   *  phase. Falls back to projects.crm_case_id when null. */
+  crm_case_id: string | null;
+  /** Auto-created SharePoint sub-folder under the project's main folder.
+   *  Provisioned at phase-creation time for phase-scoped projects when
+   *  the project's own folder is set. */
+  sharepoint_folder_url: string | null;
   created_at: string;
   updated_at: string;
 };
+
+const PHASE_SELECT_COLS =
+  "id, project_id, name, target_go_live_date, display_order, crm_case_id, sharepoint_folder_url, created_at, updated_at";
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -53,7 +64,7 @@ app.get("/:id/phases", async (c) => {
 
   const rows = await c.env.DB
     .prepare(
-      `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
+      `SELECT ${PHASE_SELECT_COLS}
        FROM phases WHERE project_id = ?${phaseClause}
        ORDER BY display_order ASC, COALESCE(target_go_live_date, '9999-12-31') ASC, name ASC`
     )
@@ -173,11 +184,17 @@ app.post("/:id/phases", async (c) => {
 
   const created = await db
     .prepare(
-      `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
+      `SELECT ${PHASE_SELECT_COLS}
        FROM phases WHERE id = ?`
     )
     .bind(phaseId)
     .first<PhaseRow>();
+
+  // Phase-scoped projects: auto-create the SharePoint sub-folder under the
+  // project's main folder. Fire-and-forget via ctx.waitUntil so the API
+  // response isn't blocked on Graph latency. The helper gates on
+  // phase_scoped_visibility + project SP URL presence — no-op otherwise.
+  c.executionCtx.waitUntil(ensurePhaseSharePointFolder(c.env, db, projectId, phaseId));
 
   return c.json(created, 201);
 });
@@ -188,6 +205,9 @@ const updateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   target_go_live_date: z.string().regex(ISO_DATE).nullable().optional(),
   display_order: z.number().int().min(0).optional(),
+  // Phase-scoped CRM case for time-entry routing. Null clears the link
+  // and time entries fall back to projects.crm_case_id.
+  crm_case_id: z.string().nullable().optional(),
 });
 
 app.patch("/:id/phases/:phaseId", async (c) => {
@@ -218,7 +238,7 @@ app.patch("/:id/phases/:phaseId", async (c) => {
 
   const updated = await c.env.DB
     .prepare(
-      `SELECT id, project_id, name, target_go_live_date, display_order, created_at, updated_at
+      `SELECT ${PHASE_SELECT_COLS}
        FROM phases WHERE id = ?`
     )
     .bind(phaseId)
@@ -423,6 +443,28 @@ app.delete("/:id/phase-staff/:rowId", async (c) => {
   }
   await c.env.DB.prepare("DELETE FROM phase_staff WHERE id = ? AND project_id = ?").bind(rowId, projectId).run();
   return c.json({ success: true });
+});
+
+// ── SharePoint folder retro-fit ──────────────────────────────────────────────
+//
+// Phases created BEFORE the parent project had its sharepoint_folder_url
+// set won't have an auto-created sub-folder. This endpoint creates it on
+// demand (same helper as the POST hook, but synchronous so the caller can
+// surface success/failure in the UI).
+app.post("/:id/phases/:phaseId/sharepoint-folder", async (c) => {
+  const projectId = c.req.param("id");
+  const phaseId = c.req.param("phaseId");
+  const auth = c.get("auth");
+  if (!(await canEditProject(c.env.DB, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const url = await ensurePhaseSharePointFolder(c.env, c.env.DB, projectId, phaseId);
+  if (!url) {
+    throw new HTTPException(400, {
+      message: "Phase folder could not be created. Confirm the project has phase-scoped visibility enabled AND its own SharePoint folder set.",
+    });
+  }
+  return c.json({ sharepoint_folder_url: url });
 });
 
 export default app;
