@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
-import { canEditProject, canViewProject } from "../services/accessService";
+import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { maybeSendEmail } from "../services/emailService";
 import { projectAtRisk } from "../lib/emailTemplates";
@@ -571,12 +571,23 @@ app.get("/:id/case", async (c) => {
   };
   let phaseCases: PhaseCaseCompliance[] = [];
   if (project.phase_scoped_visibility) {
-    const phaseRows = (await db
-      .prepare(
-        "SELECT id, name, crm_case_id FROM phases WHERE project_id = ? AND crm_case_id IS NOT NULL AND TRIM(crm_case_id) <> '' ORDER BY display_order ASC, name ASC"
-      )
-      .bind(projectId)
-      .all<{ id: string; name: string; crm_case_id: string }>()).results ?? [];
+    // Respect phase-scoped visibility: a client attached to only some phases
+    // must not receive other phases' case ids / metadata / time entries through
+    // this rollup. Internal roles resolve to "ALL". Mirrors the visiblePhaseIds
+    // filter already applied by the tasks/phases routes.
+    const vp = await visiblePhaseIds(db, auth.user, projectId);
+    const vpIds = vp === "ALL" ? [] : vp;
+    const phaseClause = vp === "ALL" ? "" : ` AND id IN (${vpIds.map(() => "?").join(",")})`;
+    // vp is a non-ALL empty array only if the caller can see no phases — skip
+    // the query entirely (canViewProject already fails closed in that case).
+    const phaseRows = vp !== "ALL" && vpIds.length === 0
+      ? []
+      : (await db
+          .prepare(
+            `SELECT id, name, crm_case_id FROM phases WHERE project_id = ? AND crm_case_id IS NOT NULL AND TRIM(crm_case_id) <> ''${phaseClause} ORDER BY display_order ASC, name ASC`
+          )
+          .bind(projectId, ...vpIds)
+          .all<{ id: string; name: string; crm_case_id: string }>()).results ?? [];
 
     phaseCases = await Promise.all(
       phaseRows.map(async (ph) => {
