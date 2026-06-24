@@ -94,6 +94,7 @@ export default function ProjectsPage() {
   const [currentRole, setCurrentRole] = useState("");
   // PMs/IEs default to their own projects but can zoom out to the full portfolio.
   const [scope, setScope] = useState<"mine" | "all">("mine");
+  const [search, setSearch] = useState("");
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { demoVendor } = useDemoMode();
@@ -102,9 +103,25 @@ export default function ProjectsPage() {
   const pfAeIdFilter = searchParams.get("pf_ae_id");
   const partnerAeIdFilter = searchParams.get("partner_ae_id");
   const aeNameFilter = searchParams.get("ae_name");
-  const filteredProjects = healthFilter
-    ? projects.filter((p) => p.health === healthFilter)
-    : projects;
+  const searchQuery = search.trim().toLowerCase();
+  const filteredProjects = projects.filter((p) => {
+    if (healthFilter && p.health !== healthFilter) return false;
+    if (searchQuery) {
+      const haystack = [
+        p.name,
+        p.customer_name,
+        p.vendor,
+        resolveVendorBadge(p.vendor)?.label,
+        (p.solution_types ?? []).join(" "),
+        p.status ? humanize(p.status) : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!haystack.includes(searchQuery)) return false;
+    }
+    return true;
+  });
   const clearFilter = (key: string) => {
     const next = new URLSearchParams(searchParams);
     next.delete(key);
@@ -261,6 +278,17 @@ export default function ProjectsPage() {
         )}
       </div>
 
+      {/* Free-text search across project, customer, and provider/tech. */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <input
+          className="ms-input"
+          placeholder="Search project, customer, or tech…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={{ width: 280 }}
+        />
+      </div>
+
       {/* PMs/IEs: default to their own projects, zoom out to the whole portfolio. */}
       {(currentRole === "pm" || currentRole === "pf_engineer") && (
         <div style={{ display: "inline-flex", marginBottom: 16, border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
@@ -316,7 +344,9 @@ export default function ProjectsPage() {
             {filteredProjects.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
-                  {healthFilter
+                  {searchQuery
+                    ? "No projects match your search."
+                    : healthFilter
                     ? `No projects with health "${healthFilter.replace("_", " ")}".`
                     : "No projects yet."}
                 </td>
