@@ -80,15 +80,20 @@ export default function HelpButton() {
         aria-label="Help"
         style={{
           background: "none", border: "none", cursor: "pointer",
-          color: open ? "#fff" : "rgba(255,255,255,0.75)",
+          color: open ? "#fff" : "rgba(255,255,255,0.9)",
           padding: 6, display: "flex", alignItems: "center", borderRadius: 8,
         }}
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ width: 20, height: 20 }}>
-          <circle cx="12" cy="12" r="10" />
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
+        <span
+          style={{
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
+            width: 20, height: 20, borderRadius: "50%",
+            border: "1.75px solid currentColor",
+            fontSize: 13, fontWeight: 800, lineHeight: 1, fontFamily: "system-ui, sans-serif",
+          }}
+        >
+          ?
+        </span>
       </button>
 
       {open && (
