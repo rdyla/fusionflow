@@ -1714,6 +1714,7 @@ export default function SolutionDetailPage() {
           folderUrl={solution.sharepoint_folder_url}
           owner={{ kind: "solution", id: solution.id }}
           canEdit={canEdit}
+          isExternal={currentRole === "partner_ae" || currentRole === "client"}
           onFolderCreated={(url) => setSolution((prev) => (prev ? { ...prev, sharepoint_folder_url: url } : prev))}
         />
       )}

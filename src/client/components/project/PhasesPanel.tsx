@@ -14,6 +14,7 @@
 import { useEffect, useState } from "react";
 import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+import { formatDateOnly } from "../../lib/dates";
 
 export default function PhasesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
   const { showToast } = useToast();
@@ -686,7 +687,5 @@ const iconBtn: React.CSSProperties = {
 };
 
 function fmtDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  } catch { return iso; }
+  return formatDateOnly(iso);
 }

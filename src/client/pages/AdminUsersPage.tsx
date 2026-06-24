@@ -34,7 +34,7 @@ const ROLE_COLOR: Record<Role, string> = {
   client: "#d97706",
 };
 
-const ORGS = ["Packet Fusion", "Zoom", "RingCentral"] as const;
+const ORGS = ["Packet Fusion", "Zoom", "RingCentral", "Cisco"] as const;
 type Org = (typeof ORGS)[number];
 
 // Email domain → org auto-detection (mirrors server-side PARTNER_DOMAINS)
@@ -43,6 +43,7 @@ const ORG_DOMAINS: Record<string, Org> = {
   "zoom.com": "Zoom",
   "zoom.us": "Zoom",
   "ringcentral.com": "RingCentral",
+  "cisco.com": "Cisco",
 };
 
 const EMPTY_CREATE_FORM = { email: "", name: "", organization_name: "" as Org | "", role: "pm" as Role };
@@ -181,6 +182,7 @@ export default function AdminUsersPage() {
       is_support_supervisor: user.is_support_supervisor ?? 0,
       is_project_resource: user.is_project_resource ?? 0,
       is_pm_eligible: user.is_pm_eligible ?? 0,
+      email_notifications: user.email_notifications ?? "all",
     });
   }
 
@@ -200,6 +202,7 @@ export default function AdminUsersPage() {
         is_support_supervisor: editForm.role === "client" ? 0 : (editForm.is_support_supervisor ?? 0),
         is_project_resource: editForm.role === "client" ? 0 : (editForm.is_project_resource ?? 0),
         is_pm_eligible: editForm.role === "client" ? 0 : (editForm.is_pm_eligible ?? 0),
+        email_notifications: (editForm.email_notifications ?? "all") as "all" | "important" | "off",
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
       setEditingUser(null);
@@ -239,6 +242,7 @@ export default function AdminUsersPage() {
     "Packet Fusion": users.filter((u) => u.organization_name === "Packet Fusion").length,
     Zoom: users.filter((u) => u.organization_name === "Zoom").length,
     RingCentral: users.filter((u) => u.organization_name === "RingCentral").length,
+    Cisco: users.filter((u) => u.organization_name === "Cisco").length,
   };
 
   const visibleUsers =
@@ -654,6 +658,19 @@ export default function AdminUsersPage() {
                   value={editForm.zoom_user_id ?? ""}
                   onChange={(e) => setEditForm({ ...editForm, zoom_user_id: e.target.value || null })}
                 />
+              </label>
+
+              <label className="ms-label">
+                <span>Email notifications</span>
+                <select
+                  className="ms-input"
+                  value={editForm.email_notifications ?? "all"}
+                  onChange={(e) => setEditForm({ ...editForm, email_notifications: e.target.value as "all" | "important" | "off" })}
+                >
+                  <option value="all">All — every notification</option>
+                  <option value="important">Important only — skip routine FYI emails</option>
+                  <option value="off">Off — no project notification emails</option>
+                </select>
               </label>
 
               {/* Support Supervisor flag — internal only */}

@@ -22,6 +22,7 @@
 
 import { useEffect, useState } from "react";
 import { api, type StakeholderSummary } from "../../lib/api";
+import { formatDateOnly, yearOfDateOnly } from "../../lib/dates";
 
 // PF brand palette
 const PF_BLUE = "#03395f";
@@ -521,10 +522,7 @@ function capitalize(s: string): string {
 }
 
 function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  } catch { return iso; }
+  return formatDateOnly(iso);
 }
 
 /** Compact stage date range, e.g. "Jan 15 – Feb 3" or "Jan 15 – Feb 3, 2027"
@@ -532,14 +530,8 @@ function fmtDate(iso: string | null): string {
  *  returns null if neither is set. */
 function fmtStageDateRange(start: string | null, end: string | null): string | null {
   if (!start && !end) return null;
-  const fmtShort = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    } catch { return iso; }
-  };
-  const yearOf = (iso: string) => {
-    try { return new Date(iso).getFullYear(); } catch { return null; }
-  };
+  const fmtShort = (iso: string) => formatDateOnly(iso, { month: "short", day: "numeric" });
+  const yearOf = (iso: string) => yearOfDateOnly(iso);
   if (start && end) {
     const sameYear = yearOf(start) === yearOf(end);
     const endStr = sameYear

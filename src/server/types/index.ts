@@ -20,6 +20,9 @@ export interface AppUser {
   title?: string | null;
   phone?: string | null;
   scheduler_url?: string | null;
+  // Email notification volume preference (migration 0121). Gates project
+  // notification emails to the recipient. Defaults to "all".
+  email_notifications?: "all" | "important" | "off";
 }
 
 export interface AuthContext {

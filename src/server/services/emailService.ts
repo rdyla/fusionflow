@@ -26,6 +26,43 @@ type EmailPayload = {
 const PF_DOMAIN = "@packetfusion.com";
 
 /**
+ * Importance tier for a project notification email, checked against the
+ * recipient's `users.email_notifications` preference:
+ *   - "routine"   — FYI / activity emails (e.g. PM "task updated" on every
+ *                   field edit). Sent only when the recipient is on "all".
+ *   - "important" — high-signal (assigned to you, blocked, at-risk, partner
+ *                   notes). Sent on "all" and "important".
+ * Either tier is suppressed when the recipient is on "off". Transactional
+ * mail (account invite, login OTP) bypasses this gate and uses sendEmail().
+ */
+export type EmailImportance = "routine" | "important";
+
+/**
+ * Send a project-notification email only if the recipient's preference allows
+ * it. Reads the recipient's preference fresh from D1 (not the cached session)
+ * so changes take effect immediately. A null/unknown recipientUserId (e.g. a
+ * raw email with no users row) always sends — gating is opt-in per user.
+ */
+export async function maybeSendEmail(
+  env: Env,
+  db: D1Database,
+  recipientUserId: string | null | undefined,
+  importance: EmailImportance,
+  payload: EmailPayload,
+): Promise<void> {
+  if (recipientUserId) {
+    const row = await db
+      .prepare("SELECT email_notifications FROM users WHERE id = ? LIMIT 1")
+      .bind(recipientUserId)
+      .first<{ email_notifications: string | null }>();
+    const level = row?.email_notifications ?? "all";
+    if (level === "off") return;
+    if (level === "important" && importance !== "important") return;
+  }
+  await sendEmail(env, payload);
+}
+
+/**
  * Fire-and-forget email via Microsoft Graph sendMail. Never throws —
  * a failed email should never break the API response that triggered it.
  *

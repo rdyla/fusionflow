@@ -16,7 +16,7 @@ export const VENDOR_OPTIONS = [
   { value: "zoom",            label: "Zoom" },
   { value: "ringcentral",     label: "RingCentral" },
   { value: "microsoft_teams", label: "Microsoft Teams" },
-  { value: "webex",           label: "Webex" },
+  { value: "webex",           label: "Cisco" },
   { value: "8x8",             label: "8x8" },
   { value: "mitel",           label: "Mitel" },
   { value: "shoretel",        label: "ShoreTel" },

@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canViewProject } from "../services/accessService";
-import { sendEmail } from "../services/emailService";
+import { maybeSendEmail } from "../services/emailService";
 import { pmNoteAdded, partnerNotePosted } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
 
@@ -100,7 +100,7 @@ app.post("/:id/notes", async (c) => {
       .bind(project.pm_user_id)
       .first<{ email: string; name: string }>();
     if (pm) {
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, project.pm_user_id, "routine", {
         to: pm.email,
         subject: `New note on ${project.name}`,
         html: pmNoteAdded({ pmName: pm.name ?? pm.email, authorName: auth.user.name ?? auth.user.email, projectName: project.name, noteBody: body, visibility, appUrl, projectId }),
@@ -132,7 +132,7 @@ app.post("/:id/notes", async (c) => {
 
     const authorName = auth.user.name ?? auth.user.email;
     for (const ae of partnerAes.results ?? []) {
-      c.executionCtx.waitUntil(sendEmail(c.env, {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, ae.id, "important", {
         to: ae.email,
         subject: `New comment on ${project!.name}`,
         html: partnerNotePosted({
