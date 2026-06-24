@@ -67,13 +67,18 @@ export default function AdminHelpRequestsPage() {
     <div style={{ maxWidth: "100%" }}>
       <div className="ms-page-header">
         <h1 className="ms-page-title">Help requests</h1>
-        <div className="toggle-pill-group" style={{ display: "flex", gap: 6 }}>
-          {FILTERS.map((f) => (
+        <div style={{ display: "inline-flex", border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
+          {FILTERS.map((f, i) => (
             <button
               key={f}
               type="button"
-              className={"toggle-pill" + (filter === f ? " toggle-pill-active" : "")}
               onClick={() => setFilter(f)}
+              style={{
+                padding: "6px 14px", fontSize: 13, fontWeight: 600, cursor: "pointer",
+                border: "none", borderLeft: i === 0 ? "none" : "1px solid #cbd5e1",
+                background: filter === f ? "#0891b2" : "#fff",
+                color: filter === f ? "#fff" : "#475569",
+              }}
             >
               {f === "all" ? "All" : STATUS_LABELS[f]}
             </button>
