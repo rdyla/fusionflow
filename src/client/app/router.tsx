@@ -5,6 +5,7 @@ import DashboardPage from "../pages/DashboardPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ProjectDetailPage from "../pages/ProjectDetailPage";
 import AdminUsersPage from "../pages/AdminUsersPage";
+import AdminHelpRequestsPage from "../pages/AdminHelpRequestsPage";
 import AdminAccessPage from "../pages/AdminAccessPage";
 import AdminProjectsPage from "../pages/AdminProjectsPage";
 import AdminSolutionsPage from "../pages/AdminSolutionsPage";
@@ -77,6 +78,7 @@ export default function Router() {
           <Route path="/roadmap" element={<RoadmapPage />} />
           <Route path="/profile" element={<ProfilePage />} />
 <Route path="/admin/users" element={<AdminUsersPage />} />
+          <Route path="/admin/help-requests" element={<AdminHelpRequestsPage />} />
           <Route path="/admin/access" element={<AdminAccessPage />} />
           <Route path="/admin/projects" element={<AdminProjectsPage />} />
           <Route path="/admin/solutions" element={<AdminSolutionsPage />} />

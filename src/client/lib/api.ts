@@ -53,6 +53,25 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+export type HelpRequestStatus = "open" | "in_progress" | "resolved" | "closed";
+
+export type HelpRequest = {
+  id: string;
+  requester_id: string | null;
+  requester_name?: string | null;
+  requester_email?: string | null;
+  module: string | null;
+  page_path: string | null;
+  subject: string;
+  body: string | null;
+  status: HelpRequestStatus;
+  admin_notes: string | null;
+  resolved_by: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type User = {
   id: string;
   email: string;
@@ -2434,6 +2453,14 @@ export const api = {
     }),
 
   // ── Inbox ─────────────────────────────────────────────────────────────────
+  // Contextual help requests
+  createHelpRequest: (payload: { subject: string; body?: string; module?: string; page_path?: string }) =>
+    request<HelpRequest>("/help-requests", { method: "POST", body: JSON.stringify(payload) }),
+  helpRequests: (status?: HelpRequestStatus) =>
+    request<HelpRequest[]>(`/help-requests${status ? `?status=${status}` : ""}`),
+  updateHelpRequest: (id: string, payload: { status?: HelpRequestStatus; admin_notes?: string | null }) =>
+    request<{ ok: boolean }>(`/help-requests/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
   inboxUnreadCount: () =>
     request<{ count: number }>("/inbox/unread-count"),
   inbox: (tab: "all" | "notifications" | "messages" = "all", page = 1) =>

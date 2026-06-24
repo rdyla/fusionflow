@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { api, type User, type SystemStatusResponse, type Notification, IMPERSONATE_KEY } from "../../lib/api";
 import { SystemStatusBadge } from "../ui/SystemStatusBadge";
 import { UserChip } from "../ui/UserChip";
+import HelpButton from "./HelpButton";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { bootstrapDemoMode, setDemoMode, useDemoMode, type DemoVendor } from "../../lib/demoMode";
 
@@ -14,6 +15,7 @@ const NOTIF_TYPE_LABELS: Record<string, string> = {
   note_added: "Note",
   go_live_reminder: "Go-live reminder",
   direct_message: "Message",
+  help_request: "Help request",
 };
 
 const NOTIF_TYPE_COLOR: Record<string, string> = {
@@ -24,6 +26,7 @@ const NOTIF_TYPE_COLOR: Record<string, string> = {
   note_added: "#6366f1",
   go_live_reminder: "#107c10",
   direct_message: "#0b9aad",
+  help_request: "#7c3aed",
 };
 
 function notifTimeAgo(iso: string): string {
@@ -145,6 +148,7 @@ export default function AppShell() {
   }
 
   function notificationLink(n: Notification): string | null {
+    if (n.entity_type === "help_request") return "/admin/help-requests";
     if (!n.project_id) return null;
     if (n.entity_type === "task") return `/projects/${n.project_id}?tab=tasks&taskId=${n.entity_id}`;
     if (n.entity_type === "risk") return `/projects/${n.project_id}?tab=risks`;
@@ -436,6 +440,7 @@ export default function AppShell() {
                     <AdminMenuLink to="/admin/labor" icon={NAV_ICONS.adminLabor} onClick={() => setAdminMenuOpen(false)}>Labor</AdminMenuLink>
                     <AdminMenuLink to="/admin/templates" icon={NAV_ICONS.adminTemplates} onClick={() => setAdminMenuOpen(false)}>Templates</AdminMenuLink>
                     <AdminMenuLink to="/admin/users" icon={NAV_ICONS.adminUsers} onClick={() => setAdminMenuOpen(false)}>Users</AdminMenuLink>
+                    <AdminMenuLink to="/admin/help-requests" icon={NAV_ICONS.adminUsers} onClick={() => setAdminMenuOpen(false)}>Help requests</AdminMenuLink>
                     <AdminMenuLink to="/admin/roadmap" icon={NAV_ICONS.adminRoadmap} onClick={() => setAdminMenuOpen(false)}>Roadmap</AdminMenuLink>
                     <AdminMenuLink to="/admin/promote-staging" icon={NAV_ICONS.adminPromote} onClick={() => setAdminMenuOpen(false)}>Promote from staging</AdminMenuLink>
                     <DemoModeRow />
@@ -443,6 +448,9 @@ export default function AppShell() {
                 )}
               </div>
             )}
+
+            {/* Contextual help — page help + file a request */}
+            <HelpButton />
 
             {/* User avatar — compact, pops down */}
             {currentUser && (
