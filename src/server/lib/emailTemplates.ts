@@ -49,6 +49,38 @@ export function detail(label: string, value: string): string {
   </tr>`;
 }
 
+// ── Contact Project Invite ─────────────────────────────────────────────────────
+
+export function contactProjectInvite(data: {
+  recipientName: string;
+  projectName: string;
+  appUrl: string;
+}): string {
+  const recipientName = escapeHtml(data.recipientName);
+  const projectName   = escapeHtml(data.projectName);
+
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">You've been added to a project</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;line-height:1.6;">
+      Hi ${recipientName},<br><br>
+      You've been added to <strong>${projectName}</strong> on CloudConnect — Packet Fusion's
+      project portal where you can track progress, milestones, and stay aligned with your
+      implementation team.
+    </p>
+    <div style="background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <table style="border-collapse:collapse;">
+        ${detail("Project", projectName)}
+        ${detail("Sign In", "Visit the link below and enter your email address")}
+        ${detail("Access", "No password needed — we'll send a one-time login code")}
+      </table>
+    </div>
+    <p style="margin:12px 0 0;font-size:13px;color:#5f7fa6;">
+      Questions? Reach out to your Packet Fusion Project Team.
+    </p>
+    ${ctaButton("View Your Project", data.appUrl)}
+  `, data.appUrl);
+}
+
 // ── User Invite ────────────────────────────────────────────────────────────────
 
 export function userInvite(data: {
