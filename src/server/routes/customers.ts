@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { getAccountTeam, getLastUcaasVendor } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { refreshAccountTeamIfStale } from "../lib/accountTeamSync";
 import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
 
@@ -210,6 +211,9 @@ app.get("/:id", async (c) => {
     .bind(c.req.param("id"))
     .first();
   if (!customer) throw new HTTPException(404, { message: "Customer not found" });
+  // Background-refresh the account team from CRM when stale (never blocks read).
+  const cust = customer as { id?: string | null; crm_account_id?: string | null };
+  refreshAccountTeamIfStale(c.env, c.executionCtx, cust.crm_account_id, cust.id);
   return c.json(customer);
 });
 

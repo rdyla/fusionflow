@@ -12,6 +12,7 @@ import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, g
 import { ensureSharePointChildFolder } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { refreshAccountTeamIfStale } from "../lib/accountTeamSync";
 import { refreshShipmentRow } from "../lib/shipmentTracking";
 import { findOrCreatePartnerAe } from "../lib/partnerAe";
 import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, buildTaggedTitle, parseTaggedTitle, type SolutionType } from "../../shared/solutionTypes";
@@ -154,6 +155,9 @@ app.get("/:id", async (c) => {
     throw new HTTPException(404, { message: "Project not found" });
   }
 
+  // Background-refresh the account team from CRM when stale (never blocks read).
+  const prow = project as { dynamics_account_id?: string | null; customer_id?: string | null };
+  refreshAccountTeamIfStale(c.env, c.executionCtx, prow.dynamics_account_id, prow.customer_id);
   return c.json(normalizeSolutionTypesField(project));
 });
 

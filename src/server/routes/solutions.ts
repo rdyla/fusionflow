@@ -6,6 +6,7 @@ import { requireRole } from "../middleware/requireRole";
 import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution, syncSolutionStatus } from "../lib/teamUtils";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { refreshAccountTeamIfStale, syncAccountTeamToCustomer } from "../lib/accountTeamSync";
 import { notifyZoomChat } from "../lib/notifications";
 import {
   parseSolutionTypes,
@@ -352,6 +353,10 @@ app.get("/:id", async (c) => {
     .bind(c.req.param("id"), ...bindings)
     .first();
   if (!solution) throw new HTTPException(404, { message: "Solution not found" });
+  // Keep the account team current with CRM: background-refresh on read when the
+  // last pull is older than the freshness window (never blocks this response).
+  const row = solution as { dynamics_account_id?: string | null; customer_id?: string | null };
+  refreshAccountTeamIfStale(c.env, c.executionCtx, row.dynamics_account_id, row.customer_id);
   return c.json(normalizeSolutionRow(solution));
 });
 
@@ -1115,29 +1120,20 @@ app.post("/:id/crm-sync", async (c) => {
     throw new HTTPException(400, { message: "No CRM account linked to this solution" });
   }
 
-  const team = await getAccountTeam(c.env, solution.dynamics_account_id);
-
-  const [ae_user_id, sa_user_id, csm_user_id] = await Promise.all([
-    findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
-    findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
-    findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
-  ]);
-
-  // Account team lives on the customer — update or create it
+  // Resolve the customer the team lives on, linking the solution if needed.
   let customerId = solution.customer_id;
-  if (customerId) {
-    await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
-      .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, customerId).run();
-  } else {
+  if (!customerId) {
     const existingCust = await db.prepare("SELECT id FROM customers WHERE crm_account_id = ? LIMIT 1")
       .bind(solution.dynamics_account_id).first<{ id: string }>();
     if (existingCust) {
       customerId = existingCust.id;
-      await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
-        .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, customerId).run();
       await db.prepare("UPDATE solutions SET customer_id = ? WHERE id = ?").bind(customerId, solutionId).run();
     }
   }
+
+  // Manual force-refresh: pull the team from CRM and write it onto the customer.
+  // Same code path the read-time SWR refresh and daily cron use.
+  const team = await syncAccountTeamToCustomer(c.env, solution.dynamics_account_id, customerId);
 
   const updated = await db.prepare(`${SOLUTION_SELECT} WHERE s.id = ? LIMIT 1`).bind(solutionId).first();
   return c.json({
