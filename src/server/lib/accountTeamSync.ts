@@ -27,9 +27,22 @@ export async function syncAccountTeamToCustomer(
     findOrCreatePfUser(env.DB, team.csm_email, team.csm_name, "pf_csm"),
   ]);
   if (customerId) {
+    // Preserve-on-null: only overwrite a role we actually resolved from CRM.
+    // getAccountTeam returns an all-null team (it does NOT throw) when Dynamics
+    // is unconfigured or the account fetch errors, and each role's email comes
+    // from a separate best-effort systemusers fetch — so a null id means "we
+    // couldn't read it", not "CRM has nobody". Writing those nulls unconditionally
+    // would let an outage/misconfig blank every customer's AE/SA/CSM (and AE
+    // drives access control). COALESCE keeps the last-known value in that case.
     await env.DB
-      .prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
-      .bind(aeId ?? null, saId ?? null, csmId ?? null, customerId)
+      .prepare(
+        `UPDATE customers SET
+           pf_ae_user_id  = COALESCE(?, pf_ae_user_id),
+           pf_sa_user_id  = COALESCE(?, pf_sa_user_id),
+           pf_csm_user_id = COALESCE(?, pf_csm_user_id)
+         WHERE id = ?`,
+      )
+      .bind(aeId, saId, csmId, customerId)
       .run();
   }
   return team;
