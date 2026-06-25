@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { findOrCreatePfUser } from "../lib/crmUsers";
+import { refreshAccountTeamIfStale, syncAccountTeamToCustomer } from "../lib/accountTeamSync";
 import { fetchZoomUtilizationSnapshot } from "../services/zoomService";
 import { fetchRCUtilizationSnapshot } from "../services/ringCentralService";
 import { searchAccounts, getAccountTeam } from "../services/dynamicsService";
@@ -98,6 +99,9 @@ app.get("/accounts/:projectId", async (c) => {
     WHERE oa.project_id = ? LIMIT 1
   `).bind(projectId).first();
   if (!row) throw new HTTPException(404, { message: "Optimize account not found" });
+  // Background-refresh the account team from CRM when stale (never blocks read).
+  const orow = row as { dynamics_account_id?: string | null; customer_id?: string | null };
+  refreshAccountTeamIfStale(c.env, c.executionCtx, orow.dynamics_account_id, orow.customer_id);
   return c.json(normalizeSolutionTypesField(row));
 });
 
@@ -140,19 +144,9 @@ app.post("/accounts/:projectId/crm-sync", async (c) => {
     throw new HTTPException(400, { message: "No CRM account linked to this project" });
   }
 
-  const team = await getAccountTeam(c.env, row.dynamics_account_id);
-
-  const [ae_user_id, sa_user_id, csm_user_id] = await Promise.all([
-    findOrCreatePfUser(db, team.ae_email, team.ae_name, "pf_ae"),
-    findOrCreatePfUser(db, team.sa_email, team.sa_name, "pf_sa"),
-    findOrCreatePfUser(db, team.csm_email, team.csm_name, "pf_csm"),
-  ]);
-
-  // Account team lives on the customer — update it
-  if (row.customer_id) {
-    await db.prepare("UPDATE customers SET pf_ae_user_id = ?, pf_sa_user_id = ?, pf_csm_user_id = ? WHERE id = ?")
-      .bind(ae_user_id ?? null, sa_user_id ?? null, csm_user_id ?? null, row.customer_id).run();
-  }
+  // Manual force-refresh: pull the team from CRM and write it onto the customer.
+  // Same code path the read-time SWR refresh and daily cron use.
+  const team = await syncAccountTeamToCustomer(c.env, row.dynamics_account_id, row.customer_id);
 
   // Return the full updated account
   const updated = await db.prepare(`

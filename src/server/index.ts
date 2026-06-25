@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import type { Bindings, Variables } from "./types";
 import { authMiddleware } from "./middleware/auth";
 import { runShipmentTracking } from "./lib/shipmentTracking";
+import { runAccountTeamSync } from "./lib/accountTeamSync";
 import authRoutes from "./routes/auth";
 import dashboardRoutes from "./routes/dashboard";
 import projectRoutes from "./routes/projects";
@@ -244,6 +245,7 @@ export default {
       runGoLiveReminders(env),
       runUtilizationSnapshots(env),
       runHealthScoring(env),
+      runAccountTeamSync(env),
     ]));
   },
 };
