@@ -1,0 +1,116 @@
+name: Watch for manual prod deploys
+
+# Kevin (and only Kevin) keeps hand-running `wrangler deploy` against the prod
+# Worker, which silently reverts prod to a stale fork build. CI deploys ping
+# Zoom on success; manual deploys ping nothing. This job polls the Cloudflare
+# deployments API and alerts Zoom when the newest prod deployment was made by a
+# human (i.e. outside CI), so we find out in minutes instead of from a bug report.
+#
+# Discriminator: CI deploys (account-owned API token) have an empty author_email;
+# a manual `wrangler deploy` (OAuth login) records the user's email. So a
+# non-empty author_email on the latest deployment == manual deploy.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"   # every 15 min
+  workflow_dispatch:
+    inputs:
+      test_alert:
+        description: "Send a test Zoom alert to verify webhook wiring"
+        type: boolean
+        default: false
+
+# A manual deploy is rare, so we accept the occasional duplicate ping rather than
+# risk missing one: GitHub's scheduler can lag 5-15 min, so the "recent" window is
+# kept comfortably wider than the cron interval.
+env:
+  RECENT_WINDOW_SECONDS: "1800"   # 30 min
+  # Comma-separated author emails to treat as CI / non-alerting (CI is normally
+  # empty-author, so this is just future-proofing if the token ever attributes).
+  IGNORE_AUTHORS: ""
+
+jobs:
+  check:
+    name: Detect non-CI deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check latest prod deployment and alert on manual
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ZOOM_WEBHOOK_URL: ${{ vars.ZOOM_WEBHOOK_URL }}
+          ZOOM_AUTH_TOKEN: ${{ secrets.ZOOM_WEBHOOK_VERIFICATION_TOKEN }}
+          TEST_ALERT: ${{ inputs.test_alert }}
+        run: |
+          set -euo pipefail
+
+          send_zoom() {
+            curl -s -X POST "$ZOOM_WEBHOOK_URL" \
+              -H "Authorization: $ZOOM_AUTH_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "$1"
+          }
+
+          if [ "${TEST_ALERT:-false}" = "true" ]; then
+            echo "Sending test alert."
+            send_zoom "🧪 Test: manual-deploy watcher is wired up and can reach Zoom."
+            exit 0
+          fi
+
+          ACCOUNT_ID=$(jq -r '.account_id' wrangler.json)
+          SCRIPT=$(jq -r '.name' wrangler.json)
+          echo "Account=$ACCOUNT_ID Script=$SCRIPT"
+
+          RESP=$(curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/workers/scripts/$SCRIPT/deployments")
+
+          if [ "$(echo "$RESP" | jq -r '.success')" != "true" ]; then
+            echo "::error::Cloudflare API call failed:"
+            echo "$RESP" | jq -r '.errors // .' || echo "$RESP"
+            exit 1
+          fi
+
+          # Newest deployment by created_on (don't assume API ordering).
+          LATEST=$(echo "$RESP" | jq -c '[.result.deployments[]?] | sort_by(.created_on) | last // empty')
+          if [ -z "$LATEST" ]; then
+            echo "No deployments returned — nothing to check."
+            exit 0
+          fi
+
+          AUTHOR=$(echo "$LATEST" | jq -r '.author_email // ""')
+          CREATED=$(echo "$LATEST" | jq -r '.created_on')
+          SOURCE=$(echo "$LATEST" | jq -r '.source // "unknown"')
+          echo "Latest deploy: author='$AUTHOR' source='$SOURCE' created='$CREATED'"
+
+          # CI deploys carry no author email.
+          if [ -z "$AUTHOR" ] || [ "$AUTHOR" = "null" ]; then
+            echo "No author email → CI deploy. No alert."
+            exit 0
+          fi
+
+          # Optional ignore-list (CI service accounts, etc.).
+          IFS=',' read -ra IGN <<< "${IGNORE_AUTHORS:-}"
+          for e in "${IGN[@]}"; do
+            if [ -n "$e" ] && [ "$e" = "$AUTHOR" ]; then
+              echo "Author '$AUTHOR' is on the ignore list. No alert."
+              exit 0
+            fi
+          done
+
+          # Only alert on recent deploys so we don't re-ping the same one forever.
+          CREATED_CLEAN=$(echo "$CREATED" | sed -E 's/\.[0-9]+Z$/Z/')
+          CREATED_TS=$(date -u -d "$CREATED_CLEAN" +%s)
+          NOW_TS=$(date -u +%s)
+          AGE=$(( NOW_TS - CREATED_TS ))
+          echo "Manual deploy age: ${AGE}s (window ${RECENT_WINDOW_SECONDS}s)"
+          if [ "$AGE" -gt "${RECENT_WINDOW_SECONDS}" ]; then
+            echo "Older than window — already alerted/expired. No alert."
+            exit 0
+          fi
+
+          echo "::warning::Manual prod deploy detected by ${AUTHOR}"
+          MSG="⚠️ Manual prod deploy detected — the '${SCRIPT}' Worker was deployed by ${AUTHOR} at ${CREATED} (source: ${SOURCE}), OUTSIDE CI. Prod has likely diverged from main; reconcile + redeploy from main. Deploy history: https://github.com/${GITHUB_REPOSITORY}/actions"
+          send_zoom "$MSG"
+          echo "Alert sent."
