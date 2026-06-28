@@ -82,9 +82,9 @@ type Props = {
   solution: Solution;
   needsAssessment: NeedsAssessment | null;
   laborEstimates: LaborEstimate[];
-  /** Free-form Additional Scope Notes from the solution. Rendered as its own
-   *  "Additional Scope Notes" section in the SOW (via ctx.additionalScopeNotes)
-   *  when non-empty. */
+  /** Free-form Scope Notes from the solution. Rendered as subsection 1.4
+   *  "Scope Notes" (after 1.3 Scope at a Glance) in the SOW
+   *  (via ctx.additionalScopeNotes) when non-empty. */
   scopeText: string;
   sowData?: SowData | null;
   sowMetadata?: SowMetadata | null;

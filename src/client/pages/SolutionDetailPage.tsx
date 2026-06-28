@@ -1527,13 +1527,13 @@ export default function SolutionDetailPage() {
           </div>
           )}
 
-          {/* Additional Scope Notes — feeds into the generated SOW, so it sits
-              ABOVE the SOW document/Generate button. For clients: hidden when
+          {/* Scope Notes — feeds into the generated SOW (subsection 1.4), so it
+              sits ABOVE the SOW document/Generate button. For clients: hidden when
               empty; read-only display when non-empty. Staff get the textarea. */}
           {(!isClient || (sowPublished && scope.trim().length > 0)) && (
           <div className="ms-card">
             <h3 style={{ margin: "0 0 8px", fontSize: 14, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-              Additional Scope Notes
+              Scope Notes
             </h3>
             {!isClient && (
               <p style={{ fontSize: 13, color: "#94a3b8", margin: "0 0 16px" }}>

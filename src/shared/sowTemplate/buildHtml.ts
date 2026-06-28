@@ -251,6 +251,7 @@ function section1(variant: SowVariant, ctx: SowBuildContext): string {
         <thead><tr><th>Element</th><th>Quantity</th><th>Notes</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+      ${scopeNotesSubsection(ctx)}
     </section>
   `;
 }
@@ -462,18 +463,16 @@ function section8Pricing(variant: SowVariant, ctx: SowBuildContext, optServices:
   `;
 }
 
-/** Free-form Additional Scope Notes from the solution (exclusions, special
- *  terms, assumptions). Unnumbered — sits as a callout before the signature
- *  block. Returns "" when there are no notes so the section disappears
- *  entirely. Line breaks are preserved via white-space: pre-wrap. */
-function scopeNotesSection(ctx: SowBuildContext): string {
+/** Free-form Scope Notes from the solution (exclusions, special terms,
+ *  assumptions). Rendered as subsection 1.4, immediately after 1.3 Scope at a
+ *  Glance, inside the Engagement Overview section. Returns "" when there are no
+ *  notes so 1.4 simply doesn't appear. Line breaks preserved via pre-wrap. */
+function scopeNotesSubsection(ctx: SowBuildContext): string {
   const notes = (ctx.additionalScopeNotes ?? "").trim();
   if (!notes) return "";
   return `
-    <section class="page-section">
-      <h1>Additional Scope Notes</h1>
+      <h3>1.4  Scope Notes</h3>
       <div style="white-space: pre-wrap;">${esc(notes)}</div>
-    </section>
   `;
 }
 
@@ -711,7 +710,6 @@ export function buildSowHtml(args: {
     section9ChangeMgmt(),
     section10Acceptance(),
     section11Terms(),
-    scopeNotesSection(ctx),
     section12Signature(ctx),
   ].join("\n");
 
