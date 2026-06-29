@@ -41,6 +41,7 @@ export default function AppShell() {
   const [isClient, setIsClient] = useState(false);
   const [isPartnerAe, setIsPartnerAe] = useState(false);
   const [canProspect, setCanProspect] = useState(false);
+  const [isLeadership, setIsLeadership] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
   const [sysStatus, setSysStatus] = useState<SystemStatusResponse | null>(null);
@@ -89,6 +90,7 @@ export default function AppShell() {
         setIsClient(res.role === "client");
         setIsPartnerAe(res.role === "partner_ae");
         setCanProspect(["admin", "executive", "pf_ae", "partner_ae"].includes(res.role));
+        setIsLeadership(res.role === "admin" || res.role === "executive");
       })
       .catch(() => {});
     bootstrapDemoMode();
@@ -176,6 +178,7 @@ export default function AppShell() {
             )}
             <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
             <SideLink to="/roadmap" icon={NAV_ICONS.roadmap} onClick={() => setDrawerOpen(false)}>Roadmap</SideLink>
+            {isLeadership && <SideLink to="/leadership" icon={NAV_ICONS.leadership} onClick={() => setDrawerOpen(false)}>Leadership</SideLink>}
           </>
         )}
         {isClient && (
@@ -638,6 +641,12 @@ const NAV_ICONS = {
       <rect x="3" y="4" width="18" height="4" rx="1"/>
       <rect x="3" y="10" width="13" height="4" rx="1"/>
       <rect x="3" y="16" width="8" height="4" rx="1"/>
+    </I>
+  ),
+  leadership: (
+    <I>
+      <path d="M3 3v18h18"/>
+      <path d="M7 14l4-4 3 3 5-6"/>
     </I>
   ),
   adminRoadmap: (
