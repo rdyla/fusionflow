@@ -301,6 +301,13 @@ export type LeadershipDashboardResponse = {
       customer_name: string | null;
       date: string | null;
     }[];
+    wentLiveStillOpen: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      date: string | null;
+      status: string | null;
+    }[];
   };
 };
 

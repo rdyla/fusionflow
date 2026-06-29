@@ -130,7 +130,7 @@ export default function LeadershipDashboardPage() {
             />
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, marginBottom: 28 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
             <div className="ms-section-card">
               <div className="ms-section-title" style={{ marginBottom: 12 }}>Go-lives this period</div>
               {data.projects.goLives.length === 0 ? (
@@ -156,6 +156,24 @@ export default function LeadershipDashboardPage() {
               ) : (
                 <div>
                   {data.projects.upcomingGoLives.map((g) => (
+                    <ListRow
+                      key={g.id}
+                      to={`/projects/${g.id}`}
+                      title={g.name ?? "Untitled"}
+                      subtitle={g.customer_name}
+                      right={formatDate(g.date)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Went live · still open</div>
+              {data.projects.wentLiveStillOpen.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>Nothing lingering — go-lives are wrapped up or in Optimize.</div>
+              ) : (
+                <div>
+                  {data.projects.wentLiveStillOpen.map((g) => (
                     <ListRow
                       key={g.id}
                       to={`/projects/${g.id}`}
