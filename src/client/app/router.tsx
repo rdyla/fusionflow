@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import AppShell from "../components/layout/AppShell";
 import ModuleSelectPage from "../pages/ModuleSelectPage";
 import DashboardPage from "../pages/DashboardPage";
+import LeadershipDashboardPage from "../pages/LeadershipDashboardPage";
 import ProjectsPage from "../pages/ProjectsPage";
 import ProjectDetailPage from "../pages/ProjectDetailPage";
 import AdminUsersPage from "../pages/AdminUsersPage";
@@ -62,6 +63,7 @@ export default function Router() {
         {/* Implementation module */}
         <Route element={<AppShell />}>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/leadership" element={<LeadershipDashboardPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/projects/:id" element={<ProjectDetailPage />} />
           <Route path="/solutions" element={<SolutionsPage />} />
