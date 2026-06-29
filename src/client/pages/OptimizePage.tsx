@@ -5,6 +5,7 @@ import { humanize } from "../lib/format";
 import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
+import { vendorLabel } from "../../shared/vendors";
 
 const STATUS_COLOR: Record<string, string> = {
   active: "#22c55e",
@@ -216,6 +217,7 @@ export default function OptimizePage() {
             <thead>
               <tr>
                 <th>Account</th>
+                <th>Vendor</th>
                 <th>Completed</th>
                 <th>Status</th>
                 <th>AE</th>
@@ -235,6 +237,7 @@ export default function OptimizePage() {
                       <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>{a.customer_name}</div>
                     )}
                   </td>
+                  <td style={{ color: "#475569", fontSize: 13 }}>{a.vendor ? vendorLabel(a.vendor) : "—"}</td>
                   <td style={{ color: "#64748b", fontSize: 12 }}>
                     {a.graduated_at ? a.graduated_at.slice(0, 10) : "—"}
                     {(() => { const m = METHOD_COLOR[a.graduation_method] ?? METHOD_COLOR.manual; return (

@@ -19,7 +19,7 @@ import {
   ExportTechStackButton,
 } from "../components/optimize/OptimizeExports";
 import { solutionTypeLabel } from "../../shared/solutionTypes";
-import { canonicalizeVendor } from "../../shared/vendors";
+import { canonicalizeVendor, vendorLabel } from "../../shared/vendors";
 import { FitFactorPicker } from "../components/ui/FitFactorPicker";
 import {
   deriveTimeRating,
@@ -481,6 +481,11 @@ export default function OptimizeAccountPage() {
                             <span style={{ fontSize: 13, color: "#334155", fontWeight: 500 }}>{a.conducted_date}</span>
                             {a.conducted_by_name && (
                               <span style={{ fontSize: 12, color: "#94a3b8" }}>by {a.conducted_by_name}</span>
+                            )}
+                            {account.vendor && (
+                              <span className="ms-badge" style={{ background: "rgba(15,118,110,0.08)", color: "#0f766e", border: "1px solid rgba(15,118,110,0.2)", fontSize: 11, fontWeight: 600 }}>
+                                {vendorLabel(account.vendor)}
+                              </span>
                             )}
                             {a.solution_types.map((t) => (
                               <span key={t} className="ms-badge" style={{ background: "rgba(99,193,234,0.08)", color: "#63c1ea", border: "1px solid rgba(99,193,234,0.2)", fontSize: 11 }}>
