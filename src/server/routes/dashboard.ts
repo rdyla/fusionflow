@@ -313,6 +313,7 @@ app.get("/leadership", async (c) => {
     tasksByEngineer,
     goLives,
     upcomingGoLives,
+    wentLiveStillOpen,
     activeProjects,
     atRisk,
     blocked,
@@ -387,6 +388,19 @@ app.get("/leadership", async (c) => {
        LIMIT 10`
     ).bind(today, upcomingEnd).all<{ id: string; name: string; customer_name: string | null; target_go_live_date: string | null }>(),
 
+    // Went live (actual_go_live_date set) but the project is still open —
+    // not archived and not yet graduated to Optimize. Surfaces projects that
+    // hit go-live but haven't been wrapped up or moved on. Oldest first.
+    db.prepare(
+      `SELECT id, name, customer_name, actual_go_live_date, status
+       FROM projects p
+       WHERE p.actual_go_live_date IS NOT NULL
+         AND (p.archived = 0 OR p.archived IS NULL)
+         AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+       ORDER BY p.actual_go_live_date ASC
+       LIMIT 10`
+    ).all<{ id: string; name: string; customer_name: string | null; actual_go_live_date: string | null; status: string | null }>(),
+
     db.prepare(
       `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL)`
     ).first<{ n: number }>(),
@@ -447,6 +461,13 @@ app.get("/leadership", async (c) => {
         name: r.name,
         customer_name: r.customer_name,
         date: r.target_go_live_date,
+      })),
+      wentLiveStillOpen: (wentLiveStillOpen.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        date: r.actual_go_live_date,
+        status: r.status,
       })),
     },
   });
