@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
@@ -264,6 +265,211 @@ app.get("/summary", async (c) => {
     typeDistribution: typeDistribution.results ?? [],
     aeDistribution,
     isSalesLeader,
+  });
+});
+
+app.get("/leadership", async (c) => {
+  const auth = c.get("auth");
+  if (auth.role !== "admin" && auth.role !== "executive") {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const db = c.env.DB;
+
+  // ── Window math ──────────────────────────────────────────────────────────
+  // Resolve the requested window into a day-count, then derive an exclusive
+  // [start, end) range plus the immediately-preceding window of equal length.
+  const rawWindow = c.req.query("window");
+  const window = rawWindow === "month" || rawWindow === "quarter" ? rawWindow : "week";
+  const days = window === "quarter" ? 90 : window === "month" ? 30 : 7;
+
+  const fmt = (d: Date) => d.toISOString().slice(0, 10);
+  const addDays = (d: Date, n: number) => {
+    const next = new Date(d);
+    next.setDate(next.getDate() + n);
+    return next;
+  };
+
+  const now = new Date();
+  const today = fmt(now);
+  const end = fmt(addDays(now, 1));          // exclusive upper bound (today + 1)
+  const start = fmt(addDays(now, -(days - 1)));
+  const prevEnd = start;                      // current start = previous window's exclusive end
+  const prevStart = fmt(addDays(now, -(days - 1) - days));
+  const upcomingEnd = fmt(addDays(now, 30));
+
+  const round1 = (n: number | null | undefined) => Math.round((n ?? 0) * 10) / 10;
+
+  const hoursExpr =
+    "(julianday(scheduled_end) - julianday(scheduled_start)) * 24";
+  const hoursExprAlias =
+    "(julianday(ste.scheduled_end) - julianday(ste.scheduled_start)) * 24";
+
+  const [
+    timeCur,
+    timePrev,
+    byEngineer,
+    byProject,
+    tasksCompleted,
+    tasksByEngineer,
+    goLives,
+    upcomingGoLives,
+    wentLiveStillOpen,
+    activeProjects,
+    atRisk,
+    blocked,
+    openBlockers,
+  ] = await Promise.all([
+    db.prepare(
+      `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
+       FROM stage_time_entries
+       WHERE scheduled_start >= ? AND scheduled_start < ?
+         AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL`
+    ).bind(start, end).first<{ entries: number; hours: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
+       FROM stage_time_entries
+       WHERE scheduled_start >= ? AND scheduled_start < ?
+         AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL`
+    ).bind(prevStart, prevEnd).first<{ entries: number; hours: number }>(),
+
+    db.prepare(
+      `SELECT ste.user_id, u.name, u.email, COUNT(*) AS entries,
+              COALESCE(SUM(${hoursExprAlias}),0) AS hours
+       FROM stage_time_entries ste
+       LEFT JOIN users u ON u.id = ste.user_id
+       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
+         AND ste.scheduled_end IS NOT NULL
+       GROUP BY ste.user_id
+       ORDER BY hours DESC`
+    ).bind(start, end).all<{ user_id: string | null; name: string | null; email: string | null; entries: number; hours: number }>(),
+
+    db.prepare(
+      `SELECT ste.project_id, p.name, p.customer_name, COUNT(*) AS entries,
+              COALESCE(SUM(${hoursExprAlias}),0) AS hours
+       FROM stage_time_entries ste
+       LEFT JOIN projects p ON p.id = ste.project_id
+       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
+         AND ste.scheduled_end IS NOT NULL
+       GROUP BY ste.project_id
+       ORDER BY hours DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ project_id: string | null; name: string | null; customer_name: string | null; entries: number; hours: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM tasks WHERE completed_at >= ? AND completed_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT t.assignee_user_id, u.name, COUNT(*) AS n
+       FROM tasks t
+       LEFT JOIN users u ON u.id = t.assignee_user_id
+       WHERE t.completed_at >= ? AND t.completed_at < ?
+         AND t.assignee_user_id IS NOT NULL
+       GROUP BY t.assignee_user_id
+       ORDER BY n DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ assignee_user_id: string | null; name: string | null; n: number }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, actual_go_live_date
+       FROM projects
+       WHERE actual_go_live_date >= ? AND actual_go_live_date < ?
+       ORDER BY actual_go_live_date DESC`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; actual_go_live_date: string | null }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, target_go_live_date
+       FROM projects
+       WHERE target_go_live_date >= ? AND target_go_live_date <= ?
+         AND (actual_go_live_date IS NULL)
+         AND (archived = 0 OR archived IS NULL)
+       ORDER BY target_go_live_date ASC
+       LIMIT 10`
+    ).bind(today, upcomingEnd).all<{ id: string; name: string; customer_name: string | null; target_go_live_date: string | null }>(),
+
+    // Went live (actual_go_live_date set) but the project is still open —
+    // not archived and not yet graduated to Optimize. Surfaces projects that
+    // hit go-live but haven't been wrapped up or moved on. Oldest first.
+    db.prepare(
+      `SELECT id, name, customer_name, actual_go_live_date, status
+       FROM projects p
+       WHERE p.actual_go_live_date IS NOT NULL
+         AND (p.archived = 0 OR p.archived IS NULL)
+         AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+       ORDER BY p.actual_go_live_date ASC
+       LIMIT 10`
+    ).all<{ id: string; name: string; customer_name: string | null; actual_go_live_date: string | null; status: string | null }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL)`
+    ).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk'`
+    ).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked'`
+    ).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM risks WHERE status = 'open'`
+    ).first<{ n: number }>(),
+  ]);
+
+  return c.json({
+    window: { window, start, end },
+    time: {
+      totalHours: round1(timeCur?.hours),
+      prevTotalHours: round1(timePrev?.hours),
+      entries: timeCur?.entries ?? 0,
+      byEngineer: (byEngineer.results ?? []).map((r) => ({
+        user_id: r.user_id,
+        name: r.name,
+        email: r.email,
+        hours: round1(r.hours),
+        entries: r.entries,
+      })),
+      byProject: (byProject.results ?? []).map((r) => ({
+        project_id: r.project_id,
+        name: r.name,
+        customer_name: r.customer_name,
+        hours: round1(r.hours),
+        entries: r.entries,
+      })),
+    },
+    projects: {
+      activeProjects: activeProjects?.n ?? 0,
+      atRiskProjects: atRisk?.n ?? 0,
+      blockedProjects: blocked?.n ?? 0,
+      openBlockers: openBlockers?.n ?? 0,
+      tasksCompleted: tasksCompleted?.n ?? 0,
+      tasksByEngineer: (tasksByEngineer.results ?? []).map((r) => ({
+        user_id: r.assignee_user_id,
+        name: r.name,
+        n: r.n,
+      })),
+      goLives: (goLives.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        date: r.actual_go_live_date,
+      })),
+      upcomingGoLives: (upcomingGoLives.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        date: r.target_go_live_date,
+      })),
+      wentLiveStillOpen: (wentLiveStillOpen.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        date: r.actual_go_live_date,
+        status: r.status,
+      })),
+    },
   });
 });
 

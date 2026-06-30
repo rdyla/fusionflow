@@ -274,6 +274,64 @@ export type DashboardSummaryResponse = {
   isSalesLeader: boolean;
 };
 
+export type LeadershipDashboardResponse = {
+  window: {
+    window: "week" | "month" | "quarter";
+    start: string;
+    end: string;
+  };
+  time: {
+    totalHours: number;
+    prevTotalHours: number;
+    entries: number;
+    byEngineer: {
+      user_id: string | null;
+      name: string | null;
+      email: string | null;
+      hours: number;
+      entries: number;
+    }[];
+    byProject: {
+      project_id: string | null;
+      name: string | null;
+      customer_name: string | null;
+      hours: number;
+      entries: number;
+    }[];
+  };
+  projects: {
+    activeProjects: number;
+    atRiskProjects: number;
+    blockedProjects: number;
+    openBlockers: number;
+    tasksCompleted: number;
+    tasksByEngineer: {
+      user_id: string | null;
+      name: string | null;
+      n: number;
+    }[];
+    goLives: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      date: string | null;
+    }[];
+    upcomingGoLives: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      date: string | null;
+    }[];
+    wentLiveStillOpen: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      date: string | null;
+      status: string | null;
+    }[];
+  };
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -1389,6 +1447,8 @@ export const api = {
     request<Record<string, string | null>>(`/staff/photos?emails=${emails.map(encodeURIComponent).join(",")}`),
   users: () => request<User[]>("/users"),
   dashboardSummary: () => request<DashboardSummaryResponse>("/dashboard/summary"),
+  leadershipDashboard: (window: "week" | "month" | "quarter" = "week") =>
+    request<LeadershipDashboardResponse>(`/dashboard/leadership?window=${window}`),
   myTasks: (params: { status?: string; priority?: string; search?: string; page?: number }) => {
     const q = new URLSearchParams();
     if (params.status)   q.set("status",   params.status);
