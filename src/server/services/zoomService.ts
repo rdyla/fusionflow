@@ -47,9 +47,14 @@ export type ZoomStatus = {
   auto_receptionists_total: number | null;
   cc_users_total: number | null;
   cc_queues_total: number | null;
+  cc_flows_total: number | null;
+  cc_campaigns_total: number | null;
+  cc_numbers_total: number | null;
   calling_plans: ZoomCallingPlan[] | null;
   meeting_activity_30d: { participants: number; meeting_minutes: number } | null;
   phone_calls_30d: number | null;
+  phone_numbers_assigned: number | null;
+  phone_numbers_unassigned: number | null;
 };
 
 function credsKey(projectId: string) { return `zoom:creds:${projectId}`; }
@@ -633,6 +638,11 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     dailyCurrRes,
     dailyPrevRes,
     phoneCallsRes,
+    phoneNumbersAssignedRes,
+    phoneNumbersUnassignedRes,
+    ccFlowsRes,
+    ccCampaignsRes,
+    ccNumbersRes,
   ] = await Promise.allSettled([
     zoomGet<{ id: string; account_name: string; account_type: number }>(token, "/accounts/me"),
     zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
@@ -650,6 +660,11 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
       ? zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(token, `/report/daily?year=${prevYear}&month=${prevMonth}`)
       : Promise.resolve(null),
     zoomGet<{ total_records: number }>(token, `/phone/call_logs?from=${from30}&to=${to}&type=all&page_size=1`),
+    zoomGet<{ total_records: number }>(token, "/phone/numbers?type=assigned&page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/phone/numbers?type=unassigned&page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/contact_center/flows?page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/contact_center/outbound_campaign/campaigns?page_size=1"),
+    zoomGet<{ total_records: number }>(token, "/contact_center/phone_numbers?page_size=1"),
   ]);
 
   if (accountRes.status === "rejected") {
@@ -695,8 +710,13 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     auto_receptionists_total: settled(autoReceptionistsRes)?.total_records ?? null,
     cc_users_total: settled(ccUsersRes)?.total_records ?? null,
     cc_queues_total: settled(ccQueuesRes)?.total_records ?? null,
+    cc_flows_total: settled(ccFlowsRes)?.total_records ?? null,
+    cc_campaigns_total: settled(ccCampaignsRes)?.total_records ?? null,
+    cc_numbers_total: settled(ccNumbersRes)?.total_records ?? null,
     calling_plans: settled(callingPlansRes)?.calling_plans ?? null,
     meeting_activity_30d,
     phone_calls_30d: settled(phoneCallsRes)?.total_records ?? null,
+    phone_numbers_assigned: settled(phoneNumbersAssignedRes)?.total_records ?? null,
+    phone_numbers_unassigned: settled(phoneNumbersUnassignedRes)?.total_records ?? null,
   };
 }
