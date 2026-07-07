@@ -1,6 +1,21 @@
 import { useEffect, useState } from "react";
 import { api, type ZoomCallingPlan, type ZoomDevice, type ZoomStatus } from "../../lib/api";
 
+// Scopes the customer must add to their Server-to-Server OAuth app so CloudConnect
+// can read account, user, usage, phone, contact-center, and billing data.
+// Add any newly-required scope here — the setup instructions render from this list.
+const S2S_SCOPES = [
+  "account:read:admin",
+  "account:read:sub_account:admin",
+  "user:read:admin",
+  "report:read:admin",
+  "phone:read:admin",
+  "contact_center:read:admin",
+  "billing:read:plan_information:admin",
+];
+
+const SCOPE_CODE_STYLE = { background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" };
+
 // Human-readable labels for plan section keys returned by Zoom
 const PLAN_SECTION_LABELS: Record<string, string> = {
   plan_base: "Base Plan",
@@ -278,7 +293,9 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
           <li>Sign in using the <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
           <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
           <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
-          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>report:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>contact_center:read:admin</code></li>
+          <li>Add scopes: {S2S_SCOPES.map((s, i) => (
+            <span key={s}>{i > 0 ? ", " : ""}<code style={SCOPE_CODE_STYLE}>{s}</code></span>
+          ))}</li>
           <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
         </ol>
       </div>
