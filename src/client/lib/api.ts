@@ -556,6 +556,12 @@ export type CaseComplianceData = {
   externalResourcesTotal: number;
   /** Per-phase cases on phase-scoped projects. Empty otherwise. */
   phaseCases: PhaseCaseCompliance[];
+  /** Project-level "admin time" shadow rows (not tied to a task/stage). These
+   *  already count against SOW via the CRM read-back in `timeEntries`; this
+   *  array is for rendering the admin-time list + block subtotal only. */
+  projectTimeEntries: ProjectTimeEntry[];
+  /** Sum of `projectTimeEntries` hours — display total for the admin block. */
+  projectTimeEntriesTotalHours: number;
 };
 
 export type ExternalResourceStatus = "new" | "posted" | "assigned" | "in_progress" | "closed" | "billed";
@@ -828,6 +834,24 @@ export type StageTimeEntry = {
   note: string | null;
   user_id: string | null;
   user_name: string | null;
+  created_at: string;
+};
+
+/** Project-level "admin time" — general time logged against the project's CRM
+ *  case, not tied to any task or stage. `hours` is computed server-side from
+ *  the scheduled window for display. */
+export type ProjectTimeEntry = {
+  id: string;
+  project_id: string;
+  crm_time_entry_id: string | null;
+  scheduled_start: string | null;
+  scheduled_end: string | null;
+  pay_code_id: string | null;
+  cost_code_id: string | null;
+  note: string | null;
+  user_id: string | null;
+  user_name: string | null;
+  hours: number | null;
   created_at: string;
 };
 
@@ -1809,6 +1833,32 @@ export const api = {
 
   deleteStageTimeEntry: (projectId: string, stageId: string, entryId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/stages/${stageId}/time-entries/${entryId}`, {
+      method: "DELETE",
+    }),
+
+  // Project-level "admin time" — general time against the project's CRM case,
+  // not tied to any task or stage. Case/job/account are resolved server-side
+  // from the project's crm_case_id, so the client sends none of them.
+  listProjectTime: (projectId: string) =>
+    request<ProjectTimeEntry[]>(`/projects/${projectId}/time-entries`),
+
+  logProjectTime: (
+    projectId: string,
+    payload: {
+      scheduled_start: string;
+      scheduled_end: string;
+      pay_code_id: string;
+      cost_code_id: string;
+      note?: string;
+    }
+  ) =>
+    request<ProjectTimeEntry>(`/projects/${projectId}/time-entries`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+
+  deleteProjectTime: (projectId: string, entryId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/time-entries/${entryId}`, {
       method: "DELETE",
     }),
 
