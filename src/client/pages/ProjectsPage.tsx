@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, type DynamicsAccount, type DynamicsOpportunity, type Project, type Stage } from "../lib/api";
+import { api, type DynamicsAccount, type Project, type Stage } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
@@ -138,10 +138,6 @@ export default function ProjectsPage() {
   const dynTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dynRef = useRef<HTMLDivElement>(null);
 
-  // Opportunities for selected account
-  const [opportunities, setOpportunities] = useState<DynamicsOpportunity[]>([]);
-  const [oppsLoading, setOppsLoading] = useState(false);
-
   useEffect(() => {
     api.me().then((me) => setCurrentRole(me.role)).catch(() => {});
   }, []);
@@ -203,28 +199,17 @@ export default function ProjectsPage() {
     }, 350);
   }
 
-  async function handleSelectAccount(acct: DynamicsAccount) {
+  function handleSelectAccount(acct: DynamicsAccount) {
     setSelectedAccount(acct);
     setDynQuery(acct.name);
     setDynOpen(false);
     setForm((f) => ({ ...f, dynamics_account_id: acct.accountid, customer_name: acct.name }));
-    setOpportunities([]);
-    setOppsLoading(true);
-    try {
-      const opps = await api.getDynamicsOpportunities(acct.accountid);
-      setOpportunities(opps);
-    } catch {
-      setOpportunities([]);
-    } finally {
-      setOppsLoading(false);
-    }
   }
 
   function clearAccount() {
     setSelectedAccount(null);
     setDynQuery("");
     setDynResults([]);
-    setOpportunities([]);
     setForm((f) => ({ ...f, dynamics_account_id: "", customer_name: "" }));
   }
 
@@ -257,7 +242,6 @@ export default function ProjectsPage() {
     setDynResults([]);
     setSelectedAccount(null);
     setDynOpen(false);
-    setOpportunities([]);
   }
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading projects...</div>;
@@ -498,37 +482,6 @@ export default function ProjectsPage() {
                   </div>
                 )}
               </div>
-
-              {/* Opportunity picker — appears after account is linked */}
-              {selectedAccount && (
-                <label className="ms-label">
-                  <span>
-                    Opportunity
-                    {oppsLoading && (
-                      <span style={{ marginLeft: 8, fontSize: 11, color: "#64748b" }}>Loading…</span>
-                    )}
-                  </span>
-                  <select
-                    className="ms-input"
-                    defaultValue=""
-                    onChange={(e) => {
-                      const opp = opportunities.find((o) => o.opportunityid === e.target.value);
-                      if (opp) setForm((f) => ({ ...f, name: opp.name }));
-                    }}
-                  >
-                    <option value="">— select an opportunity —</option>
-                    {opportunities.map((opp) => {
-                      const stateLabel = opp.statecode === 1 ? "Won" : opp.statecode === 2 ? "Lost" : "Open";
-                      const closeSuffix = opp.estimatedclosedate ? ` · close ${opp.estimatedclosedate.slice(0, 10)}` : "";
-                      return (
-                        <option key={opp.opportunityid} value={opp.opportunityid}>
-                          {opp.name} [{stateLabel}{closeSuffix}]
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-              )}
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
                 <label className="ms-label">
