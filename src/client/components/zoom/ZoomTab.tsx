@@ -1,6 +1,21 @@
 import { useEffect, useState } from "react";
 import { api, type ZoomCallingPlan, type ZoomDevice, type ZoomStatus } from "../../lib/api";
 
+// Scopes the customer must add to their Server-to-Server OAuth app so CloudConnect
+// can read account, user, usage, phone, contact-center, and billing data.
+// Add any newly-required scope here — the setup instructions render from this list.
+const S2S_SCOPES = [
+  "account:read:admin",
+  "account:read:sub_account:admin",
+  "user:read:admin",
+  "report:read:admin",
+  "phone:read:admin",
+  "contact_center:read:admin",
+  "billing:read:plan_information:admin",
+];
+
+const SCOPE_CODE_STYLE = { background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" };
+
 // Human-readable labels for plan section keys returned by Zoom
 const PLAN_SECTION_LABELS: Record<string, string> = {
   plan_base: "Base Plan",
@@ -142,11 +157,14 @@ function CallingPlanList({ plans }: { plans: ZoomCallingPlan[] | null | undefine
   );
 }
 
-function MetricTile({ label, value }: { label: string; value: number | null | undefined }) {
+function MetricTile({ label, value, outOf }: { label: string; value: number | null | undefined; outOf?: number | null }) {
   return (
     <div style={{ background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8, padding: "16px 20px" }}>
       <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>{value ?? "—"}</div>
+      <div style={{ fontSize: 28, fontWeight: 800, color: "#1e293b", lineHeight: 1 }}>
+        {value ?? "—"}
+        {outOf != null && <span style={{ fontSize: 14, fontWeight: 500, color: "#64748b", marginLeft: 6 }}>/ {outOf}</span>}
+      </div>
     </div>
   );
 }
@@ -278,7 +296,9 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
           <li>Sign in using the <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>zm-&#123;customer&#125;@packetfusion.com</code> account</li>
           <li>Go to <strong>App Marketplace</strong> → <strong>Develop</strong> → <strong>Build App</strong></li>
           <li>Choose <strong>Server-to-Server OAuth</strong> and create the app</li>
-          <li>Add scopes: <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>account:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>user:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>report:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>phone:read:admin</code>, <code style={{ background: "rgba(255,255,255,0.1)", padding: "1px 4px", borderRadius: 3, color: "#1e293b" }}>contact_center:read:admin</code></li>
+          <li>Add scopes: {S2S_SCOPES.map((s, i) => (
+            <span key={s}>{i > 0 ? ", " : ""}<code style={SCOPE_CODE_STYLE}>{s}</code></span>
+          ))}</li>
           <li>Activate the app and copy the Account ID, Client ID, and Client Secret below</li>
         </ol>
       </div>
@@ -425,6 +445,15 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 14 }}>Phone System</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
           <MetricTile label="Phone Users" value={status.phone_users_total} />
+          <MetricTile
+            label="Numbers Assigned"
+            value={status.phone_numbers_assigned}
+            outOf={
+              status.phone_numbers_assigned != null || status.phone_numbers_unassigned != null
+                ? (status.phone_numbers_assigned ?? 0) + (status.phone_numbers_unassigned ?? 0)
+                : null
+            }
+          />
           <MetricTile label="Phone Devices" value={status.devices_total ?? null} />
           <MetricTile label="Call Queues" value={status.call_queues_total} />
           <MetricTile label="Auto Receptionists" value={status.auto_receptionists_total} />
@@ -441,9 +470,12 @@ function StatusDashboard({ status, onDisconnect }: { status: ZoomStatus; onDisco
         <div className="ms-section-card">
           <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Contact Center</div>
           <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14 }}>Contact Center (Zoom CC)</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             <MetricTile label="CC Users" value={status.cc_users_total} />
             <MetricTile label="CC Queues" value={status.cc_queues_total} />
+            <MetricTile label="CC Flows" value={status.cc_flows_total} />
+            <MetricTile label="Outbound Campaigns" value={status.cc_campaigns_total} />
+            <MetricTile label="CC Numbers" value={status.cc_numbers_total} />
           </div>
         </div>
       )}
