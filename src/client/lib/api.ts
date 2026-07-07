@@ -925,9 +925,14 @@ export type ZoomStatus = {
   auto_receptionists_total?: number | null;
   cc_users_total?: number | null;
   cc_queues_total?: number | null;
+  cc_flows_total?: number | null;
+  cc_campaigns_total?: number | null;
+  cc_numbers_total?: number | null;
   calling_plans?: ZoomCallingPlan[] | null;
   meeting_activity_30d?: { participants: number; meeting_minutes: number } | null;
   phone_calls_30d?: number | null;
+  phone_numbers_assigned?: number | null;
+  phone_numbers_unassigned?: number | null;
 };
 export type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
