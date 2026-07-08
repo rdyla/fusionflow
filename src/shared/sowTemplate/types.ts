@@ -99,6 +99,7 @@ export type SowBuildContext = {
   ditNumbers: number;          // DIDs to port
   meetingsCount: number;       // Zoom Meetings licenses (UCaaS variants)
   goLiveCount: number;         // Discrete go-live events (often = locationCount, may differ for staggered cutovers)
+  trainingSessions: number;    // Instructor-led training sessions scoped/priced (0 = self-paced only)
 };
 
 /** A snapshot tile on the cover page. Variants supply 4 of these. */
