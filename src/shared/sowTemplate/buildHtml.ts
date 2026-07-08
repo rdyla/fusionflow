@@ -224,9 +224,19 @@ function snapshotAndPricing(variant: SowVariant, ctx: SowBuildContext): string {
 
 
 function section1(variant: SowVariant, ctx: SowBuildContext): string {
-  const rows = variant.scopeAtAGlance.map((r) => `
-    <tr><td>${esc(r.element)}</td><td>${esc(fillScopeQuantity(r.quantity, ctx))}</td><td>${esc(r.notes)}</td></tr>
-  `).join("");
+  const rows = variant.scopeAtAGlance.map((r) => {
+    // When instructor-led training sessions are scoped/priced, the training row
+    // must reflect the session count instead of the default "Self-paced".
+    const isTraining = r.element === "End-user training";
+    const scoped = isTraining && ctx.trainingSessions > 0;
+    const quantity = scoped
+      ? `${ctx.trainingSessions} instructor-led session${ctx.trainingSessions === 1 ? "" : "s"}`
+      : fillScopeQuantity(r.quantity, ctx);
+    const notes = scoped
+      ? "Live instructor-led sessions delivered by Packet Fusion; self-paced vendor library also included."
+      : r.notes;
+    return `<tr><td>${esc(r.element)}</td><td>${esc(quantity)}</td><td>${esc(notes)}</td></tr>`;
+  }).join("");
 
   const msaClause = ctx.isZoomReseller
     ? "Zoom Services Reseller Customer Agreement"
