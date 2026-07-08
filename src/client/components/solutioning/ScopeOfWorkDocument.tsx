@@ -106,7 +106,7 @@ function pickCounts(
   sd: SowData | null | undefined,
   na: NeedsAssessment | null,
   solution: Solution,
-): { locations: number; users: number; ccaasAgents: number; ciSeats: number; vaWorkflows: number; dids: number; meetings: number; goLives: number } {
+): { locations: number; users: number; ccaasAgents: number; ciSeats: number; vaWorkflows: number; dids: number; meetings: number; goLives: number; trainingSessions: number } {
   // Advanced-mode source: the SOW Sizing Form blob (sow_data).
   const sdLocations = num(sd?.shared?.sites_count);
   const sdStages    = num(sd?.shared?.phases_count);
@@ -153,6 +153,10 @@ function pickCounts(
   const ccaasAgents = sdCcaasAgents > 0 ? sdCcaasAgents : num(comboInputs?.ccaas?.agents);
   const ciSeats     = num(sd?.ci?.licensed_seats);
   const vaWorkflows = (sd?.va?.voice ? 1 : 0) + (sd?.va?.chat ? 1 : 0) + (sd?.va?.sms ? 1 : 0);
+  // Instructor-led training sessions scoped/priced on the SOW (sow_data, then
+  // basic_inputs fallback). > 0 means the "Scope at a Glance" training row
+  // should show the session count, not the default "Self-paced".
+  const trainingSessions = num(sd?.ucaas?.training_sessions) || num(basic?.training_sessions);
 
   // Combo (UCaaS+CCaaS Basic): all sizing lives in sow_data.combo (fallback to
   // legacy basic_inputs). Source the headline counts from it so the SOW shows
@@ -172,10 +176,11 @@ function pickCounts(
       dids:      (combo.users || users) + additionalDids,
       meetings,
       goLives:   combo.go_lives || goLives,
+      trainingSessions: num(combo.training_sessions) || trainingSessions,
     };
   }
 
-  return { locations, users, ccaasAgents, ciSeats, vaWorkflows, dids, meetings, goLives };
+  return { locations, users, ccaasAgents, ciSeats, vaWorkflows, dids, meetings, goLives, trainingSessions };
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -301,6 +306,7 @@ export default function ScopeOfWorkDocument({
     ditNumbers:      counts.dids,
     meetingsCount:   counts.meetings,
     goLiveCount:     counts.goLives,
+    trainingSessions: counts.trainingSessions,
   };
 
   function buildSowDocHtml(): string {

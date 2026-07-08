@@ -287,6 +287,11 @@ export default function ProjectDetailPage() {
 
   // Time is logged per STAGE (one Log Time action per stage group), not per task.
   const [timeEntryStage, setTimeEntryStage] = useState<Stage | null>(null);
+  // Reuses the Log Time modal to log project-level "admin time" (not tied to a
+  // stage/task). When true, the modal submits via api.logProjectTime instead of
+  // api.logStageTime and timeEntryStage is null.
+  const [timeEntryProjectMode, setTimeEntryProjectMode] = useState(false);
+  const [deletingProjectEntryId, setDeletingProjectEntryId] = useState<string | null>(null);
   // Stage whose logged time entries are being viewed/managed in the list popup.
   const [viewEntriesStage, setViewEntriesStage] = useState<Stage | null>(null);
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
@@ -2903,6 +2908,97 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
+            {/* ── Project Admin Time ── */}
+            {/* General project/admin time logged to this case — not tied to any
+                task or stage. Only shown when the project has a linked CRM case
+                (mirrors the tab's crm_case_id gate). These entries ship to the
+                same CRM case, so they already count in "Hours Logged (CRM)"
+                above; this block just lists them with delete + a subtotal. */}
+            {caseCompliance?.case && (() => {
+              const adminEntries = caseCompliance.projectTimeEntries ?? [];
+              const adminTotal = caseCompliance.projectTimeEntriesTotalHours ?? 0;
+              return (
+                <div className="ms-section-card">
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <div className="ms-section-title" style={{ marginBottom: 2 }}>
+                        Project Admin Time
+                        <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{adminEntries.length} {adminEntries.length === 1 ? "entry" : "entries"} · {adminTotal.toFixed(1)}h</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: "#94a3b8" }}>Log general project/admin time to this case — not tied to a task or stage.</div>
+                    </div>
+                    {canManageTasks && (
+                      <button
+                        type="button"
+                        className="ms-btn-secondary"
+                        style={{ fontSize: 12, padding: "4px 12px", whiteSpace: "nowrap" }}
+                        onClick={() => {
+                          const today = new Date().toISOString().slice(0, 10);
+                          setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", note: "" });
+                          setTimeEntrySetup(null);
+                          setTimeEntryStage(null);
+                          setTimeEntryProjectMode(true);
+                          setTimeEntryLoadingSetup(true);
+                          // No stageId → server resolves the project-level CRM case + job.
+                          api.timeEntrySetup(p.id).then(setTimeEntrySetup).catch(() => showToast("Failed to load CRM data", "error")).finally(() => setTimeEntryLoadingSetup(false));
+                        }}
+                      >
+                        ⏱ Log time
+                      </button>
+                    )}
+                  </div>
+
+                  {adminEntries.length > 0 && (
+                    <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+                      {adminEntries.map((entry) => {
+                        const startDt = entry.scheduled_start ? new Date(entry.scheduled_start) : null;
+                        const hrs = entry.hours != null ? Number(entry.hours) : null;
+                        return (
+                          <div key={entry.id} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, color: "#1e293b", fontWeight: 600 }}>
+                                {startDt ? startDt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                                {hrs != null && <span style={{ color: "#0891b2", marginLeft: 8 }}>{hrs.toFixed(2)}h</span>}
+                              </div>
+                              {entry.note && <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>{entry.note}</div>}
+                              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                                {entry.user_name ?? "Unknown"}
+                                {entry.crm_time_entry_id ? " · in CRM" : " · not in CRM"}
+                              </div>
+                            </div>
+                            {canManageTasks && (
+                              <button
+                                type="button"
+                                disabled={deletingProjectEntryId === entry.id}
+                                title="Delete this entry from the app and CRM"
+                                onClick={async () => {
+                                  if (!confirm("Delete this time entry? It will be removed from the app and from Dynamics CRM.")) return;
+                                  setDeletingProjectEntryId(entry.id);
+                                  try {
+                                    await api.deleteProjectTime(p.id, entry.id);
+                                    // Refresh so the list, block total and compliance update.
+                                    api.projectCaseCompliance(p.id).then(setCaseCompliance).catch(() => {});
+                                    showToast("Time entry deleted from CRM.", "success");
+                                  } catch (err) {
+                                    showToast(err instanceof Error ? err.message : "Failed to delete time entry", "error");
+                                  } finally {
+                                    setDeletingProjectEntryId(null);
+                                  }
+                                }}
+                                style={{ background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}
+                              >
+                                {deletingProjectEntryId === entry.id ? "Deleting…" : "Delete"}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* ── Time Entries ── */}
             {/* Single project case (no phase cases to roll up — unchanged behavior) */}
             {!hasPhaseCases && caseCompliance?.case && (
@@ -3121,14 +3217,14 @@ export default function ProjectDetailPage() {
 
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}
       {/* ── Time Entry Modal ──────────────────────────────────────────────── */}
-      {timeEntryStage && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setTimeEntryStage(null); }}>
+      {(timeEntryStage || timeEntryProjectMode) && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setTimeEntryStage(null); setTimeEntryProjectMode(false); } }}>
           <div className="ms-modal" style={{ maxWidth: 480 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#1e293b" }}>Log Time</h2>
-              <button onClick={() => setTimeEntryStage(null)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
+              <button onClick={() => { setTimeEntryStage(null); setTimeEntryProjectMode(false); }} style={{ background: "none", border: "none", color: "#64748b", fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
             </div>
-            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, fontWeight: 500 }}>{timeEntryStage.name} stage</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 16, fontWeight: 500 }}>{timeEntryStage ? `${timeEntryStage.name} stage` : "Project admin time"}</div>
 
             {timeEntryLoadingSetup ? (
               <div style={{ color: "#64748b", fontSize: 13, padding: "16px 0" }}>Loading CRM data…</div>
@@ -3200,7 +3296,7 @@ export default function ProjectDetailPage() {
                     onChange={(e) => setTimeEntryForm((f) => ({ ...f, note: e.target.value }))}
                   />
                   <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 4, display: "block" }}>
-                    CRM subject: <span style={{ color: "#64748b" }}>{timeEntryStage.name}{timeEntryForm.note.trim() ? ` | ${timeEntryForm.note.trim()}` : ""}</span>
+                    CRM subject: <span style={{ color: "#64748b" }}>{timeEntryStage ? timeEntryStage.name : "Project Admin"}{timeEntryForm.note.trim() ? ` | ${timeEntryForm.note.trim()}` : ""}</span>
                   </span>
                 </label>
 
@@ -3210,7 +3306,7 @@ export default function ProjectDetailPage() {
                     style={{ flex: 1 }}
                     disabled={submittingTimeEntry || !timeEntryForm.date || !timeEntryForm.startTime || !timeEntryForm.endTime || !timeEntryForm.payCodeId || !timeEntryForm.costCodeId}
                     onClick={async () => {
-                      if (!project || !timeEntryStage || !timeEntrySetup?.case_id || !timeEntrySetup?.job_id) return;
+                      if (!project || (!timeEntryStage && !timeEntryProjectMode) || !timeEntrySetup?.case_id || !timeEntrySetup?.job_id) return;
                       setSubmittingTimeEntry(true);
                       try {
                         // The <input type="time"> value is wall-clock time in
@@ -3223,19 +3319,37 @@ export default function ProjectDetailPage() {
                         // showed up in D365 as 1am during DST.
                         const start = new Date(`${timeEntryForm.date}T${timeEntryForm.startTime}:00`).toISOString();
                         const end   = new Date(`${timeEntryForm.date}T${timeEntryForm.endTime}:00`).toISOString();
-                        const entry = await api.logStageTime(project.id, timeEntryStage.id, {
-                          scheduled_start: start,
-                          scheduled_end: end,
-                          pay_code_id: timeEntryForm.payCodeId,
-                          cost_code_id: timeEntryForm.costCodeId,
-                          note: timeEntryForm.note.trim() || undefined,
-                          case_id: timeEntrySetup.case_id!,
-                          job_id: timeEntrySetup.job_id!,
-                          account_id: timeEntrySetup.account_id ?? null,
-                        });
-                        setStageTimeEntries((prev) => ({ ...prev, [timeEntryStage.id]: [...(prev[timeEntryStage.id] ?? []), entry] }));
-                        setTimeEntryStage(null);
-                        showToast("Time entry submitted to CRM.", "success");
+                        if (timeEntryProjectMode) {
+                          // Project-level admin time — case/job/account are
+                          // resolved server-side from the project's crm_case_id.
+                          await api.logProjectTime(project.id, {
+                            scheduled_start: start,
+                            scheduled_end: end,
+                            pay_code_id: timeEntryForm.payCodeId,
+                            cost_code_id: timeEntryForm.costCodeId,
+                            note: timeEntryForm.note.trim() || undefined,
+                          });
+                          setTimeEntryProjectMode(false);
+                          // Refresh the CRM Case tab so the admin-time list +
+                          // total (and compliance) reflect the new entry.
+                          api.projectCaseCompliance(project.id).then(setCaseCompliance).catch(() => {});
+                          showToast("Time entry submitted to CRM.", "success");
+                        } else {
+                          const stage = timeEntryStage!;
+                          const entry = await api.logStageTime(project.id, stage.id, {
+                            scheduled_start: start,
+                            scheduled_end: end,
+                            pay_code_id: timeEntryForm.payCodeId,
+                            cost_code_id: timeEntryForm.costCodeId,
+                            note: timeEntryForm.note.trim() || undefined,
+                            case_id: timeEntrySetup.case_id!,
+                            job_id: timeEntrySetup.job_id!,
+                            account_id: timeEntrySetup.account_id ?? null,
+                          });
+                          setStageTimeEntries((prev) => ({ ...prev, [stage.id]: [...(prev[stage.id] ?? []), entry] }));
+                          setTimeEntryStage(null);
+                          showToast("Time entry submitted to CRM.", "success");
+                        }
                       } catch (err) {
                         showToast(err instanceof Error ? err.message : "Failed to submit time entry", "error");
                       } finally {
@@ -3245,7 +3359,7 @@ export default function ProjectDetailPage() {
                   >
                     {submittingTimeEntry ? "Submitting…" : "Submit Time Entry to CRM"}
                   </button>
-                  <button className="ms-btn-secondary" onClick={() => setTimeEntryStage(null)}>Cancel</button>
+                  <button className="ms-btn-secondary" onClick={() => { setTimeEntryStage(null); setTimeEntryProjectMode(false); }}>Cancel</button>
                 </div>
               </div>
             )}
