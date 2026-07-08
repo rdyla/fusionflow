@@ -2908,59 +2908,6 @@ export default function ProjectDetailPage() {
               </div>
             )}
 
-            {/* ── Time Entries ── */}
-            {/* Single project case (no phase cases to roll up — unchanged behavior) */}
-            {!hasPhaseCases && caseCompliance?.case && (
-              <div className="ms-section-card">
-                <div className="ms-section-title">
-                  Time Entries
-                  <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries</span>
-                </div>
-                <CaseTimeEntriesTable entries={caseCompliance.timeEntries ?? []} />
-              </div>
-            )}
-
-            {/* Phase cases linked: one time-entries view per case, all accounting
-                against the single opportunity SOW shown above. */}
-            {hasPhaseCases && (
-              <>
-                {caseCompliance?.case && (
-                  <div className="ms-section-card">
-                    <div className="ms-section-title">
-                      Project Case
-                      {caseCompliance.case.ticketNumber && (
-                        <span style={{ fontWeight: 400, fontSize: 12, fontFamily: "monospace", color: "#0891b2", marginLeft: 8 }}>{caseCompliance.case.ticketNumber}</span>
-                      )}
-                      <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries · {projectEngineerHours.toFixed(1)}h</span>
-                    </div>
-                    <CaseTimeEntriesTable entries={caseCompliance.timeEntries ?? []} />
-                  </div>
-                )}
-
-                {phaseCases.map((pc) => (
-                  <div key={pc.phaseId} className="ms-section-card">
-                    <div className="ms-section-title">
-                      {pc.phaseName}
-                      {pc.case?.ticketNumber && (
-                        <span style={{ fontWeight: 400, fontSize: 12, fontFamily: "monospace", color: "#0891b2", marginLeft: 8 }}>{pc.case.ticketNumber}</span>
-                      )}
-                      <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(pc.timeEntries ?? []).length} entries · {(pc.loggedHours ?? 0).toFixed(1)}h</span>
-                    </div>
-                    <CaseTimeEntriesTable entries={pc.timeEntries ?? []} />
-                  </div>
-                ))}
-
-                {/* Grand total across every case, to compare with SOW above. */}
-                <div className="ms-section-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
-                    Total logged across all cases
-                    <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>{totalEntryCount} entries</span>
-                  </span>
-                  <span style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{engineerHours.toFixed(1)}h</span>
-                </div>
-              </>
-            )}
-
             {/* ── Project Admin Time ── */}
             {/* General project/admin time logged to this case — not tied to any
                 task or stage. Only shown when the project has a linked CRM case
@@ -3051,6 +2998,59 @@ export default function ProjectDetailPage() {
                 </div>
               );
             })()}
+
+            {/* ── Time Entries ── */}
+            {/* Single project case (no phase cases to roll up — unchanged behavior) */}
+            {!hasPhaseCases && caseCompliance?.case && (
+              <div className="ms-section-card">
+                <div className="ms-section-title">
+                  Time Entries
+                  <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries</span>
+                </div>
+                <CaseTimeEntriesTable entries={caseCompliance.timeEntries ?? []} />
+              </div>
+            )}
+
+            {/* Phase cases linked: one time-entries view per case, all accounting
+                against the single opportunity SOW shown above. */}
+            {hasPhaseCases && (
+              <>
+                {caseCompliance?.case && (
+                  <div className="ms-section-card">
+                    <div className="ms-section-title">
+                      Project Case
+                      {caseCompliance.case.ticketNumber && (
+                        <span style={{ fontWeight: 400, fontSize: 12, fontFamily: "monospace", color: "#0891b2", marginLeft: 8 }}>{caseCompliance.case.ticketNumber}</span>
+                      )}
+                      <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(caseCompliance.timeEntries ?? []).length} entries · {projectEngineerHours.toFixed(1)}h</span>
+                    </div>
+                    <CaseTimeEntriesTable entries={caseCompliance.timeEntries ?? []} />
+                  </div>
+                )}
+
+                {phaseCases.map((pc) => (
+                  <div key={pc.phaseId} className="ms-section-card">
+                    <div className="ms-section-title">
+                      {pc.phaseName}
+                      {pc.case?.ticketNumber && (
+                        <span style={{ fontWeight: 400, fontSize: 12, fontFamily: "monospace", color: "#0891b2", marginLeft: 8 }}>{pc.case.ticketNumber}</span>
+                      )}
+                      <span style={{ fontWeight: 400, fontSize: 12, color: "#94a3b8", marginLeft: 8 }}>{(pc.timeEntries ?? []).length} entries · {(pc.loggedHours ?? 0).toFixed(1)}h</span>
+                    </div>
+                    <CaseTimeEntriesTable entries={pc.timeEntries ?? []} />
+                  </div>
+                ))}
+
+                {/* Grand total across every case, to compare with SOW above. */}
+                <div className="ms-section-card" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#475569" }}>
+                    Total logged across all cases
+                    <span style={{ fontWeight: 400, color: "#94a3b8", marginLeft: 8 }}>{totalEntryCount} entries</span>
+                  </span>
+                  <span style={{ fontSize: 22, fontWeight: 700, color: "#1e293b" }}>{engineerHours.toFixed(1)}h</span>
+                </div>
+              </>
+            )}
 
           </div>
         );
