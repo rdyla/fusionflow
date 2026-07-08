@@ -780,6 +780,191 @@ app.delete("/:id/stages/:stageId/time-entries/:entryId", async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Project-level "admin time" entry ────────────────────────────────────────
+// General project/admin time that isn't tied to any task or stage. It logs
+// against the project's CRM case + job exactly like the stage path — same
+// create-then-close contract, same authz — only the CRM subject
+// ("Project Admin | {note}") and the local shadow table (project_time_entries)
+// differ. v1 is PROJECT-LEVEL ONLY (no per-phase routing). Case/job/account are
+// resolved server-side from the project's crm_case_id — never trusted from the
+// client. Both pay code (labor) and cost code are REQUIRED here.
+
+const logProjectTimeSchema = z.object({
+  scheduled_start: z.string(),
+  scheduled_end: z.string(),
+  pay_code_id: z.string().min(1),
+  cost_code_id: z.string().min(1),
+  /** Optional free-text note; combined into the CRM subject as
+   *  "Project Admin | {note}". */
+  note: z.string().max(500).optional(),
+});
+
+// Shadow-row hours (client display / block total). Kept out of the compliance
+// rollup — the CRM read-back already counts these entries against the case.
+const PROJECT_TIME_SELECT = `
+  SELECT pte.*, u.name AS user_name,
+         (julianday(pte.scheduled_end) - julianday(pte.scheduled_start)) * 24 AS hours
+  FROM project_time_entries pte
+  LEFT JOIN users u ON u.id = pte.user_id
+`;
+
+/** List project-level admin time entries. */
+app.get("/:id/time-entries", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canViewProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const rows = await db
+    .prepare(`${PROJECT_TIME_SELECT} WHERE pte.project_id = ? ORDER BY pte.scheduled_start ASC`)
+    .bind(projectId)
+    .all();
+
+  return c.json(rows.results ?? []);
+});
+
+/** Log a project-level admin time entry and ship it to Dynamics CRM. */
+app.post("/:id/time-entries", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const project = await db
+    .prepare("SELECT id, crm_case_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ id: string; crm_case_id: string | null }>();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+
+  // PFI users who can edit the project may log time; engineers who are project
+  // staff may log time even without full edit rights. Copied verbatim from the
+  // stage-level path — project-level admin time has no assignee, so membership
+  // is the gate.
+  const canEdit = await canEditProject(db, auth.user, projectId);
+  let isEngineerOnProject = false;
+  if (!canEdit && auth.role === "pf_engineer") {
+    const staffRow = await db
+      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
+      .bind(projectId, auth.user.id)
+      .first();
+    isEngineerOnProject = !!staffRow;
+  }
+  if (!canEdit && !isEngineerOnProject) throw new HTTPException(403, { message: "Forbidden" });
+
+  if (!project.crm_case_id) throw new HTTPException(400, { message: "Project has no linked CRM case." });
+
+  const body = await c.req.json();
+  const parsed = logProjectTimeSchema.safeParse(body);
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid time entry data — pay code and cost code are required" });
+
+  const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, note } = parsed.data;
+
+  // Resolve case/job/account from the project's linked case SERVER-SIDE — never
+  // trust client-supplied ids. A missing job means no billing context, so the
+  // CRM submission can't proceed.
+  const caseAndJob = await getCaseAndJob(c.env, project.crm_case_id);
+  if (!caseAndJob) throw new HTTPException(400, { message: "Could not resolve the project's CRM case in Dynamics." });
+  if (!caseAndJob.jobId) throw new HTTPException(400, { message: "The project's CRM case has no linked job — a job is required to log time." });
+
+  const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
+  if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
+
+  // CRM subject: "Project Admin | {note}" — e.g. "Project Admin | weekly
+  // internal sync". The entry is related to the project's CRM case, which
+  // already identifies the project, so the project name isn't repeated here.
+  const noteTrimmed = (note ?? "").trim();
+  const subject = noteTrimmed ? `Project Admin | ${noteTrimmed}` : "Project Admin";
+
+  let crmTimeEntryId: string;
+  try {
+    crmTimeEntryId = await createTimeEntry(c.env, {
+      subject,
+      scheduledStart: scheduled_start,
+      scheduledEnd: scheduled_end,
+      caseId: caseAndJob.caseId,
+      jobId: caseAndJob.jobId,
+      payCodeId: pay_code_id,
+      costCodeId: cost_code_id,
+      companyId: caseAndJob.accountId ?? null,
+      ownerId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry failed";
+    console.error("createTimeEntry (project admin) error:", message);
+    throw new HTTPException(502, { message: `CRM error: ${message}` });
+  }
+
+  // Same create-then-close contract as the stage/task paths: payroll only picks
+  // up Completed entries, so a failed close is a hard error (orphan left in CRM).
+  try {
+    await closeTimeEntry(c.env, crmTimeEntryId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "CRM time entry close failed";
+    console.error("closeTimeEntry (project admin) error:", message, "orphan entry:", crmTimeEntryId);
+    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
+  }
+
+  const entryId = crypto.randomUUID();
+  await db
+    .prepare(`
+      INSERT INTO project_time_entries (id, project_id, crm_time_entry_id, scheduled_start, scheduled_end, pay_code_id, cost_code_id, note, user_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .bind(entryId, projectId, crmTimeEntryId, scheduled_start, scheduled_end, pay_code_id, cost_code_id, noteTrimmed || null, auth.user.id)
+    .run();
+
+  const created = await db
+    .prepare(`${PROJECT_TIME_SELECT} WHERE pte.id = ? LIMIT 1`)
+    .bind(entryId)
+    .first();
+
+  return c.json(created, 201);
+});
+
+/** Delete a project-level admin time entry — removes it from Dynamics CRM and locally. */
+app.delete("/:id/time-entries/:entryId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const entryId = c.req.param("entryId");
+
+  const entry = await db
+    .prepare("SELECT id, crm_time_entry_id, user_id FROM project_time_entries WHERE id = ? AND project_id = ? LIMIT 1")
+    .bind(entryId, projectId)
+    .first<{ id: string; crm_time_entry_id: string | null; user_id: string | null }>();
+  if (!entry) throw new HTTPException(404, { message: "Time entry not found" });
+
+  // Same authz as the POST: project editors, or an engineer staffed on the
+  // project, may remove a project-level admin entry.
+  const canEdit = await canEditProject(db, auth.user, projectId);
+  let isEngineerOnProject = false;
+  if (!canEdit && auth.role === "pf_engineer") {
+    const staffRow = await db
+      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
+      .bind(projectId, auth.user.id)
+      .first();
+    isEngineerOnProject = !!staffRow;
+  }
+  if (!canEdit && !isEngineerOnProject) throw new HTTPException(403, { message: "Forbidden" });
+
+  // Delete the CRM record first so we never leave the local row pointing at a
+  // CRM entry we failed to remove. A 404 in CRM is treated as success.
+  if (entry.crm_time_entry_id) {
+    try {
+      await deleteTimeEntry(c.env, entry.crm_time_entry_id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "CRM delete failed";
+      console.error("deleteTimeEntry (project admin) error:", message, "entry:", entry.crm_time_entry_id);
+      throw new HTTPException(502, { message: `CRM error: ${message}` });
+    }
+  }
+
+  await db.prepare("DELETE FROM project_time_entries WHERE id = ?").bind(entryId).run();
+
+  return c.json({ ok: true });
+});
+
 app.delete("/:id/tasks/:taskId", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;

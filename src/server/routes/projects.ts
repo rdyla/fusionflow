@@ -648,7 +648,30 @@ app.get("/:id/case", async (c) => {
     }
   }
 
-  return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities, externalResourcesTotal, phaseCases });
+  // Project-level "admin time" — general time logged against the project's CRM
+  // case, not tied to any task or stage. These are shipped to the SAME CRM case
+  // as stage/task time, so they ALREADY appear in `timeEntries` (the CRM
+  // read-back) and are therefore already counted in the client's total-logged
+  // hours vs SOW — exactly like stage/task time. We surface the local shadow
+  // rows here purely so the client can render the admin-time list (with local
+  // ids for deletion) and its block subtotal. Do NOT add these hours to the
+  // compliance total separately — that would double-count against the CRM
+  // read-back. Hours are computed from the scheduled window for display only.
+  const projectTimeRows = (await db
+    .prepare(`
+      SELECT pte.*, u.name AS user_name,
+             (julianday(pte.scheduled_end) - julianday(pte.scheduled_start)) * 24 AS hours
+      FROM project_time_entries pte
+      LEFT JOIN users u ON u.id = pte.user_id
+      WHERE pte.project_id = ?
+      ORDER BY pte.scheduled_start ASC
+    `)
+    .bind(projectId)
+    .all<{ hours: number | null }>()).results ?? [];
+  const projectTimeEntries = projectTimeRows;
+  const projectTimeEntriesTotalHours = projectTimeRows.reduce((s, e) => s + (Number(e.hours) || 0), 0);
+
+  return c.json({ case: caseData, timeEntries, sowQuote, accountOpportunities, externalResourcesTotal, phaseCases, projectTimeEntries, projectTimeEntriesTotalHours });
 });
 
 // ── SharePoint folder (retrofit for projects created before the auto-create) ─
