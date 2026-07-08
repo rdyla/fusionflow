@@ -801,12 +801,10 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae"), async (c) => {
 
   const created = await db.prepare("SELECT * FROM project_contacts WHERE id = ? LIMIT 1").bind(id).first();
 
-  // Send access invite for the two Stanford POC projects only, and only when the contact has an email.
-  const INVITE_PROJECT_IDS = new Set([
-    "ba2a694a-8169-46ae-a88d-0b1cd27cd474", // Stanford University - POC (Cisco)
-    "3851f703-3cbd-43fa-ae20-6b2144cc43fb", // Stanford University - POC (Zoom)
-  ]);
-  if (email && INVITE_PROJECT_IDS.has(projectId)) {
+  // Send the customer an access invite whenever the added contact has an email.
+  // (Previously gated to two Stanford POC projects during pilot; now enabled for
+  // all projects. Fires on every add — re-adding a contact re-sends.)
+  if (email) {
     const project = await db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>();
     if (project) {
       const appUrl = c.env.APP_URL ?? "https://cloudconnect.packetfusion.com";
