@@ -507,3 +507,15 @@
     font-size: 12px;
   }
 }
+
+/* Tasks tab — the "+ add resource" control is hidden so an assigned task rests
+   as a single line; it appears only while the assignee cell is hovered or the
+   primary dropdown is focused (i.e. when you're actively assigning). Already-
+   assigned extra resources always show. */
+.assignee-cell .add-resource {
+  display: none;
+}
+.assignee-cell:hover .add-resource,
+.assignee-cell:focus-within .add-resource {
+  display: block;
+}

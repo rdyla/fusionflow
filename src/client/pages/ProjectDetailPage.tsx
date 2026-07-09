@@ -1827,7 +1827,7 @@ export default function ProjectDetailPage() {
                                         const currentValue = task.assignee_user_id ? `u:${task.assignee_user_id}` : task.assignee_contact_id ? `c:${task.assignee_contact_id}` : "";
                                         const userIsOnProject = task.assignee_user_id ? projectStaffUnique.some((s) => s.user_id === task.assignee_user_id) : true;
                                         return (
-                                          <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                          <div className="assignee-cell" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                                           <select
                                             value={currentValue}
                                             disabled={!canManageTasks}
@@ -1893,7 +1893,7 @@ export default function ProjectDetailPage() {
                                             <div
                                               key={a.id}
                                               title={assigneeLabel(a)}
-                                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, padding: "3px 6px", fontSize: 13, color: isBlocked ? "#dc2626" : "#1e293b", minWidth: 0 }}
+                                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, padding: "3px 6px", border: "1px solid transparent", boxSizing: "border-box", fontSize: 13, lineHeight: "1.4", color: isBlocked ? "#dc2626" : "#1e293b", minWidth: 0 }}
                                             >
                                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{assigneeLabel(a)}</span>
                                               {canManageTasks && (
@@ -1917,6 +1917,7 @@ export default function ProjectDetailPage() {
                                             if (staffOpts.length === 0 && contactOpts.length === 0) return null;
                                             return (
                                               <select
+                                                className="add-resource"
                                                 value=""
                                                 style={{ ...cellInputStyle, fontSize: 11, color: "#94a3b8", cursor: "pointer" }}
                                                 onChange={(e) => { const v = e.target.value; e.target.value = ""; if (v) addAssignee(task.id, v); }}
