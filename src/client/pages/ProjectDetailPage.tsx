@@ -35,7 +35,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypeFilterPills } from "../components/ui/SolutionTypeFilterPills";
-import { parseSolutionTypes, parseTaggedTitle, SOLUTION_TYPES, SOLUTION_TYPE_COLORS, SOLUTION_TYPE_LABELS, type SolutionType } from "../../shared/solutionTypes";
+import { parseSolutionTypes, parseTaggedTitle, SOLUTION_TYPES, SOLUTION_TYPE_LABELS, type SolutionType } from "../../shared/solutionTypes";
 import { VENDOR_OPTIONS, vendorLabel } from "../../shared/vendors";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
@@ -418,6 +418,13 @@ export default function ProjectDetailPage() {
   };
 
   const filteredTasks = useMemo(() => tasks.filter(taskMatchesTypeFilter), [tasks, selectedTypes]);
+
+  // Tasks with an active (non-closed) blocker — the whole row renders red so a
+  // blocked task is obvious at a glance without opening the Blockers tab.
+  const blockedTaskIds = useMemo(
+    () => new Set(risks.filter((r) => r.task_id && r.status !== "closed").map((r) => r.task_id as string)),
+    [risks]
+  );
 
   // Curated assignee picker — Tasks page dropdowns pull from the project's PF staff
   // (PM/AE/SA/CSM/IE/partner AE) + project contacts (customer & partner-side, incl. porting).
@@ -888,7 +895,9 @@ export default function ProjectDetailPage() {
     setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
     try {
       const updated = await api.updateTask(project.id, taskId, patch);
-      setTasks((ts) => ts.map((t) => (t.id === taskId ? updated : t)));
+      // The PATCH response doesn't carry the additional-resource list; preserve
+      // whatever we already have so the sub-rows don't vanish on an edit.
+      setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...updated, assignees: t.assignees ?? prev.assignees } : t)));
       // When a go-live event task's date moves, the server auto-syncs
       // projects.target_go_live_date — refetch the project so the meta
       // header reflects the new value in-session.
@@ -903,6 +912,39 @@ export default function ProjectDetailPage() {
     } catch (err) {
       setTasks((ts) => ts.map((t) => (t.id === taskId ? prev : t)));
       showToast(err instanceof Error ? err.message : "Failed to update task", "error");
+    }
+  }
+
+  // Additional-resource label — mirrors the primary assignee's resolution.
+  function assigneeLabel(a: { user_id: string | null; contact_id: string | null }): string {
+    if (a.user_id) return assigneeLabelForUser(a.user_id);
+    if (a.contact_id) {
+      const c = contacts.find((x) => x.id === a.contact_id);
+      return c ? `${c.name}${c.contact_role ? ` · ${c.contact_role}` : ""}` : "(contact)";
+    }
+    return "(unknown)";
+  }
+
+  async function addAssignee(taskId: string, selection: string) {
+    if (!project || !selection) return;
+    const body = selection.startsWith("u:") ? { user_id: selection.slice(2) } : { contact_id: selection.slice(2) };
+    try {
+      const created = await api.addTaskAssignee(project.id, taskId, body);
+      setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, assignees: [...(t.assignees ?? []), created] } : t)));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to add resource", "error");
+    }
+  }
+
+  async function removeAssignee(taskId: string, assigneeId: string) {
+    if (!project) return;
+    const prev = tasks.find((t) => t.id === taskId)?.assignees ?? [];
+    setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, assignees: (t.assignees ?? []).filter((a) => a.id !== assigneeId) } : t)));
+    try {
+      await api.removeTaskAssignee(project.id, taskId, assigneeId);
+    } catch {
+      setTasks((ts) => ts.map((t) => (t.id === taskId ? { ...t, assignees: prev } : t)));
+      showToast("Failed to remove resource", "error");
     }
   }
 
@@ -1724,12 +1766,12 @@ export default function ProjectDetailPage() {
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
                             <col />
-                            <col style={{ width: 160 }} />
-                            <col style={{ width: 130 }} />
-                            <col style={{ width: 130 }} />
-                            <col style={{ width: 100 }} />
-                            <col style={{ width: 140 }} />
-                            <col style={{ width: 96 }} />
+                            <col style={{ width: 150 }} />
+                            <col style={{ width: 112 }} />
+                            <col style={{ width: 116 }} />
+                            <col style={{ width: 80 }} />
+                            <col style={{ width: 92 }} />
+                            <col style={{ width: 68 }} />
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
@@ -1749,59 +1791,47 @@ export default function ProjectDetailPage() {
                               const todayIso = new Date().toISOString().slice(0, 10);
                               const isOverdue = !!task.due_date && !isDone && task.due_date < todayIso;
                               const subRowCount = taskRecordings.length;
+                              // A task with an active blocker renders its whole row in red.
+                              const isBlocked = blockedTaskIds.has(task.id);
+                              const rowInputStyle: React.CSSProperties = isBlocked ? { ...cellInputStyle, color: "#dc2626" } : cellInputStyle;
+                              const extraAssignees = task.assignees ?? [];
                               return (
                                 <React.Fragment key={task.id}>
                                   <tr data-task-row={task.id}>
                                     <td style={cellStyle}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                                        <input
-                                          type="text"
-                                          defaultValue={taskDisplayTitle(task)}
-                                          disabled={!canManageTasks}
-                                          style={{ ...cellInputStyle, flex: 1, minWidth: 0 }}
-                                          title={task.title}
-                                          onBlur={(e) => {
-                                            const newRaw = e.target.value.trim();
-                                            if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
-                                            if (newRaw === taskDisplayTitle(task)) return;
-                                            // Preserve any [Tag] prefix from the original title
-                                            const { types } = parseTaggedTitle(task.title);
-                                            const newTitle = types.length > 0
-                                              ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
-                                              : newRaw;
-                                            patchTask(task.id, { title: newTitle });
-                                          }}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                                            else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
-                                          }}
-                                        />
-                                        {(() => {
-                                          const taskTypes = parseTaggedTitle(task.title).types;
-                                          if (taskTypes.length === 0) return null;
-                                          return (
-                                            <span style={{ display: "inline-flex", gap: 3, flexShrink: 0 }}>
-                                              {taskTypes.map((t) => (
-                                                <span
-                                                  key={t}
-                                                  title={SOLUTION_TYPE_LABELS[t]}
-                                                  style={{ width: 7, height: 7, borderRadius: "50%", background: SOLUTION_TYPE_COLORS[t], flexShrink: 0 }}
-                                                />
-                                              ))}
-                                            </span>
-                                          );
-                                        })()}
-                                      </div>
+                                      <input
+                                        type="text"
+                                        defaultValue={taskDisplayTitle(task)}
+                                        disabled={!canManageTasks}
+                                        style={{ ...rowInputStyle, width: "100%" }}
+                                        title={task.title}
+                                        onBlur={(e) => {
+                                          const newRaw = e.target.value.trim();
+                                          if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
+                                          if (newRaw === taskDisplayTitle(task)) return;
+                                          // Preserve any [Tag] prefix from the original title
+                                          const { types } = parseTaggedTitle(task.title);
+                                          const newTitle = types.length > 0
+                                            ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
+                                            : newRaw;
+                                          patchTask(task.id, { title: newTitle });
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                          else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
+                                        }}
+                                      />
                                     </td>
                                     <td style={cellStyle}>
                                       {(() => {
                                         const currentValue = task.assignee_user_id ? `u:${task.assignee_user_id}` : task.assignee_contact_id ? `c:${task.assignee_contact_id}` : "";
                                         const userIsOnProject = task.assignee_user_id ? projectStaffUnique.some((s) => s.user_id === task.assignee_user_id) : true;
                                         return (
+                                          <div className="assignee-cell" style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                                           <select
                                             value={currentValue}
                                             disabled={!canManageTasks}
-                                            style={cellInputStyle}
+                                            style={rowInputStyle}
                                             onChange={(e) => {
                                               const v = e.target.value;
                                               if (v === "__add_contact__") {
@@ -1857,6 +1887,64 @@ export default function ProjectDetailPage() {
                                               </option>
                                             )}
                                           </select>
+                                          {/* Additional resources — stacked directly under the primary in the
+                                              same column, parity styling (same size/color, just no select chrome). */}
+                                          {extraAssignees.map((a) => (
+                                            <div
+                                              key={a.id}
+                                              title={assigneeLabel(a)}
+                                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, padding: "3px 6px 3px 10px", border: "1px solid transparent", boxSizing: "border-box", fontSize: 13, lineHeight: "1.4", color: isBlocked ? "#dc2626" : "#1e293b", minWidth: 0 }}
+                                            >
+                                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{assigneeLabel(a)}</span>
+                                              {canManageTasks && (
+                                                <button
+                                                  type="button"
+                                                  title="Remove resource"
+                                                  onClick={() => removeAssignee(task.id, a.id)}
+                                                  style={{ background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}
+                                                >
+                                                  ×
+                                                </button>
+                                              )}
+                                            </div>
+                                          ))}
+                                          {/* Add more — only once a primary is assigned; the stack grows downward. */}
+                                          {canManageTasks && (task.assignee_user_id || task.assignee_contact_id) && (() => {
+                                            const assignedU = new Set([task.assignee_user_id, ...(task.assignees ?? []).map((a) => a.user_id)].filter(Boolean) as string[]);
+                                            const assignedC = new Set([task.assignee_contact_id, ...(task.assignees ?? []).map((a) => a.contact_id)].filter(Boolean) as string[]);
+                                            const staffOpts = projectStaffUnique.filter((s) => !assignedU.has(s.user_id));
+                                            const contactOpts = contacts.filter((cc) => !assignedC.has(cc.id));
+                                            if (staffOpts.length === 0 && contactOpts.length === 0) return null;
+                                            return (
+                                              <select
+                                                className="add-resource"
+                                                value=""
+                                                style={{ ...cellInputStyle, fontSize: 11, color: "#94a3b8", cursor: "pointer" }}
+                                                onChange={(e) => { const v = e.target.value; e.target.value = ""; if (v) addAssignee(task.id, v); }}
+                                              >
+                                                <option value="">+ add resource…</option>
+                                                {staffOpts.length > 0 && (
+                                                  <optgroup label="Project Staff">
+                                                    {staffOpts.map((s) => (
+                                                      <option key={s.user_id} value={`u:${s.user_id}`}>
+                                                        {s.name ?? s.email} · {ASSIGNEE_ROLE_LABEL[s.staff_role] ?? s.staff_role}
+                                                      </option>
+                                                    ))}
+                                                  </optgroup>
+                                                )}
+                                                {contactOpts.length > 0 && (
+                                                  <optgroup label="Contacts">
+                                                    {contactOpts.map((cc) => (
+                                                      <option key={cc.id} value={`c:${cc.id}`}>
+                                                        {cc.name}{cc.contact_role ? ` · ${cc.contact_role}` : ""}
+                                                      </option>
+                                                    ))}
+                                                  </optgroup>
+                                                )}
+                                              </select>
+                                            );
+                                          })()}
+                                          </div>
                                         );
                                       })()}
                                     </td>
@@ -1865,7 +1953,7 @@ export default function ProjectDetailPage() {
                                         type="date"
                                         value={task.due_date ?? ""}
                                         disabled={!canManageTasks}
-                                        style={cellInputStyle}
+                                        style={rowInputStyle}
                                         onChange={(e) => patchTask(task.id, { due_date: e.target.value || null })}
                                       />
                                     </td>
@@ -1873,7 +1961,7 @@ export default function ProjectDetailPage() {
                                       <select
                                         value={task.status ?? "not_started"}
                                         disabled={!canManageTasks}
-                                        style={{ ...cellInputStyle, color: STATUS_COLOR[task.status ?? "not_started"] ?? "#1e293b", fontWeight: 600 }}
+                                        style={{ ...cellInputStyle, color: isBlocked ? "#dc2626" : (STATUS_COLOR[task.status ?? "not_started"] ?? "#1e293b"), fontWeight: 600 }}
                                         onChange={(e) => patchTask(task.id, { status: e.target.value as "not_started" | "in_progress" | "completed" | "blocked" })}
                                       >
                                         <option value="not_started">Not Started</option>
@@ -1886,7 +1974,7 @@ export default function ProjectDetailPage() {
                                       <select
                                         value={task.priority ?? ""}
                                         disabled={!canManageTasks}
-                                        style={cellInputStyle}
+                                        style={rowInputStyle}
                                         onChange={(e) => patchTask(task.id, { priority: (e.target.value || null) as "low" | "medium" | "high" | null })}
                                       >
                                         <option value="">—</option>
@@ -1911,7 +1999,7 @@ export default function ProjectDetailPage() {
                                             value={task.completed_at?.slice(0, 10) ?? ""}
                                             disabled={!canManageTasks}
                                             onChange={(e) => patchTask(task.id, { completed_at: e.target.value || null })}
-                                            style={{ ...cellInputStyle, color: "#059669", fontWeight: 500, padding: "3px 4px" }}
+                                            style={{ ...cellInputStyle, color: isBlocked ? "#dc2626" : "#059669", fontWeight: 500, padding: "3px 4px" }}
                                             title="Edit completion date"
                                           />
                                         )}
