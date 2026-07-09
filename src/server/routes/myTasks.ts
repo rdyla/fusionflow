@@ -56,21 +56,31 @@ app.get("/", async (c) => {
     ? `SELECT id FROM projects WHERE (archived = 0 OR archived IS NULL) AND ${projectFilter}`
     : `SELECT id FROM projects WHERE (archived = 0 OR archived IS NULL)`;
 
-  // ── Assignee scope ────────────────────────────────────────────────────────
-  const isAE = auth.role === "pf_ae" || auth.role === "partner_ae" || auth.role === "pf_sa";
-  const teamIds = isAE ? await getTeamUserIds(auth.user.id, db) : [auth.user.id];
-  const isManager = teamIds.length > 1;
-  const scopeToAssigned = (isAE && !isManager) || auth.role === "pf_engineer";
-
   // ── Task filters ──────────────────────────────────────────────────────────
-  const conditions: string[] = [`t.project_id IN (${projectSubquery})`];
-  const bindings: unknown[] = [...projectBindings];
+  // "My Tasks" is personal for every internal role: you see only tasks assigned
+  // to you (primary assignee OR an additional resource via task_assignees).
+  // Admins/PMs/leads used to get the whole portfolio here — thousands of tasks,
+  // useful to no one.
+  //
+  // Access-restricted roles (pf_ae, partner_ae — esp. external partners) ALSO
+  // stay bound to the projects they can access, so a stale assignment on a
+  // project they've been removed from can't leak its task/project names. The
+  // portfolio-visible internal roles (admin/pm/pf_sa/pf_csm/executive/
+  // pf_engineer) can see every project anyway, so no project bound is needed.
+  // Clients aren't task assignees — scope them to their company's projects.
+  const conditions: string[] = [];
+  const bindings: unknown[] = [];
 
-  if (scopeToAssigned) {
-    // Primary assignee OR an additional resource (task_assignees) — a secondary
-    // resource sees the task in My Tasks just like the primary.
+  if (auth.role === "client") {
+    conditions.push(`t.project_id IN (${projectSubquery})`);
+    bindings.push(...projectBindings);
+  } else {
     conditions.push("(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))");
     bindings.push(auth.user.id, auth.user.id);
+    if (auth.role === "pf_ae" || auth.role === "partner_ae") {
+      conditions.push(`t.project_id IN (${projectSubquery})`);
+      bindings.push(...projectBindings);
+    }
   }
 
   // Status / overdue

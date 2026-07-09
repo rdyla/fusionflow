@@ -61,12 +61,26 @@ app.get("/summary", async (c) => {
     ? `SELECT id FROM projects ${projectFilter}`
     : `SELECT id FROM projects`;
 
-  // AEs and engineers only see tasks assigned to them; managers and PMs/admins see all tasks
-  const isAE = auth.role === "pf_ae" || auth.role === "partner_ae" || auth.role === "pf_sa";
-  const isManager = teamIds.length > 1;
-  const scopeToAssigned = (isAE && !isManager) || auth.role === "pf_engineer";
-  const taskAssigneeClause = scopeToAssigned ? " AND assignee_user_id = ?" : "";
-  const taskAssigneeBinding: string[] = scopeToAssigned ? [auth.user.id] : [];
+  // "Open Tasks" is personal for every internal role: your assigned tasks
+  // (primary assignee OR an additional resource via task_assignees). Matches the
+  // /my-tasks panel; the portfolio-wide total moves to the leadership panel.
+  // Access-restricted roles (pf_ae, partner_ae) ALSO stay bound to projects they
+  // can access, so a stale assignment can't leak a project they've been removed
+  // from. Portfolio-visible internal roles need no project bound (they see all).
+  // Clients aren't task assignees — scope them to their company's projects.
+  let taskWhere: string;
+  let taskWhereBind: unknown[];
+  if (auth.role === "client") {
+    taskWhere = `t.project_id IN (${projectSubquery})`;
+    taskWhereBind = [...filterBindings];
+  } else {
+    taskWhere = "(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))";
+    taskWhereBind = [auth.user.id, auth.user.id];
+    if (auth.role === "pf_ae" || auth.role === "partner_ae") {
+      taskWhere += ` AND t.project_id IN (${projectSubquery})`;
+      taskWhereBind = [auth.user.id, auth.user.id, ...filterBindings];
+    }
+  }
 
   const isSalesLeader = (auth.role === "pf_ae" || auth.role === "partner_ae") && teamIds.length > 1;
 
@@ -119,9 +133,9 @@ app.get("/summary", async (c) => {
       .first<{ count: number }>(),
 
     db.prepare(
-        `SELECT COUNT(*) as count FROM tasks WHERE status != 'completed' AND project_id IN (${projectSubquery})${taskAssigneeClause}`
+        `SELECT COUNT(*) as count FROM tasks t WHERE t.status != 'completed' AND ${taskWhere}`
       )
-      .bind(...filterBindings, ...taskAssigneeBinding)
+      .bind(...taskWhereBind)
       .first<{ count: number }>(),
 
     db.prepare(
@@ -163,13 +177,13 @@ app.get("/summary", async (c) => {
          FROM tasks t
          JOIN projects p ON p.id = t.project_id
          WHERE t.status != 'completed'
-           AND t.project_id IN (${projectSubquery})${taskAssigneeClause.replace("assignee_user_id", "t.assignee_user_id")}
+           AND ${taskWhere}
          ORDER BY
            CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
            t.due_date ASC
          LIMIT 8`
       )
-      .bind(...filterBindings, ...taskAssigneeBinding)
+      .bind(...taskWhereBind)
       .all(),
 
     // Open blockers with project name, highest severity first
