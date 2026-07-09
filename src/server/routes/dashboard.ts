@@ -62,15 +62,25 @@ app.get("/summary", async (c) => {
     : `SELECT id FROM projects`;
 
   // "Open Tasks" is personal for every internal role: your assigned tasks
-  // (primary assignee OR an additional resource via task_assignees), across any
-  // project. Clients aren't task assignees, so they stay scoped to their
-  // company's projects. Matches the /my-tasks panel. The portfolio-wide task
-  // total moves to the leadership panel.
-  const personalTasks = auth.role !== "client";
-  const taskWhere = personalTasks
-    ? "(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))"
-    : `t.project_id IN (${projectSubquery})`;
-  const taskWhereBind: unknown[] = personalTasks ? [auth.user.id, auth.user.id] : [...filterBindings];
+  // (primary assignee OR an additional resource via task_assignees). Matches the
+  // /my-tasks panel; the portfolio-wide total moves to the leadership panel.
+  // Access-restricted roles (pf_ae, partner_ae) ALSO stay bound to projects they
+  // can access, so a stale assignment can't leak a project they've been removed
+  // from. Portfolio-visible internal roles need no project bound (they see all).
+  // Clients aren't task assignees — scope them to their company's projects.
+  let taskWhere: string;
+  let taskWhereBind: unknown[];
+  if (auth.role === "client") {
+    taskWhere = `t.project_id IN (${projectSubquery})`;
+    taskWhereBind = [...filterBindings];
+  } else {
+    taskWhere = "(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))";
+    taskWhereBind = [auth.user.id, auth.user.id];
+    if (auth.role === "pf_ae" || auth.role === "partner_ae") {
+      taskWhere += ` AND t.project_id IN (${projectSubquery})`;
+      taskWhereBind = [auth.user.id, auth.user.id, ...filterBindings];
+    }
+  }
 
   const isSalesLeader = (auth.role === "pf_ae" || auth.role === "partner_ae") && teamIds.length > 1;
 
