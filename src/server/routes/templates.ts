@@ -6,7 +6,6 @@ import { requireRole } from "../middleware/requireRole";
 import { canEditProject } from "../services/accessService";
 import { syncProjectGoLiveDate } from "../lib/teamUtils";
 import {
-  buildTaggedTitle,
   canonicalizeSolutionType,
   parseTaggedTitle,
   type SolutionType,
@@ -549,11 +548,11 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     }
 
     if (matched) {
-      // Upgrade the existing task's tag to include this template's solution type.
-      // Re-normalize the raw title too so older untouched tasks pick up TC on merge.
-      const { types, rawTitle } = parseTaggedTitle(matched.title);
-      const mergedTypes = [...new Set([...types, templateSolutionType!])];
-      const newTitle = buildTaggedTitle(mergedTypes, toTitleCase(rawTitle));
+      // A matching task already exists — don't insert a duplicate. Just clean
+      // its title (strip any legacy [type] tag + title-case). Technology-type
+      // tags are no longer applied to task titles.
+      const { rawTitle } = parseTaggedTitle(matched.title);
+      const newTitle = toTitleCase(rawTitle);
       if (newTitle !== matched.title) {
         await db.prepare("UPDATE tasks SET title = ? WHERE id = ?").bind(newTitle, matched.id).run();
         matched.title = newTitle;
@@ -563,9 +562,8 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
       continue;
     }
 
-    // No match — insert as a new task, tagged with this template's solution
-    // type when known. If templateSolutionType is null (legacy template) we
-    // fall back to the untagged title.
+    // No match — insert as a new task. Technology-type tags are no longer added
+    // to task titles (each type gets its own phase instead).
     //
     // When the stage has computed dates (target_go_live_date was supplied),
     // every task in that stage gets scheduled_start = stage.start and
@@ -583,9 +581,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => 
     // (synced from this task's due_date) exact. Mirrors taskWindow() in
     // TimelineBuilder.
     const newTaskId = crypto.randomUUID();
-    const insertedTitle = templateSolutionType
-      ? buildTaggedTitle([templateSolutionType], normalizedTitle)
-      : normalizedTitle;
+    const insertedTitle = normalizedTitle;
     const stageDates = mappedStageId ? stageDatesByDestId.get(mappedStageId) : undefined;
     const isGoLiveEvent = (task.is_go_live_event ?? 0) === 1;
     const taskStart = isGoLiveEvent && target_go_live_date
