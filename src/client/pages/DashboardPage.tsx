@@ -4,6 +4,7 @@ import { api, type DashboardSummaryResponse, type Task } from "../lib/api";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { SOLUTION_TYPE_LABELS, canonicalizeSolutionType, type SolutionType } from "../../shared/solutionTypes";
 import { humanize } from "../lib/format";
+import { sortProjects, nextSort, statusOptions, SortableTh, StatusFilter, type ProjectSort, type ProjectSortKey } from "../lib/projectSort";
 
 // ── Color maps ────────────────────────────────────────────────────────────────
 
@@ -305,6 +306,11 @@ export default function DashboardPage() {
   const [taskStatus, setTaskStatus]       = useState("all");
   const [taskPriority, setTaskPriority]   = useState("all");
   const [taskSearch, setTaskSearch]       = useState("");
+  // Projects table sort/filter
+  const [projSearch, setProjSearch]       = useState("");
+  const [projStatus, setProjStatus]       = useState("");
+  const [projSort, setProjSort]           = useState<ProjectSort>(null);
+  const toggleProjSort = (key: ProjectSortKey) => setProjSort((prev) => nextSort(prev, key));
   const [taskSearchInput, setTaskSearchInput] = useState("");
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tasksRef = useRef<HTMLDivElement | null>(null);
@@ -371,6 +377,20 @@ export default function DashboardPage() {
   }
 
   const { user, summary, projects, projectStages, openBlockers, stageDistribution, vendorDistribution, typeDistribution, aeDistribution, isSalesLeader } = data;
+
+  // Projects table: filter by name/customer search + status, then sort.
+  const projSearchQ = projSearch.trim().toLowerCase();
+  const visibleProjects = sortProjects(
+    projects.filter((p) => {
+      if (projStatus && p.status !== projStatus) return false;
+      if (projSearchQ) {
+        const hay = `${p.name} ${p.customer_name ?? ""}`.toLowerCase();
+        if (!hay.includes(projSearchQ)) return false;
+      }
+      return true;
+    }),
+    projSort,
+  );
 
   // Build a map from project_id → sorted stages
   const stagesByProject = projectStages.reduce<Record<string, StageEntry[]>>((acc, ph) => {
@@ -469,31 +489,44 @@ export default function DashboardPage() {
 
       {/* Projects table */}
       <div className="ms-card" style={{ marginBottom: 20, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "14px 20px", borderBottom: "1px solid rgba(0,0,0,0.07)", flexWrap: "wrap" }}>
           <span style={{ fontWeight: 700, fontSize: 14, color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Projects
           </span>
-          <Link to="/projects" style={{ fontSize: 13, color: "#63c1ea", textDecoration: "none", fontWeight: 600 }}>
-            View all →
-          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <input
+              className="ms-input"
+              placeholder="Search project or customer…"
+              value={projSearch}
+              onChange={(e) => setProjSearch(e.target.value)}
+              style={{ width: 220 }}
+            />
+            <StatusFilter value={projStatus} onChange={setProjStatus} options={statusOptions(projects)} />
+            <Link to="/projects" style={{ fontSize: 13, color: "#63c1ea", textDecoration: "none", fontWeight: 600, whiteSpace: "nowrap" }}>
+              View all →
+            </Link>
+          </div>
         </div>
         <table className="ms-table">
           <thead>
             <tr>
-              {["Project", "Customer", "Provider / Tech", "Status", "Current Stage", "Health"].map((h) => (
-                <th key={h}>{h}</th>
-              ))}
+              <SortableTh label="Project" colKey="name" sort={projSort} onSort={toggleProjSort} />
+              <SortableTh label="Customer" colKey="customer" sort={projSort} onSort={toggleProjSort} />
+              <th>Provider / Tech</th>
+              <SortableTh label="Status" colKey="status" sort={projSort} onSort={toggleProjSort} />
+              <th>Current Stage</th>
+              <th>Health</th>
             </tr>
           </thead>
           <tbody>
-            {projects.length === 0 && (
+            {visibleProjects.length === 0 && (
               <tr>
                 <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "24px 16px" }}>
-                  No projects yet.
+                  {projects.length === 0 ? "No projects yet." : "No projects match your filters."}
                 </td>
               </tr>
             )}
-            {projects.map((p) => {
+            {visibleProjects.map((p) => {
               const isCompleted = p.status === "completed";
               const isBlocked = p.status === "blocked";
               const onHold = p.on_hold === 1;
