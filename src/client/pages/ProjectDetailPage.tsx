@@ -1893,7 +1893,7 @@ export default function ProjectDetailPage() {
                                             <div
                                               key={a.id}
                                               title={assigneeLabel(a)}
-                                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, padding: "3px 6px", border: "1px solid transparent", boxSizing: "border-box", fontSize: 13, lineHeight: "1.4", color: isBlocked ? "#dc2626" : "#1e293b", minWidth: 0 }}
+                                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, padding: "3px 6px 3px 10px", border: "1px solid transparent", boxSizing: "border-box", fontSize: 13, lineHeight: "1.4", color: isBlocked ? "#dc2626" : "#1e293b", minWidth: 0 }}
                                             >
                                               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{assigneeLabel(a)}</span>
                                               {canManageTasks && (
