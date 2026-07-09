@@ -1038,9 +1038,9 @@ app.post("/:id/tasks/:taskId/assignees", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const task = await db
-    .prepare(`SELECT id, assignee_user_id, assignee_contact_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
+    .prepare(`SELECT id, title, due_date, priority, assignee_user_id, assignee_contact_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first<{ id: string; assignee_user_id: string | null; assignee_contact_id: string | null }>();
+    .first<{ id: string; title: string; due_date: string | null; priority: string | null; assignee_user_id: string | null; assignee_contact_id: string | null }>();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
   const parsed = addAssigneeSchema.safeParse(await c.req.json());
@@ -1068,6 +1068,33 @@ app.post("/:id/tasks/:taskId/assignees", async (c) => {
     .prepare(`INSERT INTO task_assignees (id, task_id, user_id, contact_id) VALUES (?, ?, ?, ?)`)
     .bind(id, taskId, userId, contactId)
     .run();
+
+  // Notify an added internal resource exactly like the primary assignee — email
+  // + in-app notification. Contacts aren't platform users, so nothing to send.
+  if (userId) {
+    const [assignee, project] = await Promise.all([
+      db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(userId).first<{ email: string; name: string }>(),
+      db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>(),
+    ]);
+    if (assignee && project) {
+      const appUrl = c.env.APP_URL ?? "";
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, userId, "important", {
+        to: assignee.email,
+        subject: `You've been assigned: ${task.title}`,
+        html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: task.title, projectName: project.name, dueDate: task.due_date, priority: task.priority, appUrl, projectId }),
+      }));
+      c.executionCtx.waitUntil(createNotification(db, {
+        recipientUserId: userId,
+        type: "task_assigned",
+        title: `You've been assigned: ${task.title}`,
+        body: project.name,
+        entityType: "task",
+        entityId: taskId,
+        projectId,
+        senderUserId: auth.user.id,
+      }));
+    }
+  }
 
   return c.json({ id, user_id: userId, contact_id: contactId });
 });
