@@ -1887,8 +1887,29 @@ export default function ProjectDetailPage() {
                                               </option>
                                             )}
                                           </select>
-                                          {/* Add extra resources — they render as sub-rows beneath the task. */}
-                                          {canManageTasks && (() => {
+                                          {/* Additional resources — stacked directly under the primary in the
+                                              same column, parity styling (same size/color, just no select chrome). */}
+                                          {extraAssignees.map((a) => (
+                                            <div
+                                              key={a.id}
+                                              title={assigneeLabel(a)}
+                                              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4, padding: "3px 6px", fontSize: 13, color: isBlocked ? "#dc2626" : "#1e293b", minWidth: 0 }}
+                                            >
+                                              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{assigneeLabel(a)}</span>
+                                              {canManageTasks && (
+                                                <button
+                                                  type="button"
+                                                  title="Remove resource"
+                                                  onClick={() => removeAssignee(task.id, a.id)}
+                                                  style={{ background: "none", border: "none", color: "#cbd5e1", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}
+                                                >
+                                                  ×
+                                                </button>
+                                              )}
+                                            </div>
+                                          ))}
+                                          {/* Add more — only once a primary is assigned; the stack grows downward. */}
+                                          {canManageTasks && (task.assignee_user_id || task.assignee_contact_id) && (() => {
                                             const assignedU = new Set([task.assignee_user_id, ...(task.assignees ?? []).map((a) => a.user_id)].filter(Boolean) as string[]);
                                             const assignedC = new Set([task.assignee_contact_id, ...(task.assignees ?? []).map((a) => a.contact_id)].filter(Boolean) as string[]);
                                             const staffOpts = projectStaffUnique.filter((s) => !assignedU.has(s.user_id));
@@ -1897,7 +1918,7 @@ export default function ProjectDetailPage() {
                                             return (
                                               <select
                                                 value=""
-                                                style={{ ...cellInputStyle, fontSize: 11, color: "#64748b", cursor: "pointer" }}
+                                                style={{ ...cellInputStyle, fontSize: 11, color: "#94a3b8", cursor: "pointer" }}
                                                 onChange={(e) => { const v = e.target.value; e.target.value = ""; if (v) addAssignee(task.id, v); }}
                                               >
                                                 <option value="">+ add resource…</option>
@@ -2014,25 +2035,9 @@ export default function ProjectDetailPage() {
                                       )}
                                     </td>
                                   </tr>
-                                  {(extraAssignees.length > 0 || subRowCount > 0) && (
+                                  {subRowCount > 0 && (
                                     <tr>
                                       <td colSpan={7} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
-                                        {extraAssignees.map((a) => (
-                                          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: isBlocked ? "#dc2626" : "#475569", padding: "1px 0" }}>
-                                            <span style={{ color: "#94a3b8" }}>↳</span>
-                                            <span>{assigneeLabel(a)}</span>
-                                            {canManageTasks && (
-                                              <button
-                                                type="button"
-                                                title="Remove resource"
-                                                onClick={() => removeAssignee(task.id, a.id)}
-                                                style={{ background: "none", border: "none", color: "#94a3b8", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "0 2px" }}
-                                              >
-                                                ×
-                                              </button>
-                                            )}
-                                          </div>
-                                        ))}
                                         {taskRecordings.map((rec) => (
                                           <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#7c3aed" }}>
                                             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#7c3aed" }} />
