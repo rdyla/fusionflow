@@ -9,6 +9,7 @@ import { useDemoMode } from "../lib/demoMode";
 import { resolveVendorBadge } from "../lib/vendorBadge";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { humanize } from "../lib/format";
+import { sortProjects, nextSort, statusOptions, SortableTh, StatusFilter, type ProjectSort, type ProjectSortKey } from "../lib/projectSort";
 
 /** Latest in_progress stage name — what the project is "currently doing".
  *  Multi-phase projects may have the same stage repeated per phase; using
@@ -95,6 +96,9 @@ export default function ProjectsPage() {
   // PMs/IEs default to their own projects but can zoom out to the full portfolio.
   const [scope, setScope] = useState<"mine" | "all">("mine");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [sort, setSort] = useState<ProjectSort>(null);
+  const toggleSort = (key: ProjectSortKey) => setSort((prev) => nextSort(prev, key));
   const { showToast } = useToast();
   const navigate = useNavigate();
   const { demoVendor } = useDemoMode();
@@ -106,6 +110,7 @@ export default function ProjectsPage() {
   const searchQuery = search.trim().toLowerCase();
   const filteredProjects = projects.filter((p) => {
     if (healthFilter && p.health !== healthFilter) return false;
+    if (statusFilter && p.status !== statusFilter) return false;
     if (searchQuery) {
       const haystack = [
         p.name,
@@ -122,6 +127,7 @@ export default function ProjectsPage() {
     }
     return true;
   });
+  const sortedProjects = sortProjects(filteredProjects, sort);
   const clearFilter = (key: string) => {
     const next = new URLSearchParams(searchParams);
     next.delete(key);
@@ -262,7 +268,7 @@ export default function ProjectsPage() {
         )}
       </div>
 
-      {/* Free-text search across project, customer, and provider/tech. */}
+      {/* Free-text search across project, customer, and provider/tech + status filter. */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <input
           className="ms-input"
@@ -271,6 +277,7 @@ export default function ProjectsPage() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: 280 }}
         />
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} options={statusOptions(projects)} />
       </div>
 
       {/* PMs/IEs: default to their own projects, zoom out to the whole portfolio. */}
@@ -316,19 +323,19 @@ export default function ProjectsPage() {
         <table className="ms-table">
           <thead>
             <tr>
-              <th>Project</th>
-              <th>Customer</th>
+              <SortableTh label="Project" colKey="name" sort={sort} onSort={toggleSort} />
+              <SortableTh label="Customer" colKey="customer" sort={sort} onSort={toggleSort} />
               <th>Provider / Tech</th>
-              <th>Status</th>
+              <SortableTh label="Status" colKey="status" sort={sort} onSort={toggleSort} />
               <th>Current Stage</th>
               <th>Health</th>
             </tr>
           </thead>
           <tbody>
-            {filteredProjects.length === 0 ? (
+            {sortedProjects.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: "center", color: "#64748b", padding: "28px 16px" }}>
-                  {searchQuery
+                  {searchQuery || statusFilter
                     ? "No projects match your search."
                     : healthFilter
                     ? `No projects with health "${healthFilter.replace("_", " ")}".`
@@ -336,7 +343,7 @@ export default function ProjectsPage() {
                 </td>
               </tr>
             ) : (
-              filteredProjects.map((project) => {
+              sortedProjects.map((project) => {
                 const hasTypes = (project.solution_types?.length ?? 0) > 0;
                 const v = resolveVendorBadge(project.vendor);
                 const onHold = project.on_hold === 1;
