@@ -113,19 +113,22 @@ export async function canEditProject(
   }
 
   if (user.role === "pm") {
-    const owned = await db
-      .prepare(
-        `
-        SELECT id
-        FROM projects
-        WHERE id = ? AND pm_user_id = ?
-        LIMIT 1
-        `
-      )
+    // A project has a Lead PM (projects.pm_user_id) and may have additional PMs
+    // (project_staff rows with staff_role='pm'). BOTH manage the project. This
+    // mirrors the list-scoping in myTasks/projects, which already surfaces a
+    // project to either — canEditProject previously honored only the Lead PM,
+    // so additional PMs could see their projects but got 403 managing them.
+    const leadPm = await db
+      .prepare("SELECT id FROM projects WHERE id = ? AND pm_user_id = ? LIMIT 1")
       .bind(projectId, user.id)
       .first();
+    if (leadPm) return true;
 
-    return !!owned;
+    const staffPm = await db
+      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? AND staff_role = 'pm' LIMIT 1")
+      .bind(projectId, user.id)
+      .first();
+    return !!staffPm;
   }
 
   return false;
