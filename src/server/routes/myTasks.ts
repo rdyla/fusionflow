@@ -67,8 +67,10 @@ app.get("/", async (c) => {
   const bindings: unknown[] = [...projectBindings];
 
   if (scopeToAssigned) {
-    conditions.push("t.assignee_user_id = ?");
-    bindings.push(auth.user.id);
+    // Primary assignee OR an additional resource (task_assignees) — a secondary
+    // resource sees the task in My Tasks just like the primary.
+    conditions.push("(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))");
+    bindings.push(auth.user.id, auth.user.id);
   }
 
   // Status / overdue
