@@ -184,7 +184,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const existing = await db
     .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -253,7 +253,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const updated = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
-    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
 
   // Auto-derive stage status from the new task state. Sync both the old and
   // new stage when a task moved between stages.
@@ -289,6 +289,25 @@ app.patch("/:id/tasks/:taskId", async (c) => {
         entityId: taskId,
         projectId,
         senderUserId: auth.user.id,
+      }));
+    }
+  }
+
+  // Notify a newly-assigned CONTACT (external / customer person). Contacts
+  // aren't platform users, so there's no in-app feed or per-user email
+  // preference — email them directly (recipientUserId null => always sends).
+  // Without this, customer assignees got no task-assignment email at all.
+  const contactChanged = updates.assignee_contact_id !== undefined && updates.assignee_contact_id !== existing.assignee_contact_id;
+  if (contactChanged && updated?.assignee_contact_id && project) {
+    const contact = await db
+      .prepare("SELECT email, name FROM project_contacts WHERE id = ? LIMIT 1")
+      .bind(updated.assignee_contact_id)
+      .first<{ email: string | null; name: string | null }>();
+    if (contact?.email) {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, null, "important", {
+        to: contact.email,
+        subject: `You've been assigned: ${updated.title}`,
+        html: taskAssigned({ assigneeName: contact.name ?? contact.email, taskTitle: updated.title, projectName: project.name, dueDate: updated.due_date, priority: updated.priority, appUrl, projectId }),
       }));
     }
   }
@@ -1069,29 +1088,38 @@ app.post("/:id/tasks/:taskId/assignees", async (c) => {
     .bind(id, taskId, userId, contactId)
     .run();
 
-  // Notify an added internal resource exactly like the primary assignee — email
-  // + in-app notification. Contacts aren't platform users, so nothing to send.
-  if (userId) {
-    const [assignee, project] = await Promise.all([
-      db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(userId).first<{ email: string; name: string }>(),
-      db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>(),
-    ]);
-    if (assignee && project) {
-      const appUrl = c.env.APP_URL ?? "";
+  // Notify an added resource exactly like the primary assignee. Internal users
+  // get email (pref-gated) + an in-app notification. Contacts (external /
+  // customer people) aren't platform users, so they get the email directly
+  // (no in-app feed, no per-user preference).
+  const projectRow = await db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>();
+  const appUrl = c.env.APP_URL ?? "";
+  if (userId && projectRow) {
+    const assignee = await db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(userId).first<{ email: string; name: string }>();
+    if (assignee) {
       c.executionCtx.waitUntil(maybeSendEmail(c.env, db, userId, "important", {
         to: assignee.email,
         subject: `You've been assigned: ${task.title}`,
-        html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: task.title, projectName: project.name, dueDate: task.due_date, priority: task.priority, appUrl, projectId }),
+        html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: task.title, projectName: projectRow.name, dueDate: task.due_date, priority: task.priority, appUrl, projectId }),
       }));
       c.executionCtx.waitUntil(createNotification(db, {
         recipientUserId: userId,
         type: "task_assigned",
         title: `You've been assigned: ${task.title}`,
-        body: project.name,
+        body: projectRow.name,
         entityType: "task",
         entityId: taskId,
         projectId,
         senderUserId: auth.user.id,
+      }));
+    }
+  } else if (contactId && projectRow) {
+    const contact = await db.prepare("SELECT email, name FROM project_contacts WHERE id = ? LIMIT 1").bind(contactId).first<{ email: string | null; name: string | null }>();
+    if (contact?.email) {
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, null, "important", {
+        to: contact.email,
+        subject: `You've been assigned: ${task.title}`,
+        html: taskAssigned({ assigneeName: contact.name ?? contact.email, taskTitle: task.title, projectName: projectRow.name, dueDate: task.due_date, priority: task.priority, appUrl, projectId }),
       }));
     }
   }
