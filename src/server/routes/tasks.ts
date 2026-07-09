@@ -56,7 +56,25 @@ app.get("/:id/tasks", async (c) => {
     .bind(projectId, ...phaseBinds)
     .all();
 
-  return c.json(rows.results ?? []);
+  // Attach additional resources (beyond the primary assignee) to each task.
+  const extra = await db
+    .prepare(
+      `SELECT ta.id, ta.task_id, ta.user_id, ta.contact_id
+         FROM task_assignees ta
+         JOIN tasks t ON t.id = ta.task_id
+        WHERE t.project_id = ?`
+    )
+    .bind(projectId)
+    .all<{ id: string; task_id: string; user_id: string | null; contact_id: string | null }>();
+  const byTask = new Map<string, Array<{ id: string; user_id: string | null; contact_id: string | null }>>();
+  for (const a of extra.results ?? []) {
+    const list = byTask.get(a.task_id) ?? [];
+    list.push({ id: a.id, user_id: a.user_id, contact_id: a.contact_id });
+    byTask.set(a.task_id, list);
+  }
+  const tasks = (rows.results ?? []).map((t) => ({ ...(t as Record<string, unknown>), assignees: byTask.get((t as { id: string }).id) ?? [] }));
+
+  return c.json(tasks);
 });
 
 const createTaskSchema = z.object({
@@ -997,6 +1015,83 @@ app.delete("/:id/tasks/:taskId", async (c) => {
   await maybeGraduateProject(db, projectId, auth.user.id);
   await syncProjectGoLiveDate(db, projectId);
   await syncProjectStatus(db, projectId);
+
+  return c.json({ success: true });
+});
+
+// ── Additional task resources (beyond the primary assignee) ──────────────────
+
+const addAssigneeSchema = z.object({
+  user_id: z.string().max(255).nullable().optional(),
+  contact_id: z.string().max(255).nullable().optional(),
+});
+
+// Add an extra resource to a task. Exactly one of user_id / contact_id. Managing
+// assignments is a manage action, so it needs full edit or staffed-engineer.
+app.post("/:id/tasks/:taskId/assignees", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+
+  const allowed = (await canEditProject(db, auth.user, projectId)) || (await isStaffedEngineer(db, auth, projectId));
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const task = await db
+    .prepare(`SELECT id, assignee_user_id, assignee_contact_id FROM tasks WHERE id = ? AND project_id = ? LIMIT 1`)
+    .bind(taskId, projectId)
+    .first<{ id: string; assignee_user_id: string | null; assignee_contact_id: string | null }>();
+  if (!task) throw new HTTPException(404, { message: "Task not found" });
+
+  const parsed = addAssigneeSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const userId = parsed.data.user_id ?? null;
+  const contactId = parsed.data.contact_id ?? null;
+  if ((userId && contactId) || (!userId && !contactId)) {
+    throw new HTTPException(400, { message: "Provide exactly one of user_id or contact_id" });
+  }
+
+  // Skip if this person is already the primary assignee.
+  if ((userId && userId === task.assignee_user_id) || (contactId && contactId === task.assignee_contact_id)) {
+    throw new HTTPException(409, { message: "Already the primary assignee" });
+  }
+
+  // Idempotent: return the existing row if this person is already an extra.
+  const dup = await db
+    .prepare(`SELECT id, user_id, contact_id FROM task_assignees WHERE task_id = ? AND ${userId ? "user_id = ?" : "contact_id = ?"} LIMIT 1`)
+    .bind(taskId, userId ?? contactId)
+    .first<{ id: string; user_id: string | null; contact_id: string | null }>();
+  if (dup) return c.json(dup);
+
+  const id = crypto.randomUUID();
+  await db
+    .prepare(`INSERT INTO task_assignees (id, task_id, user_id, contact_id) VALUES (?, ?, ?, ?)`)
+    .bind(id, taskId, userId, contactId)
+    .run();
+
+  return c.json({ id, user_id: userId, contact_id: contactId });
+});
+
+// Remove an extra resource from a task.
+app.delete("/:id/tasks/:taskId/assignees/:assigneeId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const taskId = c.req.param("taskId");
+  const assigneeId = c.req.param("assigneeId");
+
+  const allowed = (await canEditProject(db, auth.user, projectId)) || (await isStaffedEngineer(db, auth, projectId));
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  // Scope the delete to a task that actually belongs to this project.
+  await db
+    .prepare(
+      `DELETE FROM task_assignees
+        WHERE id = ? AND task_id = ?
+          AND task_id IN (SELECT id FROM tasks WHERE project_id = ?)`
+    )
+    .bind(assigneeId, taskId, projectId)
+    .run();
 
   return c.json({ success: true });
 });

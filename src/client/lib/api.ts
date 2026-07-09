@@ -798,6 +798,17 @@ export type Task = {
    *  from migration 0081, carried into tasks by migration 0095). When set,
    *  the task's due_date drives projects.target_go_live_date. */
   is_go_live_event: number | null;
+  /** Additional resources beyond the primary assignee (migration 0124).
+   *  Rendered as sub-rows on the Tasks tab. */
+  assignees?: TaskAssignee[];
+};
+
+/** One extra resource on a task, from task_assignees. Exactly one of
+ *  user_id / contact_id is set. */
+export type TaskAssignee = {
+  id: string;
+  user_id: string | null;
+  contact_id: string | null;
 };
 
 export type TimeEntrySetup = {
@@ -1788,6 +1799,18 @@ export const api = {
 
   deleteTask: (projectId: string, taskId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}`, {
+      method: "DELETE",
+    }),
+
+  // Additional task resources (beyond the primary assignee) — see task_assignees.
+  addTaskAssignee: (projectId: string, taskId: string, body: { user_id?: string | null; contact_id?: string | null }) =>
+    request<TaskAssignee>(`/projects/${projectId}/tasks/${taskId}/assignees`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  removeTaskAssignee: (projectId: string, taskId: string, assigneeId: string) =>
+    request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}/assignees/${assigneeId}`, {
       method: "DELETE",
     }),
 
