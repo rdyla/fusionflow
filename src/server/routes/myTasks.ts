@@ -57,20 +57,26 @@ app.get("/", async (c) => {
     : `SELECT id FROM projects WHERE (archived = 0 OR archived IS NULL)`;
 
   // ── Assignee scope ────────────────────────────────────────────────────────
-  const isAE = auth.role === "pf_ae" || auth.role === "partner_ae" || auth.role === "pf_sa";
-  const teamIds = isAE ? await getTeamUserIds(auth.user.id, db) : [auth.user.id];
-  const isManager = teamIds.length > 1;
-  const scopeToAssigned = (isAE && !isManager) || auth.role === "pf_engineer";
+  // "My Tasks" is personal for EVERY internal role: you see only tasks assigned
+  // to you (primary assignee or an additional resource via task_assignees),
+  // across any project. Admins/PMs/leads used to get the whole portfolio here —
+  // thousands of tasks, useful to no one. Clients aren't task assignees, so they
+  // keep company-scoped visibility (their projects' tasks).
+  const scopeToAssigned = auth.role !== "client";
 
   // ── Task filters ──────────────────────────────────────────────────────────
-  const conditions: string[] = [`t.project_id IN (${projectSubquery})`];
-  const bindings: unknown[] = [...projectBindings];
+  const conditions: string[] = [];
+  const bindings: unknown[] = [];
 
   if (scopeToAssigned) {
-    // Primary assignee OR an additional resource (task_assignees) — a secondary
-    // resource sees the task in My Tasks just like the primary.
+    // Assigned to me — no project scoping; if it's mine it shows regardless of
+    // which project it lives on.
     conditions.push("(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))");
     bindings.push(auth.user.id, auth.user.id);
+  } else {
+    // Client: scope to their company's projects.
+    conditions.push(`t.project_id IN (${projectSubquery})`);
+    bindings.push(...projectBindings);
   }
 
   // Status / overdue
