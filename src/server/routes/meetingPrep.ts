@@ -95,24 +95,29 @@ async function loadSendHistory(db: D1Database, projectId: string, meetingType: M
     )
     .bind(projectId, meetingType)
     .all<SendHistoryRow>();
-  return (rows.results ?? []).map((r) => ({
-    id: r.id,
-    label: r.label,
-    phaseId: r.phase_id,
-    phaseName: r.site_name,
-    subject: r.subject,
-    sentBy: r.sent_by_user_id,
-    sentAt: r.sent_at,
-    hasBody: r.has_body === 1,
-    recipientCount: (() => {
-      try {
-        const arr = JSON.parse(r.recipient_emails);
-        return Array.isArray(arr) ? arr.length : 0;
-      } catch {
-        return 0;
-      }
-    })(),
-  }));
+  return (rows.results ?? []).map((r) => {
+    // recipient_emails is a JSON array of strings; tolerate legacy/malformed
+    // rows by falling back to an empty list.
+    let recipients: string[] = [];
+    try {
+      const arr = JSON.parse(r.recipient_emails);
+      if (Array.isArray(arr)) recipients = arr.filter((e): e is string => typeof e === "string");
+    } catch {
+      recipients = [];
+    }
+    return {
+      id: r.id,
+      label: r.label,
+      phaseId: r.phase_id,
+      phaseName: r.site_name,
+      subject: r.subject,
+      sentBy: r.sent_by_user_id,
+      sentAt: r.sent_at,
+      hasBody: r.has_body === 1,
+      recipients,
+      recipientCount: recipients.length,
+    };
+  });
 }
 
 function partnerLabel(vendor: string | null): string {
