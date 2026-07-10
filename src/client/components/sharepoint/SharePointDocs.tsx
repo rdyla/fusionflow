@@ -68,6 +68,18 @@ function formatDate(iso: string | null) {
   return iso.slice(0, 10);
 }
 
+/** Recency key for a file — most recent activity wins, whether that's an
+ *  upload or a later modification. Null-dated items sort to the bottom. */
+function recencyKey(f: SPFile): number {
+  const iso = f.lastModified ?? f.createdAt;
+  return iso ? Date.parse(iso) : 0;
+}
+
+/** Sort newest-first so the freshest documents sit at the top of the list. */
+function sortByRecency(files: SPFile[]): SPFile[] {
+  return [...files].sort((a, b) => recencyKey(b) - recencyKey(a));
+}
+
 export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, owner, canEdit, isExternal, onFolderCreated }: Props) {
   const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -140,7 +152,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     setLoadingFiles(true);
     setFilesError(null);
     api.spFiles(folderUrl)
-      .then(({ files: f }) => setFiles(f))
+      .then(({ files: f }) => setFiles(sortByRecency(f)))
       .catch((err) => setFilesError(err instanceof Error ? err.message : "Failed to load files"))
       .finally(() => setLoadingFiles(false));
   }
