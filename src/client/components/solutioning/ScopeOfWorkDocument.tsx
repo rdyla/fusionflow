@@ -59,6 +59,10 @@ export type SowMetadata = {
   duration_band?: SowDurationBand | null;
   /** Only used when duration_band === "custom". */
   custom_weeks?: number | null;
+  /** Overrides the customer name printed throughout the SOW. Set when the
+   *  record's display name is a DBA but the contract needs the full legal
+   *  entity name. Blank → falls back to solution.customer_name. */
+  customer_legal_name?: string | null;
   revisions: SowRevision[];
 };
 
@@ -71,6 +75,7 @@ export function parseSowMetadata(blob: string | null | undefined): SowMetadata {
       target_go_live_date: p.target_go_live_date ?? null,
       duration_band:       p.duration_band ?? null,
       custom_weeks:        p.custom_weeks ?? null,
+      customer_legal_name: p.customer_legal_name ?? null,
       revisions: Array.isArray(p.revisions) ? p.revisions : [],
     };
   } catch {
@@ -204,8 +209,13 @@ export default function ScopeOfWorkDocument({
   const [customWeeksDraft, setCustomWeeksDraft] = useState<string>(sowMetadata?.custom_weeks?.toString() ?? "");
   const [savingTimeline, setSavingTimeline] = useState(false);
   const [noteDraft, setNoteDraft] = useState("");
+  // Legal-name override (DBA vs full entity name on the contract). Blank → use
+  // the record's display name.
+  const [legalNameDraft, setLegalNameDraft] = useState(sowMetadata?.customer_legal_name ?? "");
+  const [savingLegalName, setSavingLegalName] = useState(false);
 
   useEffect(() => { setMsaDateDraft(sowMetadata?.msa_date ?? ""); }, [sowMetadata?.msa_date]);
+  useEffect(() => { setLegalNameDraft(sowMetadata?.customer_legal_name ?? ""); }, [sowMetadata?.customer_legal_name]);
   useEffect(() => {
     setGoLiveDraft(sowMetadata?.target_go_live_date ?? "");
     setBandDraft(sowMetadata?.duration_band ?? "");
@@ -247,8 +257,12 @@ export default function ScopeOfWorkDocument({
     feeBreakdown = calcSowTotal(totalLaborHours, addOns, blendedRate);
   }
 
+  // Legal-name override wins over the record's display name across the whole
+  // document (cover, intro, signature block, project reference).
+  const docCustomerName = sowMetadata?.customer_legal_name?.trim() || solution.customer_name || "Customer";
+
   const ctx: SowBuildContext = {
-    customerName: solution.customer_name || "Customer",
+    customerName: docCustomerName,
     customerAddress: null,
     customerPrimaryContact: null,
     preparedBy: {
@@ -257,7 +271,7 @@ export default function ScopeOfWorkDocument({
       email: currentUser?.email ?? null,
       phone: null,
     },
-    projectReference: variant.projectReferenceTemplate.replace("{customer}", solution.customer_name ?? "Customer"),
+    projectReference: variant.projectReferenceTemplate.replace("{customer}", docCustomerName),
     sowNumber: sowMetadata?.revisions?.length ? sowMetadata.revisions[sowMetadata.revisions.length - 1].version : "V1 (draft)",
     issueDateText: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     msaDate: sowMetadata?.msa_date ?? null,
@@ -343,6 +357,19 @@ export default function ScopeOfWorkDocument({
     }
   }
 
+  async function saveLegalName() {
+    setSavingLegalName(true);
+    try {
+      await api.updateSowMetadata(solution.id, { customer_legal_name: legalNameDraft.trim() || null });
+      showToast(legalNameDraft.trim() ? "Customer legal name saved." : "Legal-name override cleared.", "success");
+      onMetadataChanged?.();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save customer legal name", "error");
+    } finally {
+      setSavingLegalName(false);
+    }
+  }
+
   async function saveTimeline() {
     setSavingTimeline(true);
     try {
@@ -384,6 +411,30 @@ export default function ScopeOfWorkDocument({
       {!isClient && (
       <div className="ms-section-card" style={{ padding: "16px 18px", marginBottom: 16 }}>
         <div className="ms-section-title" style={{ marginBottom: 12 }}>SOW Metadata</div>
+
+        {/* Customer legal-name override — for records tracked under a DBA whose
+            contract must carry the full legal entity name. Drives every
+            "Prepared for / the Customer" reference in the generated document. */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 6 }}>
+          <label style={{ flex: 1, minWidth: 280 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", display: "block", marginBottom: 4 }}>Customer legal name (override)</span>
+            <input
+              type="text"
+              className="ms-input"
+              value={legalNameDraft}
+              onChange={(e) => setLegalNameDraft(e.target.value)}
+              placeholder={solution.customer_name || "Customer"}
+              disabled={savingLegalName}
+              style={{ fontSize: 13, width: "100%" }}
+            />
+          </label>
+          <button className="ms-btn-secondary" onClick={saveLegalName} disabled={savingLegalName} style={{ fontSize: 12 }}>
+            {savingLegalName ? "Saving…" : "Save legal name"}
+          </button>
+        </div>
+        <p style={{ fontSize: 11, color: "#64748b", marginTop: 0, marginBottom: 14 }}>
+          Leave blank to use the customer's display name (<strong>{solution.customer_name || "Customer"}</strong>). Set this only when the contract must show a different legal entity name — e.g. the account is tracked under a DBA but the SOW needs the full registered name.
+        </p>
 
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 14 }}>
           <label style={{ display: "block" }}>
