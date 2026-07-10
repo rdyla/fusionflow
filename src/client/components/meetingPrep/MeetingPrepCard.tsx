@@ -29,6 +29,7 @@ function SendRow({
   function toggle() {
     if (open) { setOpen(false); return; }
     setOpen(true);
+    // Fetch the body on first expand only, and only if one was persisted.
     if (html !== null || loading || !record.hasBody) return;
     setLoading(true);
     setError(null);
@@ -38,52 +39,94 @@ function SendRow({
       .finally(() => setLoading(false));
   }
 
-  const canPreview = record.hasBody;
-
   return (
     <div style={{ padding: "4px 0", fontSize: 12, borderBottom: "1px dashed #f1f5f9" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {/* Per-phase sends carry phaseName even when label is blank — show
-                the phase name as the primary line so the history reads as
-                "UAT · Libraries", "UAT · Treatment", etc. */}
-            {record.label
-              ? record.label
-              : record.phaseName
-                ? `${sectionLabel} · ${record.phaseName}`
-                : sectionLabel}
-          </div>
-          {(record.label || record.phaseName) && (
-            <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {record.subject}
+      {/* Whole summary row is the expand toggle — click reveals recipients +
+          body inline so PMs can verify exactly what went out and to whom. */}
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left",
+        }}
+      >
+        <div style={{ minWidth: 0, flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ color: "#94a3b8", fontSize: 10, flexShrink: 0, transform: open ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ color: "#1e293b", fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {/* Per-phase sends carry phaseName even when label is blank — show
+                  the phase name as the primary line so the history reads as
+                  "UAT · Libraries", "UAT · Treatment", etc. */}
+              {record.label
+                ? record.label
+                : record.phaseName
+                  ? `${sectionLabel} · ${record.phaseName}`
+                  : sectionLabel}
             </div>
-          )}
+            {(record.label || record.phaseName) && (
+              <div style={{ color: "#94a3b8", fontSize: 11, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {record.subject}
+              </div>
+            )}
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, color: "#64748b", whiteSpace: "nowrap" }}>
-          <span>{formatWhen(record.sentAt)} · {record.recipientCount} recip.</span>
-          {canPreview && (
-            <button
-              type="button"
-              onClick={toggle}
-              style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: 4, padding: "2px 8px", fontSize: 11, color: "#0b9aad", cursor: "pointer" }}
-            >
-              {open ? "Hide" : "View"}
-            </button>
-          )}
-        </div>
-      </div>
-      {open && canPreview && (
-        <div style={{ marginTop: 8 }}>
-          {loading && <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading…</div>}
-          {error && <div style={{ color: "#d13438", fontSize: 12 }}>{error}</div>}
-          {html !== null && (
-            <iframe
-              title={`Email preview — ${record.subject}`}
-              srcDoc={html}
-              sandbox=""
-              style={{ width: "100%", height: 420, border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff" }}
-            />
+        <span style={{ color: "#64748b", whiteSpace: "nowrap", flexShrink: 0 }}>
+          {formatWhen(record.sentAt)} · {record.recipientCount} recip.
+        </span>
+      </button>
+
+      {open && (
+        <div style={{ marginTop: 8, paddingLeft: 16 }}>
+          {/* Recipients — the fast "did it go to the right distribution list?"
+              check. Rendered from data already in the history payload. */}
+          <div style={{ marginBottom: 8 }}>
+            <div style={{ color: "#94a3b8", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 3 }}>
+              Recipients ({record.recipientCount})
+            </div>
+            {record.recipients.length > 0 ? (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {record.recipients.map((email) => (
+                  <span
+                    key={email}
+                    style={{ background: "#f1f5f9", border: "1px solid #e2e8f0", borderRadius: 4, padding: "1px 6px", fontSize: 11, color: "#334155", wordBreak: "break-all" }}
+                  >
+                    {email}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ color: "#94a3b8", fontSize: 11, fontStyle: "italic" }}>
+                Recipients weren't recorded for this send.
+              </div>
+            )}
+          </div>
+
+          {/* Subject line — full, un-truncated. */}
+          <div style={{ marginBottom: 8, fontSize: 11 }}>
+            <span style={{ color: "#94a3b8", fontWeight: 600 }}>Subject: </span>
+            <span style={{ color: "#334155" }}>{record.subject}</span>
+          </div>
+
+          {/* Rendered body — fetched on demand. Older sends predate body storage. */}
+          {record.hasBody ? (
+            <>
+              {loading && <div style={{ color: "#94a3b8", fontSize: 12 }}>Loading email…</div>}
+              {error && <div style={{ color: "#d13438", fontSize: 12 }}>{error}</div>}
+              {html !== null && (
+                <iframe
+                  title={`Email preview — ${record.subject}`}
+                  srcDoc={html}
+                  sandbox=""
+                  style={{ width: "100%", height: 420, border: "1px solid #e2e8f0", borderRadius: 4, background: "#fff" }}
+                />
+              )}
+            </>
+          ) : (
+            <div style={{ color: "#94a3b8", fontSize: 11, fontStyle: "italic" }}>
+              The email body wasn't stored for this send.
+            </div>
           )}
         </div>
       )}
@@ -140,6 +183,7 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend, compa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const labels = TYPE_LABELS[meetingType];
 
@@ -169,9 +213,17 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend, compa
             {error && <span style={{ fontSize: 11, color: "#d13438" }}>{error}</span>}
             {!loading && !error && (
               hasSends ? (
-                <span style={{ fontSize: 11, color: "#047857" }}>
+                // Clickable count toggles the send-history disclosure — keeps
+                // the stacked 5-type panel tight by default, one click to audit.
+                <button
+                  type="button"
+                  onClick={() => setShowHistory((v) => !v)}
+                  aria-expanded={showHistory}
+                  style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 11, color: "#047857", display: "inline-flex", alignItems: "center", gap: 4 }}
+                >
+                  <span style={{ fontSize: 9, transform: showHistory ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}>▶</span>
                   ✓ {history.length} send{history.length === 1 ? "" : "s"}
-                </span>
+                </button>
               ) : (
                 <span style={{ fontSize: 11, color: "#94a3b8" }}>Not sent yet</span>
               )
@@ -183,6 +235,13 @@ export default function MeetingPrepCard({ projectId, meetingType, canSend, compa
             </button>
           )}
         </div>
+        {showHistory && hasSends && (
+          <div style={{ paddingBottom: 6 }}>
+            {history.map((h) => (
+              <SendRow key={h.id} projectId={projectId} meetingType={meetingType} record={h} sectionLabel={labels.sectionLabel} />
+            ))}
+          </div>
+        )}
         {showModal && options && (
           <MeetingPrepModal
             projectId={projectId}
