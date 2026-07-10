@@ -1229,7 +1229,7 @@ export function buildSignatureHtml(_oppName: string, d: OppFormData, calc: OppCa
           <div class="sdli-name">CCaaS CloudSupport</div>
           <div class="sdli-note">CCaaS CloudSupport \u00b7 Annual, auto-renewing</div>
         </div>
-        <div class="sdli-qty">\u2014</div>
+        <div class="sdli-qty"></div>
         <div class="sdli-price">${fmtFull(sigCcaasTotal)}/yr</div>
       </div>` : "";
 
@@ -1241,7 +1241,7 @@ export function buildSignatureHtml(_oppName: string, d: OppFormData, calc: OppCa
       return `
       <div class="sd-line-item"${isDiscount ? ` style="color:#065f46;"` : ""}>
         <div class="sdli-desc"><div class="sdli-name">${escHtml(lineDisplayLabel(l))}</div><div class="sdli-note">${escHtml(lineNoteText(l))}</div></div>
-        <div class="sdli-qty">\u2014</div>
+        <div class="sdli-qty"></div>
         <div class="sdli-price">${fmtSigned(effect)}/yr</div>
       </div>`;
     }).join("")
@@ -1254,7 +1254,7 @@ export function buildSignatureHtml(_oppName: string, d: OppFormData, calc: OppCa
           <div class="sdli-name" style="color:#007d6e;">CloudSupport<sup style="font-size:8px;">+</sup> MSO \u2014 ${escHtml(sigTierMeta?.label ?? "Custom")}</div>
           <div class="sdli-note">${escHtml(sigTierMeta?.engineer ?? "As scoped")} \u00b7 ${escHtml(sigTierMeta?.allocation ?? "\u2014")}</div>
         </div>
-        <div class="sdli-qty">\u2014</div>
+        <div class="sdli-qty"></div>
         <div class="sdli-price" style="color:#007d6e;">${fmtFull(calc.msoSup)}/yr</div>
       </div>` : "";
 
