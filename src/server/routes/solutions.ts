@@ -679,6 +679,10 @@ type SowMetadata = {
   target_go_live_date?: string | null;
   duration_band?: DurationBand | null;
   custom_weeks?: number | null;
+  /** Overrides the customer name printed throughout the SOW document. Set when
+   *  the record's display name is a DBA but the contract must use the full
+   *  legal entity name. Blank/null → fall back to solution.customer_name. */
+  customer_legal_name?: string | null;
   revisions: SowRevision[];
 };
 
@@ -691,6 +695,7 @@ function readSowMetadata(blob: string | null | undefined): SowMetadata {
       target_go_live_date: parsed.target_go_live_date ?? null,
       duration_band: parsed.duration_band ?? null,
       custom_weeks: parsed.custom_weeks ?? null,
+      customer_legal_name: parsed.customer_legal_name ?? null,
       revisions: Array.isArray(parsed.revisions) ? parsed.revisions : [],
     };
   } catch {
@@ -755,6 +760,7 @@ const sowMetadataSchema = z.object({
   target_go_live_date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   duration_band:        z.enum(["4_6_weeks", "6_8_weeks", "8_12_weeks", "custom"]).nullable().optional(),
   custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
+  customer_legal_name:  z.string().trim().max(200).nullable().optional(),
 });
 
 app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_csm", "executive"), async (c) => {
@@ -781,6 +787,9 @@ app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_
   if (parsed.data.target_go_live_date !== undefined)  meta.target_go_live_date = parsed.data.target_go_live_date;
   if (parsed.data.duration_band !== undefined)        meta.duration_band = parsed.data.duration_band;
   if (parsed.data.custom_weeks !== undefined)         meta.custom_weeks = parsed.data.custom_weeks;
+  // Normalize empty string → null so a cleared override reliably falls back to
+  // the display name rather than printing a blank customer on the document.
+  if (parsed.data.customer_legal_name !== undefined)  meta.customer_legal_name = parsed.data.customer_legal_name || null;
 
   await db
     .prepare("UPDATE solutions SET sow_metadata = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")

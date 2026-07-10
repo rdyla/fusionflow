@@ -2267,8 +2267,9 @@ export const api = {
     target_go_live_date?: string | null;
     duration_band?: "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | null;
     custom_weeks?: number | null;
+    customer_legal_name?: string | null;
   }) =>
-    request<{ sow_metadata: { msa_date?: string | null; target_go_live_date?: string | null; duration_band?: string | null; custom_weeks?: number | null; revisions: unknown[] } }>(
+    request<{ sow_metadata: { msa_date?: string | null; target_go_live_date?: string | null; duration_band?: string | null; custom_weeks?: number | null; customer_legal_name?: string | null; revisions: unknown[] } }>(
       `/solutions/${id}/sow-metadata`, { method: "PATCH", body: JSON.stringify(payload) }
     ),
 
