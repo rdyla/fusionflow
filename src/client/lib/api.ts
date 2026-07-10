@@ -2761,6 +2761,9 @@ export type MeetingPrepSendRecord = {
   subject: string;
   sentBy: string | null;
   sentAt: string;
+  /** The actual recipient email addresses this send went to (distribution
+   *  lists + contacts + staff + extras), so PMs can verify the audience. */
+  recipients: string[];
   recipientCount: number;
   /** True if the rendered HTML body was persisted (sends from before the
    *  body_html column was added will be false). */
