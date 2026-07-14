@@ -1099,7 +1099,7 @@ export default function ProjectDetailPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ maxWidth: 1440, margin: "0 auto" }}>
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
         <Link to="/projects" style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
