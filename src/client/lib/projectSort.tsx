@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { humanize } from "./format";
 
 // Shared sort/filter helpers for the project tables on ProjectsPage and the
@@ -53,14 +54,32 @@ export function SortableTh({
   onSort: (key: ProjectSortKey) => void;
 }) {
   const active = sort?.key === colKey;
+  const [hover, setHover] = useState(false);
   return (
     <th
       onClick={() => onSort(colKey)}
-      style={{ cursor: "pointer", userSelect: "none", whiteSpace: "nowrap" }}
+      onMouseEnter={() => setHover(true)}
+      onMouseLeave={() => setHover(false)}
+      style={{
+        cursor: "pointer",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        background: active ? "#ecfeff" : hover ? "#f1f5f9" : undefined,
+        transition: "background 0.12s",
+      }}
       title={`Sort by ${label.toLowerCase()}`}
+      aria-sort={active ? (sort!.dir === "asc" ? "ascending" : "descending") : "none"}
     >
       {label}
-      <span style={{ marginLeft: 4, fontSize: 10, color: active ? "#0891b2" : "#cbd5e1" }}>
+      {/* Indicator is always visible (not near-invisible) so the columns read
+          as sortable at a glance; brightens on hover, cyan when active. */}
+      <span
+        style={{
+          marginLeft: 5,
+          fontSize: 11,
+          color: active ? "#0891b2" : hover ? "#475569" : "#94a3b8",
+        }}
+      >
         {active ? (sort!.dir === "asc" ? "▲" : "▼") : "↕"}
       </span>
     </th>
