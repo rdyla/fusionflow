@@ -601,6 +601,29 @@ export type ProjectShipment = {
   created_at: string;
 };
 
+export type ProjectMeeting = {
+  id: string;
+  project_id: string;
+  title: string | null;
+  meeting_date: string;              // YYYY-MM-DD
+  start_time_local: string | null;   // HH:MM 24h
+  timezone: string | null;           // IANA tz
+  duration_min: number | null;
+  join_url: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type MeetingInput = {
+  title?: string | null;
+  meeting_date: string;
+  start_time_local?: string | null;
+  timezone?: string | null;
+  duration_min?: number | null;
+  join_url?: string | null;
+  notes?: string | null;
+};
+
 // ── Prospecting ────────────────────────────────────────────────────────────
 
 export type ProspectList = {
@@ -1742,6 +1765,21 @@ export const api = {
     request<ProjectShipment[]>(`/projects/${projectId}/shipments/refresh`, { method: "POST" }),
   deleteShipment: (projectId: string, sid: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/shipments/${sid}`, { method: "DELETE" }),
+
+  projectMeetings: (projectId: string) =>
+    request<ProjectMeeting[]>(`/projects/${projectId}/meetings`),
+  addMeeting: (projectId: string, payload: MeetingInput) =>
+    request<ProjectMeeting>(`/projects/${projectId}/meetings`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  updateMeeting: (projectId: string, mid: string, payload: MeetingInput) =>
+    request<ProjectMeeting>(`/projects/${projectId}/meetings/${mid}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
+  deleteMeeting: (projectId: string, mid: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/meetings/${mid}`, { method: "DELETE" }),
 
   createProject: (payload: {
     name: string;
