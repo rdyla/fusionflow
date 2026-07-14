@@ -1770,12 +1770,12 @@ export default function ProjectDetailPage() {
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
                             <col />
-                            <col style={{ width: 150 }} />
-                            <col style={{ width: 112 }} />
-                            <col style={{ width: 116 }} />
-                            <col style={{ width: 80 }} />
-                            <col style={{ width: 92 }} />
-                            <col style={{ width: 68 }} />
+                            <col style={{ width: 200 }} />
+                            <col style={{ width: 124 }} />
+                            <col style={{ width: 132 }} />
+                            <col style={{ width: 104 }} />
+                            <col style={{ width: 96 }} />
+                            <col style={{ width: 88 }} />
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>

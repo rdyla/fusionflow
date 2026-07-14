@@ -82,7 +82,7 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
   }
 
   return (
-    <div style={{ maxWidth: 1280, margin: "0 auto" }}>
+    <div style={{ maxWidth: 1440, margin: "0 auto" }}>
       {/* ── KPI tiles ─────────────────────────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
         <KpiTile
