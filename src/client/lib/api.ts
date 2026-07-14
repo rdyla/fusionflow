@@ -255,6 +255,17 @@ export type SPFile = {
   visibleToClient?: boolean;
 };
 
+/** One entry in a file's upload/replace history (sharepoint_file_events). */
+export type SPFileEvent = {
+  id: string;
+  action: "upload" | "replace";
+  filename: string | null;
+  size: number | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  created_at: string;
+};
+
 export type DashboardSummaryResponse = {
   user: User;
   summary: {
@@ -2143,6 +2154,9 @@ export const api = {
   },
   spDelete: (webUrl: string) =>
     request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+  /** Append-only upload/replace history for a file (newest first). */
+  spFileHistory: (spItemId: string) =>
+    request<{ events: SPFileEvent[] }>(`/sharepoint/file/history?spItemId=${encodeURIComponent(spItemId)}`),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context
    *  on files uploaded via SP web directly. */

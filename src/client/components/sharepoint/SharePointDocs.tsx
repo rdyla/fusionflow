@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type SPFile, type SPLocation } from "../../lib/api";
+import { api, type SPFile, type SPLocation, type SPFileEvent } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 /** Which record owns this SharePoint area — a project or a solution. Drives
@@ -206,6 +206,33 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       setUploading(false);
       setUploadPct(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  /** Replace a file in place with a newly-picked file ("upload new version").
+   *  The picked bytes upload under the TARGET file's name so SharePoint replaces
+   *  the same item (new native version) instead of creating a second file; the
+   *  replace + real user are logged server-side. Description is left untouched. */
+  async function handleUploadNewVersion(target: SPFile, picked: File) {
+    if (folderStack.length === 0) return;
+    const currentUrl = folderStack[folderStack.length - 1].url;
+    const bytes = picked.name === target.name
+      ? picked
+      : new File([picked], target.name, { type: picked.type || target.mimeType || "application/octet-stream" });
+    setUploading(true);
+    setUploadPct(null);
+    try {
+      await api.spUpload(currentUrl, bytes, {
+        projectId: owner?.kind === "project" ? owner.id : null,
+        onProgress: (pct) => setUploadPct(pct),
+      });
+      showToast(`New version of "${target.name}" uploaded.`, "success");
+      loadFiles(currentUrl); // refresh attribution + modified date
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Upload failed", "error");
+    } finally {
+      setUploading(false);
+      setUploadPct(null);
     }
   }
 
@@ -445,6 +472,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                   isDeleting={deletingId === file.id}
                   onNavigateInto={() => navigateInto(file)}
                   onDelete={() => handleDelete(file)}
+                  onUploadNewVersion={(picked) => handleUploadNewVersion(file, picked)}
                   onDescriptionSaved={(updated) =>
                     setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
                   }
@@ -471,6 +499,7 @@ function FileRow({
   isDeleting,
   onNavigateInto,
   onDelete,
+  onUploadNewVersion,
   onDescriptionSaved,
   onVisibilityChanged,
 }: {
@@ -481,6 +510,7 @@ function FileRow({
   isDeleting: boolean;
   onNavigateInto: () => void;
   onDelete: () => void;
+  onUploadNewVersion: (picked: File) => Promise<void>;
   onDescriptionSaved: (updated: SPFile) => void;
   onVisibilityChanged: (visible: boolean) => void;
 }) {
@@ -489,6 +519,41 @@ function FileRow({
   const [draft, setDraft] = useState(file.description ?? "");
   const [saving, setSaving] = useState(false);
   const [togglingVis, setTogglingVis] = useState(false);
+  const versionInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingVersion, setUploadingVersion] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<SPFileEvent[] | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  async function pickNewVersion(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    if (!picked) return;
+    setUploadingVersion(true);
+    try {
+      await onUploadNewVersion(picked);
+      // A replace bumps the timeline — drop the cache so a reopen refetches.
+      setHistory(null);
+    } finally {
+      setUploadingVersion(false);
+      if (versionInputRef.current) versionInputRef.current.value = "";
+    }
+  }
+
+  async function toggleHistory() {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && history === null) {
+      setLoadingHistory(true);
+      try {
+        const { events } = await api.spFileHistory(file.id);
+        setHistory(events);
+      } catch {
+        setHistory([]);
+      } finally {
+        setLoadingHistory(false);
+      }
+    }
+  }
 
   async function toggleVisibility() {
     const next = !file.visibleToClient;
@@ -631,6 +696,30 @@ function FileRow({
             </span>
           )}
         </div>
+
+        {/* Version history timeline — who uploaded/replaced this file, when.
+            Visible to anyone who can see the file. */}
+        {historyOpen && !file.isFolder && (
+          <div style={{ marginTop: 8, borderTop: "1px solid #eef2f7", paddingTop: 8 }}>
+            {loadingHistory ? (
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading history…</div>
+            ) : !history || history.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>No recorded history for this file.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 4 }}>
+                {history.map((ev) => (
+                  <div key={ev.id} style={{ fontSize: 12, color: "#475569", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, color: ev.action === "replace" ? "#b45309" : "#0b9aad", minWidth: 62 }}>
+                      {ev.action === "replace" ? "Replaced" : "Uploaded"}
+                    </span>
+                    <span>{formatDate(ev.created_at)}</span>
+                    {ev.actor_name && <span style={{ color: "#64748b" }}>by {ev.actor_name}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
@@ -650,6 +739,30 @@ function FileRow({
           >
             {togglingVis ? "…" : file.visibleToClient ? "👁 Visible to client" : "🔒 Internal only"}
           </button>
+        )}
+        {!file.isFolder && (
+          <button
+            className="ms-btn-ghost"
+            onClick={toggleHistory}
+            style={{ fontSize: 12 }}
+            title="Show this file's upload / replace history"
+          >
+            {historyOpen ? "History ▲" : "History ▾"}
+          </button>
+        )}
+        {!file.isFolder && canEdit && !isExternal && (
+          <>
+            <input ref={versionInputRef} type="file" style={{ display: "none" }} onChange={pickNewVersion} />
+            <button
+              className="ms-btn-ghost"
+              onClick={() => versionInputRef.current?.click()}
+              disabled={uploadingVersion}
+              style={{ fontSize: 12 }}
+              title="Replace this file with a new version (keeps the same file + logs who/when)"
+            >
+              {uploadingVersion ? "Uploading…" : "↑ New version"}
+            </button>
+          </>
         )}
         {!file.isFolder && file.downloadUrl && (
           <a
