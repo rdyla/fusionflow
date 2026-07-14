@@ -27,7 +27,7 @@ import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import PhasesPanel from "../components/project/PhasesPanel";
-import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
+import UpcomingMeetingsPanel from "../components/project/UpcomingMeetingsPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -42,7 +42,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
 
-type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
+type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "meetings" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -79,6 +79,14 @@ const RISK_COLOR: Record<string, string> = {
   open: "#d13438",
   mitigated: "#ff8c00",
   closed: "#059669",
+};
+// Display labels for blocker status. The stored value stays "open" (no
+// migration); we surface it as "Active" since users read the badge as a
+// state, not an action.
+const RISK_STATUS_LABEL: Record<string, string> = {
+  open: "Active",
+  mitigated: "Mitigated",
+  closed: "Closed",
 };
 function formatDate(d: string | null) {
   if (!d) return "—";
@@ -425,6 +433,19 @@ export default function ProjectDetailPage() {
     () => new Set(risks.filter((r) => r.task_id && r.status !== "closed").map((r) => r.task_id as string)),
     [risks]
   );
+  // task_id → its active (non-closed) blockers, so the blocked-task glyph on the
+  // Tasks tab can show blocker details on hover and open the blocker on click.
+  const activeBlockersByTask = useMemo(() => {
+    const m = new Map<string, Risk[]>();
+    for (const r of risks) {
+      if (r.task_id && r.status !== "closed") {
+        const arr = m.get(r.task_id) ?? [];
+        arr.push(r);
+        m.set(r.task_id, arr);
+      }
+    }
+    return m;
+  }, [risks]);
 
   // Curated assignee picker — Tasks page dropdowns pull from the project's PF staff
   // (PM/AE/SA/CSM/IE/partner AE) + project contacts (customer & partner-side, incl. porting).
@@ -610,7 +631,13 @@ export default function ProjectDetailPage() {
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
   if (!project) return <div style={{ color: "#64748b", padding: 32 }}>Project not found.</div>;
 
-  const canEdit = currentUserRole === "admin" || currentUserRole === "pm";
+  // A user assigned as this project's PM — Lead PM (pm_user_id) or an additional
+  // 'pm' staffer — gets full PM rights here regardless of their base role (e.g.
+  // a pm_eligible CSM). Mirrors the server's canEditProject.
+  const isAssignedPm =
+    (!!project.pm_user_id && project.pm_user_id === currentUserId) ||
+    projectStaff.some((s) => s.user_id === currentUserId && s.staff_role === "pm");
+  const canEdit = currentUserRole === "admin" || currentUserRole === "pm" || isAssignedPm;
   // IEs staffed on this project can manage its tasks (assign + complete + edit),
   // mirrored server-side. Scoped to engineers actually on the project_staff list.
   const isStaffedEngineer = currentUserRole === "pf_engineer" && projectStaff.some((s) => s.user_id === currentUserId);
@@ -1078,7 +1105,7 @@ export default function ProjectDetailPage() {
   };
 
   return (
-    <div style={{ maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ maxWidth: 1440, margin: "0 auto" }}>
       {/* Back */}
       <div style={{ marginBottom: 12 }}>
         <Link to="/projects" style={{ fontSize: 13, color: "#94a3b8", textDecoration: "none" }}>
@@ -1164,11 +1191,11 @@ export default function ProjectDetailPage() {
         const isExternal = currentUserRole === "partner_ae" || currentUserRole === "client";
         const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
         const visibleTabs: DetailTab[] = isExternal
-          ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
+          ? ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...externalSPTab, "activity"]
           // Timeline Builder is hidden now that phase + kickoff date auto-generate
           // the dated timeline (the builder code is kept, just not surfaced).
           // External Resources is PM/admin only (canEdit === admin || pm).
-          : ["dashboard", "overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
+          : ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -1564,23 +1591,16 @@ export default function ProjectDetailPage() {
               }}
             />
 
-            {/* ── Status Meeting │ Meeting Prep (internal only, 2-column) ──── */}
+            {/* ── Meeting Prep (internal only) ─────────────────────────────── */}
             {!isExternal && (
-              <div style={twoCol}>
-                <StatusMeetingPanel
-                  project={project}
-                  canEdit={canEdit}
-                  onSaved={(updated) => setProject((prev) => prev ? { ...prev, ...updated } : updated)}
-                />
-                <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-                  <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                    {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
-                      <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
-                        <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
-                      </div>
-                    ))}
-                  </div>
+              <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+                <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                    <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
+                      <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -1769,16 +1789,18 @@ export default function ProjectDetailPage() {
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
+                            <col style={{ width: 56 }} />
                             <col />
-                            <col style={{ width: 150 }} />
-                            <col style={{ width: 112 }} />
-                            <col style={{ width: 116 }} />
-                            <col style={{ width: 80 }} />
-                            <col style={{ width: 92 }} />
-                            <col style={{ width: 68 }} />
+                            <col style={{ width: 200 }} />
+                            <col style={{ width: 124 }} />
+                            <col style={{ width: 132 }} />
+                            <col style={{ width: 104 }} />
+                            <col style={{ width: 96 }} />
+                            <col style={{ width: 88 }} />
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
+                              <th style={{ textAlign: "center", padding: "6px 8px" }}>Blocked</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Title</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Assignee</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Due</th>
@@ -1797,18 +1819,37 @@ export default function ProjectDetailPage() {
                               const subRowCount = taskRecordings.length;
                               // A task with an active blocker renders its whole row in red.
                               const isBlocked = blockedTaskIds.has(task.id);
+                              const taskBlockers = isBlocked ? (activeBlockersByTask.get(task.id) ?? []) : [];
+                              const blockerTip = taskBlockers.length
+                                ? `Blocked by:\n${taskBlockers.map((b) => `⛔ ${b.title}${b.severity ? ` (${b.severity})` : ""} — ${RISK_STATUS_LABEL[b.status ?? "open"] ?? "Active"}`).join("\n")}`
+                                : "";
                               const rowInputStyle: React.CSSProperties = isBlocked ? { ...cellInputStyle, color: "#dc2626" } : cellInputStyle;
                               const extraAssignees = task.assignees ?? [];
                               return (
                                 <React.Fragment key={task.id}>
                                   <tr data-task-row={task.id}>
+                                    {/* Blocked — its own column. Glyph shows only when the task has an
+                                        active blocker; hover lists the blocker(s), click opens the first. */}
+                                    <td style={{ ...cellStyle, textAlign: "center" }}>
+                                      {taskBlockers.length > 0 && (
+                                        <button
+                                          type="button"
+                                          aria-label="View blocker"
+                                          title={`${blockerTip}\n\nClick to open.`}
+                                          onClick={() => openEditRisk(taskBlockers[0])}
+                                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}
+                                        >
+                                          ⛔
+                                        </button>
+                                      )}
+                                    </td>
                                     <td style={cellStyle}>
                                       <input
                                         type="text"
                                         defaultValue={taskDisplayTitle(task)}
                                         disabled={!canManageTasks}
                                         style={{ ...rowInputStyle, width: "100%" }}
-                                        title={task.title}
+                                        title={blockerTip ? `${task.title}\n\n${blockerTip}` : task.title}
                                         onBlur={(e) => {
                                           const newRaw = e.target.value.trim();
                                           if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
@@ -2042,7 +2083,7 @@ export default function ProjectDetailPage() {
                                   </tr>
                                   {subRowCount > 0 && (
                                     <tr>
-                                      <td colSpan={7} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                      <td colSpan={8} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
                                         {taskRecordings.map((rec) => (
                                           <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#7c3aed" }}>
                                             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#7c3aed" }} />
@@ -2060,7 +2101,7 @@ export default function ProjectDetailPage() {
                             })}
                             {isAddingHere && (
                               <tr>
-                                <td colSpan={7} style={{ padding: "6px 8px" }}>
+                                <td colSpan={8} style={{ padding: "6px 8px" }}>
                                   <form
                                     onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(stage.id); }}
                                     style={{ display: "flex", gap: 8, alignItems: "center" }}
@@ -2188,6 +2229,12 @@ export default function ProjectDetailPage() {
         </>
       )}
 
+      {/* ── Meetings — Upcoming Meetings on its own tab (was on Overview).
+          Shown to internal + external viewers; editing gated by canEdit. */}
+      {tab === "meetings" && (
+        <UpcomingMeetingsPanel projectId={project.id} canEdit={canEdit} />
+      )}
+
       {/* ── Blockers ───────────────────────────────────────────────────────── */}
       {tab === "blockers" && (
         <div className="ms-section-card">
@@ -2210,8 +2257,19 @@ export default function ProjectDetailPage() {
                   && !!ownerContact?.dynamics_contact_id
                   && ownerContact.dynamics_contact_id === currentUserId;
                 const canEditThisRisk = canEdit || isAssignedToCurrentClient;
+                const st = risk.status ?? "open";
+                const stColor = RISK_COLOR[st] ?? "#94a3b8";
                 return (
-                  <div key={risk.id} className="ms-row-item">
+                  <div
+                    key={risk.id}
+                    className="ms-row-item"
+                    onClick={canEditThisRisk ? () => openEditRisk(risk) : undefined}
+                    role={canEditThisRisk ? "button" : undefined}
+                    tabIndex={canEditThisRisk ? 0 : undefined}
+                    onKeyDown={canEditThisRisk ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditRisk(risk); } } : undefined}
+                    title={canEditThisRisk ? "Click to edit this blocker" : undefined}
+                    style={canEditThisRisk ? { cursor: "pointer" } : undefined}
+                  >
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
                       {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
@@ -2224,9 +2282,13 @@ export default function ProjectDetailPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                      <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
-                      {canEditThisRisk && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
-                      {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
+                      {/* Status indicator — a colored dot + label, deliberately not a
+                          pill/button so users read it as state, not something to click. */}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: stColor, whiteSpace: "nowrap" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: stColor, flexShrink: 0 }} />
+                        {RISK_STATUS_LABEL[st] ?? st}
+                      </span>
+                      {canEdit && <button className="ms-btn-danger" onClick={(e) => { e.stopPropagation(); handleDeleteRisk(risk.id); }}>Delete</button>}
                     </div>
                   </div>
                 );
@@ -3222,7 +3284,7 @@ export default function ProjectDetailPage() {
                   <label className="ms-label">
                     <span>Status</span>
                     <select className="ms-input" value={riskForm.status} onChange={(e) => setRiskForm({ ...riskForm, status: e.target.value })}>
-                      <option value="open">Open</option>
+                      <option value="open">Active</option>
                       <option value="mitigated">Mitigated</option>
                       <option value="closed">Closed</option>
                     </select>
