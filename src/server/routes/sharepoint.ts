@@ -42,6 +42,39 @@ async function overlayUploaderAttribution(db: D1Database, files: SPFile[]): Prom
   });
 }
 
+/**
+ * Append one row to the file-change history (sharepoint_file_events). Best-effort
+ * — callers wrap in try/catch and never fail the upload on a history-write error.
+ * action is derived: 'replace' if the file already has history, else 'upload'.
+ */
+async function logFileEvent(
+  db: D1Database,
+  ev: {
+    spItemId: string;
+    projectId: string;
+    webUrl: string | null;
+    filename: string | null;
+    size: number | null;
+    userId: string;
+    userName: string | null;
+    userEmail: string | null;
+  }
+): Promise<void> {
+  const prior = await db
+    .prepare("SELECT 1 FROM sharepoint_file_events WHERE sp_item_id = ? LIMIT 1")
+    .bind(ev.spItemId)
+    .first();
+  const action = prior ? "replace" : "upload";
+  await db
+    .prepare(
+      `INSERT INTO sharepoint_file_events
+         (id, sp_item_id, project_id, web_url, filename, action, size, actor_user_id, actor_name, actor_email)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(crypto.randomUUID(), ev.spItemId, ev.projectId, ev.webUrl, ev.filename, action, ev.size, ev.userId, ev.userName, ev.userEmail)
+    .run();
+}
+
 // GET /api/sharepoint/locations?recordId=xxx
 // Returns all SharePoint document locations for a Dynamics CRM record ID
 app.get("/locations", async (c) => {
@@ -219,6 +252,17 @@ app.post("/upload", async (c) => {
           )
           .bind(uploaded.id, projectId, uploaded.webUrl, auth.user.id, auth.user.name ?? auth.user.email, auth.user.email)
           .run();
+        // Append-only history row (who/when; 'upload' vs 'replace' auto-derived).
+        await logFileEvent(c.env.DB, {
+          spItemId: uploaded.id,
+          projectId,
+          webUrl: uploaded.webUrl,
+          filename: file.name,
+          size: uploaded.size ?? content.byteLength ?? null,
+          userId: auth.user.id,
+          userName: auth.user.name ?? auth.user.email,
+          userEmail: auth.user.email,
+        });
         // Also stamp the response with what the UI will see on next refresh —
         // saves an extra round-trip.
         uploaded.createdByName = auth.user.name ?? auth.user.email;
@@ -296,6 +340,19 @@ app.post("/upload-complete", async (c) => {
         )
         .bind(spItemId, body.projectId, webUrl, auth.user.id, auth.user.name ?? auth.user.email, auth.user.email)
         .run();
+      // Append-only history row. Filename is derived from the web URL's last
+      // segment (the chunked path doesn't carry the original File here).
+      const filename = (() => { try { return decodeURIComponent(webUrl.split("/").pop() ?? "") || null; } catch { return null; } })();
+      await logFileEvent(c.env.DB, {
+        spItemId,
+        projectId: body.projectId,
+        webUrl,
+        filename,
+        size: null,
+        userId: auth.user.id,
+        userName: auth.user.name ?? auth.user.email,
+        userEmail: auth.user.email,
+      });
     } catch (err) {
       console.warn("[sp.upload-complete] attribution insert failed:", err instanceof Error ? err.message : err);
     }
@@ -327,6 +384,29 @@ app.patch("/file/description", async (c) => {
   }
 });
 
+// GET /api/sharepoint/file/history?spItemId=xxx
+// Returns the append-only upload/replace history for a file (newest first) so
+// the UI can show a "who changed this, when" timeline. Visible to anyone who can
+// already see the file (the file list itself is access-controlled upstream).
+app.get("/file/history", async (c) => {
+  const spItemId = c.req.query("spItemId");
+  if (!spItemId) return c.json({ error: "spItemId required" }, 400);
+  try {
+    const rows = await c.env.DB
+      .prepare(
+        `SELECT id, action, filename, size, actor_name, actor_email, created_at
+         FROM sharepoint_file_events WHERE sp_item_id = ? ORDER BY created_at DESC`
+      )
+      .bind(spItemId)
+      .all();
+    return c.json({ events: rows.results ?? [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load file history";
+    console.error("SharePoint file-history error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
 // DELETE /api/sharepoint/file?webUrl=xxx
 // Deletes a file by its SharePoint web URL. Also cleans up its sharepoint_uploads
 // attribution row (by web_url) — best-effort, leftover rows are harmless.
@@ -337,7 +417,10 @@ app.delete("/file", async (c) => {
   try {
     await deleteSharePointFile(c.env, webUrl);
     try {
-      await c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE web_url = ?").bind(webUrl).run();
+      await c.env.DB.batch([
+        c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE web_url = ?").bind(webUrl),
+        c.env.DB.prepare("DELETE FROM sharepoint_file_events WHERE web_url = ?").bind(webUrl),
+      ]);
     } catch (cleanupErr) {
       console.warn("[sp.delete] attribution cleanup failed:", cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);
     }
