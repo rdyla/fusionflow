@@ -319,6 +319,13 @@ export default function ProjectsPage() {
         </div>
       )}
 
+      {!sort && sortedProjects.length > 1 && (
+        <div style={{ fontSize: 12, color: "#94a3b8", margin: "0 2px 6px", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 12, color: "#0891b2" }}>↕</span>
+          Tip: click <strong style={{ fontWeight: 600, color: "#64748b" }}>Project</strong>, <strong style={{ fontWeight: 600, color: "#64748b" }}>Customer</strong>, or <strong style={{ fontWeight: 600, color: "#64748b" }}>Status</strong> to sort.
+        </div>
+      )}
+
       <div className="ms-card" style={{ overflow: "hidden" }}>
         <table className="ms-table">
           <thead>
