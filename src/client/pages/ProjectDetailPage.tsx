@@ -80,6 +80,14 @@ const RISK_COLOR: Record<string, string> = {
   mitigated: "#ff8c00",
   closed: "#059669",
 };
+// Display labels for blocker status. The stored value stays "open" (no
+// migration); we surface it as "Active" since users read the badge as a
+// state, not an action.
+const RISK_STATUS_LABEL: Record<string, string> = {
+  open: "Active",
+  mitigated: "Mitigated",
+  closed: "Closed",
+};
 function formatDate(d: string | null) {
   if (!d) return "—";
   const normalized = /^\d{4}-\d{2}-\d{2}$/.test(d) ? d + "T00:00:00" : d;
@@ -425,6 +433,19 @@ export default function ProjectDetailPage() {
     () => new Set(risks.filter((r) => r.task_id && r.status !== "closed").map((r) => r.task_id as string)),
     [risks]
   );
+  // task_id → its active (non-closed) blockers, so the blocked-task glyph on the
+  // Tasks tab can show blocker details on hover and open the blocker on click.
+  const activeBlockersByTask = useMemo(() => {
+    const m = new Map<string, Risk[]>();
+    for (const r of risks) {
+      if (r.task_id && r.status !== "closed") {
+        const arr = m.get(r.task_id) ?? [];
+        arr.push(r);
+        m.set(r.task_id, arr);
+      }
+    }
+    return m;
+  }, [risks]);
 
   // Curated assignee picker — Tasks page dropdowns pull from the project's PF staff
   // (PM/AE/SA/CSM/IE/partner AE) + project contacts (customer & partner-side, incl. porting).
@@ -1797,34 +1818,53 @@ export default function ProjectDetailPage() {
                               const subRowCount = taskRecordings.length;
                               // A task with an active blocker renders its whole row in red.
                               const isBlocked = blockedTaskIds.has(task.id);
+                              const taskBlockers = isBlocked ? (activeBlockersByTask.get(task.id) ?? []) : [];
+                              const blockerTip = taskBlockers.length
+                                ? `Blocked by:\n${taskBlockers.map((b) => `⛔ ${b.title}${b.severity ? ` (${b.severity})` : ""} — ${RISK_STATUS_LABEL[b.status ?? "open"] ?? "Active"}`).join("\n")}`
+                                : "";
                               const rowInputStyle: React.CSSProperties = isBlocked ? { ...cellInputStyle, color: "#dc2626" } : cellInputStyle;
                               const extraAssignees = task.assignees ?? [];
                               return (
                                 <React.Fragment key={task.id}>
                                   <tr data-task-row={task.id}>
                                     <td style={cellStyle}>
-                                      <input
-                                        type="text"
-                                        defaultValue={taskDisplayTitle(task)}
-                                        disabled={!canManageTasks}
-                                        style={{ ...rowInputStyle, width: "100%" }}
-                                        title={task.title}
-                                        onBlur={(e) => {
-                                          const newRaw = e.target.value.trim();
-                                          if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
-                                          if (newRaw === taskDisplayTitle(task)) return;
-                                          // Preserve any [Tag] prefix from the original title
-                                          const { types } = parseTaggedTitle(task.title);
-                                          const newTitle = types.length > 0
-                                            ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
-                                            : newRaw;
-                                          patchTask(task.id, { title: newTitle });
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                                          else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
-                                        }}
-                                      />
+                                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                        <input
+                                          type="text"
+                                          defaultValue={taskDisplayTitle(task)}
+                                          disabled={!canManageTasks}
+                                          style={{ ...rowInputStyle, flex: 1, minWidth: 0 }}
+                                          title={blockerTip ? `${task.title}\n\n${blockerTip}` : task.title}
+                                          onBlur={(e) => {
+                                            const newRaw = e.target.value.trim();
+                                            if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
+                                            if (newRaw === taskDisplayTitle(task)) return;
+                                            // Preserve any [Tag] prefix from the original title
+                                            const { types } = parseTaggedTitle(task.title);
+                                            const newTitle = types.length > 0
+                                              ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
+                                              : newRaw;
+                                            patchTask(task.id, { title: newTitle });
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                            else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
+                                          }}
+                                        />
+                                        {/* Blocked glyph — hover shows the blocker(s); click opens the
+                                            (first) referenced blocker in the edit modal. */}
+                                        {taskBlockers.length > 0 && (
+                                          <button
+                                            type="button"
+                                            aria-label="View blocker"
+                                            title={`${blockerTip}\n\nClick to open.`}
+                                            onClick={() => openEditRisk(taskBlockers[0])}
+                                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}
+                                          >
+                                            ⛔
+                                          </button>
+                                        )}
+                                      </div>
                                     </td>
                                     <td style={cellStyle}>
                                       {(() => {
@@ -2210,8 +2250,19 @@ export default function ProjectDetailPage() {
                   && !!ownerContact?.dynamics_contact_id
                   && ownerContact.dynamics_contact_id === currentUserId;
                 const canEditThisRisk = canEdit || isAssignedToCurrentClient;
+                const st = risk.status ?? "open";
+                const stColor = RISK_COLOR[st] ?? "#94a3b8";
                 return (
-                  <div key={risk.id} className="ms-row-item">
+                  <div
+                    key={risk.id}
+                    className="ms-row-item"
+                    onClick={canEditThisRisk ? () => openEditRisk(risk) : undefined}
+                    role={canEditThisRisk ? "button" : undefined}
+                    tabIndex={canEditThisRisk ? 0 : undefined}
+                    onKeyDown={canEditThisRisk ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openEditRisk(risk); } } : undefined}
+                    title={canEditThisRisk ? "Click to edit this blocker" : undefined}
+                    style={canEditThisRisk ? { cursor: "pointer" } : undefined}
+                  >
                     <div style={{ flex: 1 }}>
                       <div style={{ fontWeight: 600, color: "#1e293b", marginBottom: 4 }}>{risk.title}</div>
                       {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
@@ -2224,9 +2275,13 @@ export default function ProjectDetailPage() {
                       </div>
                     </div>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-                      <Badge label={risk.status ?? "open"} color={RISK_COLOR[risk.status ?? "open"] ?? "#94a3b8"} />
-                      {canEditThisRisk && <button className="ms-btn-ghost" onClick={() => openEditRisk(risk)}>Edit</button>}
-                      {canEdit && <button className="ms-btn-danger" onClick={() => handleDeleteRisk(risk.id)}>Delete</button>}
+                      {/* Status indicator — a colored dot + label, deliberately not a
+                          pill/button so users read it as state, not something to click. */}
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 600, color: stColor, whiteSpace: "nowrap" }}>
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", background: stColor, flexShrink: 0 }} />
+                        {RISK_STATUS_LABEL[st] ?? st}
+                      </span>
+                      {canEdit && <button className="ms-btn-danger" onClick={(e) => { e.stopPropagation(); handleDeleteRisk(risk.id); }}>Delete</button>}
                     </div>
                   </div>
                 );
@@ -3222,7 +3277,7 @@ export default function ProjectDetailPage() {
                   <label className="ms-label">
                     <span>Status</span>
                     <select className="ms-input" value={riskForm.status} onChange={(e) => setRiskForm({ ...riskForm, status: e.target.value })}>
-                      <option value="open">Open</option>
+                      <option value="open">Active</option>
                       <option value="mitigated">Mitigated</option>
                       <option value="closed">Closed</option>
                     </select>
