@@ -27,7 +27,7 @@ import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import PhasesPanel from "../components/project/PhasesPanel";
-import StatusMeetingPanel from "../components/project/StatusMeetingPanel";
+import UpcomingMeetingsPanel from "../components/project/UpcomingMeetingsPanel";
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -1493,6 +1493,11 @@ export default function ProjectDetailPage() {
               )}
             </div>
 
+            {/* ── Upcoming Meetings — placed above the people roster so a large
+                roster can't push it out of view. Shown to internal AND external
+                (customer/partner) viewers; editing gated by canEdit. */}
+            <UpcomingMeetingsPanel projectId={project.id} canEdit={canEdit} />
+
             {/* ── Account Team │ Project Team (2-column) ───────────────────── */}
             <div style={twoCol}>
               {renderSection({
@@ -1564,23 +1569,16 @@ export default function ProjectDetailPage() {
               }}
             />
 
-            {/* ── Status Meeting │ Meeting Prep (internal only, 2-column) ──── */}
+            {/* ── Meeting Prep (internal only) ─────────────────────────────── */}
             {!isExternal && (
-              <div style={twoCol}>
-                <StatusMeetingPanel
-                  project={project}
-                  canEdit={canEdit}
-                  onSaved={(updated) => setProject((prev) => prev ? { ...prev, ...updated } : updated)}
-                />
-                <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-                  <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                    {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
-                      <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
-                        <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
-                      </div>
-                    ))}
-                  </div>
+              <div className="ms-section-card" style={{ padding: "12px 16px" }}>
+                <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                  {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                    <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
+                      <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

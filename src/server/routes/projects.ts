@@ -1148,4 +1148,76 @@ app.delete("/:id/shipments/:sid", requireRole("admin", "pm", "pf_sa"), async (c)
   return c.json({ ok: true });
 });
 
+// ── Upcoming meetings (1 project → many) ──────────────────────────────────
+// Read: anyone who can view the project (incl. client + partner contacts) —
+// this is a customer-facing schedule. Write: project editors (same gate as the
+// project PATCH: admin/pm/pf_sa + canEditProject).
+const MEETING_COLS = "id, project_id, title, meeting_date, start_time_local, timezone, duration_min, join_url, notes, created_at";
+const meetingSchema = z.object({
+  title: z.string().max(255).nullable().optional(),
+  meeting_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  start_time_local: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
+  timezone: z.string().max(64).nullable().optional(),
+  duration_min: z.number().int().min(5).max(480).nullable().optional(),
+  join_url: z.string().max(2000).nullable().optional(),
+  notes: z.string().max(2000).nullable().optional(),
+});
+
+app.get("/:id/meetings", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canViewProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const rows = await db
+    .prepare(`SELECT ${MEETING_COLS} FROM project_meetings WHERE project_id = ? ORDER BY meeting_date ASC, COALESCE(start_time_local, '99:99') ASC`)
+    .bind(projectId)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+app.post("/:id/meetings", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const parsed = meetingSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const d = parsed.data;
+  const id = crypto.randomUUID();
+  await db
+    .prepare(`INSERT INTO project_meetings (id, project_id, title, meeting_date, start_time_local, timezone, duration_min, join_url, notes, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(id, projectId, d.title?.trim() || null, d.meeting_date, d.start_time_local || null, d.timezone || null, d.duration_min ?? null, d.join_url?.trim() || null, d.notes?.trim() || null, auth.user.id)
+    .run();
+  const created = await db.prepare(`SELECT ${MEETING_COLS} FROM project_meetings WHERE id = ? LIMIT 1`).bind(id).first();
+  return c.json(created, 201);
+});
+
+app.patch("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const mid = c.req.param("mid");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const parsed = meetingSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  const d = parsed.data;
+  await db
+    .prepare(`UPDATE project_meetings SET title = ?, meeting_date = ?, start_time_local = ?, timezone = ?, duration_min = ?, join_url = ?, notes = ? WHERE id = ? AND project_id = ?`)
+    .bind(d.title?.trim() || null, d.meeting_date, d.start_time_local || null, d.timezone || null, d.duration_min ?? null, d.join_url?.trim() || null, d.notes?.trim() || null, mid, projectId)
+    .run();
+  const updated = await db.prepare(`SELECT ${MEETING_COLS} FROM project_meetings WHERE id = ? AND project_id = ? LIMIT 1`).bind(mid, projectId).first();
+  if (!updated) throw new HTTPException(404, { message: "Not found" });
+  return c.json(updated);
+});
+
+app.delete("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const mid = c.req.param("mid");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  await db.prepare("DELETE FROM project_meetings WHERE id = ? AND project_id = ?").bind(mid, projectId).run();
+  return c.json({ ok: true });
+});
+
 export default app;
