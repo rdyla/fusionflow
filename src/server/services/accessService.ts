@@ -104,31 +104,33 @@ export async function canEditProject(
 ): Promise<boolean> {
   if (user.role === "admin") return true;
 
+  // Anyone assigned as this project's PM manages it in full, REGARDLESS of their
+  // base org role. A project has a Lead PM (projects.pm_user_id) and may have
+  // additional PMs (project_staff rows with staff_role='pm'); BOTH count. This
+  // is what lets a "pm_eligible" user selected as a project's PM (e.g. a CSM)
+  // get real PM rights — previously this check sat behind `role === "pm"`, so a
+  // pf_csm/pf_sa/pf_engineer assigned as PM was denied and fell through to the
+  // project_access-only path below.
+  const leadPm = await db
+    .prepare("SELECT id FROM projects WHERE id = ? AND pm_user_id = ? LIMIT 1")
+    .bind(projectId, user.id)
+    .first();
+  if (leadPm) return true;
+
+  const staffPm = await db
+    .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? AND staff_role = 'pm' LIMIT 1")
+    .bind(projectId, user.id)
+    .first();
+  if (staffPm) return true;
+
+  // SAs and CSMs otherwise edit only projects they've been explicitly granted
+  // access to (project_access).
   if (user.role === "pf_sa" || user.role === "pf_csm") {
     const access = await db
       .prepare("SELECT id FROM project_access WHERE project_id = ? AND user_id = ? LIMIT 1")
       .bind(projectId, user.id)
       .first();
     return !!access;
-  }
-
-  if (user.role === "pm") {
-    // A project has a Lead PM (projects.pm_user_id) and may have additional PMs
-    // (project_staff rows with staff_role='pm'). BOTH manage the project. This
-    // mirrors the list-scoping in myTasks/projects, which already surfaces a
-    // project to either — canEditProject previously honored only the Lead PM,
-    // so additional PMs could see their projects but got 403 managing them.
-    const leadPm = await db
-      .prepare("SELECT id FROM projects WHERE id = ? AND pm_user_id = ? LIMIT 1")
-      .bind(projectId, user.id)
-      .first();
-    if (leadPm) return true;
-
-    const staffPm = await db
-      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? AND staff_role = 'pm' LIMIT 1")
-      .bind(projectId, user.id)
-      .first();
-    return !!staffPm;
   }
 
   return false;

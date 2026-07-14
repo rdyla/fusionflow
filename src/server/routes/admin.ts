@@ -12,7 +12,7 @@ import { getDemoVendor, setDemoVendor } from "../lib/appSettings";
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // PM-accessible read endpoints — must be registered BEFORE the admin-only catch-all below
-app.get("/templates-list", requireRole("admin", "pm"), async (c) => {
+app.get("/templates-list", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const db = c.env.DB;
   const templates = await db
     .prepare(
