@@ -93,6 +93,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   const [loadingLocations, setLoadingLocations] = useState(true);
   const [loadingFiles, setLoadingFiles] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [creatingFolder, setCreatingFolder] = useState(false);
   /** Optional description typed by the user before clicking Upload. Captured
@@ -182,6 +183,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     if (!file || folderStack.length === 0) return;
     const currentUrl = folderStack[folderStack.length - 1].url;
     setUploading(true);
+    setUploadPct(null);
     try {
       const { file: uploaded } = await api.spUpload(currentUrl, file, {
         description: uploadDescription || null,
@@ -189,6 +191,8 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
         // it only applies to project folders; solution uploads fall back to the
         // Graph identity, same as the legacy customer-root behavior.
         projectId: owner?.kind === "project" ? owner.id : null,
+        // Large files upload in chunks straight to SharePoint; show progress.
+        onProgress: (pct) => setUploadPct(pct),
       });
       setFiles((prev) => {
         const without = prev.filter((f) => f.name !== uploaded.name);
@@ -200,6 +204,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       showToast(err instanceof Error ? err.message : "Upload failed", "error");
     } finally {
       setUploading(false);
+      setUploadPct(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
@@ -396,7 +401,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading || !currentUrl}
             >
-              {uploading ? "Uploading…" : "↑ Upload File"}
+              {uploading ? (uploadPct != null ? `Uploading… ${uploadPct}%` : "Uploading…") : "↑ Upload File"}
             </button>
             {canEdit && (
               <button
