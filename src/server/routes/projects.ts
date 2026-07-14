@@ -321,7 +321,7 @@ const updateProjectSchema = z.object({
   cleanup_solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
 });
 
-app.patch("/:id", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -780,7 +780,7 @@ const addContactSchema = z.object({
   contact_role: z.string().max(100).nullable().optional(),
 });
 
-app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae"), async (c) => {
+app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -819,7 +819,7 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae"), async (c) => {
   return c.json(created, 201);
 });
 
-app.delete("/:id/contacts/:contactId", requireRole("admin", "pm", "pf_ae"), async (c) => {
+app.delete("/:id/contacts/:contactId", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1005,7 +1005,7 @@ const externalResourceSchema = z.object({
   notes: z.string().max(5000).nullable().optional(),
 });
 
-app.get("/:id/external-resources", requireRole("admin", "pm"), async (c) => {
+app.get("/:id/external-resources", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1017,7 +1017,7 @@ app.get("/:id/external-resources", requireRole("admin", "pm"), async (c) => {
   return c.json(rows.results ?? []);
 });
 
-app.post("/:id/external-resources", requireRole("admin", "pm"), async (c) => {
+app.post("/:id/external-resources", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1039,7 +1039,7 @@ app.post("/:id/external-resources", requireRole("admin", "pm"), async (c) => {
   return c.json(created, 201);
 });
 
-app.patch("/:id/external-resources/:rid", requireRole("admin", "pm"), async (c) => {
+app.patch("/:id/external-resources/:rid", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1066,7 +1066,7 @@ app.patch("/:id/external-resources/:rid", requireRole("admin", "pm"), async (c) 
   return c.json(updated);
 });
 
-app.delete("/:id/external-resources/:rid", requireRole("admin", "pm"), async (c) => {
+app.delete("/:id/external-resources/:rid", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1098,7 +1098,7 @@ app.get("/:id/shipments", async (c) => {
   return c.json(rows.results ?? []);
 });
 
-app.post("/:id/shipments", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.post("/:id/shipments", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1116,7 +1116,7 @@ app.post("/:id/shipments", requireRole("admin", "pm", "pf_sa"), async (c) => {
   return c.json(created, 201);
 });
 
-app.post("/:id/shipments/:sid/refresh", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.post("/:id/shipments/:sid/refresh", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1127,7 +1127,7 @@ app.post("/:id/shipments/:sid/refresh", requireRole("admin", "pm", "pf_sa"), asy
   return c.json(row);
 });
 
-app.post("/:id/shipments/refresh", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.post("/:id/shipments/refresh", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1138,7 +1138,7 @@ app.post("/:id/shipments/refresh", requireRole("admin", "pm", "pf_sa"), async (c
   return c.json(rows.results ?? []);
 });
 
-app.delete("/:id/shipments/:sid", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.delete("/:id/shipments/:sid", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1175,7 +1175,7 @@ app.get("/:id/meetings", async (c) => {
   return c.json(rows.results ?? []);
 });
 
-app.post("/:id/meetings", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.post("/:id/meetings", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1192,7 +1192,7 @@ app.post("/:id/meetings", requireRole("admin", "pm", "pf_sa"), async (c) => {
   return c.json(created, 201);
 });
 
-app.patch("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.patch("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
@@ -1210,7 +1210,7 @@ app.patch("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa"), async (c) =
   return c.json(updated);
 });
 
-app.delete("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.delete("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");

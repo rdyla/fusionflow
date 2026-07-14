@@ -279,7 +279,7 @@ app.delete("/templates/:id/tasks/:taskId", requireRole("admin"), async (c) => {
 
 // ── Apply Template to Project ─────────────────────────────────────────────────
 
-app.post("/:projectId/apply-template", requireRole("admin", "pm"), async (c) => {
+app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("projectId");
@@ -650,7 +650,7 @@ const applyTimelineSchema = z.object({
   })).min(1),
 });
 
-app.post("/:projectId/apply-timeline", requireRole("admin", "pm"), async (c) => {
+app.post("/:projectId/apply-timeline", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("projectId");

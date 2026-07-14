@@ -631,7 +631,13 @@ export default function ProjectDetailPage() {
   if (error) return <div style={{ color: "#d13438", padding: 32 }}>Error: {error}</div>;
   if (!project) return <div style={{ color: "#64748b", padding: 32 }}>Project not found.</div>;
 
-  const canEdit = currentUserRole === "admin" || currentUserRole === "pm";
+  // A user assigned as this project's PM — Lead PM (pm_user_id) or an additional
+  // 'pm' staffer — gets full PM rights here regardless of their base role (e.g.
+  // a pm_eligible CSM). Mirrors the server's canEditProject.
+  const isAssignedPm =
+    (!!project.pm_user_id && project.pm_user_id === currentUserId) ||
+    projectStaff.some((s) => s.user_id === currentUserId && s.staff_role === "pm");
+  const canEdit = currentUserRole === "admin" || currentUserRole === "pm" || isAssignedPm;
   // IEs staffed on this project can manage its tasks (assign + complete + edit),
   // mirrored server-side. Scoped to engineers actually on the project_staff list.
   const isStaffedEngineer = currentUserRole === "pf_engineer" && projectStaff.some((s) => s.user_id === currentUserId);

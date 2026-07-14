@@ -154,7 +154,7 @@ const applySchema = z.object({
   exclude_task_ids: z.array(z.string()).default([]),
 });
 
-app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa"), async (c) => {
+app.post("/:id/cascade/apply", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
