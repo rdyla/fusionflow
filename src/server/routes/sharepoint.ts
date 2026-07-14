@@ -4,6 +4,7 @@ import {
   getSharePointLocations,
   listSharePointFiles,
   uploadToSharePoint,
+  createSharePointUploadSession,
   deleteSharePointFile,
   updateSharePointFileDescription,
   ensureSharePointChildFolder,
@@ -233,6 +234,74 @@ app.post("/upload", async (c) => {
     console.error("SharePoint upload error:", message);
     return c.json({ error: message }, 500);
   }
+});
+
+// POST /api/sharepoint/upload-session?url=folderUrl
+// Body: { filename }
+// Starts a Graph resumable upload session and returns a pre-authenticated
+// uploadUrl the BROWSER uploads chunks to directly (bypassing this Worker's
+// body/memory limits). Used for large files; small files use POST /upload.
+app.post("/upload-session", async (c) => {
+  const folderUrl = c.req.query("url");
+  if (!folderUrl) return c.json({ error: "url required" }, 400);
+  let body: { filename?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); }
+  const filename = (body.filename ?? "").trim();
+  if (!filename) return c.json({ error: "filename required" }, 400);
+  try {
+    const session = await createSharePointUploadSession(c.env, folderUrl, filename);
+    return c.json(session);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to create upload session";
+    console.error("SharePoint upload-session error:", message);
+    return c.json({ error: message }, 502);
+  }
+});
+
+// POST /api/sharepoint/upload-complete
+// Body: { spItemId, webUrl, projectId?, description? }
+// Called by the client after a chunked upload finishes (the browser gets the
+// final driveItem straight from Graph). Sets the description (Graph PATCH) and
+// shadows the upload in sharepoint_uploads for uploader attribution — the same
+// bookkeeping the simple POST /upload does server-side.
+app.post("/upload-complete", async (c) => {
+  const auth = c.get("auth");
+  let body: { spItemId?: string; webUrl?: string; projectId?: string | null; description?: string | null };
+  try { body = await c.req.json(); } catch { return c.json({ error: "invalid body" }, 400); }
+  const spItemId = (body.spItemId ?? "").trim();
+  const webUrl = (body.webUrl ?? "").trim();
+  if (!spItemId || !webUrl) return c.json({ error: "spItemId and webUrl required" }, 400);
+
+  // Description is best-effort — the file is already uploaded regardless.
+  if (body.description?.trim()) {
+    try { await updateSharePointFileDescription(c.env, webUrl, body.description.trim()); }
+    catch (err) { console.warn("[sp.upload-complete] description set failed:", err instanceof Error ? err.message : err); }
+  }
+
+  // Attribution shadow — only for project folders (project FK), matching /upload.
+  if (body.projectId && auth?.user) {
+    try {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO sharepoint_uploads
+             (sp_item_id, project_id, web_url, uploaded_by_user_id, uploaded_by_name, uploaded_by_email, uploaded_at)
+           VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(sp_item_id) DO UPDATE SET
+             project_id          = excluded.project_id,
+             web_url             = excluded.web_url,
+             uploaded_by_user_id = excluded.uploaded_by_user_id,
+             uploaded_by_name    = excluded.uploaded_by_name,
+             uploaded_by_email   = excluded.uploaded_by_email,
+             uploaded_at         = CURRENT_TIMESTAMP`
+        )
+        .bind(spItemId, body.projectId, webUrl, auth.user.id, auth.user.name ?? auth.user.email, auth.user.email)
+        .run();
+    } catch (err) {
+      console.warn("[sp.upload-complete] attribution insert failed:", err instanceof Error ? err.message : err);
+    }
+  }
+
+  return c.json({ ok: true });
 });
 
 // PATCH /api/sharepoint/file/description?webUrl=xxx

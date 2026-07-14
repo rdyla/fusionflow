@@ -375,6 +375,36 @@ export async function uploadToSharePoint(
 }
 
 /**
+ * Create a Graph resumable upload session for a file in a SharePoint folder.
+ * Returns a pre-authenticated `uploadUrl` that the BROWSER uploads chunks to
+ * directly — so the file bytes never pass through the Cloudflare Worker, which
+ * removes the Worker's ~100 MB request-body / 128 MB memory ceiling and lets
+ * uploads go up to SharePoint's real limit. Used for large files; small files
+ * still take the simple PUT path (uploadToSharePoint).
+ *
+ * conflictBehavior "replace" mirrors the simple-upload path (re-uploading the
+ * same filename overwrites, matching the ON CONFLICT REPLACE attribution).
+ */
+export async function createSharePointUploadSession(
+  env: GraphEnv,
+  folderAbsoluteUrl: string,
+  filename: string,
+): Promise<{ uploadUrl: string; expirationDateTime: string | null }> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);
+  const encodedPath = graphPath(segments);
+  const sessionPath = encodedPath
+    ? `/drives/${driveId}/root:/${encodedPath}/${encodeURIComponent(filename)}:/createUploadSession`
+    : `/drives/${driveId}/root:/${encodeURIComponent(filename)}:/createUploadSession`;
+  const session = await graphPostJson<{ uploadUrl: string; expirationDateTime?: string }>(
+    token,
+    sessionPath,
+    { item: { "@microsoft.graph.conflictBehavior": "replace", name: filename } },
+  );
+  return { uploadUrl: session.uploadUrl, expirationDateTime: session.expirationDateTime ?? null };
+}
+
+/**
  * Update the description on an existing SharePoint file. Used by the
  * PATCH /api/sharepoint/file/description endpoint so PMs can backfill
  * context on files uploaded via the SharePoint web UI directly (no

@@ -1480,6 +1480,110 @@ export type StakeholderSummary = {
   }>;
 };
 
+// ── SharePoint large-file upload (resumable, chunked, browser → SharePoint) ──
+// Files above this go through a Graph upload session so the bytes never pass
+// through the Cloudflare Worker (which caps ~100 MB body / 128 MB memory).
+// Small files keep the proven simple POST /upload path.
+const SP_SIMPLE_UPLOAD_MAX = 4 * 1024 * 1024;   // 4 MiB
+// Chunk size MUST be a multiple of 320 KiB per Graph; 5 MiB = 16 × 320 KiB.
+const SP_CHUNK_SIZE = 5 * 1024 * 1024;
+
+interface GraphUploadedItem {
+  id: string;
+  name: string;
+  size?: number;
+  webUrl?: string;
+  description?: string;
+  lastModifiedDateTime?: string;
+  createdDateTime?: string;
+  file?: { mimeType?: string };
+  folder?: unknown;
+  createdBy?: { user?: { displayName?: string; email?: string }; application?: { displayName?: string } };
+  lastModifiedBy?: { user?: { displayName?: string; email?: string }; application?: { displayName?: string } };
+  "@microsoft.graph.downloadUrl"?: string;
+}
+
+function graphItemToSPFile(item: GraphUploadedItem): SPFile {
+  const who = (s?: GraphUploadedItem["createdBy"]) =>
+    s?.user?.displayName ?? s?.user?.email ?? s?.application?.displayName ?? null;
+  return {
+    id: item.id,
+    name: item.name,
+    size: typeof item.size === "number" ? item.size : null,
+    lastModified: item.lastModifiedDateTime ?? null,
+    webUrl: item.webUrl ?? "",
+    downloadUrl: item["@microsoft.graph.downloadUrl"] ?? null,
+    isFolder: !!item.folder,
+    mimeType: item.file?.mimeType ?? null,
+    description: item.description ?? null,
+    createdAt: item.createdDateTime ?? null,
+    createdByName: who(item.createdBy),
+    modifiedByName: who(item.lastModifiedBy),
+  };
+}
+
+async function spUploadChunked(
+  folderUrl: string,
+  file: File,
+  opts?: { description?: string | null; projectId?: string | null; onProgress?: (pct: number) => void },
+): Promise<{ file: SPFile }> {
+  // 1. Server creates the resumable session (app-auth) and returns a
+  //    pre-authenticated uploadUrl.
+  const sessRes = await fetch(`${API_BASE}/sharepoint/upload-session?url=${encodeURIComponent(folderUrl)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getImpersonationHeaders() },
+    body: JSON.stringify({ filename: file.name }),
+  });
+  if (sessRes.status === 401) { window.location.href = "/login"; throw new Error("Unauthorized"); }
+  if (!sessRes.ok) {
+    const b = await sessRes.json().catch(() => null) as { error?: string } | null;
+    throw new Error(b?.error ?? `Could not start upload: ${sessRes.status}`);
+  }
+  const { uploadUrl } = await sessRes.json() as { uploadUrl: string };
+
+  // 2. Browser PUTs chunks straight to SharePoint. No auth header — the session
+  //    URL is pre-authenticated. 202 = more expected; 200/201 = done.
+  const total = file.size;
+  let start = 0;
+  let finalItem: GraphUploadedItem | null = null;
+  while (start < total) {
+    const end = Math.min(start + SP_CHUNK_SIZE, total);
+    const put = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Range": `bytes ${start}-${end - 1}/${total}` },
+      body: file.slice(start, end),
+    });
+    if (put.status === 200 || put.status === 201) {
+      finalItem = await put.json().catch(() => null) as GraphUploadedItem | null;
+    } else if (put.status !== 202) {
+      let detail = ""; try { detail = await put.text(); } catch { /* ignore */ }
+      try { await fetch(uploadUrl, { method: "DELETE" }); } catch { /* cancel session, best-effort */ }
+      throw new Error(`Upload failed near ${Math.round(start / 1048576)} MB (HTTP ${put.status}). ${detail.slice(0, 200)}`);
+    }
+    start = end;
+    opts?.onProgress?.(Math.min(99, Math.round((start / total) * 100)));
+  }
+  if (!finalItem?.id) throw new Error("Upload finished but SharePoint returned no file.");
+
+  // 3. Server records attribution + sets the description (best-effort — the
+  //    file is already committed regardless).
+  try {
+    await fetch(`${API_BASE}/sharepoint/upload-complete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...getImpersonationHeaders() },
+      body: JSON.stringify({
+        spItemId: finalItem.id,
+        webUrl: finalItem.webUrl ?? "",
+        projectId: opts?.projectId ?? null,
+        description: opts?.description ?? null,
+      }),
+    });
+  } catch { /* non-fatal */ }
+
+  opts?.onProgress?.(100);
+  return { file: graphItemToSPFile(finalItem) };
+}
+
 export const api = {
   me: () => request<MeResponse>("/me"),
   systemStatus: () => request<SystemStatusResponse>("/status"),
@@ -1975,7 +2079,12 @@ export const api = {
    *  server shadows the upload in sharepoint_uploads so the file list can
    *  show the real uploader (Graph runs app-only, so its createdBy is the
    *  app principal). */
-  spUpload: async (folderUrl: string, file: File, opts?: { description?: string | null; projectId?: string | null }): Promise<{ file: SPFile }> => {
+  spUpload: async (folderUrl: string, file: File, opts?: { description?: string | null; projectId?: string | null; onProgress?: (pct: number) => void }): Promise<{ file: SPFile }> => {
+    // Large files use a resumable session straight to SharePoint (bypasses the
+    // Worker's body/memory limits). Small files keep the simple PUT path.
+    if (file.size > SP_SIMPLE_UPLOAD_MAX) {
+      return spUploadChunked(folderUrl, file, opts);
+    }
     const form = new FormData();
     form.append("file", file);
     const params = new URLSearchParams({ url: folderUrl });
@@ -1991,6 +2100,7 @@ export const api = {
       const body = await res.json().catch(() => null) as { error?: string } | null;
       throw new Error(body?.error ?? `Upload failed: ${res.status}`);
     }
+    opts?.onProgress?.(100);
     return res.json();
   },
   spDelete: (webUrl: string) =>
