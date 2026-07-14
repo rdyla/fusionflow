@@ -823,6 +823,7 @@ export default function ProjectDetailPage() {
   async function handleRemoveStaff(staffId: string) {
     if (!project) return;
     const removing = projectStaff.find((s) => s.id === staffId);
+    if (!window.confirm(`Remove ${removing?.name ?? removing?.email ?? "this person"} from the project team?`)) return;
     try {
       await api.removeProjectStaff(project.id, staffId);
       setProjectStaff((prev) => prev.filter((s) => s.id !== staffId));
@@ -878,6 +879,8 @@ export default function ProjectDetailPage() {
 
   async function handleRemovePartner(staffId: string) {
     if (!project) return;
+    const removing = projectStaff.find((s) => s.id === staffId);
+    if (!window.confirm(`Remove ${removing?.name ?? removing?.email ?? "this partner AE"} from the project?`)) return;
     try {
       await api.removeProjectStaff(project.id, staffId);
       setProjectStaff((prev) => prev.filter((s) => s.id !== staffId));
@@ -1432,6 +1435,7 @@ export default function ProjectDetailPage() {
           email: c.email,
           phone: c.phone,
           onRemove: canEdit ? async () => {
+            if (!window.confirm(`Remove ${c.name} from this project?`)) return;
             await api.removeProjectContact(project!.id, c.id);
             setContacts((prev) => prev.filter((x) => x.id !== c.id));
           } : undefined,

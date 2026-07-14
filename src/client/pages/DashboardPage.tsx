@@ -507,6 +507,12 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+        {!projSort && visibleProjects.length > 1 && (
+          <div style={{ fontSize: 12, color: "#94a3b8", padding: "8px 20px 0", display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 12, color: "#0891b2" }}>↕</span>
+            Tip: click <strong style={{ fontWeight: 600, color: "#64748b" }}>Project</strong>, <strong style={{ fontWeight: 600, color: "#64748b" }}>Customer</strong>, or <strong style={{ fontWeight: 600, color: "#64748b" }}>Status</strong> to sort.
+          </div>
+        )}
         <table className="ms-table">
           <thead>
             <tr>
