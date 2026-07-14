@@ -1794,6 +1794,7 @@ export default function ProjectDetailPage() {
                       <div style={{ overflowX: "auto" }}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
+                            <col style={{ width: 56 }} />
                             <col />
                             <col style={{ width: 200 }} />
                             <col style={{ width: 124 }} />
@@ -1804,6 +1805,7 @@ export default function ProjectDetailPage() {
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
+                              <th style={{ textAlign: "center", padding: "6px 8px" }}>Blocked</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Title</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Assignee</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Due</th>
@@ -1831,44 +1833,44 @@ export default function ProjectDetailPage() {
                               return (
                                 <React.Fragment key={task.id}>
                                   <tr data-task-row={task.id}>
+                                    {/* Blocked — its own column. Glyph shows only when the task has an
+                                        active blocker; hover lists the blocker(s), click opens the first. */}
+                                    <td style={{ ...cellStyle, textAlign: "center" }}>
+                                      {taskBlockers.length > 0 && (
+                                        <button
+                                          type="button"
+                                          aria-label="View blocker"
+                                          title={`${blockerTip}\n\nClick to open.`}
+                                          onClick={() => openEditRisk(taskBlockers[0])}
+                                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}
+                                        >
+                                          ⛔
+                                        </button>
+                                      )}
+                                    </td>
                                     <td style={cellStyle}>
-                                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                        <input
-                                          type="text"
-                                          defaultValue={taskDisplayTitle(task)}
-                                          disabled={!canManageTasks}
-                                          style={{ ...rowInputStyle, flex: 1, minWidth: 0 }}
-                                          title={blockerTip ? `${task.title}\n\n${blockerTip}` : task.title}
-                                          onBlur={(e) => {
-                                            const newRaw = e.target.value.trim();
-                                            if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
-                                            if (newRaw === taskDisplayTitle(task)) return;
-                                            // Preserve any [Tag] prefix from the original title
-                                            const { types } = parseTaggedTitle(task.title);
-                                            const newTitle = types.length > 0
-                                              ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
-                                              : newRaw;
-                                            patchTask(task.id, { title: newTitle });
-                                          }}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-                                            else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
-                                          }}
-                                        />
-                                        {/* Blocked glyph — hover shows the blocker(s); click opens the
-                                            (first) referenced blocker in the edit modal. */}
-                                        {taskBlockers.length > 0 && (
-                                          <button
-                                            type="button"
-                                            aria-label="View blocker"
-                                            title={`${blockerTip}\n\nClick to open.`}
-                                            onClick={() => openEditRisk(taskBlockers[0])}
-                                            style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0, flexShrink: 0 }}
-                                          >
-                                            ⛔
-                                          </button>
-                                        )}
-                                      </div>
+                                      <input
+                                        type="text"
+                                        defaultValue={taskDisplayTitle(task)}
+                                        disabled={!canManageTasks}
+                                        style={{ ...rowInputStyle, width: "100%" }}
+                                        title={blockerTip ? `${task.title}\n\n${blockerTip}` : task.title}
+                                        onBlur={(e) => {
+                                          const newRaw = e.target.value.trim();
+                                          if (!newRaw) { e.target.value = taskDisplayTitle(task); return; }
+                                          if (newRaw === taskDisplayTitle(task)) return;
+                                          // Preserve any [Tag] prefix from the original title
+                                          const { types } = parseTaggedTitle(task.title);
+                                          const newTitle = types.length > 0
+                                            ? `[${types.map((t) => t.toUpperCase()).join("+")}] ${newRaw}`
+                                            : newRaw;
+                                          patchTask(task.id, { title: newTitle });
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                          else if (e.key === "Escape") (e.target as HTMLInputElement).value = taskDisplayTitle(task);
+                                        }}
+                                      />
                                     </td>
                                     <td style={cellStyle}>
                                       {(() => {
@@ -2086,7 +2088,7 @@ export default function ProjectDetailPage() {
                                   </tr>
                                   {subRowCount > 0 && (
                                     <tr>
-                                      <td colSpan={7} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                      <td colSpan={8} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
                                         {taskRecordings.map((rec) => (
                                           <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#7c3aed" }}>
                                             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#7c3aed" }} />
@@ -2104,7 +2106,7 @@ export default function ProjectDetailPage() {
                             })}
                             {isAddingHere && (
                               <tr>
-                                <td colSpan={7} style={{ padding: "6px 8px" }}>
+                                <td colSpan={8} style={{ padding: "6px 8px" }}>
                                   <form
                                     onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(stage.id); }}
                                     style={{ display: "flex", gap: 8, alignItems: "center" }}
