@@ -42,7 +42,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
 
-type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
+type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "meetings" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -1191,11 +1191,11 @@ export default function ProjectDetailPage() {
         const isExternal = currentUserRole === "partner_ae" || currentUserRole === "client";
         const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
         const visibleTabs: DetailTab[] = isExternal
-          ? ["dashboard", "overview", "timeline", "tasks", "blockers", ...externalSPTab, "activity"]
+          ? ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...externalSPTab, "activity"]
           // Timeline Builder is hidden now that phase + kickoff date auto-generate
           // the dated timeline (the builder code is kept, just not surfaced).
           // External Resources is PM/admin only (canEdit === admin || pm).
-          : ["dashboard", "overview", "timeline", "tasks", "blockers", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
+          : ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -1519,11 +1519,6 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </div>
-
-            {/* ── Upcoming Meetings — placed above the people roster so a large
-                roster can't push it out of view. Shown to internal AND external
-                (customer/partner) viewers; editing gated by canEdit. */}
-            <UpcomingMeetingsPanel projectId={project.id} canEdit={canEdit} />
 
             {/* ── Account Team │ Project Team (2-column) ───────────────────── */}
             <div style={twoCol}>
@@ -2232,6 +2227,12 @@ export default function ProjectDetailPage() {
           </div>
         </div>
         </>
+      )}
+
+      {/* ── Meetings — Upcoming Meetings on its own tab (was on Overview).
+          Shown to internal + external viewers; editing gated by canEdit. */}
+      {tab === "meetings" && (
+        <UpcomingMeetingsPanel projectId={project.id} canEdit={canEdit} />
       )}
 
       {/* ── Blockers ───────────────────────────────────────────────────────── */}
