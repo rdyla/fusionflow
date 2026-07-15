@@ -10,6 +10,7 @@ import {
   ensureSharePointChildFolder,
   inviteGuestAndGrantWrite,
   grantFolderEdit,
+  revokeFolderEdit,
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
@@ -661,6 +662,35 @@ app.post("/folder/allow-editing", async (c) => {
   const failed = list.filter((_, i) => results[i].status === "rejected").map((ct) => ct.email);
   if (failed.length) console.warn("[sp.allow-editing] some grants failed:", failed.join(", "));
   return c.json({ ok: true, enabled: true, granted, failed });
+});
+
+// POST /api/sharepoint/revoke-edit
+// Body: { web_url, email, project_id }
+// Removes one external person's edit access to a folder (deletes the SharePoint
+// permission + our grant row). Does NOT delete the guest account (Entra owns
+// guest lifecycle). Internal editors only.
+app.post("/revoke-edit", async (c) => {
+  const auth = c.get("auth");
+  let body: { web_url?: string; email?: string; project_id?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const webUrl = (body.web_url ?? "").trim();
+  const email = (body.email ?? "").trim();
+  const projectId = (body.project_id ?? "").trim();
+  if (!webUrl || !email || !projectId) return c.json({ error: "web_url, email, project_id required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
+
+  try {
+    await revokeFolderEdit(c.env, webUrl, email);
+    await c.env.DB
+      .prepare(`DELETE FROM sharepoint_edit_grants WHERE project_id = ? AND web_url = ? AND grantee_email = ?`)
+      .bind(projectId, webUrl, email.toLowerCase())
+      .run();
+    return c.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to revoke edit access";
+    console.error("SharePoint revoke-edit error:", message);
+    return c.json({ error: message }, 500);
+  }
 });
 
 export default app;
