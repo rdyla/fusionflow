@@ -25,6 +25,14 @@ type EmailPayload = {
 
 const PF_DOMAIN = "@packetfusion.com";
 
+// Recipient suffixes that receive mail on STAGING (see sendEmail). Beyond PF
+// staff, we also deliver to @gmail.com so the team can drive the portal as
+// "customers" via +alias Gmail accounts during testing (e.g. SharePoint flows).
+// This list is consulted ONLY on staging — prod delivers to everyone regardless
+// — so it's safe to promote as-is (nothing to strip). To lock staging back down
+// to PF-only, drop "@gmail.com" here.
+const STAGING_ALLOWED_SUFFIXES = [PF_DOMAIN, "@gmail.com"];
+
 /**
  * Importance tier for a project notification email, checked against the
  * recipient's `users.email_notifications` preference:
@@ -68,7 +76,8 @@ export async function maybeSendEmail(
  *
  * Routing rules:
  *   DEV_EMAIL set   → all mail diverted to that address (local dev only)
- *   APP_URL staging → only @packetfusion.com recipients receive mail
+ *   APP_URL staging → only STAGING_ALLOWED_SUFFIXES recipients receive mail
+ *                     (@packetfusion.com + @gmail.com for customer-POV testing)
  *   otherwise       → normal production delivery
  */
 export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> {
@@ -88,10 +97,9 @@ export async function sendEmail(env: Env, payload: EmailPayload): Promise<void> 
     finalRecipients = [env.DEV_EMAIL];
     subject = `[DEV → ${validRecipients.join(", ")}] ${subject}`;
   } else if (env.APP_URL?.includes("staging")) {
-    const allowedSuffixes = [PF_DOMAIN];
     finalRecipients = validRecipients.filter(r => {
       const lower = r.toLowerCase();
-      return allowedSuffixes.some(s => lower.endsWith(s));
+      return STAGING_ALLOWED_SUFFIXES.some(s => lower.endsWith(s));
     });
     if (finalRecipients.length === 0) {
       console.info(`[email] Staging: suppressed email to non-allowlisted recipients (${validRecipients.join(", ")})`);
