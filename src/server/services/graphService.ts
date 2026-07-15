@@ -10,6 +10,7 @@ type GraphEnv = {
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;
   DYNAMICS_CLIENT_SECRET?: string;
+  APP_URL?: string;
 };
 
 export type SPLocation = {
@@ -582,6 +583,62 @@ export async function ensurePhaseSharePointFolder(
     console.warn(`[phaseSharePoint] Failed to create folder for phase ${phaseId}:`, err instanceof Error ? err.message : err);
     return null;
   }
+}
+
+/**
+ * Give an EXTERNAL person edit access to a SharePoint item (file or folder) so
+ * they can open + edit it in Office-for-the-web as themselves — the "customer
+ * online editing with attribution" flow.
+ *
+ * Two steps:
+ *  1. Ensure they exist as a B2B guest in our tenant (POST /invitations). Uses
+ *     the app's User.Invite.All permission. Best-effort — if they're already a
+ *     guest, Graph errors and we swallow it and proceed to the grant.
+ *  2. Grant "write" on the item via the drive-item invite API, with
+ *     requireSignIn=true (so edits are attributed to their guest identity) and
+ *     sendInvitation=true (Graph emails them a direct link to the item).
+ *
+ * Granting on a FOLDER cascades to its children, so a single folder grant lets
+ * the guest edit every document inside it.
+ */
+export async function inviteGuestAndGrantWrite(
+  env: GraphEnv,
+  itemWebUrl: string,
+  email: string,
+  displayName?: string | null
+): Promise<{ invited: boolean; granted: boolean }> {
+  const token = await getGraphToken(env);
+
+  // 1. Provision the guest (idempotent-ish — ignore "already exists").
+  let invited = false;
+  try {
+    await graphPostJson(token, "/invitations", {
+      invitedUserEmailAddress: email,
+      ...(displayName ? { invitedUserDisplayName: displayName } : {}),
+      inviteRedirectUrl: env.APP_URL || "https://cloudconnect.packetfusion.com",
+      sendInvitationMessage: false, // the item-invite below sends the useful email
+    });
+    invited = true;
+  } catch (err) {
+    console.warn(`[graph] guest invite for ${email} failed (likely already a guest):`, err instanceof Error ? err.message : err);
+  }
+
+  // 2. Grant write on the item (+ email them a direct link).
+  const { driveId, segments } = await resolveSharePointPath(token, itemWebUrl);
+  const encodedPath = graphPath(segments);
+  const item = await graphGet<{ id: string }>(
+    token,
+    encodedPath ? `/drives/${driveId}/root:/${encodedPath}` : `/drives/${driveId}/root`
+  );
+  await graphPostJson(token, `/drives/${driveId}/items/${item.id}/invite`, {
+    recipients: [{ email }],
+    roles: ["write"],
+    requireSignIn: true,
+    sendInvitation: true,
+    message: "You've been given access to edit this document for your Packet Fusion project.",
+  });
+
+  return { invited, granted: true };
 }
 
 export async function deleteSharePointFile(

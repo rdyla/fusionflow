@@ -8,6 +8,7 @@ import {
   deleteSharePointFile,
   updateSharePointFileDescription,
   ensureSharePointChildFolder,
+  inviteGuestAndGrantWrite,
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
@@ -531,6 +532,32 @@ app.post("/clear-token-cache", async (c) => {
     c.env.KV.delete("sp:token:https://packetfusioncrm.sharepoint.com"), // legacy SP REST token
   ]);
   return c.json({ ok: true, message: "Token cache cleared" });
+});
+
+// POST /api/sharepoint/grant-edit
+// Body: { webUrl, email, name? }
+// Invites an external person as a B2B guest and grants them WRITE access to the
+// item (folder or file) at webUrl, so they can edit it in Office-for-the-web as
+// themselves (attributed). Internal-only — external roles can't grant access.
+// NOTE (Phase 1a): a proof-of-concept trigger keyed on a raw email; hardening
+// (canEditProject gate + wiring to project contacts) lands with the UI in 1b.
+app.post("/grant-edit", async (c) => {
+  const auth = c.get("auth");
+  if (!auth?.user || isExternalRole(auth.role)) return c.json({ error: "Forbidden" }, 403);
+  let body: { webUrl?: string; email?: string; name?: string | null };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const webUrl = (body.webUrl ?? "").trim();
+  const email = (body.email ?? "").trim();
+  if (!webUrl || !email) return c.json({ error: "webUrl and email required" }, 400);
+
+  try {
+    const res = await inviteGuestAndGrantWrite(c.env, webUrl, email, body.name ?? null);
+    return c.json({ ok: true, ...res });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to grant edit access";
+    console.error("SharePoint grant-edit error:", message);
+    return c.json({ error: message }, 500);
+  }
 });
 
 export default app;

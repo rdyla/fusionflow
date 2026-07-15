@@ -519,6 +519,23 @@ function FileRow({
   const [draft, setDraft] = useState(file.description ?? "");
   const [saving, setSaving] = useState(false);
   const [togglingVis, setTogglingVis] = useState(false);
+  const [grantingEdit, setGrantingEdit] = useState(false);
+
+  async function enableOnlineEditing() {
+    const email = window.prompt(
+      `Grant online-editing access to this folder.\n\nEnter the customer's email — they'll be invited as a guest and can edit documents here in Office online (attributed to them).`
+    );
+    if (!email || !email.trim()) return;
+    setGrantingEdit(true);
+    try {
+      await api.spGrantEditAccess(file.webUrl, email.trim());
+      showToast(`Invited ${email.trim()} and granted edit access. They'll get an email with the link.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
+    } finally {
+      setGrantingEdit(false);
+    }
+  }
   const versionInputRef = useRef<HTMLInputElement>(null);
   const [uploadingVersion, setUploadingVersion] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -738,6 +755,17 @@ function FileRow({
             }}
           >
             {togglingVis ? "…" : file.visibleToClient ? "👁 Visible to client" : "🔒 Internal only"}
+          </button>
+        )}
+        {file.isFolder && canEdit && !isExternal && (
+          <button
+            className="ms-btn-ghost"
+            onClick={enableOnlineEditing}
+            disabled={grantingEdit}
+            title="Invite a customer as a guest and grant edit access to this folder (Office online, attributed)"
+            style={{ fontSize: 12 }}
+          >
+            {grantingEdit ? "…" : "✎ Enable online editing"}
           </button>
         )}
         {!file.isFolder && (
