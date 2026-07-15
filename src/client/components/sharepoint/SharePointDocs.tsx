@@ -276,7 +276,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       await api.spGrantEditAccess(editPickerFolder.webUrl, clean, projectId, name ?? null);
       setGrantedEmails((prev) => new Set(prev).add(clean.toLowerCase()));
       setManualEmail("");
-      showToast(`${clean} can now edit this folder online. They'll get an email with the link (may land in spam).`, "success");
+      showToast(`${clean} can now edit this folder online — they'll see an "Edit online" link on its files in the portal.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
     } finally {

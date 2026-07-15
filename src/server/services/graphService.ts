@@ -599,8 +599,11 @@ export async function ensurePhaseSharePointFolder(
  *     the app's User.Invite.All permission. Best-effort — if they're already a
  *     guest, Graph errors and we swallow it and proceed to the grant.
  *  2. Grant "write" on the item via the drive-item invite API, with
- *     requireSignIn=true (so edits are attributed to their guest identity) and
- *     sendInvitation=true (Graph emails them a direct link to the item).
+ *     requireSignIn=true (so edits are attributed to their guest identity).
+ *     sendInvitation=false — we deliberately do NOT send SharePoint's
+ *     (spam-prone) sharing email: the customer reaches the doc via the in-portal
+ *     "Edit online" link, and Microsoft handles first-time guest sign-in (email
+ *     one-time-passcode) inline when they open it.
  *
  * Granting on a FOLDER cascades to its children, so a single folder grant lets
  * the guest edit every document inside it.
@@ -620,7 +623,7 @@ export async function inviteGuestAndGrantWrite(
       invitedUserEmailAddress: email,
       ...(displayName ? { invitedUserDisplayName: displayName } : {}),
       inviteRedirectUrl: env.APP_URL || "https://cloudconnect.packetfusion.com",
-      sendInvitationMessage: false, // the item-invite below sends the useful email
+      sendInvitationMessage: false, // no email — customer uses the in-portal "Edit online" link (OTP sign-in handled inline)
     });
     invited = true;
   } catch (err) {
@@ -639,7 +642,7 @@ export async function inviteGuestAndGrantWrite(
     recipients: [{ email }],
     roles: ["write"],
     requireSignIn: true,
-    sendInvitation: true,
+    sendInvitation: false, // no SharePoint sharing email — see the doc comment above
     message: "You've been given access to edit this document for your Packet Fusion project.",
   };
 
