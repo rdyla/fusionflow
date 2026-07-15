@@ -253,6 +253,18 @@ export type SPFile = {
   /** Folders only: whether shared with client/partner roles. Set by the server
    *  overlay; undefined for files. */
   visibleToClient?: boolean;
+  /** Files, external viewers only: this viewer has been granted edit access, so
+   *  the UI can offer an "Edit online" link. Set by the server overlay. */
+  canEditOnline?: boolean;
+};
+
+/** An external edit grant on a project's SharePoint folder. */
+export type SPEditGrant = {
+  id: string;
+  web_url: string;
+  grantee_email: string;
+  grantee_name: string | null;
+  granted_at: string;
 };
 
 /** One entry in a file's upload/replace history (sharepoint_file_events). */
@@ -2157,13 +2169,16 @@ export const api = {
   /** Append-only upload/replace history for a file (newest first). */
   spFileHistory: (spItemId: string) =>
     request<{ events: SPFileEvent[] }>(`/sharepoint/file/history?spItemId=${encodeURIComponent(spItemId)}`),
-  /** Invite an external person as a guest + grant them write on the item at
-   *  webUrl (folder grants cascade to children) so they can edit in Office online. */
-  spGrantEditAccess: (webUrl: string, email: string, name?: string | null) =>
+  /** Invite an external person as a guest + grant them write on the folder at
+   *  webUrl (cascades to children) so they can edit in Office online. */
+  spGrantEditAccess: (webUrl: string, email: string, projectId: string, name?: string | null) =>
     request<{ ok: boolean; invited: boolean; granted: boolean }>(`/sharepoint/grant-edit`, {
       method: "POST",
-      body: JSON.stringify({ webUrl, email, name: name ?? null }),
+      body: JSON.stringify({ webUrl, email, projectId, name: name ?? null }),
     }),
+  /** List external edit grants for a project (who can edit online). */
+  spEditGrants: (projectId: string) =>
+    request<{ grants: SPEditGrant[] }>(`/sharepoint/grants?projectId=${encodeURIComponent(projectId)}`),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context
    *  on files uploaded via SP web directly. */

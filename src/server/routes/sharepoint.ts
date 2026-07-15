@@ -12,6 +12,7 @@ import {
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
+import { canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -136,6 +137,19 @@ app.get("/files", async (c) => {
         .first<{ visible_to_client: number }>();
       const currentFolderVisible = cur?.visible_to_client === 1;
       files = files.filter((f) => (f.isFolder ? f.visibleToClient === true : currentFolderVisible));
+    }
+
+    // Overlay in-portal "Edit online" for external viewers granted edit on this
+    // folder (or an ancestor — grants cascade, so match by URL prefix).
+    if (isExternalRole(auth?.role) && auth?.user?.email) {
+      const grantRows = await c.env.DB
+        .prepare("SELECT web_url FROM sharepoint_edit_grants WHERE grantee_email = ?")
+        .bind(auth.user.email.toLowerCase())
+        .all<{ web_url: string }>();
+      const editable = (grantRows.results ?? []).some((r) => url === r.web_url || url.startsWith(r.web_url));
+      if (editable) {
+        files = files.map((f) => (f.isFolder ? f : { ...f, canEditOnline: true }));
+      }
     }
 
     return c.json({ files });
@@ -534,24 +548,57 @@ app.post("/clear-token-cache", async (c) => {
   return c.json({ ok: true, message: "Token cache cleared" });
 });
 
+// GET /api/sharepoint/grants?projectId=xxx
+// Lists the external edit grants for a project (who can edit online). Internal
+// editors only.
+app.get("/grants", async (c) => {
+  const auth = c.get("auth");
+  const projectId = c.req.query("projectId");
+  if (!projectId) return c.json({ error: "projectId required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+  const rows = await c.env.DB
+    .prepare(`SELECT id, web_url, grantee_email, grantee_name, granted_at
+              FROM sharepoint_edit_grants WHERE project_id = ? ORDER BY granted_at DESC`)
+    .bind(projectId)
+    .all();
+  return c.json({ grants: rows.results ?? [] });
+});
+
 // POST /api/sharepoint/grant-edit
-// Body: { webUrl, email, name? }
+// Body: { webUrl, email, name?, projectId }
 // Invites an external person as a B2B guest and grants them WRITE access to the
-// item (folder or file) at webUrl, so they can edit it in Office-for-the-web as
-// themselves (attributed). Internal-only — external roles can't grant access.
-// NOTE (Phase 1a): a proof-of-concept trigger keyed on a raw email; hardening
-// (canEditProject gate + wiring to project contacts) lands with the UI in 1b.
+// folder at webUrl, so they can edit its documents in Office-for-the-web as
+// themselves (attributed). Gated to project editors; records the grant so the
+// customer gets an in-portal "Edit online" link and PMs can see/revoke access.
 app.post("/grant-edit", async (c) => {
   const auth = c.get("auth");
-  if (!auth?.user || isExternalRole(auth.role)) return c.json({ error: "Forbidden" }, 403);
-  let body: { webUrl?: string; email?: string; name?: string | null };
+  let body: { webUrl?: string; email?: string; name?: string | null; projectId?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
   const webUrl = (body.webUrl ?? "").trim();
   const email = (body.email ?? "").trim();
-  if (!webUrl || !email) return c.json({ error: "webUrl and email required" }, 400);
+  const projectId = (body.projectId ?? "").trim();
+  if (!webUrl || !email || !projectId) return c.json({ error: "webUrl, email and projectId required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
 
   try {
     const res = await inviteGuestAndGrantWrite(c.env, webUrl, email, body.name ?? null);
+    // Record the grant (idempotent-ish: one row per grant action is fine — the
+    // overlay + list de-dupe by email at read time).
+    try {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO sharepoint_edit_grants (id, project_id, web_url, grantee_email, grantee_name, granted_by_user_id)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(crypto.randomUUID(), projectId, webUrl, email.toLowerCase(), body.name ?? null, auth.user.id)
+        .run();
+    } catch (err) {
+      console.warn("[sp.grant-edit] grant-record insert failed:", err instanceof Error ? err.message : err);
+    }
     return c.json({ ok: true, ...res });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to grant edit access";

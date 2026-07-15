@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type SPFile, type SPLocation, type SPFileEvent } from "../../lib/api";
+import { api, type SPFile, type SPLocation, type SPFileEvent, type ProjectContact } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 /** Which record owns this SharePoint area — a project or a solution. Drives
@@ -99,6 +99,16 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   /** Optional description typed by the user before clicking Upload. Captured
    *  alongside the file so it lands on the SP driveItem as metadata. */
   const [uploadDescription, setUploadDescription] = useState("");
+
+  // "Enable online editing" picker (project owners only) — grant customers guest
+  // edit access to a folder.
+  const projectId = owner?.kind === "project" ? owner.id : null;
+  const [editPickerFolder, setEditPickerFolder] = useState<SPFile | null>(null);
+  const [pickerContacts, setPickerContacts] = useState<ProjectContact[]>([]);
+  const [grantedEmails, setGrantedEmails] = useState<Set<string>>(new Set());
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [grantingEmail, setGrantingEmail] = useState<string | null>(null);
+  const [manualEmail, setManualEmail] = useState("");
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -233,6 +243,44 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     } finally {
       setUploading(false);
       setUploadPct(null);
+    }
+  }
+
+  // ── Enable online editing (grant customers guest edit access) ──────────────
+
+  async function openEditPicker(folder: SPFile) {
+    if (!projectId) return;
+    setEditPickerFolder(folder);
+    setManualEmail("");
+    setPickerLoading(true);
+    try {
+      const [contacts, { grants }] = await Promise.all([
+        api.projectContacts(projectId),
+        api.spEditGrants(projectId),
+      ]);
+      setPickerContacts(contacts.filter((c) => !!c.email));
+      setGrantedEmails(new Set(grants.map((g) => g.grantee_email.toLowerCase())));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to load contacts", "error");
+    } finally {
+      setPickerLoading(false);
+    }
+  }
+
+  async function grantEditTo(email: string, name?: string | null) {
+    if (!editPickerFolder || !projectId) return;
+    const clean = email.trim();
+    if (!clean) return;
+    setGrantingEmail(clean);
+    try {
+      await api.spGrantEditAccess(editPickerFolder.webUrl, clean, projectId, name ?? null);
+      setGrantedEmails((prev) => new Set(prev).add(clean.toLowerCase()));
+      setManualEmail("");
+      showToast(`${clean} can now edit this folder online. They'll get an email with the link (may land in spam).`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
+    } finally {
+      setGrantingEmail(null);
     }
   }
 
@@ -473,6 +521,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                   onNavigateInto={() => navigateInto(file)}
                   onDelete={() => handleDelete(file)}
                   onUploadNewVersion={(picked) => handleUploadNewVersion(file, picked)}
+                  onEnableOnlineEditing={projectId ? () => openEditPicker(file) : null}
                   onDescriptionSaved={(updated) =>
                     setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
                   }
@@ -483,6 +532,64 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Enable-online-editing picker — grant customers guest edit access. */}
+      {editPickerFolder && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditPickerFolder(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 520 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <h2 style={{ margin: 0 }}>Enable online editing</h2>
+              <button onClick={() => setEditPickerFolder(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#64748b", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14 }}>
+              Grant a customer contact edit access to <strong>{editPickerFolder.name}</strong>. They're invited as a guest and can edit its documents in Office online — attributed to them.
+            </div>
+
+            {pickerLoading ? (
+              <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading contacts…</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {pickerContacts.length === 0 && (
+                  <div style={{ fontSize: 13, color: "#94a3b8" }}>
+                    No project contacts with an email yet — add one on the Overview tab, or enter an email below.
+                  </div>
+                )}
+                {pickerContacts.map((ct) => {
+                  const granted = !!ct.email && grantedEmails.has(ct.email.toLowerCase());
+                  return (
+                    <div key={ct.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", background: "#f8fafc", border: "1px solid #eef2f7", borderRadius: 6 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>
+                          {ct.name}{ct.contact_role ? <span style={{ fontWeight: 400, color: "#94a3b8" }}> · {ct.contact_role}</span> : null}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis" }}>{ct.email}</div>
+                      </div>
+                      {granted ? (
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "#107c10", whiteSpace: "nowrap" }}>✓ Can edit</span>
+                      ) : (
+                        <button className="ms-btn-secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }} disabled={grantingEmail === ct.email} onClick={() => grantEditTo(ct.email!, ct.name)}>
+                          {grantingEmail === ct.email ? "Granting…" : "Grant edit"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div style={{ display: "flex", gap: 6, marginTop: 6, borderTop: "1px solid #eef2f7", paddingTop: 10 }}>
+                  <input className="ms-input" type="email" placeholder="Or enter an email…" value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} style={{ flex: 1, fontSize: 13 }} />
+                  <button className="ms-btn-primary" style={{ fontSize: 12 }} disabled={!manualEmail.trim() || grantingEmail === manualEmail.trim()} onClick={() => grantEditTo(manualEmail)}>
+                    {grantingEmail === manualEmail.trim() ? "Granting…" : "Grant edit"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="ms-btn-secondary" onClick={() => setEditPickerFolder(null)} style={{ fontSize: 12 }}>Done</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -500,6 +607,7 @@ function FileRow({
   onNavigateInto,
   onDelete,
   onUploadNewVersion,
+  onEnableOnlineEditing,
   onDescriptionSaved,
   onVisibilityChanged,
 }: {
@@ -511,6 +619,7 @@ function FileRow({
   onNavigateInto: () => void;
   onDelete: () => void;
   onUploadNewVersion: (picked: File) => Promise<void>;
+  onEnableOnlineEditing: (() => void) | null;
   onDescriptionSaved: (updated: SPFile) => void;
   onVisibilityChanged: (visible: boolean) => void;
 }) {
@@ -519,23 +628,6 @@ function FileRow({
   const [draft, setDraft] = useState(file.description ?? "");
   const [saving, setSaving] = useState(false);
   const [togglingVis, setTogglingVis] = useState(false);
-  const [grantingEdit, setGrantingEdit] = useState(false);
-
-  async function enableOnlineEditing() {
-    const email = window.prompt(
-      `Grant online-editing access to this folder.\n\nEnter the customer's email — they'll be invited as a guest and can edit documents here in Office online (attributed to them).`
-    );
-    if (!email || !email.trim()) return;
-    setGrantingEdit(true);
-    try {
-      await api.spGrantEditAccess(file.webUrl, email.trim());
-      showToast(`Invited ${email.trim()} and granted edit access. They'll get an email with the link.`, "success");
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
-    } finally {
-      setGrantingEdit(false);
-    }
-  }
   const versionInputRef = useRef<HTMLInputElement>(null);
   const [uploadingVersion, setUploadingVersion] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -757,15 +849,14 @@ function FileRow({
             {togglingVis ? "…" : file.visibleToClient ? "👁 Visible to client" : "🔒 Internal only"}
           </button>
         )}
-        {file.isFolder && canEdit && !isExternal && (
+        {file.isFolder && canEdit && !isExternal && onEnableOnlineEditing && (
           <button
             className="ms-btn-ghost"
-            onClick={enableOnlineEditing}
-            disabled={grantingEdit}
-            title="Invite a customer as a guest and grant edit access to this folder (Office online, attributed)"
+            onClick={onEnableOnlineEditing}
+            title="Give a customer edit access to this folder (Office online, attributed)"
             style={{ fontSize: 12 }}
           >
-            {grantingEdit ? "…" : "✎ Enable online editing"}
+            ✎ Enable online editing
           </button>
         )}
         {!file.isFolder && (
@@ -791,6 +882,20 @@ function FileRow({
               {uploadingVersion ? "Uploading…" : "↑ New version"}
             </button>
           </>
+        )}
+        {/* External viewers granted edit access get an in-portal "Edit online"
+            link (opens the file in Office-for-the-web; they sign in as a guest). */}
+        {!file.isFolder && isExternal && file.canEditOnline && (
+          <a
+            href={file.webUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ms-btn-ghost"
+            style={{ textDecoration: "none", color: "#0b9aad", borderColor: "rgba(11,154,173,0.35)" }}
+            title="Edit this document online in Office for the web"
+          >
+            ✎ Edit online
+          </a>
         )}
         {!file.isFolder && file.downloadUrl && (
           <a
