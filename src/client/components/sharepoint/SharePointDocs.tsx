@@ -111,6 +111,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   const [manualEmail, setManualEmail] = useState("");
   const [pickerEditingOn, setPickerEditingOn] = useState(false);
   const [togglingEditing, setTogglingEditing] = useState(false);
+  const [revokingEmail, setRevokingEmail] = useState<string | null>(null);
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -295,6 +296,21 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       showToast(err instanceof Error ? err.message : "Failed to update client editing", "error");
     } finally {
       setTogglingEditing(false);
+    }
+  }
+
+  async function revokeEditFrom(email: string) {
+    if (!editPickerFolder || !projectId) return;
+    if (!window.confirm(`Revoke ${email}'s edit access to this folder?`)) return;
+    setRevokingEmail(email);
+    try {
+      await api.spRevokeEditAccess(editPickerFolder.webUrl, email, projectId);
+      setGrantedEmails((prev) => { const n = new Set(prev); n.delete(email.toLowerCase()); return n; });
+      showToast(`Revoked edit access for ${email}.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to revoke access", "error");
+    } finally {
+      setRevokingEmail(null);
     }
   }
 
@@ -609,7 +625,12 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                         <div style={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis" }}>{ct.email}</div>
                       </div>
                       {granted ? (
-                        <span style={{ fontSize: 12, fontWeight: 600, color: "#107c10", whiteSpace: "nowrap" }}>✓ Can edit</span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#107c10" }}>✓ Can edit</span>
+                          <button className="ms-btn-ghost" style={{ fontSize: 11, color: "#d13438" }} disabled={revokingEmail === ct.email} onClick={() => revokeEditFrom(ct.email!)}>
+                            {revokingEmail === ct.email ? "…" : "Revoke"}
+                          </button>
+                        </span>
                       ) : (
                         <button className="ms-btn-secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }} disabled={grantingEmail === ct.email} onClick={() => grantEditTo(ct.email!, ct.name)}>
                           {grantingEmail === ct.email ? "Granting…" : "Grant edit"}

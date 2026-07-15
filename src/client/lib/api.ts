@@ -2189,6 +2189,13 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  /** Revoke one external person's edit access to a folder (removes the SP
+   *  permission + our grant row; guest account is left to Entra). */
+  spRevokeEditAccess: (webUrl: string, email: string, projectId: string) =>
+    request<{ ok: boolean }>(`/sharepoint/revoke-edit`, {
+      method: "POST",
+      body: JSON.stringify({ web_url: webUrl, email, project_id: projectId }),
+    }),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context
    *  on files uploaded via SP web directly. */

@@ -693,6 +693,103 @@ export async function grantFolderEdit(
     .run();
 }
 
+type GraphPermission = {
+  id: string;
+  grantedToV2?: { user?: { email?: string; displayName?: string } };
+  grantedToIdentitiesV2?: Array<{ user?: { email?: string; displayName?: string } }>;
+  invitation?: { email?: string };
+};
+
+function permissionMatchesEmail(p: GraphPermission, emailLower: string): boolean {
+  if (p.grantedToV2?.user?.email?.toLowerCase() === emailLower) return true;
+  if (p.invitation?.email?.toLowerCase() === emailLower) return true;
+  return (p.grantedToIdentitiesV2 ?? []).some((g) => g.user?.email?.toLowerCase() === emailLower);
+}
+
+/**
+ * Revoke an external person's edit access to a folder/file: find the sharing
+ * permission(s) matching their email on the item and delete them. Best-effort —
+ * if no matching permission exists (already revoked), it's a no-op. Does NOT
+ * delete the guest USER (guest-account lifecycle is left to Entra).
+ */
+export async function revokeFolderEdit(
+  env: GraphEnv,
+  itemWebUrl: string,
+  email: string
+): Promise<void> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, itemWebUrl);
+  const encodedPath = graphPath(segments);
+  const item = await graphGet<{ id: string }>(
+    token,
+    encodedPath ? `/drives/${driveId}/root:/${encodedPath}` : `/drives/${driveId}/root`
+  );
+  const perms = await graphGet<{ value: GraphPermission[] }>(token, `/drives/${driveId}/items/${item.id}/permissions`);
+  const emailLower = email.toLowerCase();
+  const matching = (perms.value ?? []).filter((p) => permissionMatchesEmail(p, emailLower));
+  for (const p of matching) {
+    const res = await fetch(`${GRAPH_API_BASE}/drives/${driveId}/items/${item.id}/permissions/${p.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok && res.status !== 204 && res.status !== 404) {
+      throw new Error(`Graph DELETE permission ${res.status}: ${await res.text().catch(() => "")}`);
+    }
+  }
+}
+
+/**
+ * Revoke ALL external edit grants recorded for a project: delete each grantee's
+ * SharePoint permission, clear the sharepoint_edit_grants rows, and turn off
+ * client_editing on the project's folders (so no future auto-grants). Used when
+ * a project is marked complete. Best-effort per grant — a Graph failure on one
+ * doesn't stop the rest; rows are cleared regardless so our state is clean.
+ */
+export async function revokeAllProjectEditGrants(
+  env: GraphEnv,
+  db: D1Database,
+  projectId: string
+): Promise<void> {
+  const grants = await db
+    .prepare(`SELECT DISTINCT web_url, grantee_email FROM sharepoint_edit_grants WHERE project_id = ?`)
+    .bind(projectId)
+    .all<{ web_url: string; grantee_email: string }>();
+  for (const g of grants.results ?? []) {
+    try {
+      await revokeFolderEdit(env, g.web_url, g.grantee_email);
+    } catch (err) {
+      console.warn(`[graph] revoke ${g.grantee_email} on ${g.web_url} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+  await db.batch([
+    db.prepare(`DELETE FROM sharepoint_edit_grants WHERE project_id = ?`).bind(projectId),
+    db.prepare(`UPDATE sharepoint_folder_visibility SET client_editing = 0 WHERE project_id = ?`).bind(projectId),
+  ]);
+}
+
+/**
+ * Scheduled sweep: revoke external edit grants for any project whose status is
+ * 'complete' (the derived project-complete value — note: NOT 'completed', which
+ * is the task/stage value). Runs on cron because project status is auto-derived
+ * deep in syncProjectStatus, which has no Graph access to revoke inline. Idempotent
+ * — once a project's grants are cleared it drops out of the query.
+ */
+export async function revokeCompletedProjectGrants(env: GraphEnv, db: D1Database): Promise<void> {
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT project_id FROM sharepoint_edit_grants
+       WHERE project_id IN (SELECT id FROM projects WHERE status = 'complete')`
+    )
+    .all<{ project_id: string }>();
+  for (const r of rows.results ?? []) {
+    try {
+      await revokeAllProjectEditGrants(env, db, r.project_id);
+    } catch (err) {
+      console.warn(`[graph] completion sweep revoke for project ${r.project_id} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+}
+
 export async function deleteSharePointFile(
   env: GraphEnv,
   fileWebUrl: string
