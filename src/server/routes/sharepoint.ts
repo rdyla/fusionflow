@@ -9,6 +9,7 @@ import {
   updateSharePointFileDescription,
   ensureSharePointChildFolder,
   inviteGuestAndGrantWrite,
+  grantFolderEdit,
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
@@ -105,11 +106,13 @@ async function overlayFolderVisibility(db: D1Database, files: SPFile[]): Promise
   if (folderIds.length === 0) return files;
   const ph = inPlaceholders(folderIds);
   const rows = await db
-    .prepare(`SELECT sp_item_id, visible_to_client FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
+    .prepare(`SELECT sp_item_id, visible_to_client, client_editing FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
     .bind(...folderIds)
-    .all<{ sp_item_id: string; visible_to_client: number }>();
-  const visById = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r.visible_to_client === 1]));
-  return files.map((f) => (f.isFolder ? { ...f, visibleToClient: visById.get(f.id) === true } : f));
+    .all<{ sp_item_id: string; visible_to_client: number; client_editing: number }>();
+  const byId = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r]));
+  return files.map((f) => (f.isFolder
+    ? { ...f, visibleToClient: byId.get(f.id)?.visible_to_client === 1, clientEditing: byId.get(f.id)?.client_editing === 1 }
+    : f));
 }
 
 // GET /api/sharepoint/files?url=xxx
@@ -605,6 +608,59 @@ app.post("/grant-edit", async (c) => {
     console.error("SharePoint grant-edit error:", message);
     return c.json({ error: message }, 500);
   }
+});
+
+// POST /api/sharepoint/folder/allow-editing
+// Body: { sp_item_id, web_url, project_id, enabled }
+// Toggles per-folder "client editing." Enabling also marks the folder visible to
+// client and grants edit to all the project's contacts with an email; new
+// contacts added later are auto-granted (see projects.ts contact-add). Disabling
+// just stops future auto-grants (existing grants are removed via Revoke).
+app.post("/folder/allow-editing", async (c) => {
+  const auth = c.get("auth");
+  let body: { sp_item_id?: string; web_url?: string; project_id?: string; enabled?: boolean };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const spItemId = (body.sp_item_id ?? "").trim();
+  const webUrl = (body.web_url ?? "").trim();
+  const projectId = (body.project_id ?? "").trim();
+  const enabled = !!body.enabled;
+  if (!spItemId || !webUrl || !projectId) return c.json({ error: "sp_item_id, web_url, project_id required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
+
+  // Persist the flag. Enabling also flips visible_to_client on (can't edit what
+  // you can't see); disabling leaves visibility untouched.
+  await c.env.DB
+    .prepare(
+      `INSERT INTO sharepoint_folder_visibility
+         (sp_item_id, project_id, web_url, visible_to_client, client_editing, set_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(sp_item_id) DO UPDATE SET
+         project_id        = excluded.project_id,
+         web_url           = excluded.web_url,
+         client_editing    = excluded.client_editing,
+         visible_to_client = CASE WHEN excluded.client_editing = 1 THEN 1 ELSE visible_to_client END,
+         set_by_user_id    = excluded.set_by_user_id,
+         updated_at        = CURRENT_TIMESTAMP`
+    )
+    .bind(spItemId, projectId, webUrl, enabled ? 1 : 0, enabled ? 1 : 0, auth.user.id)
+    .run();
+
+  if (!enabled) return c.json({ ok: true, enabled: false, granted: [] });
+
+  // Grant every current project contact with an email (in parallel — each
+  // invite may wait out the provisioning race, so serial would be slow).
+  const contacts = await c.env.DB
+    .prepare(`SELECT name, email FROM project_contacts WHERE project_id = ? AND email IS NOT NULL AND TRIM(email) != ''`)
+    .bind(projectId)
+    .all<{ name: string | null; email: string }>();
+  const list = contacts.results ?? [];
+  const results = await Promise.allSettled(
+    list.map((ct) => grantFolderEdit(c.env, c.env.DB, { projectId, webUrl, email: ct.email, name: ct.name, grantedByUserId: auth.user!.id }))
+  );
+  const granted = list.filter((_, i) => results[i].status === "fulfilled").map((ct) => ct.email);
+  const failed = list.filter((_, i) => results[i].status === "rejected").map((ct) => ct.email);
+  if (failed.length) console.warn("[sp.allow-editing] some grants failed:", failed.join(", "));
+  return c.json({ ok: true, enabled: true, granted, failed });
 });
 
 export default app;

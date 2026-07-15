@@ -9,7 +9,7 @@ import { maybeSendEmail, sendEmail } from "../services/emailService";
 import { projectAtRisk, contactProjectInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
-import { ensureSharePointChildFolder } from "../services/graphService";
+import { ensureSharePointChildFolder, grantFolderEdit } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { refreshAccountTeamIfStale } from "../lib/accountTeamSync";
@@ -814,6 +814,27 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engi
         html: contactProjectInvite({ recipientName: name, projectName: project.name, appUrl }),
       }));
     }
+
+    // Phase 2 auto-grant: if any of this project's folders have "client editing"
+    // enabled, grant the new contact edit on them. Best-effort + off the response
+    // path (Graph invites are slow and can hit the guest-provisioning race).
+    c.executionCtx.waitUntil((async () => {
+      try {
+        const folders = await db
+          .prepare(`SELECT web_url FROM sharepoint_folder_visibility WHERE project_id = ? AND client_editing = 1 AND web_url IS NOT NULL`)
+          .bind(projectId)
+          .all<{ web_url: string }>();
+        for (const f of folders.results ?? []) {
+          try {
+            await grantFolderEdit(c.env, db, { projectId, webUrl: f.web_url, email, name, grantedByUserId: auth.user.id });
+          } catch (err) {
+            console.warn(`[projects.contacts] auto-grant edit for ${email} on ${f.web_url} failed:`, err instanceof Error ? err.message : err);
+          }
+        }
+      } catch (err) {
+        console.warn("[projects.contacts] auto-grant lookup failed:", err instanceof Error ? err.message : err);
+      }
+    })());
   }
 
   return c.json(created, 201);

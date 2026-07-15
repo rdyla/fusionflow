@@ -109,6 +109,8 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   const [pickerLoading, setPickerLoading] = useState(false);
   const [grantingEmail, setGrantingEmail] = useState<string | null>(null);
   const [manualEmail, setManualEmail] = useState("");
+  const [pickerEditingOn, setPickerEditingOn] = useState(false);
+  const [togglingEditing, setTogglingEditing] = useState(false);
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -252,6 +254,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     if (!projectId) return;
     setEditPickerFolder(folder);
     setManualEmail("");
+    setPickerEditingOn(folder.clientEditing === true);
     setPickerLoading(true);
     try {
       const [contacts, { grants }] = await Promise.all([
@@ -264,6 +267,34 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       showToast(err instanceof Error ? err.message : "Failed to load contacts", "error");
     } finally {
       setPickerLoading(false);
+    }
+  }
+
+  async function toggleClientEditing(next: boolean) {
+    if (!editPickerFolder || !projectId) return;
+    setTogglingEditing(true);
+    try {
+      const res = await api.spAllowClientEditing({
+        sp_item_id: editPickerFolder.id,
+        web_url: editPickerFolder.webUrl,
+        project_id: projectId,
+        enabled: next,
+      });
+      setPickerEditingOn(next);
+      // Reflect on the folder row (badge + toggle state; enabling also makes it visible).
+      setFiles((prev) => prev.map((f) => (f.id === editPickerFolder.id
+        ? { ...f, clientEditing: next, visibleToClient: next ? true : f.visibleToClient }
+        : f)));
+      if (next) {
+        setGrantedEmails(new Set((res.granted ?? []).map((e) => e.toLowerCase())));
+        showToast(`Client editing on — granted ${res.granted?.length ?? 0} contact${res.granted?.length === 1 ? "" : "s"}${res.failed?.length ? `, ${res.failed.length} failed` : ""}.`, res.failed?.length ? "error" : "success");
+      } else {
+        showToast("Client editing off — new contacts won't be auto-granted (existing access stays until revoked).", "success");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update client editing", "error");
+    } finally {
+      setTogglingEditing(false);
     }
   }
 
@@ -543,9 +574,20 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
               <h2 style={{ margin: 0 }}>Enable online editing</h2>
               <button onClick={() => setEditPickerFolder(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#64748b", lineHeight: 1 }}>×</button>
             </div>
-            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 14 }}>
-              Grant a customer contact edit access to <strong>{editPickerFolder.name}</strong>. They're invited as a guest and can edit its documents in Office online — attributed to them.
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
+              Give customer contacts edit access to <strong>{editPickerFolder.name}</strong>. They're invited as guests and edit its documents in Office online — attributed to them.
             </div>
+
+            {/* Phase 2: bulk toggle — grants everyone now + auto-grants future contacts. */}
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", background: pickerEditingOn ? "rgba(16,124,16,0.08)" : "#f8fafc", border: `1px solid ${pickerEditingOn ? "rgba(16,124,16,0.35)" : "#eef2f7"}`, borderRadius: 6, marginBottom: 12, cursor: togglingEditing ? "default" : "pointer" }}>
+              <input type="checkbox" checked={pickerEditingOn} disabled={togglingEditing} onChange={(e) => toggleClientEditing(e.target.checked)} style={{ marginTop: 2 }} />
+              <span style={{ fontSize: 13, color: "#1e293b" }}>
+                <strong>Allow all project contacts to edit</strong>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {togglingEditing ? "Updating…" : "Grants everyone on the project now, and auto-grants any contact added later."}
+                </div>
+              </span>
+            </label>
 
             {pickerLoading ? (
               <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading contacts…</div>
@@ -853,10 +895,14 @@ function FileRow({
           <button
             className="ms-btn-ghost"
             onClick={onEnableOnlineEditing}
-            title="Give a customer edit access to this folder (Office online, attributed)"
-            style={{ fontSize: 12 }}
+            title="Manage who can edit this folder online"
+            style={{
+              fontSize: 12,
+              color: file.clientEditing ? "#107c10" : undefined,
+              borderColor: file.clientEditing ? "rgba(16,124,16,0.35)" : undefined,
+            }}
           >
-            ✎ Enable online editing
+            {file.clientEditing ? "✎ Client editing: On" : "✎ Client editing"}
           </button>
         )}
         {!file.isFolder && (
