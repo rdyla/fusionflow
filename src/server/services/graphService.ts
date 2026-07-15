@@ -47,6 +47,10 @@ export type SPFile = {
    *  has been granted edit access covering this file, so the UI can offer an
    *  "Edit online" link. Set by the /files route from sharepoint_edit_grants. */
   canEditOnline?: boolean;
+  /** App-side overlay (folders only): "Allow client editing" is on — the
+   *  project's customer contacts are auto-granted edit here. Set by /files from
+   *  sharepoint_folder_visibility.client_editing. */
+  clientEditing?: boolean;
 };
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
@@ -666,6 +670,27 @@ export async function inviteGuestAndGrantWrite(
     }
   }
   throw lastErr;
+}
+
+/**
+ * Grant one external email edit access to a folder AND record it in
+ * sharepoint_edit_grants. Wraps inviteGuestAndGrantWrite + the grant-row insert
+ * so the "allow client editing" toggle and the new-contact auto-grant share one
+ * path. Throws on hard failure (Graph); callers decide how to handle.
+ */
+export async function grantFolderEdit(
+  env: GraphEnv,
+  db: D1Database,
+  opts: { projectId: string; webUrl: string; email: string; name?: string | null; grantedByUserId?: string | null }
+): Promise<void> {
+  await inviteGuestAndGrantWrite(env, opts.webUrl, opts.email, opts.name ?? null);
+  await db
+    .prepare(
+      `INSERT INTO sharepoint_edit_grants (id, project_id, web_url, grantee_email, grantee_name, granted_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .bind(crypto.randomUUID(), opts.projectId, opts.webUrl, opts.email.toLowerCase(), opts.name ?? null, opts.grantedByUserId ?? null)
+    .run();
 }
 
 export async function deleteSharePointFile(

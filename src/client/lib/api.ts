@@ -256,6 +256,9 @@ export type SPFile = {
   /** Files, external viewers only: this viewer has been granted edit access, so
    *  the UI can offer an "Edit online" link. Set by the server overlay. */
   canEditOnline?: boolean;
+  /** Folders only: "Allow client editing" is on (project contacts auto-granted
+   *  edit here). Set by the server overlay. */
+  clientEditing?: boolean;
 };
 
 /** An external edit grant on a project's SharePoint folder. */
@@ -2179,6 +2182,13 @@ export const api = {
   /** List external edit grants for a project (who can edit online). */
   spEditGrants: (projectId: string) =>
     request<{ grants: SPEditGrant[] }>(`/sharepoint/grants?projectId=${encodeURIComponent(projectId)}`),
+  /** Toggle "Allow client editing" on a folder. Enabling grants all current
+   *  project contacts (and future ones are auto-granted on add). */
+  spAllowClientEditing: (payload: { sp_item_id: string; web_url: string; project_id: string; enabled: boolean }) =>
+    request<{ ok: boolean; enabled: boolean; granted: string[]; failed?: string[] }>(`/sharepoint/folder/allow-editing`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context
    *  on files uploaded via SP web directly. */
