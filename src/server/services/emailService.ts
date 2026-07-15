@@ -26,12 +26,12 @@ type EmailPayload = {
 const PF_DOMAIN = "@packetfusion.com";
 
 // Recipient suffixes that receive mail on STAGING (see sendEmail). Beyond PF
-// staff, we also deliver to @gmail.com so the team can drive the portal as
-// "customers" via +alias Gmail accounts during testing (e.g. SharePoint flows).
-// This list is consulted ONLY on staging — prod delivers to everyone regardless
-// — so it's safe to promote as-is (nothing to strip). To lock staging back down
-// to PF-only, drop "@gmail.com" here.
-const STAGING_ALLOWED_SUFFIXES = [PF_DOMAIN, "@gmail.com"];
+// staff, we also deliver to @gmail.com and @dyla.net so the team can drive the
+// portal as "customers" via personal/+alias accounts during testing (e.g.
+// SharePoint flows). This list is consulted ONLY on staging — prod delivers to
+// everyone regardless — so it's safe to promote as-is (nothing to strip). To
+// lock staging back down to PF-only, drop the extra suffixes here.
+const STAGING_ALLOWED_SUFFIXES = [PF_DOMAIN, "@gmail.com", "@dyla.net"];
 
 /**
  * Importance tier for a project notification email, checked against the
