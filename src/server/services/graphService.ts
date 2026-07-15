@@ -634,15 +634,35 @@ export async function inviteGuestAndGrantWrite(
     token,
     encodedPath ? `/drives/${driveId}/root:/${encodedPath}` : `/drives/${driveId}/root`
   );
-  await graphPostJson(token, `/drives/${driveId}/items/${item.id}/invite`, {
+  const invitePath = `/drives/${driveId}/items/${item.id}/invite`;
+  const inviteBody = {
     recipients: [{ email }],
     roles: ["write"],
     requireSignIn: true,
     sendInvitation: true,
     message: "You've been given access to edit this document for your Packet Fusion project.",
-  });
+  };
 
-  return { invited, granted: true };
+  // Entra provisions a just-invited guest ASYNCHRONOUSLY, so the very first
+  // share to a brand-new guest usually comes back `sharingFailed`
+  // ("try again later") — a retry a few seconds later succeeds. Retry the share
+  // with backoff to absorb that provisioning lag. Only `sharingFailed` is
+  // retried; any other error is a real failure and bubbles immediately.
+  const backoffMs = [0, 3000, 6000];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (backoffMs[attempt] > 0) await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+    try {
+      await graphPostJson(token, invitePath, inviteBody);
+      return { invited, granted: true };
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("sharingFailed")) throw err;
+      console.warn(`[graph] share attempt ${attempt + 1}/${backoffMs.length} for ${email} hit sharingFailed; retrying…`);
+    }
+  }
+  throw lastErr;
 }
 
 export async function deleteSharePointFile(
