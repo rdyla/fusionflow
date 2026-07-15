@@ -43,6 +43,10 @@ export type SPFile = {
    *  customer-facing roles (client / partner_ae). Set by the /files route from
    *  sharepoint_folder_visibility; undefined for files / when not overlaid. */
   visibleToClient?: boolean;
+  /** App-side overlay (files, external viewers only): the current external user
+   *  has been granted edit access covering this file, so the UI can offer an
+   *  "Edit online" link. Set by the /files route from sharepoint_edit_grants. */
+  canEditOnline?: boolean;
 };
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
