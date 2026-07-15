@@ -253,6 +253,32 @@ export type SPFile = {
   /** Folders only: whether shared with client/partner roles. Set by the server
    *  overlay; undefined for files. */
   visibleToClient?: boolean;
+  /** Files, external viewers only: this viewer has been granted edit access, so
+   *  the UI can offer an "Edit online" link. Set by the server overlay. */
+  canEditOnline?: boolean;
+  /** Folders only: "Allow client editing" is on (project contacts auto-granted
+   *  edit here). Set by the server overlay. */
+  clientEditing?: boolean;
+};
+
+/** An external edit grant on a project's SharePoint folder. */
+export type SPEditGrant = {
+  id: string;
+  web_url: string;
+  grantee_email: string;
+  grantee_name: string | null;
+  granted_at: string;
+};
+
+/** One entry in a file's upload/replace history (sharepoint_file_events). */
+export type SPFileEvent = {
+  id: string;
+  action: "upload" | "replace";
+  filename: string | null;
+  size: number | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  created_at: string;
 };
 
 export type DashboardSummaryResponse = {
@@ -2143,6 +2169,33 @@ export const api = {
   },
   spDelete: (webUrl: string) =>
     request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+  /** Append-only upload/replace history for a file (newest first). */
+  spFileHistory: (spItemId: string) =>
+    request<{ events: SPFileEvent[] }>(`/sharepoint/file/history?spItemId=${encodeURIComponent(spItemId)}`),
+  /** Invite an external person as a guest + grant them write on the folder at
+   *  webUrl (cascades to children) so they can edit in Office online. */
+  spGrantEditAccess: (webUrl: string, email: string, projectId: string, name?: string | null) =>
+    request<{ ok: boolean; invited: boolean; granted: boolean }>(`/sharepoint/grant-edit`, {
+      method: "POST",
+      body: JSON.stringify({ webUrl, email, projectId, name: name ?? null }),
+    }),
+  /** List external edit grants for a project (who can edit online). */
+  spEditGrants: (projectId: string) =>
+    request<{ grants: SPEditGrant[] }>(`/sharepoint/grants?projectId=${encodeURIComponent(projectId)}`),
+  /** Toggle "Allow client editing" on a folder. Enabling grants all current
+   *  project contacts (and future ones are auto-granted on add). */
+  spAllowClientEditing: (payload: { sp_item_id: string; web_url: string; project_id: string; enabled: boolean }) =>
+    request<{ ok: boolean; enabled: boolean; granted: string[]; failed?: string[] }>(`/sharepoint/folder/allow-editing`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    }),
+  /** Revoke one external person's edit access to a folder (removes the SP
+   *  permission + our grant row; guest account is left to Entra). */
+  spRevokeEditAccess: (webUrl: string, email: string, projectId: string) =>
+    request<{ ok: boolean }>(`/sharepoint/revoke-edit`, {
+      method: "POST",
+      body: JSON.stringify({ web_url: webUrl, email, project_id: projectId }),
+    }),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context
    *  on files uploaded via SP web directly. */

@@ -4,6 +4,7 @@ import type { Bindings, Variables } from "./types";
 import { authMiddleware } from "./middleware/auth";
 import { runShipmentTracking } from "./lib/shipmentTracking";
 import { runAccountTeamSync } from "./lib/accountTeamSync";
+import { revokeCompletedProjectGrants } from "./services/graphService";
 import authRoutes from "./routes/auth";
 import dashboardRoutes from "./routes/dashboard";
 import projectRoutes from "./routes/projects";
@@ -246,6 +247,11 @@ export default {
       runUtilizationSnapshots(env),
       runHealthScoring(env),
       runAccountTeamSync(env),
+      // Revoke customer SharePoint edit access on completed projects (Phase 3
+      // auto-revoke; project status is auto-derived so this can't run inline).
+      revokeCompletedProjectGrants(env, env.DB).catch((err) =>
+        console.warn("[cron] SharePoint completion revoke sweep failed:", err instanceof Error ? err.message : err)
+      ),
     ]));
   },
 };

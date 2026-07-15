@@ -8,9 +8,13 @@ import {
   deleteSharePointFile,
   updateSharePointFileDescription,
   ensureSharePointChildFolder,
+  inviteGuestAndGrantWrite,
+  grantFolderEdit,
+  revokeFolderEdit,
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
+import { canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -42,6 +46,39 @@ async function overlayUploaderAttribution(db: D1Database, files: SPFile[]): Prom
   });
 }
 
+/**
+ * Append one row to the file-change history (sharepoint_file_events). Best-effort
+ * — callers wrap in try/catch and never fail the upload on a history-write error.
+ * action is derived: 'replace' if the file already has history, else 'upload'.
+ */
+async function logFileEvent(
+  db: D1Database,
+  ev: {
+    spItemId: string;
+    projectId: string;
+    webUrl: string | null;
+    filename: string | null;
+    size: number | null;
+    userId: string;
+    userName: string | null;
+    userEmail: string | null;
+  }
+): Promise<void> {
+  const prior = await db
+    .prepare("SELECT 1 FROM sharepoint_file_events WHERE sp_item_id = ? LIMIT 1")
+    .bind(ev.spItemId)
+    .first();
+  const action = prior ? "replace" : "upload";
+  await db
+    .prepare(
+      `INSERT INTO sharepoint_file_events
+         (id, sp_item_id, project_id, web_url, filename, action, size, actor_user_id, actor_name, actor_email)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .bind(crypto.randomUUID(), ev.spItemId, ev.projectId, ev.webUrl, ev.filename, action, ev.size, ev.userId, ev.userName, ev.userEmail)
+    .run();
+}
+
 // GET /api/sharepoint/locations?recordId=xxx
 // Returns all SharePoint document locations for a Dynamics CRM record ID
 app.get("/locations", async (c) => {
@@ -70,11 +107,13 @@ async function overlayFolderVisibility(db: D1Database, files: SPFile[]): Promise
   if (folderIds.length === 0) return files;
   const ph = inPlaceholders(folderIds);
   const rows = await db
-    .prepare(`SELECT sp_item_id, visible_to_client FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
+    .prepare(`SELECT sp_item_id, visible_to_client, client_editing FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
     .bind(...folderIds)
-    .all<{ sp_item_id: string; visible_to_client: number }>();
-  const visById = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r.visible_to_client === 1]));
-  return files.map((f) => (f.isFolder ? { ...f, visibleToClient: visById.get(f.id) === true } : f));
+    .all<{ sp_item_id: string; visible_to_client: number; client_editing: number }>();
+  const byId = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r]));
+  return files.map((f) => (f.isFolder
+    ? { ...f, visibleToClient: byId.get(f.id)?.visible_to_client === 1, clientEditing: byId.get(f.id)?.client_editing === 1 }
+    : f));
 }
 
 // GET /api/sharepoint/files?url=xxx
@@ -102,6 +141,19 @@ app.get("/files", async (c) => {
         .first<{ visible_to_client: number }>();
       const currentFolderVisible = cur?.visible_to_client === 1;
       files = files.filter((f) => (f.isFolder ? f.visibleToClient === true : currentFolderVisible));
+    }
+
+    // Overlay in-portal "Edit online" for external viewers granted edit on this
+    // folder (or an ancestor — grants cascade, so match by URL prefix).
+    if (isExternalRole(auth?.role) && auth?.user?.email) {
+      const grantRows = await c.env.DB
+        .prepare("SELECT web_url FROM sharepoint_edit_grants WHERE grantee_email = ?")
+        .bind(auth.user.email.toLowerCase())
+        .all<{ web_url: string }>();
+      const editable = (grantRows.results ?? []).some((r) => url === r.web_url || url.startsWith(r.web_url));
+      if (editable) {
+        files = files.map((f) => (f.isFolder ? f : { ...f, canEditOnline: true }));
+      }
     }
 
     return c.json({ files });
@@ -219,6 +271,17 @@ app.post("/upload", async (c) => {
           )
           .bind(uploaded.id, projectId, uploaded.webUrl, auth.user.id, auth.user.name ?? auth.user.email, auth.user.email)
           .run();
+        // Append-only history row (who/when; 'upload' vs 'replace' auto-derived).
+        await logFileEvent(c.env.DB, {
+          spItemId: uploaded.id,
+          projectId,
+          webUrl: uploaded.webUrl,
+          filename: file.name,
+          size: uploaded.size ?? content.byteLength ?? null,
+          userId: auth.user.id,
+          userName: auth.user.name ?? auth.user.email,
+          userEmail: auth.user.email,
+        });
         // Also stamp the response with what the UI will see on next refresh —
         // saves an extra round-trip.
         uploaded.createdByName = auth.user.name ?? auth.user.email;
@@ -296,6 +359,19 @@ app.post("/upload-complete", async (c) => {
         )
         .bind(spItemId, body.projectId, webUrl, auth.user.id, auth.user.name ?? auth.user.email, auth.user.email)
         .run();
+      // Append-only history row. Filename is derived from the web URL's last
+      // segment (the chunked path doesn't carry the original File here).
+      const filename = (() => { try { return decodeURIComponent(webUrl.split("/").pop() ?? "") || null; } catch { return null; } })();
+      await logFileEvent(c.env.DB, {
+        spItemId,
+        projectId: body.projectId,
+        webUrl,
+        filename,
+        size: null,
+        userId: auth.user.id,
+        userName: auth.user.name ?? auth.user.email,
+        userEmail: auth.user.email,
+      });
     } catch (err) {
       console.warn("[sp.upload-complete] attribution insert failed:", err instanceof Error ? err.message : err);
     }
@@ -327,6 +403,29 @@ app.patch("/file/description", async (c) => {
   }
 });
 
+// GET /api/sharepoint/file/history?spItemId=xxx
+// Returns the append-only upload/replace history for a file (newest first) so
+// the UI can show a "who changed this, when" timeline. Visible to anyone who can
+// already see the file (the file list itself is access-controlled upstream).
+app.get("/file/history", async (c) => {
+  const spItemId = c.req.query("spItemId");
+  if (!spItemId) return c.json({ error: "spItemId required" }, 400);
+  try {
+    const rows = await c.env.DB
+      .prepare(
+        `SELECT id, action, filename, size, actor_name, actor_email, created_at
+         FROM sharepoint_file_events WHERE sp_item_id = ? ORDER BY created_at DESC`
+      )
+      .bind(spItemId)
+      .all();
+    return c.json({ events: rows.results ?? [] });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to load file history";
+    console.error("SharePoint file-history error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
 // DELETE /api/sharepoint/file?webUrl=xxx
 // Deletes a file by its SharePoint web URL. Also cleans up its sharepoint_uploads
 // attribution row (by web_url) — best-effort, leftover rows are harmless.
@@ -337,7 +436,10 @@ app.delete("/file", async (c) => {
   try {
     await deleteSharePointFile(c.env, webUrl);
     try {
-      await c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE web_url = ?").bind(webUrl).run();
+      await c.env.DB.batch([
+        c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE web_url = ?").bind(webUrl),
+        c.env.DB.prepare("DELETE FROM sharepoint_file_events WHERE web_url = ?").bind(webUrl),
+      ]);
     } catch (cleanupErr) {
       console.warn("[sp.delete] attribution cleanup failed:", cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);
     }
@@ -448,6 +550,147 @@ app.post("/clear-token-cache", async (c) => {
     c.env.KV.delete("sp:token:https://packetfusioncrm.sharepoint.com"), // legacy SP REST token
   ]);
   return c.json({ ok: true, message: "Token cache cleared" });
+});
+
+// GET /api/sharepoint/grants?projectId=xxx
+// Lists the external edit grants for a project (who can edit online). Internal
+// editors only.
+app.get("/grants", async (c) => {
+  const auth = c.get("auth");
+  const projectId = c.req.query("projectId");
+  if (!projectId) return c.json({ error: "projectId required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+  const rows = await c.env.DB
+    .prepare(`SELECT id, web_url, grantee_email, grantee_name, granted_at
+              FROM sharepoint_edit_grants WHERE project_id = ? ORDER BY granted_at DESC`)
+    .bind(projectId)
+    .all();
+  return c.json({ grants: rows.results ?? [] });
+});
+
+// POST /api/sharepoint/grant-edit
+// Body: { webUrl, email, name?, projectId }
+// Invites an external person as a B2B guest and grants them WRITE access to the
+// folder at webUrl, so they can edit its documents in Office-for-the-web as
+// themselves (attributed). Gated to project editors; records the grant so the
+// customer gets an in-portal "Edit online" link and PMs can see/revoke access.
+app.post("/grant-edit", async (c) => {
+  const auth = c.get("auth");
+  let body: { webUrl?: string; email?: string; name?: string | null; projectId?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const webUrl = (body.webUrl ?? "").trim();
+  const email = (body.email ?? "").trim();
+  const projectId = (body.projectId ?? "").trim();
+  if (!webUrl || !email || !projectId) return c.json({ error: "webUrl, email and projectId required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  try {
+    const res = await inviteGuestAndGrantWrite(c.env, webUrl, email, body.name ?? null);
+    // Record the grant (idempotent-ish: one row per grant action is fine — the
+    // overlay + list de-dupe by email at read time).
+    try {
+      await c.env.DB
+        .prepare(
+          `INSERT INTO sharepoint_edit_grants (id, project_id, web_url, grantee_email, grantee_name, granted_by_user_id)
+           VALUES (?, ?, ?, ?, ?, ?)`
+        )
+        .bind(crypto.randomUUID(), projectId, webUrl, email.toLowerCase(), body.name ?? null, auth.user.id)
+        .run();
+    } catch (err) {
+      console.warn("[sp.grant-edit] grant-record insert failed:", err instanceof Error ? err.message : err);
+    }
+    return c.json({ ok: true, ...res });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to grant edit access";
+    console.error("SharePoint grant-edit error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
+// POST /api/sharepoint/folder/allow-editing
+// Body: { sp_item_id, web_url, project_id, enabled }
+// Toggles per-folder "client editing." Enabling also marks the folder visible to
+// client and grants edit to all the project's contacts with an email; new
+// contacts added later are auto-granted (see projects.ts contact-add). Disabling
+// just stops future auto-grants (existing grants are removed via Revoke).
+app.post("/folder/allow-editing", async (c) => {
+  const auth = c.get("auth");
+  let body: { sp_item_id?: string; web_url?: string; project_id?: string; enabled?: boolean };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const spItemId = (body.sp_item_id ?? "").trim();
+  const webUrl = (body.web_url ?? "").trim();
+  const projectId = (body.project_id ?? "").trim();
+  const enabled = !!body.enabled;
+  if (!spItemId || !webUrl || !projectId) return c.json({ error: "sp_item_id, web_url, project_id required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
+
+  // Persist the flag. Enabling also flips visible_to_client on (can't edit what
+  // you can't see); disabling leaves visibility untouched.
+  await c.env.DB
+    .prepare(
+      `INSERT INTO sharepoint_folder_visibility
+         (sp_item_id, project_id, web_url, visible_to_client, client_editing, set_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+       ON CONFLICT(sp_item_id) DO UPDATE SET
+         project_id        = excluded.project_id,
+         web_url           = excluded.web_url,
+         client_editing    = excluded.client_editing,
+         visible_to_client = CASE WHEN excluded.client_editing = 1 THEN 1 ELSE visible_to_client END,
+         set_by_user_id    = excluded.set_by_user_id,
+         updated_at        = CURRENT_TIMESTAMP`
+    )
+    .bind(spItemId, projectId, webUrl, enabled ? 1 : 0, enabled ? 1 : 0, auth.user.id)
+    .run();
+
+  if (!enabled) return c.json({ ok: true, enabled: false, granted: [] });
+
+  // Grant every current project contact with an email (in parallel — each
+  // invite may wait out the provisioning race, so serial would be slow).
+  const contacts = await c.env.DB
+    .prepare(`SELECT name, email FROM project_contacts WHERE project_id = ? AND email IS NOT NULL AND TRIM(email) != ''`)
+    .bind(projectId)
+    .all<{ name: string | null; email: string }>();
+  const list = contacts.results ?? [];
+  const results = await Promise.allSettled(
+    list.map((ct) => grantFolderEdit(c.env, c.env.DB, { projectId, webUrl, email: ct.email, name: ct.name, grantedByUserId: auth.user!.id }))
+  );
+  const granted = list.filter((_, i) => results[i].status === "fulfilled").map((ct) => ct.email);
+  const failed = list.filter((_, i) => results[i].status === "rejected").map((ct) => ct.email);
+  if (failed.length) console.warn("[sp.allow-editing] some grants failed:", failed.join(", "));
+  return c.json({ ok: true, enabled: true, granted, failed });
+});
+
+// POST /api/sharepoint/revoke-edit
+// Body: { web_url, email, project_id }
+// Removes one external person's edit access to a folder (deletes the SharePoint
+// permission + our grant row). Does NOT delete the guest account (Entra owns
+// guest lifecycle). Internal editors only.
+app.post("/revoke-edit", async (c) => {
+  const auth = c.get("auth");
+  let body: { web_url?: string; email?: string; project_id?: string };
+  try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
+  const webUrl = (body.web_url ?? "").trim();
+  const email = (body.email ?? "").trim();
+  const projectId = (body.project_id ?? "").trim();
+  if (!webUrl || !email || !projectId) return c.json({ error: "web_url, email, project_id required" }, 400);
+  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
+
+  try {
+    await revokeFolderEdit(c.env, webUrl, email);
+    await c.env.DB
+      .prepare(`DELETE FROM sharepoint_edit_grants WHERE project_id = ? AND web_url = ? AND grantee_email = ?`)
+      .bind(projectId, webUrl, email.toLowerCase())
+      .run();
+    return c.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to revoke edit access";
+    console.error("SharePoint revoke-edit error:", message);
+    return c.json({ error: message }, 500);
+  }
 });
 
 export default app;

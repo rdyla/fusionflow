@@ -10,6 +10,7 @@ type GraphEnv = {
   DYNAMICS_TENANT_ID?: string;
   DYNAMICS_CLIENT_ID?: string;
   DYNAMICS_CLIENT_SECRET?: string;
+  APP_URL?: string;
 };
 
 export type SPLocation = {
@@ -42,6 +43,14 @@ export type SPFile = {
    *  customer-facing roles (client / partner_ae). Set by the /files route from
    *  sharepoint_folder_visibility; undefined for files / when not overlaid. */
   visibleToClient?: boolean;
+  /** App-side overlay (files, external viewers only): the current external user
+   *  has been granted edit access covering this file, so the UI can offer an
+   *  "Edit online" link. Set by the /files route from sharepoint_edit_grants. */
+  canEditOnline?: boolean;
+  /** App-side overlay (folders only): "Allow client editing" is on — the
+   *  project's customer contacts are auto-granted edit here. Set by /files from
+   *  sharepoint_folder_visibility.client_editing. */
+  clientEditing?: boolean;
 };
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
@@ -581,6 +590,203 @@ export async function ensurePhaseSharePointFolder(
     // "Create folder" retro-fit endpoint can pick it up later.
     console.warn(`[phaseSharePoint] Failed to create folder for phase ${phaseId}:`, err instanceof Error ? err.message : err);
     return null;
+  }
+}
+
+/**
+ * Give an EXTERNAL person edit access to a SharePoint item (file or folder) so
+ * they can open + edit it in Office-for-the-web as themselves — the "customer
+ * online editing with attribution" flow.
+ *
+ * Two steps:
+ *  1. Ensure they exist as a B2B guest in our tenant (POST /invitations). Uses
+ *     the app's User.Invite.All permission. Best-effort — if they're already a
+ *     guest, Graph errors and we swallow it and proceed to the grant.
+ *  2. Grant "write" on the item via the drive-item invite API, with
+ *     requireSignIn=true (so edits are attributed to their guest identity).
+ *     sendInvitation=false — we deliberately do NOT send SharePoint's
+ *     (spam-prone) sharing email: the customer reaches the doc via the in-portal
+ *     "Edit online" link, and Microsoft handles first-time guest sign-in (email
+ *     one-time-passcode) inline when they open it.
+ *
+ * Granting on a FOLDER cascades to its children, so a single folder grant lets
+ * the guest edit every document inside it.
+ */
+export async function inviteGuestAndGrantWrite(
+  env: GraphEnv,
+  itemWebUrl: string,
+  email: string,
+  displayName?: string | null
+): Promise<{ invited: boolean; granted: boolean }> {
+  const token = await getGraphToken(env);
+
+  // 1. Provision the guest (idempotent-ish — ignore "already exists").
+  let invited = false;
+  try {
+    await graphPostJson(token, "/invitations", {
+      invitedUserEmailAddress: email,
+      ...(displayName ? { invitedUserDisplayName: displayName } : {}),
+      inviteRedirectUrl: env.APP_URL || "https://cloudconnect.packetfusion.com",
+      sendInvitationMessage: false, // no email — customer uses the in-portal "Edit online" link (OTP sign-in handled inline)
+    });
+    invited = true;
+  } catch (err) {
+    console.warn(`[graph] guest invite for ${email} failed (likely already a guest):`, err instanceof Error ? err.message : err);
+  }
+
+  // 2. Grant write on the item (+ email them a direct link).
+  const { driveId, segments } = await resolveSharePointPath(token, itemWebUrl);
+  const encodedPath = graphPath(segments);
+  const item = await graphGet<{ id: string }>(
+    token,
+    encodedPath ? `/drives/${driveId}/root:/${encodedPath}` : `/drives/${driveId}/root`
+  );
+  const invitePath = `/drives/${driveId}/items/${item.id}/invite`;
+  const inviteBody = {
+    recipients: [{ email }],
+    roles: ["write"],
+    requireSignIn: true,
+    sendInvitation: false, // no SharePoint sharing email — see the doc comment above
+    message: "You've been given access to edit this document for your Packet Fusion project.",
+  };
+
+  // Entra provisions a just-invited guest ASYNCHRONOUSLY, so the very first
+  // share to a brand-new guest usually comes back `sharingFailed`
+  // ("try again later") — a retry a few seconds later succeeds. Retry the share
+  // with backoff to absorb that provisioning lag. Only `sharingFailed` is
+  // retried; any other error is a real failure and bubbles immediately.
+  const backoffMs = [0, 3000, 6000];
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < backoffMs.length; attempt++) {
+    if (backoffMs[attempt] > 0) await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+    try {
+      await graphPostJson(token, invitePath, inviteBody);
+      return { invited, granted: true };
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes("sharingFailed")) throw err;
+      console.warn(`[graph] share attempt ${attempt + 1}/${backoffMs.length} for ${email} hit sharingFailed; retrying…`);
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Grant one external email edit access to a folder AND record it in
+ * sharepoint_edit_grants. Wraps inviteGuestAndGrantWrite + the grant-row insert
+ * so the "allow client editing" toggle and the new-contact auto-grant share one
+ * path. Throws on hard failure (Graph); callers decide how to handle.
+ */
+export async function grantFolderEdit(
+  env: GraphEnv,
+  db: D1Database,
+  opts: { projectId: string; webUrl: string; email: string; name?: string | null; grantedByUserId?: string | null }
+): Promise<void> {
+  await inviteGuestAndGrantWrite(env, opts.webUrl, opts.email, opts.name ?? null);
+  await db
+    .prepare(
+      `INSERT INTO sharepoint_edit_grants (id, project_id, web_url, grantee_email, grantee_name, granted_by_user_id)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    )
+    .bind(crypto.randomUUID(), opts.projectId, opts.webUrl, opts.email.toLowerCase(), opts.name ?? null, opts.grantedByUserId ?? null)
+    .run();
+}
+
+type GraphPermission = {
+  id: string;
+  grantedToV2?: { user?: { email?: string; displayName?: string } };
+  grantedToIdentitiesV2?: Array<{ user?: { email?: string; displayName?: string } }>;
+  invitation?: { email?: string };
+};
+
+function permissionMatchesEmail(p: GraphPermission, emailLower: string): boolean {
+  if (p.grantedToV2?.user?.email?.toLowerCase() === emailLower) return true;
+  if (p.invitation?.email?.toLowerCase() === emailLower) return true;
+  return (p.grantedToIdentitiesV2 ?? []).some((g) => g.user?.email?.toLowerCase() === emailLower);
+}
+
+/**
+ * Revoke an external person's edit access to a folder/file: find the sharing
+ * permission(s) matching their email on the item and delete them. Best-effort —
+ * if no matching permission exists (already revoked), it's a no-op. Does NOT
+ * delete the guest USER (guest-account lifecycle is left to Entra).
+ */
+export async function revokeFolderEdit(
+  env: GraphEnv,
+  itemWebUrl: string,
+  email: string
+): Promise<void> {
+  const token = await getGraphToken(env);
+  const { driveId, segments } = await resolveSharePointPath(token, itemWebUrl);
+  const encodedPath = graphPath(segments);
+  const item = await graphGet<{ id: string }>(
+    token,
+    encodedPath ? `/drives/${driveId}/root:/${encodedPath}` : `/drives/${driveId}/root`
+  );
+  const perms = await graphGet<{ value: GraphPermission[] }>(token, `/drives/${driveId}/items/${item.id}/permissions`);
+  const emailLower = email.toLowerCase();
+  const matching = (perms.value ?? []).filter((p) => permissionMatchesEmail(p, emailLower));
+  for (const p of matching) {
+    const res = await fetch(`${GRAPH_API_BASE}/drives/${driveId}/items/${item.id}/permissions/${p.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok && res.status !== 204 && res.status !== 404) {
+      throw new Error(`Graph DELETE permission ${res.status}: ${await res.text().catch(() => "")}`);
+    }
+  }
+}
+
+/**
+ * Revoke ALL external edit grants recorded for a project: delete each grantee's
+ * SharePoint permission, clear the sharepoint_edit_grants rows, and turn off
+ * client_editing on the project's folders (so no future auto-grants). Used when
+ * a project is marked complete. Best-effort per grant — a Graph failure on one
+ * doesn't stop the rest; rows are cleared regardless so our state is clean.
+ */
+export async function revokeAllProjectEditGrants(
+  env: GraphEnv,
+  db: D1Database,
+  projectId: string
+): Promise<void> {
+  const grants = await db
+    .prepare(`SELECT DISTINCT web_url, grantee_email FROM sharepoint_edit_grants WHERE project_id = ?`)
+    .bind(projectId)
+    .all<{ web_url: string; grantee_email: string }>();
+  for (const g of grants.results ?? []) {
+    try {
+      await revokeFolderEdit(env, g.web_url, g.grantee_email);
+    } catch (err) {
+      console.warn(`[graph] revoke ${g.grantee_email} on ${g.web_url} failed:`, err instanceof Error ? err.message : err);
+    }
+  }
+  await db.batch([
+    db.prepare(`DELETE FROM sharepoint_edit_grants WHERE project_id = ?`).bind(projectId),
+    db.prepare(`UPDATE sharepoint_folder_visibility SET client_editing = 0 WHERE project_id = ?`).bind(projectId),
+  ]);
+}
+
+/**
+ * Scheduled sweep: revoke external edit grants for any project whose status is
+ * 'complete' (the derived project-complete value — note: NOT 'completed', which
+ * is the task/stage value). Runs on cron because project status is auto-derived
+ * deep in syncProjectStatus, which has no Graph access to revoke inline. Idempotent
+ * — once a project's grants are cleared it drops out of the query.
+ */
+export async function revokeCompletedProjectGrants(env: GraphEnv, db: D1Database): Promise<void> {
+  const rows = await db
+    .prepare(
+      `SELECT DISTINCT project_id FROM sharepoint_edit_grants
+       WHERE project_id IN (SELECT id FROM projects WHERE status = 'complete')`
+    )
+    .all<{ project_id: string }>();
+  for (const r of rows.results ?? []) {
+    try {
+      await revokeAllProjectEditGrants(env, db, r.project_id);
+    } catch (err) {
+      console.warn(`[graph] completion sweep revoke for project ${r.project_id} failed:`, err instanceof Error ? err.message : err);
+    }
   }
 }
 

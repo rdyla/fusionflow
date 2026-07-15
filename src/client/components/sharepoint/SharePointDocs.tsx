@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type SPFile, type SPLocation } from "../../lib/api";
+import { api, type SPFile, type SPLocation, type SPFileEvent, type ProjectContact } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 /** Which record owns this SharePoint area — a project or a solution. Drives
@@ -99,6 +99,19 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   /** Optional description typed by the user before clicking Upload. Captured
    *  alongside the file so it lands on the SP driveItem as metadata. */
   const [uploadDescription, setUploadDescription] = useState("");
+
+  // "Enable online editing" picker (project owners only) — grant customers guest
+  // edit access to a folder.
+  const projectId = owner?.kind === "project" ? owner.id : null;
+  const [editPickerFolder, setEditPickerFolder] = useState<SPFile | null>(null);
+  const [pickerContacts, setPickerContacts] = useState<ProjectContact[]>([]);
+  const [grantedEmails, setGrantedEmails] = useState<Set<string>>(new Set());
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [grantingEmail, setGrantingEmail] = useState<string | null>(null);
+  const [manualEmail, setManualEmail] = useState("");
+  const [pickerEditingOn, setPickerEditingOn] = useState(false);
+  const [togglingEditing, setTogglingEditing] = useState(false);
+  const [revokingEmail, setRevokingEmail] = useState<string | null>(null);
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -206,6 +219,115 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       setUploading(false);
       setUploadPct(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  /** Replace a file in place with a newly-picked file ("upload new version").
+   *  The picked bytes upload under the TARGET file's name so SharePoint replaces
+   *  the same item (new native version) instead of creating a second file; the
+   *  replace + real user are logged server-side. Description is left untouched. */
+  async function handleUploadNewVersion(target: SPFile, picked: File) {
+    if (folderStack.length === 0) return;
+    const currentUrl = folderStack[folderStack.length - 1].url;
+    const bytes = picked.name === target.name
+      ? picked
+      : new File([picked], target.name, { type: picked.type || target.mimeType || "application/octet-stream" });
+    setUploading(true);
+    setUploadPct(null);
+    try {
+      await api.spUpload(currentUrl, bytes, {
+        projectId: owner?.kind === "project" ? owner.id : null,
+        onProgress: (pct) => setUploadPct(pct),
+      });
+      showToast(`New version of "${target.name}" uploaded.`, "success");
+      loadFiles(currentUrl); // refresh attribution + modified date
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Upload failed", "error");
+    } finally {
+      setUploading(false);
+      setUploadPct(null);
+    }
+  }
+
+  // ── Enable online editing (grant customers guest edit access) ──────────────
+
+  async function openEditPicker(folder: SPFile) {
+    if (!projectId) return;
+    setEditPickerFolder(folder);
+    setManualEmail("");
+    setPickerEditingOn(folder.clientEditing === true);
+    setPickerLoading(true);
+    try {
+      const [contacts, { grants }] = await Promise.all([
+        api.projectContacts(projectId),
+        api.spEditGrants(projectId),
+      ]);
+      setPickerContacts(contacts.filter((c) => !!c.email));
+      setGrantedEmails(new Set(grants.map((g) => g.grantee_email.toLowerCase())));
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to load contacts", "error");
+    } finally {
+      setPickerLoading(false);
+    }
+  }
+
+  async function toggleClientEditing(next: boolean) {
+    if (!editPickerFolder || !projectId) return;
+    setTogglingEditing(true);
+    try {
+      const res = await api.spAllowClientEditing({
+        sp_item_id: editPickerFolder.id,
+        web_url: editPickerFolder.webUrl,
+        project_id: projectId,
+        enabled: next,
+      });
+      setPickerEditingOn(next);
+      // Reflect on the folder row (badge + toggle state; enabling also makes it visible).
+      setFiles((prev) => prev.map((f) => (f.id === editPickerFolder.id
+        ? { ...f, clientEditing: next, visibleToClient: next ? true : f.visibleToClient }
+        : f)));
+      if (next) {
+        setGrantedEmails(new Set((res.granted ?? []).map((e) => e.toLowerCase())));
+        showToast(`Client editing on — granted ${res.granted?.length ?? 0} contact${res.granted?.length === 1 ? "" : "s"}${res.failed?.length ? `, ${res.failed.length} failed` : ""}.`, res.failed?.length ? "error" : "success");
+      } else {
+        showToast("Client editing off — new contacts won't be auto-granted (existing access stays until revoked).", "success");
+      }
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to update client editing", "error");
+    } finally {
+      setTogglingEditing(false);
+    }
+  }
+
+  async function revokeEditFrom(email: string) {
+    if (!editPickerFolder || !projectId) return;
+    if (!window.confirm(`Revoke ${email}'s edit access to this folder?`)) return;
+    setRevokingEmail(email);
+    try {
+      await api.spRevokeEditAccess(editPickerFolder.webUrl, email, projectId);
+      setGrantedEmails((prev) => { const n = new Set(prev); n.delete(email.toLowerCase()); return n; });
+      showToast(`Revoked edit access for ${email}.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to revoke access", "error");
+    } finally {
+      setRevokingEmail(null);
+    }
+  }
+
+  async function grantEditTo(email: string, name?: string | null) {
+    if (!editPickerFolder || !projectId) return;
+    const clean = email.trim();
+    if (!clean) return;
+    setGrantingEmail(clean);
+    try {
+      await api.spGrantEditAccess(editPickerFolder.webUrl, clean, projectId, name ?? null);
+      setGrantedEmails((prev) => new Set(prev).add(clean.toLowerCase()));
+      setManualEmail("");
+      showToast(`${clean} can now edit this folder online — they'll see an "Edit online" link on its files in the portal.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
+    } finally {
+      setGrantingEmail(null);
     }
   }
 
@@ -445,6 +567,8 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                   isDeleting={deletingId === file.id}
                   onNavigateInto={() => navigateInto(file)}
                   onDelete={() => handleDelete(file)}
+                  onUploadNewVersion={(picked) => handleUploadNewVersion(file, picked)}
+                  onEnableOnlineEditing={projectId ? () => openEditPicker(file) : null}
                   onDescriptionSaved={(updated) =>
                     setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
                   }
@@ -455,6 +579,80 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Enable-online-editing picker — grant customers guest edit access. */}
+      {editPickerFolder && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditPickerFolder(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 520 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+              <h2 style={{ margin: 0 }}>Enable online editing</h2>
+              <button onClick={() => setEditPickerFolder(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#64748b", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
+              Give customer contacts edit access to <strong>{editPickerFolder.name}</strong>. They're invited as guests and edit its documents in Office online — attributed to them.
+            </div>
+
+            {/* Phase 2: bulk toggle — grants everyone now + auto-grants future contacts. */}
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", background: pickerEditingOn ? "rgba(16,124,16,0.08)" : "#f8fafc", border: `1px solid ${pickerEditingOn ? "rgba(16,124,16,0.35)" : "#eef2f7"}`, borderRadius: 6, marginBottom: 12, cursor: togglingEditing ? "default" : "pointer" }}>
+              <input type="checkbox" checked={pickerEditingOn} disabled={togglingEditing} onChange={(e) => toggleClientEditing(e.target.checked)} style={{ marginTop: 2 }} />
+              <span style={{ fontSize: 13, color: "#1e293b" }}>
+                <strong>Allow all project contacts to edit</strong>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                  {togglingEditing ? "Updating…" : "Grants everyone on the project now, and auto-grants any contact added later."}
+                </div>
+              </span>
+            </label>
+
+            {pickerLoading ? (
+              <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading contacts…</div>
+            ) : (
+              <div style={{ display: "grid", gap: 8 }}>
+                {pickerContacts.length === 0 && (
+                  <div style={{ fontSize: 13, color: "#94a3b8" }}>
+                    No project contacts with an email yet — add one on the Overview tab, or enter an email below.
+                  </div>
+                )}
+                {pickerContacts.map((ct) => {
+                  const granted = !!ct.email && grantedEmails.has(ct.email.toLowerCase());
+                  return (
+                    <div key={ct.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", background: "#f8fafc", border: "1px solid #eef2f7", borderRadius: 6 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>
+                          {ct.name}{ct.contact_role ? <span style={{ fontWeight: 400, color: "#94a3b8" }}> · {ct.contact_role}</span> : null}
+                        </div>
+                        <div style={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis" }}>{ct.email}</div>
+                      </div>
+                      {granted ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: "#107c10" }}>✓ Can edit</span>
+                          <button className="ms-btn-ghost" style={{ fontSize: 11, color: "#d13438" }} disabled={revokingEmail === ct.email} onClick={() => revokeEditFrom(ct.email!)}>
+                            {revokingEmail === ct.email ? "…" : "Revoke"}
+                          </button>
+                        </span>
+                      ) : (
+                        <button className="ms-btn-secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }} disabled={grantingEmail === ct.email} onClick={() => grantEditTo(ct.email!, ct.name)}>
+                          {grantingEmail === ct.email ? "Granting…" : "Grant edit"}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+
+                <div style={{ display: "flex", gap: 6, marginTop: 6, borderTop: "1px solid #eef2f7", paddingTop: 10 }}>
+                  <input className="ms-input" type="email" placeholder="Or enter an email…" value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} style={{ flex: 1, fontSize: 13 }} />
+                  <button className="ms-btn-primary" style={{ fontSize: 12 }} disabled={!manualEmail.trim() || grantingEmail === manualEmail.trim()} onClick={() => grantEditTo(manualEmail)}>
+                    {grantingEmail === manualEmail.trim() ? "Granting…" : "Grant edit"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+              <button className="ms-btn-secondary" onClick={() => setEditPickerFolder(null)} style={{ fontSize: 12 }}>Done</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -471,6 +669,8 @@ function FileRow({
   isDeleting,
   onNavigateInto,
   onDelete,
+  onUploadNewVersion,
+  onEnableOnlineEditing,
   onDescriptionSaved,
   onVisibilityChanged,
 }: {
@@ -481,6 +681,8 @@ function FileRow({
   isDeleting: boolean;
   onNavigateInto: () => void;
   onDelete: () => void;
+  onUploadNewVersion: (picked: File) => Promise<void>;
+  onEnableOnlineEditing: (() => void) | null;
   onDescriptionSaved: (updated: SPFile) => void;
   onVisibilityChanged: (visible: boolean) => void;
 }) {
@@ -489,6 +691,41 @@ function FileRow({
   const [draft, setDraft] = useState(file.description ?? "");
   const [saving, setSaving] = useState(false);
   const [togglingVis, setTogglingVis] = useState(false);
+  const versionInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingVersion, setUploadingVersion] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [history, setHistory] = useState<SPFileEvent[] | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  async function pickNewVersion(e: React.ChangeEvent<HTMLInputElement>) {
+    const picked = e.target.files?.[0];
+    if (!picked) return;
+    setUploadingVersion(true);
+    try {
+      await onUploadNewVersion(picked);
+      // A replace bumps the timeline — drop the cache so a reopen refetches.
+      setHistory(null);
+    } finally {
+      setUploadingVersion(false);
+      if (versionInputRef.current) versionInputRef.current.value = "";
+    }
+  }
+
+  async function toggleHistory() {
+    const next = !historyOpen;
+    setHistoryOpen(next);
+    if (next && history === null) {
+      setLoadingHistory(true);
+      try {
+        const { events } = await api.spFileHistory(file.id);
+        setHistory(events);
+      } catch {
+        setHistory([]);
+      } finally {
+        setLoadingHistory(false);
+      }
+    }
+  }
 
   async function toggleVisibility() {
     const next = !file.visibleToClient;
@@ -631,6 +868,30 @@ function FileRow({
             </span>
           )}
         </div>
+
+        {/* Version history timeline — who uploaded/replaced this file, when.
+            Visible to anyone who can see the file. */}
+        {historyOpen && !file.isFolder && (
+          <div style={{ marginTop: 8, borderTop: "1px solid #eef2f7", paddingTop: 8 }}>
+            {loadingHistory ? (
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>Loading history…</div>
+            ) : !history || history.length === 0 ? (
+              <div style={{ fontSize: 12, color: "#94a3b8" }}>No recorded history for this file.</div>
+            ) : (
+              <div style={{ display: "grid", gap: 4 }}>
+                {history.map((ev) => (
+                  <div key={ev.id} style={{ fontSize: 12, color: "#475569", display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 600, color: ev.action === "replace" ? "#b45309" : "#0b9aad", minWidth: 62 }}>
+                      {ev.action === "replace" ? "Replaced" : "Uploaded"}
+                    </span>
+                    <span>{formatDate(ev.created_at)}</span>
+                    {ev.actor_name && <span style={{ color: "#64748b" }}>by {ev.actor_name}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
@@ -650,6 +911,58 @@ function FileRow({
           >
             {togglingVis ? "…" : file.visibleToClient ? "👁 Visible to client" : "🔒 Internal only"}
           </button>
+        )}
+        {file.isFolder && canEdit && !isExternal && onEnableOnlineEditing && (
+          <button
+            className="ms-btn-ghost"
+            onClick={onEnableOnlineEditing}
+            title="Manage who can edit this folder online"
+            style={{
+              fontSize: 12,
+              color: file.clientEditing ? "#107c10" : undefined,
+              borderColor: file.clientEditing ? "rgba(16,124,16,0.35)" : undefined,
+            }}
+          >
+            {file.clientEditing ? "✎ Client editing: On" : "✎ Client editing"}
+          </button>
+        )}
+        {!file.isFolder && (
+          <button
+            className="ms-btn-ghost"
+            onClick={toggleHistory}
+            style={{ fontSize: 12 }}
+            title="Show this file's upload / replace history"
+          >
+            {historyOpen ? "History ▲" : "History ▾"}
+          </button>
+        )}
+        {!file.isFolder && canEdit && !isExternal && (
+          <>
+            <input ref={versionInputRef} type="file" style={{ display: "none" }} onChange={pickNewVersion} />
+            <button
+              className="ms-btn-ghost"
+              onClick={() => versionInputRef.current?.click()}
+              disabled={uploadingVersion}
+              style={{ fontSize: 12 }}
+              title="Replace this file with a new version (keeps the same file + logs who/when)"
+            >
+              {uploadingVersion ? "Uploading…" : "↑ New version"}
+            </button>
+          </>
+        )}
+        {/* External viewers granted edit access get an in-portal "Edit online"
+            link (opens the file in Office-for-the-web; they sign in as a guest). */}
+        {!file.isFolder && isExternal && file.canEditOnline && (
+          <a
+            href={file.webUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ms-btn-ghost"
+            style={{ textDecoration: "none", color: "#0b9aad", borderColor: "rgba(11,154,173,0.35)" }}
+            title="Edit this document online in Office for the web"
+          >
+            ✎ Edit online
+          </a>
         )}
         {!file.isFolder && file.downloadUrl && (
           <a
