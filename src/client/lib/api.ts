@@ -2157,6 +2157,13 @@ export const api = {
   /** Append-only upload/replace history for a file (newest first). */
   spFileHistory: (spItemId: string) =>
     request<{ events: SPFileEvent[] }>(`/sharepoint/file/history?spItemId=${encodeURIComponent(spItemId)}`),
+  /** Invite an external person as a guest + grant them write on the item at
+   *  webUrl (folder grants cascade to children) so they can edit in Office online. */
+  spGrantEditAccess: (webUrl: string, email: string, name?: string | null) =>
+    request<{ ok: boolean; invited: boolean; granted: boolean }>(`/sharepoint/grant-edit`, {
+      method: "POST",
+      body: JSON.stringify({ webUrl, email, name: name ?? null }),
+    }),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context
    *  on files uploaded via SP web directly. */
