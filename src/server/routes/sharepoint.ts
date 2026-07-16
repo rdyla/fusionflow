@@ -18,6 +18,15 @@ import { canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
+// Partner AEs have NO SharePoint access (per request, July 2026) — deny the
+// entire SharePoint surface for them. Clients + internal roles are unaffected.
+// The SharePoint tab is also hidden from partner AEs client-side; this enforces
+// it at the API regardless.
+app.use("*", async (c, next) => {
+  if (c.get("auth")?.role === "partner_ae") return c.json({ error: "Forbidden" }, 403);
+  await next();
+});
+
 /**
  * Overlay per-file uploader attribution from `sharepoint_uploads` onto a
  * Graph-sourced SPFile[]. Files uploaded via the SP web UI directly aren't
