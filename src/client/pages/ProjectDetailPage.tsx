@@ -347,6 +347,7 @@ export default function ProjectDetailPage() {
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [metaName, setMetaName] = useState("");
   const [metaOnHold, setMetaOnHold] = useState(false);
+  const [metaCustomPlan, setMetaCustomPlan] = useState(false); // one-off Asana-plan mode
   const [metaCrmQuery, setMetaCrmQuery] = useState("");
   const [metaCrmResults, setMetaCrmResults] = useState<{ id: string; name: string }[]>([]);
   const [metaCrmSearching, setMetaCrmSearching] = useState(false);
@@ -718,6 +719,7 @@ export default function ProjectDetailPage() {
     if (!project) return;
     setMetaName(project.name ?? "");
     setMetaOnHold(project.on_hold === 1);
+    setMetaCustomPlan(project.uses_custom_plan === 1);
     setMetaCrmQuery(project.customer_name ?? "");
     setMetaCrmResults([]);
     setMetaPickedAccount(null);
@@ -745,6 +747,7 @@ export default function ProjectDetailPage() {
     const trimmedName = metaName.trim();
     if (trimmedName && trimmedName !== project.name) payload.name = trimmedName;
     if (metaOnHold !== (project.on_hold === 1)) payload.on_hold = metaOnHold ? 1 : 0;
+    if (metaCustomPlan !== (project.uses_custom_plan === 1)) payload.uses_custom_plan = metaCustomPlan ? 1 : 0;
     if (metaPickedAccount && metaPickedAccount.id !== project.dynamics_account_id) {
       payload.dynamics_account_id = metaPickedAccount.id;
       payload.customer_name = metaPickedAccount.name;
@@ -3630,6 +3633,17 @@ export default function ProjectDetailPage() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>On hold</div>
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                     Greys the project out and shows an <strong>On Hold</strong> badge in the project lists. Doesn't change tasks or dates.
+                  </div>
+                </div>
+              </label>
+              {/* One-off (MedVet): swap this project's Timeline & Tasks tabs for the
+                  custom Asana-mirroring plan. Throwaway — see migration 0129. */}
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
+                <input type="checkbox" checked={metaCustomPlan} onChange={(e) => setMetaCustomPlan(e.target.checked)} style={{ marginTop: 3 }} />
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>Use custom (Asana) plan</div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    Replaces this project's <strong>Timeline</strong> & <strong>Tasks</strong> tabs with the imported Asana plan (sections, nested tasks, module tags). Then open the Tasks tab to import.
                   </div>
                 </div>
               </label>
