@@ -313,6 +313,9 @@ const updateProjectSchema = z.object({
   status_meeting_timezone: z.string().max(64).nullable().optional(),
   status_meeting_duration_min: z.number().int().min(5).max(480).nullable().optional(),
   status_meeting_join_url: z.string().max(2000).nullable().optional(),
+  /** One-off: opt this project into the custom (Asana-mirroring) Timeline+Tasks
+   *  plan. Throwaway — see migration 0129 / customPlan route. */
+  uses_custom_plan: z.number().int().min(0).max(1).optional(),
   /** When a PM removes one or more solution_types from a combo project,
    *  setting this list also cleans up tasks tagged with those types via
    *  buildTaggedTitle. Tasks whose only types are in the cleanup list get
