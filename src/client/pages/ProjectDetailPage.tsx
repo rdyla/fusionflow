@@ -28,6 +28,7 @@ import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import PhasesPanel from "../components/project/PhasesPanel";
 import UpcomingMeetingsPanel from "../components/project/UpcomingMeetingsPanel";
+import CustomPlan from "../components/customPlan/CustomPlan"; // one-off MedVet plan (throwaway)
 import ProjectDocuments from "../components/documents/ProjectDocuments";
 import ZoomTab from "../components/zoom/ZoomTab";
 import RingCentralTab from "../components/ringcentral/RingCentralTab";
@@ -1235,7 +1236,12 @@ export default function ProjectDetailPage() {
       {tab === "dashboard" && <ProjectDashboardTab projectId={project.id} currentUserRole={currentUserRole} onChangeTab={(t) => setTab(t as DetailTab)} />}
 
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
-      {tab === "timeline" && (
+      {/* One-off: MedVet renders its Asana-mirroring plan here instead. */}
+      {tab === "timeline" && project.uses_custom_plan === 1 && (
+        <CustomPlan projectId={project.id} canEdit={canEdit} view="timeline" />
+      )}
+
+      {tab === "timeline" && !project.uses_custom_plan && (
         <>
         {multiPhase && (
           <PhasePicker
@@ -1612,7 +1618,12 @@ export default function ProjectDetailPage() {
       })()}
 
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
-      {tab === "tasks" && (
+      {/* One-off: MedVet renders its Asana-mirroring plan here instead. */}
+      {tab === "tasks" && project.uses_custom_plan === 1 && (
+        <CustomPlan projectId={project.id} canEdit={canEdit} view="tasks" />
+      )}
+
+      {tab === "tasks" && !project.uses_custom_plan && (
         <>
         {multiPhase && (
           <PhasePicker

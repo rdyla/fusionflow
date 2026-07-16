@@ -129,7 +129,7 @@ app.get("/:id", async (c) => {
              p.phase_scoped_visibility,
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
-             p.sharepoint_folder_url,
+             p.sharepoint_folder_url, p.uses_custom_plan,
              p.created_at, p.updated_at,
              pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,

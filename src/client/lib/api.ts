@@ -261,6 +261,25 @@ export type SPFile = {
   clientEditing?: boolean;
 };
 
+/** One-off MedVet custom plan item (Asana-mirroring; throwaway feature). */
+export type CustomPlanItem = {
+  id: string;
+  project_id: string;
+  section: string;
+  parent_id: string | null;
+  depth: number;
+  sort_order: number;
+  name: string;
+  module: string | null;
+  start_date: string | null;
+  due_date: string | null;
+  status: "not_started" | "in_progress" | "completed" | "blocked";
+  assignee: string | null;
+  notes: string | null;
+};
+
+export type CustomPlanItemInput = Partial<Omit<CustomPlanItem, "id" | "project_id" | "sort_order">>;
+
 /** An external edit grant on a project's SharePoint folder. */
 export type SPEditGrant = {
   id: string;
@@ -412,6 +431,9 @@ export type Project = {
   status_meeting_timezone: string | null;     // IANA tz (e.g. "America/Los_Angeles")
   status_meeting_duration_min: number | null;
   status_meeting_join_url: string | null;
+  /** One-off: when 1, this project's Timeline/Tasks tabs render the custom
+   *  (Asana-mirroring) plan instead of the standard modules. */
+  uses_custom_plan?: number;
   created_at: string;
   updated_at: string;
 };
@@ -2169,6 +2191,18 @@ export const api = {
   },
   spDelete: (webUrl: string) =>
     request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+  // ── One-off MedVet custom plan (throwaway) ────────────────────────────────
+  customPlan: (projectId: string) =>
+    request<{ items: CustomPlanItem[] }>(`/projects/${projectId}/custom-plan`),
+  importCustomPlan: (projectId: string) =>
+    request<{ ok: boolean; imported: number }>(`/projects/${projectId}/custom-plan/import`, { method: "POST" }),
+  addCustomPlanItem: (projectId: string, payload: CustomPlanItemInput) =>
+    request<CustomPlanItem>(`/projects/${projectId}/custom-plan`, { method: "POST", body: JSON.stringify(payload) }),
+  updateCustomPlanItem: (projectId: string, itemId: string, payload: CustomPlanItemInput) =>
+    request<CustomPlanItem>(`/projects/${projectId}/custom-plan/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteCustomPlanItem: (projectId: string, itemId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/custom-plan/${itemId}`, { method: "DELETE" }),
+
   /** Append-only upload/replace history for a file (newest first). */
   spFileHistory: (spItemId: string) =>
     request<{ events: SPFileEvent[] }>(`/sharepoint/file/history?spItemId=${encodeURIComponent(spItemId)}`),
