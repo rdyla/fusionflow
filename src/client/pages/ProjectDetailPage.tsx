@@ -1189,7 +1189,9 @@ export default function ProjectDetailPage() {
         // tab. The notes endpoint scopes what each sees — clients see public
         // notes, partner AEs see partner+public. Internal staff see everything.
         const isExternal = currentUserRole === "partner_ae" || currentUserRole === "client";
-        const externalSPTab: DetailTab[] = hasCrm ? ["sharepoint"] : [];
+        // SharePoint is client-only among external roles — partner AEs no longer
+        // get the tab (server also denies them the /api/sharepoint surface).
+        const externalSPTab: DetailTab[] = (hasCrm && currentUserRole === "client") ? ["sharepoint"] : [];
         const visibleTabs: DetailTab[] = isExternal
           ? ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...externalSPTab, "activity"]
           // Timeline Builder is hidden now that phase + kickoff date auto-generate
