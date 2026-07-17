@@ -18,12 +18,24 @@ import { canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Partner AEs have NO SharePoint access (per request, July 2026) — deny the
-// entire SharePoint surface for them. Clients + internal roles are unaffected.
-// The SharePoint tab is also hidden from partner AEs client-side; this enforces
-// it at the API regardless.
+// External roles (client = customer, partner_ae = partner) get READ + CONTRIBUTE:
+// they may list files (GET /files, filtered by each folder's audience), upload
+// documents, and annotate them with a description — the intended external
+// workflow (discovery workbooks, phone bills, CSRs). Everything else non-GET
+// (delete, create/manage folders, set audience, manage grants, and the
+// admin/debug endpoints) is internal-only. Individual endpoints keep their own
+// canEditProject / isExternalRole checks on top of this allow-list.
+//
+// (This replaces the July-2026 blanket partner_ae deny: partners are no longer
+// shut out entirely — they now see only folders explicitly tagged partner-
+// visible, defaulting to nothing.)
+const EXTERNAL_WRITE_PATHS = ["/upload", "/upload-session", "/upload-complete", "/file/description"];
 app.use("*", async (c, next) => {
-  if (c.get("auth")?.role === "partner_ae") return c.json({ error: "Forbidden" }, 403);
+  const role = c.get("auth")?.role;
+  if (role === "client" || role === "partner_ae") {
+    const allowed = c.req.method === "GET" || EXTERNAL_WRITE_PATHS.some((p) => c.req.path.endsWith(p));
+    if (!allowed) return c.json({ error: "Forbidden" }, 403);
+  }
   await next();
 });
 
@@ -104,25 +116,41 @@ app.get("/locations", async (c) => {
   }
 });
 
-/** Customer-facing roles — they see only folders a PM marked visible. */
+/** Customer-facing roles — they see only folders whose audience includes them. */
 function isExternalRole(role: string | undefined): boolean {
   return role === "client" || role === "partner_ae";
 }
 
-/** Overlay each FOLDER's client/partner visibility flag from
- *  sharepoint_folder_visibility (by sp_item_id). Files are untouched. */
+// Per-folder audience delineation. Internal (PF staff) always see everything;
+// each external audience is opt-in per folder. No row ⇒ 'internal'.
+type Audience = "internal" | "internal_customer" | "internal_partner" | "internal_customer_partner";
+const AUDIENCES: Audience[] = ["internal", "internal_customer", "internal_partner", "internal_customer_partner"];
+const audienceIncludesCustomer = (a: string | null | undefined) => a === "internal_customer" || a === "internal_customer_partner";
+const audienceIncludesPartner = (a: string | null | undefined) => a === "internal_partner" || a === "internal_customer_partner";
+/** Whether a viewer of the given role may see a folder with the given audience.
+ *  Internal roles always may; external roles only if their audience bit is set. */
+function viewerSeesAudience(role: string | undefined, audience: string | null | undefined): boolean {
+  if (role === "client") return audienceIncludesCustomer(audience);
+  if (role === "partner_ae") return audienceIncludesPartner(audience);
+  return true; // internal roles see all
+}
+
+/** Overlay each FOLDER's audience (+ derived visibleToClient) and client-editing
+ *  flag from sharepoint_folder_visibility (by sp_item_id). Files are untouched. */
 async function overlayFolderVisibility(db: D1Database, files: SPFile[]): Promise<SPFile[]> {
   const folderIds = files.filter((f) => f.isFolder).map((f) => f.id);
   if (folderIds.length === 0) return files;
   const ph = inPlaceholders(folderIds);
   const rows = await db
-    .prepare(`SELECT sp_item_id, visible_to_client, client_editing FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
+    .prepare(`SELECT sp_item_id, audience, client_editing FROM sharepoint_folder_visibility WHERE sp_item_id IN (${ph})`)
     .bind(...folderIds)
-    .all<{ sp_item_id: string; visible_to_client: number; client_editing: number }>();
+    .all<{ sp_item_id: string; audience: string; client_editing: number }>();
   const byId = new Map((rows.results ?? []).map((r) => [r.sp_item_id, r]));
-  return files.map((f) => (f.isFolder
-    ? { ...f, visibleToClient: byId.get(f.id)?.visible_to_client === 1, clientEditing: byId.get(f.id)?.client_editing === 1 }
-    : f));
+  return files.map((f) => {
+    if (!f.isFolder) return f;
+    const audience = byId.get(f.id)?.audience ?? "internal";
+    return { ...f, audience, visibleToClient: audienceIncludesCustomer(audience), clientEditing: byId.get(f.id)?.client_editing === 1 };
+  });
 }
 
 // GET /api/sharepoint/files?url=xxx
@@ -142,14 +170,15 @@ app.get("/files", async (c) => {
     let files = await overlayFolderVisibility(c.env.DB, withAttribution);
 
     if (isExternalRole(auth?.role)) {
-      // Is the folder being listed itself shared? (root project folder isn't,
-      // so its loose files stay hidden.) Matched by web_url.
+      // Does the folder being listed itself include this viewer's audience?
+      // (root project folder is 'internal', so its loose files stay hidden.)
+      // Matched by web_url. Sub-folders are filtered by their own audience.
       const cur = await c.env.DB
-        .prepare("SELECT visible_to_client FROM sharepoint_folder_visibility WHERE web_url = ? LIMIT 1")
+        .prepare("SELECT audience FROM sharepoint_folder_visibility WHERE web_url = ? LIMIT 1")
         .bind(url)
-        .first<{ visible_to_client: number }>();
-      const currentFolderVisible = cur?.visible_to_client === 1;
-      files = files.filter((f) => (f.isFolder ? f.visibleToClient === true : currentFolderVisible));
+        .first<{ audience: string }>();
+      const currentFolderVisible = viewerSeesAudience(auth?.role, cur?.audience);
+      files = files.filter((f) => (f.isFolder ? viewerSeesAudience(auth?.role, f.audience) : currentFolderVisible));
     }
 
     // Overlay in-portal "Edit online" for external viewers granted edit on this
@@ -195,35 +224,40 @@ app.post("/folder", async (c) => {
 });
 
 // PATCH /api/sharepoint/folder/visibility
-// Body: { sp_item_id, web_url, project_id?, solution_id?, visible: boolean }
-// Upserts a folder's client/partner visibility. Editor-only (clients can't
-// see the toggle; this guards the API regardless). project_id / solution_id
-// just scope ownership — the filtering in /files keys on sp_item_id + web_url
-// regardless, so the same row format serves both project and solution folders.
+// Body: { sp_item_id, web_url, project_id?, solution_id?, audience }
+// Sets a folder's audience (internal / internal_customer / internal_partner /
+// internal_customer_partner). Editor-only (externals can't reach non-GET here
+// anyway; this is belt-and-suspenders). project_id / solution_id just scope
+// ownership — filtering in /files keys on sp_item_id + web_url, so the same row
+// format serves both project and solution folders. visible_to_client is kept in
+// sync (1 iff the audience includes the customer) for legacy readers.
 app.patch("/folder/visibility", async (c) => {
   const auth = c.get("auth");
   if (isExternalRole(auth?.role)) return c.json({ error: "Forbidden" }, 403);
-  let body: { sp_item_id?: string; web_url?: string; project_id?: string | null; solution_id?: string | null; visible?: boolean };
+  let body: { sp_item_id?: string; web_url?: string; project_id?: string | null; solution_id?: string | null; audience?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
   if (!body.sp_item_id) return c.json({ error: "sp_item_id required" }, 400);
+  const audience: Audience = AUDIENCES.includes(body.audience as Audience) ? (body.audience as Audience) : "internal";
+  const visibleToClient = audienceIncludesCustomer(audience) ? 1 : 0;
 
   try {
     await c.env.DB
       .prepare(
         `INSERT INTO sharepoint_folder_visibility
-           (sp_item_id, project_id, solution_id, web_url, visible_to_client, set_by_user_id, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+           (sp_item_id, project_id, solution_id, web_url, audience, visible_to_client, set_by_user_id, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
          ON CONFLICT(sp_item_id) DO UPDATE SET
            project_id        = excluded.project_id,
            solution_id       = excluded.solution_id,
            web_url           = excluded.web_url,
+           audience          = excluded.audience,
            visible_to_client = excluded.visible_to_client,
            set_by_user_id    = excluded.set_by_user_id,
            updated_at        = CURRENT_TIMESTAMP`
       )
-      .bind(body.sp_item_id, body.project_id ?? null, body.solution_id ?? null, body.web_url ?? null, body.visible ? 1 : 0, auth?.user?.id ?? null)
+      .bind(body.sp_item_id, body.project_id ?? null, body.solution_id ?? null, body.web_url ?? null, audience, visibleToClient, auth?.user?.id ?? null)
       .run();
-    return c.json({ ok: true, visible: !!body.visible });
+    return c.json({ ok: true, audience });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to update folder visibility";
     console.error("SharePoint folder-visibility error:", message);
@@ -637,23 +671,40 @@ app.post("/folder/allow-editing", async (c) => {
   if (!spItemId || !webUrl || !projectId) return c.json({ error: "sp_item_id, web_url, project_id required" }, 400);
   if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
 
-  // Persist the flag. Enabling also flips visible_to_client on (can't edit what
-  // you can't see); disabling leaves visibility untouched.
+  // Persist the flag. Enabling client editing implies the customer can see the
+  // folder (can't edit what you can't see), so it adds the customer bit to the
+  // audience; disabling leaves the audience untouched.
   await c.env.DB
     .prepare(
       `INSERT INTO sharepoint_folder_visibility
-         (sp_item_id, project_id, web_url, visible_to_client, client_editing, set_by_user_id, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+         (sp_item_id, project_id, web_url, audience, visible_to_client, client_editing, set_by_user_id, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
        ON CONFLICT(sp_item_id) DO UPDATE SET
          project_id        = excluded.project_id,
          web_url           = excluded.web_url,
          client_editing    = excluded.client_editing,
-         visible_to_client = CASE WHEN excluded.client_editing = 1 THEN 1 ELSE visible_to_client END,
          set_by_user_id    = excluded.set_by_user_id,
          updated_at        = CURRENT_TIMESTAMP`
     )
-    .bind(spItemId, projectId, webUrl, enabled ? 1 : 0, enabled ? 1 : 0, auth.user.id)
+    .bind(spItemId, projectId, webUrl, enabled ? "internal_customer" : "internal", enabled ? 1 : 0, enabled ? 1 : 0, auth.user.id)
     .run();
+
+  // On enable, fold the customer into whatever audience the folder already had
+  // (internal → internal_customer, internal_partner → internal_customer_partner)
+  // and keep the legacy visible_to_client mirror in sync.
+  if (enabled) {
+    await c.env.DB
+      .prepare(
+        `UPDATE sharepoint_folder_visibility
+           SET audience = CASE audience
+                 WHEN 'internal' THEN 'internal_customer'
+                 WHEN 'internal_partner' THEN 'internal_customer_partner'
+                 ELSE audience END,
+               visible_to_client = 1
+         WHERE sp_item_id = ?`
+      )
+      .bind(spItemId).run();
+  }
 
   if (!enabled) return c.json({ ok: true, enabled: false, granted: [] });
 
