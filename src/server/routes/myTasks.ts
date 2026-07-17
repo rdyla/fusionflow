@@ -68,73 +68,94 @@ app.get("/", async (c) => {
   // portfolio-visible internal roles (admin/pm/pf_sa/pf_csm/executive/
   // pf_engineer) can see every project anyway, so no project bound is needed.
   // Clients aren't task assignees — scope them to their company's projects.
-  const conditions: string[] = [];
-  const bindings: unknown[] = [];
+  // ── Assignment/scope branches ─────────────────────────────────────────────
+  // Each branch projects a common column shape so the standard tasks table and
+  // the MedVet throwaway custom_plan_items table can be UNIONed, then filtered
+  // + paginated uniformly. Both use the same status vocabulary.
+  const branches: { sql: string; binds: unknown[] }[] = [];
 
   if (auth.role === "client") {
-    conditions.push(`t.project_id IN (${projectSubquery})`);
-    bindings.push(...projectBindings);
+    branches.push({
+      sql: `SELECT t.id, t.project_id, t.stage_id, t.title, t.assignee_user_id,
+                   t.due_date, t.status, t.priority, t.completed_at
+            FROM tasks t WHERE t.project_id IN (${projectSubquery})`,
+      binds: [...projectBindings],
+    });
+    // Clients aren't assignees; custom-plan items are internal-only, so skip.
   } else {
-    conditions.push("(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))");
-    bindings.push(auth.user.id, auth.user.id);
+    const taskScope: string[] = ["(t.assignee_user_id = ? OR t.id IN (SELECT task_id FROM task_assignees WHERE user_id = ?))"];
+    const taskBinds: unknown[] = [auth.user.id, auth.user.id];
     if (auth.role === "pf_ae" || auth.role === "partner_ae") {
-      conditions.push(`t.project_id IN (${projectSubquery})`);
-      bindings.push(...projectBindings);
+      taskScope.push(`t.project_id IN (${projectSubquery})`);
+      taskBinds.push(...projectBindings);
     }
+    branches.push({
+      sql: `SELECT t.id, t.project_id, t.stage_id, t.title, t.assignee_user_id,
+                   t.due_date, t.status, t.priority, t.completed_at
+            FROM tasks t WHERE ${taskScope.join(" AND ")}`,
+      binds: taskBinds,
+    });
+    // MedVet throwaway: custom_plan_items are real assignments too (no stage/
+    // priority). Assignees are PF users, so no extra project bound is needed.
+    branches.push({
+      sql: `SELECT cpi.id, cpi.project_id, NULL AS stage_id, cpi.name AS title, cpi.assignee_user_id,
+                   cpi.due_date, cpi.status, NULL AS priority, NULL AS completed_at
+            FROM custom_plan_items cpi WHERE cpi.assignee_user_id = ?`,
+      binds: [auth.user.id],
+    });
   }
 
-  // Status / overdue
+  const unionSql = branches.map((b) => b.sql).join("\n      UNION ALL\n      ");
+  const unionBinds = branches.flatMap((b) => b.binds);
+
+  // ── Outer filters (applied to the unioned set) ─────────────────────────────
+  const outer: string[] = [];
+  const outerBinds: unknown[] = [];
   if (statusParam === "overdue") {
-    conditions.push("t.status != 'completed'");
-    conditions.push("t.due_date IS NOT NULL");
-    conditions.push("t.due_date < date('now')");
+    outer.push("x.status != 'completed'", "x.due_date IS NOT NULL", "x.due_date < date('now')");
   } else if (statusParam && statusParam !== "all") {
-    conditions.push("t.status = ?");
-    bindings.push(statusParam);
+    outer.push("x.status = ?");
+    outerBinds.push(statusParam);
   } else {
-    // default: exclude completed
-    conditions.push("t.status != 'completed'");
+    outer.push("x.status != 'completed'");
   }
-
   if (priorityParam && priorityParam !== "all") {
-    conditions.push("t.priority = ?");
-    bindings.push(priorityParam);
+    outer.push("x.priority = ?");
+    outerBinds.push(priorityParam);
   }
-
   if (searchParam.trim()) {
-    conditions.push("t.title LIKE ?");
-    bindings.push(`%${searchParam.trim()}%`);
+    outer.push("x.title LIKE ?");
+    outerBinds.push(`%${searchParam.trim()}%`);
   }
-
-  const whereClause = `WHERE ${conditions.join(" AND ")}`;
+  const outerWhere = outer.length ? `WHERE ${outer.join(" AND ")}` : "";
 
   // ── Count ─────────────────────────────────────────────────────────────────
   const countRow = await db
-    .prepare(`SELECT COUNT(*) AS cnt FROM tasks t ${whereClause}`)
-    .bind(...bindings)
+    .prepare(`SELECT COUNT(*) AS cnt FROM (${unionSql}) x ${outerWhere}`)
+    .bind(...unionBinds, ...outerBinds)
     .first<{ cnt: number }>();
   const total = countRow?.cnt ?? 0;
 
   // ── Fetch page ────────────────────────────────────────────────────────────
   const rows = await db
     .prepare(
-      `SELECT t.id, t.project_id, t.stage_id, t.title, t.assignee_user_id,
-              t.due_date, t.status, t.priority, t.completed_at,
+      `SELECT x.id, x.project_id, x.stage_id, x.title, x.assignee_user_id,
+              x.due_date, x.status, x.priority, x.completed_at,
               p.name AS project_name,
               ph.name AS stage_name,
               u.name AS assignee_name
-       FROM tasks t
-       JOIN projects p ON p.id = t.project_id
-       LEFT JOIN stages ph ON ph.id = t.stage_id
-       LEFT JOIN users u ON u.id = t.assignee_user_id
-       ${whereClause}
+       FROM (${unionSql}) x
+       JOIN projects p ON p.id = x.project_id
+       LEFT JOIN stages ph ON ph.id = x.stage_id
+       LEFT JOIN users u ON u.id = x.assignee_user_id
+       ${outerWhere}
        ORDER BY
-         CASE t.status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END,
-         CASE t.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
-         t.due_date ASC NULLS LAST
+         CASE x.status WHEN 'blocked' THEN 0 WHEN 'in_progress' THEN 1 WHEN 'not_started' THEN 2 ELSE 3 END,
+         CASE x.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
+         x.due_date ASC NULLS LAST
        LIMIT ? OFFSET ?`
     )
-    .bind(...bindings, PAGE_SIZE, offset)
+    .bind(...unionBinds, ...outerBinds, PAGE_SIZE, offset)
     .all();
 
   return c.json({
