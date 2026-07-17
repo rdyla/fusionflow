@@ -90,34 +90,67 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
     : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} addItem={addItem} del={del} onReimport={canEdit ? runImport : undefined} importing={importing} />;
 }
 
-// ── Timeline: each section (stage) as a dated band over the project range ──────
+// ── Timeline: sections as dated bands over the project range; each expands to
+//    reveal its tasks as indented sub-bars on the same axis. ─────────────────
 function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: string[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const toggle = (sec: string) => setExpanded((prev) => { const n = new Set(prev); n.has(sec) ? n.delete(sec) : n.add(sec); return n; });
+
   const dated = items.filter((i) => i.start_date || i.due_date);
-  const all = dated.flatMap((i) => [i.start_date, i.due_date].filter(Boolean) as string[]).map((d) => Date.parse(d + "T00:00:00"));
+  const startOf = (i: CustomPlanItem) => Date.parse((i.start_date ?? i.due_date)! + "T00:00:00");
+  const endOf = (i: CustomPlanItem) => Date.parse((i.due_date ?? i.start_date)! + "T00:00:00");
+  const all = dated.flatMap((i) => [startOf(i), endOf(i)]);
   const min = Math.min(...all), max = Math.max(...all);
   const span = Math.max(1, max - min);
   const pct = (d: number) => `${((d - min) / span) * 100}%`;
+  const iso = (d: number) => new Date(d).toISOString().slice(0, 10);
 
   return (
     <div className="ms-section-card">
-      <div className="ms-section-title">Timeline</div>
-      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>{fmt(new Date(min).toISOString().slice(0, 10))} → {fmt(new Date(max).toISOString().slice(0, 10))}</div>
-      <div style={{ display: "grid", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Timeline</div>
+        {sections.length > 0 && (
+          <button className="ms-btn-ghost" style={{ fontSize: 12 }} onClick={() => setExpanded(expanded.size ? new Set() : new Set(sections))}>
+            {expanded.size ? "Collapse all" : "Expand all"}
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>{fmt(iso(min))} → {fmt(iso(max))}</div>
+      <div style={{ display: "grid", gap: 3 }}>
         {sections.map((sec) => {
           const its = dated.filter((i) => i.section === sec);
           if (its.length === 0) return null;
-          const s = Math.min(...its.map((i) => Date.parse((i.start_date ?? i.due_date)! + "T00:00:00")));
-          const e = Math.max(...its.map((i) => Date.parse((i.due_date ?? i.start_date)! + "T00:00:00")));
+          const s = Math.min(...its.map(startOf)), e = Math.max(...its.map(endOf));
+          const isOpen = expanded.has(sec);
+          const rows = its.slice().sort((a, b) => a.sort_order - b.sort_order);
           return (
-            <div key={sec} style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 150, flexShrink: 0, fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{sec}</div>
-              <div style={{ flex: 1, position: "relative", height: 22, background: "#f1f5f9", borderRadius: 4 }}>
-                <div title={`${fmt(new Date(s).toISOString().slice(0,10))} → ${fmt(new Date(e).toISOString().slice(0,10))}`}
-                  style={{ position: "absolute", left: pct(s), width: `calc(${pct(e)} - ${pct(s)})`, minWidth: 4, top: 3, bottom: 3, background: "#0891b2", borderRadius: 4 }} />
+            <div key={sec}>
+              {/* Section band — click to expand/collapse its tasks. */}
+              <div onClick={() => toggle(sec)} style={{ display: "flex", alignItems: "center", gap: 12, cursor: "pointer", padding: "2px 0" }}>
+                <div style={{ width: 170, flexShrink: 0, fontSize: 13, fontWeight: 600, color: "#1e293b", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 10, color: "#94a3b8", width: 10 }}>{isOpen ? "▼" : "▶"}</span>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{sec}</span>
+                </div>
+                <div style={{ flex: 1, position: "relative", height: 22, background: "#f1f5f9", borderRadius: 4 }}>
+                  <div title={`${fmt(iso(s))} → ${fmt(iso(e))}`}
+                    style={{ position: "absolute", left: pct(s), width: `calc(${pct(e)} - ${pct(s)})`, minWidth: 4, top: 3, bottom: 3, background: "#0891b2", borderRadius: 4 }} />
+                </div>
+                <div style={{ width: 160, flexShrink: 0, fontSize: 11, color: "#64748b", textAlign: "right" }}>{fmt(iso(s))} → {fmt(iso(e))}</div>
               </div>
-              <div style={{ width: 150, flexShrink: 0, fontSize: 11, color: "#64748b", textAlign: "right" }}>
-                {fmt(new Date(s).toISOString().slice(0, 10))} → {fmt(new Date(e).toISOString().slice(0, 10))}
-              </div>
+              {/* Expanded: each dated task as an indented sub-bar. */}
+              {isOpen && rows.map((it) => {
+                const is = startOf(it), ie = endOf(it);
+                return (
+                  <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "1px 0" }}>
+                    <div title={it.name} style={{ width: 170, flexShrink: 0, fontSize: 11, color: "#64748b", paddingLeft: 20 + it.depth * 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.name}</div>
+                    <div style={{ flex: 1, position: "relative", height: 13, background: "#f8fafc", borderRadius: 3 }}>
+                      <div title={`${fmt(iso(is))} → ${fmt(iso(ie))}`}
+                        style={{ position: "absolute", left: pct(is), width: `calc(${pct(ie)} - ${pct(is)})`, minWidth: 3, top: 2, bottom: 2, background: it.depth === 0 ? "#38bdf8" : "#7dd3fc", borderRadius: 3 }} />
+                    </div>
+                    <div style={{ width: 160, flexShrink: 0, fontSize: 10, color: "#94a3b8", textAlign: "right" }}>{fmt(iso(is))} → {fmt(iso(ie))}</div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}
