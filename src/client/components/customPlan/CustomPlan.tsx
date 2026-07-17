@@ -32,6 +32,9 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
   const [items, setItems] = useState<CustomPlanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
+  // Assignee picker options: PF staff on the project + customer/partner contacts.
+  const [staffNames, setStaffNames] = useState<string[]>([]);
+  const [contactNames, setContactNames] = useState<string[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -41,6 +44,16 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
       .finally(() => setLoading(false));
   }, [projectId]);
   useEffect(load, [load]);
+
+  useEffect(() => {
+    Promise.all([
+      api.projectStaff(projectId).catch(() => []),
+      api.projectContacts(projectId).catch(() => []),
+    ]).then(([staff, contacts]) => {
+      setStaffNames([...new Set(staff.map((s) => s.name ?? s.email).filter(Boolean) as string[])]);
+      setContactNames([...new Set(contacts.map((c) => c.name).filter(Boolean) as string[])]);
+    });
+  }, [projectId]);
 
   // Sections in first-appearance order (they are the "stages").
   const sections = useMemo(() => {
@@ -87,7 +100,7 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
 
   return view === "timeline"
     ? <TimelineView items={items} sections={sections} />
-    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} addItem={addItem} del={del} onReimport={canEdit ? runImport : undefined} importing={importing} />;
+    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} addItem={addItem} del={del} onReimport={canEdit ? runImport : undefined} importing={importing} staffNames={staffNames} contactNames={contactNames} />;
 }
 
 // ── Timeline: sections as dated bands over the project range; each expands to
@@ -160,12 +173,13 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
 }
 
 // ── Tasks: nested outline grouped by section, inline-editable ──────────────────
-function TasksView({ items, sections, canEdit, patch, addItem, del, onReimport, importing }: {
+function TasksView({ items, sections, canEdit, patch, addItem, del, onReimport, importing, staffNames, contactNames }: {
   items: CustomPlanItem[]; sections: string[]; canEdit: boolean;
   patch: (id: string, f: keyof CustomPlanItem, v: unknown) => void;
   addItem: (section: string, parent: CustomPlanItem | null) => void;
   del: (it: CustomPlanItem) => void;
   onReimport?: () => void; importing: boolean;
+  staffNames: string[]; contactNames: string[];
 }) {
   // Order within a section: preserve sort_order, but render as a tree (parents
   // before their children). The seed is already in document order, so sort_order
@@ -239,8 +253,29 @@ function TasksView({ items, sections, canEdit, patch, addItem, del, onReimport, 
                       </select>
                     </td>
                     <td style={cell}>
-                      <input defaultValue={it.assignee ?? ""} disabled={!canEdit} placeholder="—" style={{ ...input, fontSize: 12, color: "#64748b" }}
-                        onBlur={(e) => { const v = e.target.value.trim() || null; if (v !== it.assignee) patch(it.id, "assignee", v); }} />
+                      <select
+                        value={it.assignee ?? ""}
+                        disabled={!canEdit}
+                        style={{ ...input, fontSize: 12, color: "#475569" }}
+                        onChange={(e) => patch(it.id, "assignee", e.target.value || null)}
+                      >
+                        <option value="">— Unassigned —</option>
+                        {/* Preserve the imported Asana label (a role like "Customer, Engineer")
+                            if it isn't one of the pickable people, so it still shows. */}
+                        {it.assignee && !staffNames.includes(it.assignee) && !contactNames.includes(it.assignee) && (
+                          <option value={it.assignee}>{it.assignee}</option>
+                        )}
+                        {staffNames.length > 0 && (
+                          <optgroup label="PF Staff">
+                            {staffNames.map((n) => <option key={`s:${n}`} value={n}>{n}</option>)}
+                          </optgroup>
+                        )}
+                        {contactNames.length > 0 && (
+                          <optgroup label="Customer / Partner Contacts">
+                            {contactNames.map((n) => <option key={`c:${n}`} value={n}>{n}</option>)}
+                          </optgroup>
+                        )}
+                      </select>
                     </td>
                     {canEdit && (
                       <td style={{ ...cell, whiteSpace: "nowrap", textAlign: "right" }}>
