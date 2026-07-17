@@ -994,7 +994,7 @@ function FileRow({
             ↓ Download
           </a>
         )}
-        {!file.isFolder && (
+        {!file.isFolder && !isExternal && (
           <button
             className="ms-btn-ghost"
             onClick={onDelete}

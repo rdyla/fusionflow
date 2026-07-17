@@ -18,19 +18,23 @@ import { canEditProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// External roles (client = customer, partner_ae = partner) get READ-ONLY
-// SharePoint: they can list files (GET /files, then filtered by each folder's
-// audience) but can never mutate — create/upload/delete/visibility/grants are
-// internal-only. This is the safety net for the whole surface; individual write
-// endpoints keep their own canEditProject / isExternalRole checks on top.
+// External roles (client = customer, partner_ae = partner) get READ + CONTRIBUTE:
+// they may list files (GET /files, filtered by each folder's audience), upload
+// documents, and annotate them with a description — the intended external
+// workflow (discovery workbooks, phone bills, CSRs). Everything else non-GET
+// (delete, create/manage folders, set audience, manage grants, and the
+// admin/debug endpoints) is internal-only. Individual endpoints keep their own
+// canEditProject / isExternalRole checks on top of this allow-list.
 //
 // (This replaces the July-2026 blanket partner_ae deny: partners are no longer
 // shut out entirely — they now see only folders explicitly tagged partner-
 // visible, defaulting to nothing.)
+const EXTERNAL_WRITE_PATHS = ["/upload", "/upload-session", "/upload-complete", "/file/description"];
 app.use("*", async (c, next) => {
   const role = c.get("auth")?.role;
-  if ((role === "client" || role === "partner_ae") && c.req.method !== "GET") {
-    return c.json({ error: "Forbidden" }, 403);
+  if (role === "client" || role === "partner_ae") {
+    const allowed = c.req.method === "GET" || EXTERNAL_WRITE_PATHS.some((p) => c.req.path.endsWith(p));
+    if (!allowed) return c.json({ error: "Forbidden" }, 403);
   }
   await next();
 });
