@@ -274,7 +274,11 @@ export type CustomPlanItem = {
   start_date: string | null;
   due_date: string | null;
   status: "not_started" | "in_progress" | "completed" | "blocked";
+  /** Free-text Asana label kept as a display fallback for un-mapped items. */
   assignee: string | null;
+  /** Real assignment refs — mutually exclusive; drive notifications + My Tasks. */
+  assignee_user_id: string | null;
+  assignee_contact_id: string | null;
   notes: string | null;
 };
 

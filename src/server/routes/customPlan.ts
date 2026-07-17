@@ -7,11 +7,14 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject } from "../services/accessService";
+import { maybeSendEmail } from "../services/emailService";
+import { taskAssigned } from "../lib/emailTemplates";
+import { createNotification } from "../lib/notifications";
 import medvetPlan from "../data/medvetPlan.json";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-const COLS = "id, project_id, section, parent_id, depth, sort_order, name, module, start_date, due_date, status, assignee, notes";
+const COLS = "id, project_id, section, parent_id, depth, sort_order, name, module, start_date, due_date, status, assignee, assignee_user_id, assignee_contact_id, notes";
 
 type SeedItem = {
   id: string; section: string; depth: number; parentId: string | null; sort: number;
@@ -50,11 +53,13 @@ app.post("/:id/custom-plan/import", async (c) => {
 
   // Insert in document order (parents precede children) in batches.
   const stmt = db.prepare(
-    `INSERT INTO custom_plan_items (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO custom_plan_items (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
+  // Imported items carry only the free-text Asana label; real assignee refs
+  // (assignee_user_id / assignee_contact_id) start null and are set via PATCH.
   const batch = seed.map((it) => stmt.bind(
     idMap.get(it.id)!, projectId, it.section, it.parentId ? idMap.get(it.parentId) ?? null : null,
-    it.depth, it.sort, it.name, it.module, it.startDate, it.dueDate, it.status, it.assignee, it.notes,
+    it.depth, it.sort, it.name, it.module, it.startDate, it.dueDate, it.status, it.assignee, null, null, it.notes,
   ));
   // D1 batch caps ~ a few hundred; chunk to be safe.
   for (let i = 0; i < batch.length; i += 100) await db.batch(batch.slice(i, i + 100));
@@ -73,6 +78,8 @@ const itemSchema = z.object({
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
   assignee: z.string().max(255).nullable().optional(),
+  assignee_user_id: z.string().max(255).nullable().optional(),
+  assignee_contact_id: z.string().max(255).nullable().optional(),
   notes: z.string().max(4000).nullable().optional(),
 });
 
@@ -118,9 +125,10 @@ app.post("/:id/custom-plan", async (c) => {
   }
 
   await db
-    .prepare(`INSERT INTO custom_plan_items (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .prepare(`INSERT INTO custom_plan_items (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .bind(id, projectId, section, parentId, depth, sortOrder,
-          d.name, d.module ?? null, d.start_date ?? null, d.due_date ?? null, d.status ?? "not_started", d.assignee ?? null, d.notes ?? null)
+          d.name, d.module ?? null, d.start_date ?? null, d.due_date ?? null, d.status ?? "not_started",
+          d.assignee ?? null, d.assignee_user_id ?? null, d.assignee_contact_id ?? null, d.notes ?? null)
     .run();
   const created = await db.prepare(`SELECT ${COLS} FROM custom_plan_items WHERE id = ? LIMIT 1`).bind(id).first();
   return c.json(created, 201);
@@ -136,19 +144,59 @@ app.patch("/:id/custom-plan/:itemId", async (c) => {
   const parsed = itemSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
   const editable: Record<string, unknown> = {};
-  const map: Record<string, string> = { name: "name", module: "module", start_date: "start_date", due_date: "due_date", status: "status", assignee: "assignee", notes: "notes", section: "section" };
+  const map: Record<string, string> = { name: "name", module: "module", start_date: "start_date", due_date: "due_date", status: "status", assignee: "assignee", assignee_user_id: "assignee_user_id", assignee_contact_id: "assignee_contact_id", notes: "notes", section: "section" };
   for (const [k, col] of Object.entries(map)) {
     const v = (parsed.data as Record<string, unknown>)[k];
     if (v !== undefined) editable[col] = v;
   }
   const keys = Object.keys(editable);
   if (keys.length === 0) throw new HTTPException(400, { message: "No fields to update" });
+
+  // Capture the prior user-assignee so we only notify on an actual (re)assignment.
+  let priorAssigneeUserId: string | null = null;
+  if ("assignee_user_id" in editable) {
+    const prev = await db
+      .prepare("SELECT assignee_user_id FROM custom_plan_items WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(itemId, projectId).first<{ assignee_user_id: string | null }>();
+    priorAssigneeUserId = prev?.assignee_user_id ?? null;
+  }
+
   await db
     .prepare(`UPDATE custom_plan_items SET ${keys.map((k) => `${k} = ?`).join(", ")} WHERE id = ? AND project_id = ?`)
     .bind(...keys.map((k) => editable[k]), itemId, projectId)
     .run();
-  const updated = await db.prepare(`SELECT ${COLS} FROM custom_plan_items WHERE id = ? AND project_id = ? LIMIT 1`).bind(itemId, projectId).first();
+  const updated = await db.prepare(`SELECT ${COLS} FROM custom_plan_items WHERE id = ? AND project_id = ? LIMIT 1`).bind(itemId, projectId).first<{ name: string; due_date: string | null; assignee_user_id: string | null }>();
   if (!updated) throw new HTTPException(404, { message: "Not found" });
+
+  // Real assignment parity with the standard tasks module: when a plan item is
+  // (re)assigned to a PF user, fire the same task-assigned email + notification.
+  const newAssigneeUserId = updated.assignee_user_id;
+  if ("assignee_user_id" in editable && newAssigneeUserId && newAssigneeUserId !== priorAssigneeUserId) {
+    const [assignee, project] = await Promise.all([
+      db.prepare("SELECT email, name FROM users WHERE id = ? LIMIT 1").bind(newAssigneeUserId).first<{ email: string; name: string }>(),
+      db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>(),
+    ]);
+    if (assignee && project) {
+      const appUrl = c.env.APP_URL ?? "";
+      c.executionCtx.waitUntil(maybeSendEmail(c.env, db, newAssigneeUserId, "important", {
+        to: assignee.email,
+        subject: `You've been assigned: ${updated.name}`,
+        html: taskAssigned({ assigneeName: assignee.name ?? assignee.email, taskTitle: updated.name, projectName: project.name, dueDate: updated.due_date, priority: null, appUrl, projectId }),
+      }));
+      c.executionCtx.waitUntil(createNotification(db, {
+        recipientUserId: newAssigneeUserId,
+        type: "task_assigned",
+        title: `You've been assigned: ${updated.name}`,
+        body: project.name,
+        // Custom-plan items aren't rows in `tasks`; link to the project (its
+        // Tasks tab renders the custom plan) so the notification resolves.
+        entityType: "project",
+        entityId: projectId,
+        projectId,
+        senderUserId: auth.user.id,
+      }));
+    }
+  }
   return c.json(updated);
 });
 

@@ -34,9 +34,10 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
   const [items, setItems] = useState<CustomPlanItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState(false);
-  // Assignee picker options: PF staff on the project + customer/partner contacts.
-  const [staffNames, setStaffNames] = useState<string[]>([]);
-  const [contactNames, setContactNames] = useState<string[]>([]);
+  // Assignee picker options: PF staff (real user ids → notifications + My Tasks)
+  // and customer/partner contacts (contact ids). Carry ids, not just names.
+  const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
+  const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -51,9 +52,17 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
     Promise.all([
       api.projectStaff(projectId).catch(() => []),
       api.projectContacts(projectId).catch(() => []),
-    ]).then(([staff, contacts]) => {
-      setStaffNames([...new Set(staff.map((s) => s.name ?? s.email).filter(Boolean) as string[])]);
-      setContactNames([...new Set(contacts.map((c) => c.name).filter(Boolean) as string[])]);
+    ]).then(([staffRows, contactRows]) => {
+      // De-dupe staff by user_id (a person can hold multiple staff roles).
+      const seen = new Set<string>();
+      const s: { id: string; name: string }[] = [];
+      for (const m of staffRows) {
+        if (!m.user_id || seen.has(m.user_id)) continue;
+        seen.add(m.user_id);
+        s.push({ id: m.user_id, name: m.name ?? m.email });
+      }
+      setStaff(s);
+      setContacts(contactRows.filter((c) => c.name).map((c) => ({ id: c.id, name: c.name })));
     });
   }, [projectId]);
 
@@ -67,6 +76,13 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
   async function patch(id: string, field: keyof CustomPlanItem, value: unknown) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } as CustomPlanItem : it)));
     try { await api.updateCustomPlanItem(projectId, id, { [field]: value } as never); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Save failed", "error"); load(); }
+  }
+  // Assignee spans three columns (real user ref, contact ref, display label) and
+  // must be set atomically so notifications fire on the correct field.
+  async function patchMany(id: string, partial: Partial<CustomPlanItem>) {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...partial } as CustomPlanItem : it)));
+    try { await api.updateCustomPlanItem(projectId, id, partial as never); }
     catch (err) { showToast(err instanceof Error ? err.message : "Save failed", "error"); load(); }
   }
   async function addItem(section: string, parent: CustomPlanItem | null) {
@@ -102,7 +118,7 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
 
   return view === "timeline"
     ? <TimelineView items={items} sections={sections} />
-    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} addItem={addItem} del={del} onReimport={canEdit ? runImport : undefined} importing={importing} staffNames={staffNames} contactNames={contactNames} />;
+    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} />;
 }
 
 // ── Timeline: sections as dated bands over the project range; each expands to
@@ -175,13 +191,14 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
 }
 
 // ── Tasks: nested outline grouped by section, inline-editable ──────────────────
-function TasksView({ items, sections, canEdit, patch, addItem, del, onReimport, importing, staffNames, contactNames }: {
+function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, onReimport, importing, staff, contacts }: {
   items: CustomPlanItem[]; sections: string[]; canEdit: boolean;
   patch: (id: string, f: keyof CustomPlanItem, v: unknown) => void;
+  patchMany: (id: string, partial: Partial<CustomPlanItem>) => void;
   addItem: (section: string, parent: CustomPlanItem | null) => void;
   del: (it: CustomPlanItem) => void;
   onReimport?: () => void; importing: boolean;
-  staffNames: string[]; contactNames: string[];
+  staff: { id: string; name: string }[]; contacts: { id: string; name: string }[];
 }) {
   // Order within a section: preserve sort_order, but render as a tree (parents
   // before their children). The seed is already in document order, so sort_order
@@ -265,29 +282,55 @@ function TasksView({ items, sections, canEdit, patch, addItem, del, onReimport, 
                       </select>
                     </td>
                     <td style={cell}>
-                      <select
-                        value={it.assignee ?? ""}
-                        disabled={!canEdit}
-                        style={{ ...input, fontSize: 12, color: "#475569" }}
-                        onChange={(e) => patch(it.id, "assignee", e.target.value || null)}
-                      >
-                        <option value="">— Unassigned —</option>
-                        {/* Preserve the imported Asana label (a role like "Customer, Engineer")
-                            if it isn't one of the pickable people, so it still shows. */}
-                        {it.assignee && !staffNames.includes(it.assignee) && !contactNames.includes(it.assignee) && (
-                          <option value={it.assignee}>{it.assignee}</option>
-                        )}
-                        {staffNames.length > 0 && (
-                          <optgroup label="PF Staff">
-                            {staffNames.map((n) => <option key={`s:${n}`} value={n}>{n}</option>)}
-                          </optgroup>
-                        )}
-                        {contactNames.length > 0 && (
-                          <optgroup label="Customer / Partner Contacts">
-                            {contactNames.map((n) => <option key={`c:${n}`} value={n}>{n}</option>)}
-                          </optgroup>
-                        )}
-                      </select>
+                      {(() => {
+                        // Resolved display name: real user/contact ref wins, else
+                        // the imported Asana label (a role like "Customer, Engineer").
+                        const resolved = it.assignee_user_id
+                          ? staff.find((s) => s.id === it.assignee_user_id)?.name ?? it.assignee
+                          : it.assignee_contact_id
+                          ? contacts.find((ct) => ct.id === it.assignee_contact_id)?.name ?? it.assignee
+                          : it.assignee;
+                        if (!canEdit) return <span style={{ fontSize: 12, color: "#475569" }}>{resolved || "—"}</span>;
+                        // A real assignment (a person) selects that option; an
+                        // un-mapped imported label shows via the sentinel "lbl".
+                        const val = it.assignee_user_id ? `u:${it.assignee_user_id}`
+                          : it.assignee_contact_id ? `c:${it.assignee_contact_id}`
+                          : it.assignee ? "lbl" : "";
+                        return (
+                          <select
+                            value={val}
+                            style={{ ...input, fontSize: 12, color: "#475569" }}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              if (v === "lbl") return; // no-op: keep the imported label
+                              if (!v) { patchMany(it.id, { assignee_user_id: null, assignee_contact_id: null, assignee: null }); return; }
+                              const kind = v.slice(0, 1), id = v.slice(2);
+                              if (kind === "u") {
+                                const s = staff.find((x) => x.id === id);
+                                patchMany(it.id, { assignee_user_id: id, assignee_contact_id: null, assignee: s?.name ?? null });
+                              } else {
+                                const ct = contacts.find((x) => x.id === id);
+                                patchMany(it.id, { assignee_contact_id: id, assignee_user_id: null, assignee: ct?.name ?? null });
+                              }
+                            }}
+                          >
+                            <option value="">— Unassigned —</option>
+                            {it.assignee && !it.assignee_user_id && !it.assignee_contact_id && (
+                              <option value="lbl">{it.assignee} (imported)</option>
+                            )}
+                            {staff.length > 0 && (
+                              <optgroup label="PF Staff">
+                                {staff.map((s) => <option key={s.id} value={`u:${s.id}`}>{s.name}</option>)}
+                              </optgroup>
+                            )}
+                            {contacts.length > 0 && (
+                              <optgroup label="Customer / Partner Contacts">
+                                {contacts.map((ct) => <option key={ct.id} value={`c:${ct.id}`}>{ct.name}</option>)}
+                              </optgroup>
+                            )}
+                          </select>
+                        );
+                      })()}
                     </td>
                     {canEdit && (
                       <td style={{ ...cell, whiteSpace: "nowrap", textAlign: "right" }}>
