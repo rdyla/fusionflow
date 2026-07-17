@@ -91,6 +91,15 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
       load();
     } catch (err) { showToast(err instanceof Error ? err.message : "Add failed", "error"); }
   }
+  async function addDep(itemId: string, dependsOnItemId: string) {
+    try { await api.addCustomPlanDep(projectId, itemId, dependsOnItemId); load(); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Couldn't add dependency", "error"); }
+  }
+  async function removeDep(itemId: string, depId: string) {
+    setItems((prev) => prev.map((it) => (it.id === itemId ? { ...it, blocked_by: it.blocked_by.filter((d) => d !== depId) } : it)));
+    try { await api.removeCustomPlanDep(projectId, itemId, depId); }
+    catch (err) { showToast(err instanceof Error ? err.message : "Couldn't remove dependency", "error"); load(); }
+  }
   async function del(it: CustomPlanItem) {
     const kids = items.some((x) => x.parent_id === it.id);
     if (!window.confirm(`Delete "${it.name}"${kids ? " and everything under it" : ""}?`)) return;
@@ -118,7 +127,7 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
 
   return view === "timeline"
     ? <TimelineView items={items} sections={sections} />
-    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} />;
+    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} />;
 }
 
 // ── Timeline: sections as dated bands over the project range; each expands to
@@ -191,12 +200,14 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
 }
 
 // ── Tasks: nested outline grouped by section, inline-editable ──────────────────
-function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, onReimport, importing, staff, contacts }: {
+function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, onReimport, importing, staff, contacts }: {
   items: CustomPlanItem[]; sections: string[]; canEdit: boolean;
   patch: (id: string, f: keyof CustomPlanItem, v: unknown) => void;
   patchMany: (id: string, partial: Partial<CustomPlanItem>) => void;
   addItem: (section: string, parent: CustomPlanItem | null) => void;
   del: (it: CustomPlanItem) => void;
+  addDep: (itemId: string, dependsOnItemId: string) => void;
+  removeDep: (itemId: string, depId: string) => void;
   onReimport?: () => void; importing: boolean;
   staff: { id: string; name: string }[]; contacts: { id: string; name: string }[];
 }) {
@@ -204,6 +215,18 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, o
   // before their children). The seed is already in document order, so sort_order
   // ascending within a section yields a correct outline.
   const perSection = (sec: string) => items.filter((i) => i.section === sec).sort((a, b) => a.sort_order - b.sort_order);
+  const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
+  const incompleteDeps = (it: CustomPlanItem) => it.blocked_by.filter((id) => byId.get(id)?.status !== "completed");
+
+  // Soft enforcement: warn (but allow) when completing a task whose dependencies
+  // aren't all done yet.
+  function changeStatus(it: CustomPlanItem, next: string) {
+    if (next === "completed") {
+      const open = incompleteDeps(it).map((id) => byId.get(id)?.name).filter(Boolean);
+      if (open.length && !window.confirm(`This task is still blocked by:\n\n• ${open.join("\n• ")}\n\nComplete it anyway?`)) return;
+    }
+    patch(it.id, "status", next);
+  }
 
   const cell: React.CSSProperties = { padding: "3px 6px", fontSize: 13, verticalAlign: "top" };
   const input: React.CSSProperties = { width: "100%", border: "1px solid transparent", background: "transparent", fontSize: 13, padding: "2px 4px", borderRadius: 4, color: "#1e293b" };
@@ -251,6 +274,41 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, o
                         />
                         {it.notes && <span title={it.notes} style={{ color: "#94a3b8", flexShrink: 0, cursor: "help" }}>🗒</span>}
                       </div>
+                      {(it.blocked_by.length > 0 || canEdit) && (
+                        <div style={{ paddingLeft: it.depth * 22 + 18, marginTop: 3, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
+                          {it.blocked_by.length > 0 && (
+                            <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: incompleteDeps(it).length ? "#d13438" : "#16a34a" }}>
+                              {incompleteDeps(it).length ? "⛔ Blocked by" : "✓ Prereqs done"}
+                            </span>
+                          )}
+                          {it.blocked_by.map((dep) => {
+                            const d = byId.get(dep);
+                            if (!d) return null;
+                            const done = d.status === "completed";
+                            return (
+                              <span key={dep} style={{ fontSize: 10, display: "inline-flex", alignItems: "center", gap: 3, borderRadius: 4, padding: "1px 5px", background: done ? "#dcfce7" : "#fee2e2", color: done ? "#166534" : "#991b1b" }}>
+                                {done ? "✓" : "•"} {d.name}
+                                {canEdit && <button onClick={() => removeDep(it.id, dep)} title="Remove dependency" style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", fontSize: 10, padding: 0, lineHeight: 1 }}>✕</button>}
+                              </span>
+                            );
+                          })}
+                          {canEdit && (
+                            <select
+                              value=""
+                              onChange={(e) => { if (e.target.value) addDep(it.id, e.target.value); }}
+                              title="Add a task this one is blocked by"
+                              style={{ fontSize: 10, border: "1px dashed #cbd5e1", borderRadius: 4, background: "transparent", color: "#64748b", padding: "1px 3px", maxWidth: 170 }}
+                            >
+                              <option value="">+ blocked by…</option>
+                              {sections.map((sec) => {
+                                const cands = items.filter((cand) => cand.section === sec && cand.id !== it.id && !it.blocked_by.includes(cand.id));
+                                if (!cands.length) return null;
+                                return <optgroup key={sec} label={sec}>{cands.map((cand) => <option key={cand.id} value={cand.id}>{cand.name}</option>)}</optgroup>;
+                              })}
+                            </select>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td style={cell}>
                       {canEdit ? (
@@ -276,7 +334,7 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, o
                         : <span style={{ fontSize: 12, color: "#64748b" }}>{fmt(it.due_date)}</span>}
                     </td>
                     <td style={cell}>
-                      <select value={it.status} disabled={!canEdit} onChange={(e) => patch(it.id, "status", e.target.value)}
+                      <select value={it.status} disabled={!canEdit} onChange={(e) => changeStatus(it, e.target.value)}
                         style={{ ...input, fontWeight: 600, color: STATUS_COLOR[it.status] ?? "#1e293b" }}>
                         {STATUS.map((s) => <option key={s} value={s}>{STATUS_LABEL[s]}</option>)}
                       </select>
