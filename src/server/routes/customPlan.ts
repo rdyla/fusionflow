@@ -83,17 +83,43 @@ app.post("/:id/custom-plan", async (c) => {
   const projectId = c.req.param("id");
   if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
   const parsed = itemSchema.safeParse(await c.req.json());
-  if (!parsed.success || !parsed.data.section || !parsed.data.name) {
-    throw new HTTPException(400, { message: "section and name required" });
-  }
+  if (!parsed.success || !parsed.data.name) throw new HTTPException(400, { message: "name required" });
   const d = parsed.data;
   const id = crypto.randomUUID();
-  const maxSort = await db
-    .prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM custom_plan_items WHERE project_id = ?")
-    .bind(projectId).first<{ m: number }>();
+
+  // The outline renders purely by sort_order, so a new item must be inserted at
+  // the right position (not just appended to the end). A subtask slots directly
+  // beneath its parent; a new top-level task goes at the end of its section.
+  // Section + depth are derived from the parent so they can't drift.
+  let section: string, parentId: string | null, depth: number, sortOrder: number;
+  if (d.parent_id) {
+    const parent = await db
+      .prepare("SELECT section, depth, sort_order FROM custom_plan_items WHERE id = ? AND project_id = ? LIMIT 1")
+      .bind(d.parent_id, projectId).first<{ section: string; depth: number; sort_order: number }>();
+    if (!parent) throw new HTTPException(400, { message: "Parent item not found" });
+    section = parent.section; parentId = d.parent_id; depth = parent.depth + 1;
+    sortOrder = parent.sort_order + 1;
+    await db.prepare("UPDATE custom_plan_items SET sort_order = sort_order + 1 WHERE project_id = ? AND sort_order > ?")
+      .bind(projectId, parent.sort_order).run();
+  } else {
+    if (!d.section) throw new HTTPException(400, { message: "section required" });
+    section = d.section; parentId = null; depth = 0;
+    const last = await db
+      .prepare("SELECT MAX(sort_order) AS m FROM custom_plan_items WHERE project_id = ? AND section = ?")
+      .bind(projectId, section).first<{ m: number | null }>();
+    if (last?.m == null) {
+      const g = await db.prepare("SELECT COALESCE(MAX(sort_order), 0) AS m FROM custom_plan_items WHERE project_id = ?").bind(projectId).first<{ m: number }>();
+      sortOrder = (g?.m ?? 0) + 1;
+    } else {
+      sortOrder = last.m + 1;
+      await db.prepare("UPDATE custom_plan_items SET sort_order = sort_order + 1 WHERE project_id = ? AND sort_order > ?")
+        .bind(projectId, last.m).run();
+    }
+  }
+
   await db
     .prepare(`INSERT INTO custom_plan_items (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .bind(id, projectId, d.section, d.parent_id ?? null, d.depth ?? 0, (maxSort?.m ?? 0) + 1,
+    .bind(id, projectId, section, parentId, depth, sortOrder,
           d.name, d.module ?? null, d.start_date ?? null, d.due_date ?? null, d.status ?? "not_started", d.assignee ?? null, d.notes ?? null)
     .run();
   const created = await db.prepare(`SELECT ${COLS} FROM custom_plan_items WHERE id = ? LIMIT 1`).bind(id).first();
