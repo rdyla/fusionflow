@@ -217,6 +217,9 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
   const perSection = (sec: string) => items.filter((i) => i.section === sec).sort((a, b) => a.sort_order - b.sort_order);
   const byId = useMemo(() => new Map(items.map((i) => [i.id, i])), [items]);
   const incompleteDeps = (it: CustomPlanItem) => it.blocked_by.filter((id) => byId.get(id)?.status !== "completed");
+  // The dependency picker is opened per-row on demand (kept off the row until
+  // asked for) so every task isn't carrying a dropdown.
+  const [addDepFor, setAddDepFor] = useState<string | null>(null);
 
   // Soft enforcement: warn (but allow) when completing a task whose dependencies
   // aren't all done yet.
@@ -273,8 +276,17 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
                           title={it.notes ?? undefined}
                         />
                         {it.notes && <span title={it.notes} style={{ color: "#94a3b8", flexShrink: 0, cursor: "help" }}>🗒</span>}
+                        {canEdit && (
+                          <button
+                            onClick={() => setAddDepFor((cur) => (cur === it.id ? null : it.id))}
+                            title="Add a dependency (a task this one is blocked by)"
+                            style={{ background: "none", border: "none", cursor: "pointer", flexShrink: 0, fontSize: 10, fontWeight: 700, whiteSpace: "nowrap", padding: "0 2px", color: addDepFor === it.id ? "#0891b2" : "#cbd5e1" }}
+                          >
+                            + dep
+                          </button>
+                        )}
                       </div>
-                      {(it.blocked_by.length > 0 || canEdit) && (
+                      {(it.blocked_by.length > 0 || addDepFor === it.id) && (
                         <div style={{ paddingLeft: it.depth * 22 + 18, marginTop: 3, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4 }}>
                           {it.blocked_by.length > 0 && (
                             <span style={{ fontSize: 10, fontWeight: 700, flexShrink: 0, color: incompleteDeps(it).length ? "#d13438" : "#16a34a" }}>
@@ -292,14 +304,16 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
                               </span>
                             );
                           })}
-                          {canEdit && (
+                          {addDepFor === it.id && (
                             <select
                               value=""
-                              onChange={(e) => { if (e.target.value) addDep(it.id, e.target.value); }}
+                              autoFocus
+                              onChange={(e) => { if (e.target.value) { addDep(it.id, e.target.value); setAddDepFor(null); } }}
+                              onBlur={() => setAddDepFor(null)}
                               title="Add a task this one is blocked by"
-                              style={{ fontSize: 10, border: "1px dashed #cbd5e1", borderRadius: 4, background: "transparent", color: "#64748b", padding: "1px 3px", maxWidth: 170 }}
+                              style={{ fontSize: 10, border: "1px dashed #0891b2", borderRadius: 4, background: "transparent", color: "#64748b", padding: "1px 3px", maxWidth: 190 }}
                             >
-                              <option value="">+ blocked by…</option>
+                              <option value="">Select prerequisite task…</option>
                               {sections.map((sec) => {
                                 const cands = items.filter((cand) => cand.section === sec && cand.id !== it.id && !it.blocked_by.includes(cand.id));
                                 if (!cands.length) return null;
