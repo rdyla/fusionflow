@@ -233,6 +233,9 @@ export type SPLocation = {
   absoluteUrl: string;
 };
 
+/** Per-folder SharePoint audience delineation (see migration 0132). */
+export type SPAudience = "internal" | "internal_customer" | "internal_partner" | "internal_customer_partner";
+
 export type SPFile = {
   id: string;
   name: string;
@@ -250,9 +253,11 @@ export type SPFile = {
    *  it anyway so users have at least a "by what process" hint. */
   createdByName: string | null;
   modifiedByName: string | null;
-  /** Folders only: whether shared with client/partner roles. Set by the server
-   *  overlay; undefined for files. */
+  /** Folders only: whether shared with the customer (client role). Derived from
+   *  `audience`. Set by the server overlay; undefined for files. */
   visibleToClient?: boolean;
+  /** Folders only: the folder's audience delineation. Set by the server overlay. */
+  audience?: SPAudience;
   /** Files, external viewers only: this viewer has been granted edit access, so
    *  the UI can offer an "Edit online" link. Set by the server overlay. */
   canEditOnline?: boolean;
@@ -2259,10 +2264,11 @@ export const api = {
       { method: "POST", body: JSON.stringify({ name }) }
     ),
 
-  /** Toggle whether a folder is visible to client/partner roles. Editor-only.
-   *  Pass project_id OR solution_id depending on which side owns the folder. */
-  spSetFolderVisibility: (input: { sp_item_id: string; web_url: string; project_id?: string | null; solution_id?: string | null; visible: boolean }) =>
-    request<{ ok: boolean; visible: boolean }>(`/sharepoint/folder/visibility`, {
+  /** Set a folder's audience (internal / internal_customer / internal_partner /
+   *  internal_customer_partner). Editor-only. Pass project_id OR solution_id
+   *  depending on which side owns the folder. */
+  spSetFolderVisibility: (input: { sp_item_id: string; web_url: string; project_id?: string | null; solution_id?: string | null; audience: SPAudience }) =>
+    request<{ ok: boolean; audience: SPAudience }>(`/sharepoint/folder/visibility`, {
       method: "PATCH",
       body: JSON.stringify(input),
     }),

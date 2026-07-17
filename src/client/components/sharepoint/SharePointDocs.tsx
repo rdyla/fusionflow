@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type SPFile, type SPLocation, type SPFileEvent, type ProjectContact } from "../../lib/api";
+import { api, type SPFile, type SPAudience, type SPLocation, type SPFileEvent, type ProjectContact } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+
+/** Per-folder audience choices shown to internal editors (see migration 0132). */
+const AUDIENCE_OPTIONS: { value: SPAudience; label: string; color: string }[] = [
+  { value: "internal", label: "🔒 Internal only", color: "#64748b" },
+  { value: "internal_customer", label: "👁 Internal + Customer", color: "#107c10" },
+  { value: "internal_partner", label: "🤝 Internal + Partner", color: "#8250df" },
+  { value: "internal_customer_partner", label: "👁 Internal + Customer + Partner", color: "#107c10" },
+];
+/** Folding the customer into an audience — mirrors the server invariant that
+ *  enabling client editing implies the customer can see the folder. */
+function withCustomer(a: SPAudience | undefined): SPAudience {
+  return a === "internal_partner" || a === "internal_customer_partner" ? "internal_customer_partner" : "internal_customer";
+}
 
 /** Which record owns this SharePoint area — a project or a solution. Drives
  *  the retrofit endpoint and which id is stamped on folder-visibility rows.
@@ -282,9 +295,10 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
         enabled: next,
       });
       setPickerEditingOn(next);
-      // Reflect on the folder row (badge + toggle state; enabling also makes it visible).
+      // Reflect on the folder row (badge + audience; enabling folds the customer
+      // into the folder's audience, matching the server invariant).
       setFiles((prev) => prev.map((f) => (f.id === editPickerFolder.id
-        ? { ...f, clientEditing: next, visibleToClient: next ? true : f.visibleToClient }
+        ? { ...f, clientEditing: next, ...(next ? { audience: withCustomer(f.audience), visibleToClient: true } : {}) }
         : f)));
       if (next) {
         setGrantedEmails(new Set((res.granted ?? []).map((e) => e.toLowerCase())));
@@ -572,8 +586,10 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                   onDescriptionSaved={(updated) =>
                     setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
                   }
-                  onVisibilityChanged={(visible) =>
-                    setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, visibleToClient: visible } : f)))
+                  onVisibilityChanged={(audience) =>
+                    setFiles((prev) => prev.map((f) => (f.id === file.id
+                      ? { ...f, audience, visibleToClient: audience === "internal_customer" || audience === "internal_customer_partner" }
+                      : f)))
                   }
                 />
               ))}
@@ -684,7 +700,7 @@ function FileRow({
   onUploadNewVersion: (picked: File) => Promise<void>;
   onEnableOnlineEditing: (() => void) | null;
   onDescriptionSaved: (updated: SPFile) => void;
-  onVisibilityChanged: (visible: boolean) => void;
+  onVisibilityChanged: (audience: SPAudience) => void;
 }) {
   const { showToast } = useToast();
   const [editing, setEditing] = useState(false);
@@ -727,8 +743,9 @@ function FileRow({
     }
   }
 
-  async function toggleVisibility() {
-    const next = !file.visibleToClient;
+  async function changeAudience(next: SPAudience) {
+    const prev = file.audience ?? "internal";
+    if (next === prev) return;
     setTogglingVis(true);
     try {
       await api.spSetFolderVisibility({
@@ -736,12 +753,13 @@ function FileRow({
         web_url: file.webUrl,
         project_id: owner?.kind === "project" ? owner.id : null,
         solution_id: owner?.kind === "solution" ? owner.id : null,
-        visible: next,
+        audience: next,
       });
       onVisibilityChanged(next);
-      showToast(next ? "Folder shared with client/partner." : "Folder hidden from client/partner.", "success");
+      const label = AUDIENCE_OPTIONS.find((o) => o.value === next)?.label ?? next;
+      showToast(`Folder audience set to ${label}.`, "success");
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to update visibility", "error");
+      showToast(err instanceof Error ? err.message : "Failed to update audience", "error");
     } finally {
       setTogglingVis(false);
     }
@@ -896,21 +914,23 @@ function FileRow({
 
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
         {file.isFolder && canEdit && owner && (
-          <button
-            className="ms-btn-ghost"
-            onClick={toggleVisibility}
+          <select
+            value={file.audience ?? "internal"}
+            onChange={(e) => changeAudience(e.target.value as SPAudience)}
             disabled={togglingVis}
-            title={file.visibleToClient
-              ? "Visible to client/partner — click to make internal-only"
-              : "Internal-only — click to share with client/partner"}
+            title="Who can see this folder"
             style={{
               fontSize: 12,
-              color: file.visibleToClient ? "#107c10" : "#64748b",
-              borderColor: file.visibleToClient ? "rgba(16,124,16,0.35)" : "#cbd5e1",
+              padding: "4px 6px",
+              borderRadius: 4,
+              border: `1px solid ${(AUDIENCE_OPTIONS.find((o) => o.value === (file.audience ?? "internal"))?.value === "internal") ? "#cbd5e1" : "rgba(16,124,16,0.35)"}`,
+              color: AUDIENCE_OPTIONS.find((o) => o.value === (file.audience ?? "internal"))?.color ?? "#64748b",
+              background: "#fff",
+              cursor: togglingVis ? "wait" : "pointer",
             }}
           >
-            {togglingVis ? "…" : file.visibleToClient ? "👁 Visible to client" : "🔒 Internal only"}
-          </button>
+            {AUDIENCE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
         )}
         {file.isFolder && canEdit && !isExternal && onEnableOnlineEditing && (
           <button
