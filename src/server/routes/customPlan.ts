@@ -32,7 +32,25 @@ app.get("/:id/custom-plan", async (c) => {
     .prepare(`SELECT ${COLS} FROM custom_plan_items WHERE project_id = ? ORDER BY sort_order ASC`)
     .bind(projectId)
     .all();
-  return c.json({ items: rows.results ?? [] });
+  const items = (rows.results ?? []) as Record<string, unknown>[];
+
+  // Attach each item's dependencies (the tasks it is "blocked by") as an id list.
+  const deps = await db
+    .prepare(
+      `SELECT d.item_id, d.depends_on_item_id FROM custom_plan_deps d
+       JOIN custom_plan_items i ON i.id = d.item_id WHERE i.project_id = ?`
+    )
+    .bind(projectId)
+    .all<{ item_id: string; depends_on_item_id: string }>();
+  const byItem = new Map<string, string[]>();
+  for (const d of deps.results ?? []) {
+    const arr = byItem.get(d.item_id) ?? [];
+    arr.push(d.depends_on_item_id);
+    byItem.set(d.item_id, arr);
+  }
+  for (const it of items) it.blocked_by = byItem.get(it.id as string) ?? [];
+
+  return c.json({ items });
 });
 
 // POST /api/projects/:id/custom-plan/import — (re)seed from the bundled Asana
@@ -219,6 +237,65 @@ app.delete("/:id/custom-plan/:itemId", async (c) => {
     )
     .bind(itemId, projectId)
     .run();
+  return c.json({ ok: true });
+});
+
+// POST /api/projects/:id/custom-plan/:itemId/deps — add a dependency (itemId is
+// "blocked by" depends_on_item_id). Guards self-links, cross-project links, and
+// cycles so the "blocked" indicator can't loop forever.
+const depSchema = z.object({ depends_on_item_id: z.string().min(1) });
+app.post("/:id/custom-plan/:itemId/deps", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const itemId = c.req.param("itemId");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  const parsed = depSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: "depends_on_item_id required" });
+  const dependsOn = parsed.data.depends_on_item_id;
+  if (dependsOn === itemId) throw new HTTPException(400, { message: "A task can't depend on itself." });
+
+  // Both tasks must live in this project.
+  const both = await db
+    .prepare("SELECT COUNT(*) AS n FROM custom_plan_items WHERE project_id = ? AND id IN (?, ?)")
+    .bind(projectId, itemId, dependsOn).first<{ n: number }>();
+  if ((both?.n ?? 0) !== 2) throw new HTTPException(400, { message: "Task not found in this plan." });
+
+  // Cycle guard: reject if the target already (transitively) depends on this
+  // task — adding the edge would close a loop.
+  const cycle = await db
+    .prepare(
+      `WITH RECURSIVE chain(id) AS (
+         SELECT depends_on_item_id FROM custom_plan_deps WHERE item_id = ?
+         UNION
+         SELECT d.depends_on_item_id FROM custom_plan_deps d JOIN chain ch ON d.item_id = ch.id
+       )
+       SELECT 1 AS hit FROM chain WHERE id = ? LIMIT 1`
+    )
+    .bind(dependsOn, itemId).first<{ hit: number }>();
+  if (cycle) throw new HTTPException(400, { message: "That would create a circular dependency." });
+
+  await db
+    .prepare("INSERT OR IGNORE INTO custom_plan_deps (item_id, depends_on_item_id) VALUES (?, ?)")
+    .bind(itemId, dependsOn).run();
+  return c.json({ ok: true });
+});
+
+// DELETE /api/projects/:id/custom-plan/:itemId/deps/:depId — remove a dependency.
+app.delete("/:id/custom-plan/:itemId/deps/:depId", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  const itemId = c.req.param("itemId");
+  const depId = c.req.param("depId");
+  if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+  await db
+    .prepare(
+      `DELETE FROM custom_plan_deps
+       WHERE item_id = ? AND depends_on_item_id = ?
+         AND item_id IN (SELECT id FROM custom_plan_items WHERE project_id = ?)`
+    )
+    .bind(itemId, depId, projectId).run();
   return c.json({ ok: true });
 });
 

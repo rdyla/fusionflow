@@ -280,6 +280,8 @@ export type CustomPlanItem = {
   assignee_user_id: string | null;
   assignee_contact_id: string | null;
   notes: string | null;
+  /** Ids of the tasks this item is "blocked by" (Asana-style dependencies). */
+  blocked_by: string[];
 };
 
 export type CustomPlanItemInput = Partial<Omit<CustomPlanItem, "id" | "project_id" | "sort_order">>;
@@ -2208,6 +2210,10 @@ export const api = {
     request<CustomPlanItem>(`/projects/${projectId}/custom-plan/${itemId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteCustomPlanItem: (projectId: string, itemId: string) =>
     request<{ ok: boolean }>(`/projects/${projectId}/custom-plan/${itemId}`, { method: "DELETE" }),
+  addCustomPlanDep: (projectId: string, itemId: string, dependsOnItemId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/custom-plan/${itemId}/deps`, { method: "POST", body: JSON.stringify({ depends_on_item_id: dependsOnItemId }) }),
+  removeCustomPlanDep: (projectId: string, itemId: string, depId: string) =>
+    request<{ ok: boolean }>(`/projects/${projectId}/custom-plan/${itemId}/deps/${depId}`, { method: "DELETE" }),
 
   /** Append-only upload/replace history for a file (newest first). */
   spFileHistory: (spItemId: string) =>
