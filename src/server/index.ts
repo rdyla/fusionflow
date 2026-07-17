@@ -41,6 +41,7 @@ import stagingPromoteRoutes from "./routes/stagingPromote";
 import stakeholderRoutes from "./routes/stakeholder";
 import phasesRoutes from "./routes/phases";
 import meRoutes from "./routes/me";
+import customPlanRoutes from "./routes/customPlan"; // one-off MedVet custom plan (throwaway)
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -101,6 +102,7 @@ app.route("/api/settings", settingsRoutes);
 app.route("/api/admin/staging", stagingPromoteRoutes);
 app.route("/api/projects", stakeholderRoutes);
 app.route("/api/projects", phasesRoutes);
+app.route("/api/projects", customPlanRoutes);
 app.route("/api/me", meRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
