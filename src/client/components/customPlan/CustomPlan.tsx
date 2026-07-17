@@ -21,6 +21,8 @@ const MODULE_COLOR: Record<string, string> = {
   "UCaaS": "#0078d4", "CCaaS": "#8764b8", "Integrations": "#ca5010",
   "AI Expert Assist": "#059669", "Quality Management": "#e74856", "Workforce Management": "#b146c2",
 };
+// Selectable module tags (the set the Asana export used). "Not Applicable" == none.
+const MODULE_OPTIONS = ["UCaaS", "CCaaS", "Integrations", "AI Expert Assist", "Quality Management", "Workforce Management", "Not Applicable"];
 
 function fmt(d: string | null): string {
   if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
@@ -234,7 +236,17 @@ function TasksView({ items, sections, canEdit, patch, addItem, del, onReimport, 
                       </div>
                     </td>
                     <td style={cell}>
-                      {it.module && it.module !== "Not Applicable" ? (
+                      {canEdit ? (
+                        <select
+                          value={it.module ?? ""}
+                          style={{ ...input, fontSize: 11, fontWeight: 600, color: it.module && it.module !== "Not Applicable" ? (MODULE_COLOR[it.module] ?? "#64748b") : "#94a3b8" }}
+                          onChange={(e) => patch(it.id, "module", e.target.value || null)}
+                        >
+                          <option value="">—</option>
+                          {MODULE_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+                          {it.module && !MODULE_OPTIONS.includes(it.module) && <option value={it.module}>{it.module}</option>}
+                        </select>
+                      ) : it.module && it.module !== "Not Applicable" ? (
                         <span className="ms-badge" style={{ fontSize: 10, background: (MODULE_COLOR[it.module] ?? "#64748b") + "1a", color: MODULE_COLOR[it.module] ?? "#64748b", border: `1px solid ${(MODULE_COLOR[it.module] ?? "#64748b")}40` }}>{it.module}</span>
                       ) : <span style={{ color: "#cbd5e1", fontSize: 11 }}>—</span>}
                     </td>
