@@ -630,14 +630,25 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
       .prepare("UPDATE projects SET zoom_email_alias = ?, updated_at = ? WHERE id = ?")
       .bind(typedAlias, now, projectId)
       .run();
-    if (c.env.ZOOM_HELPDESK_WEBHOOK_URL) {
-      c.executionCtx.waitUntil(notifyZoomEmailAlias(c.env.ZOOM_HELPDESK_WEBHOOK_URL, c.env.APP_URL ?? "", {
+    if (c.env.ZOOM_HELPDESK_WEBHOOK_URL && c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN) {
+      const helpdeskUrl = c.env.ZOOM_HELPDESK_WEBHOOK_URL;
+      const helpdeskToken = c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN;
+      // PM(s) to add to the new distro: the lead PM + any additional PM staff.
+      const pmRows = await c.env.DB
+        .prepare(`SELECT DISTINCT u.name, u.email FROM users u
+                  WHERE u.id = (SELECT pm_user_id FROM projects WHERE id = ?)
+                     OR u.id IN (SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'pm')`)
+        .bind(projectId, projectId)
+        .all<{ name: string | null; email: string }>();
+      const pmNames = (pmRows.results ?? []).map((r) => r.name ?? r.email).filter(Boolean) as string[];
+      c.executionCtx.waitUntil(notifyZoomEmailAlias(helpdeskUrl, c.env.APP_URL ?? "", {
         projectId,
         projectName: project.name,
         customerName: project.customer_name,
         alias: typedAlias,
         actorName: auth.user.name ?? auth.user.email,
-        token: c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN,
+        pmNames,
+        token: helpdeskToken,
       }));
     }
   }

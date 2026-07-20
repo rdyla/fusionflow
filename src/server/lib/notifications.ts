@@ -13,7 +13,13 @@ const STATUS_LABELS: Record<string, string> = {
 /**
  * Prompt the helpdesk Zoom Team Chat channel to create a project's Zoom email
  * alias / distribution list, fired when a PM first sets (or changes) the alias
- * from the welcome/kickoff meeting-prep flow. Simple URL-gated JSON POST.
+ * from the welcome/kickoff meeting-prep flow.
+ *
+ * Uses Zoom's SIGNED incoming-webhook scheme (the
+ * integrations.zoom.us/.../incomingwebhook endpoint, verified 2026-07-20):
+ * POST `?format=message&timestamp={ms}` with a plain-text body and an
+ * Authorization header = base64( HMAC-SHA256( `message&{ts}&{body}`, token ) ).
+ * Same signing as notifyZoomNewCase; the config's verification token is the key.
  */
 export async function notifyZoomEmailAlias(
   webhookUrl: string,
@@ -24,36 +30,47 @@ export async function notifyZoomEmailAlias(
     customerName: string | null;
     alias: string;
     actorName: string;
-    /** Verification token from the Zoom webhook config, if issued. Sent in the
-     *  Authorization header; omit when the token is already baked into the URL. */
-    token?: string;
+    /** Project PM(s) to add to the new distribution list. */
+    pmNames: string[];
+    /** Verification token from the Zoom webhook config — the HMAC signing key. */
+    token: string;
   }
 ): Promise<void> {
-  const link = `${appUrl.replace(/\/$/, "")}/projects/${opts.projectId}`;
-  const who = opts.customerName ?? opts.projectName;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (opts.token) headers["Authorization"] = opts.token;
-  await fetch(webhookUrl, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      content: {
-        head: { text: "CloudConnect", sub_head: { text: "📧 Create Zoom email alias" } },
-        body: [
-          { type: "message", text: `Please create the email alias / distribution list ${opts.alias} for ${who} (set by ${opts.actorName} on the ${opts.projectName} project).` },
-          {
-            type: "attachments",
-            resource_url: link,
-            img_url: "",
-            information: {
-              title: { text: "View project →" },
-              description: { text: opts.projectName },
-            },
-          },
-        ],
-      },
-    }),
-  });
+  try {
+    const link = `${appUrl.replace(/\/$/, "")}/projects/${opts.projectId}`;
+    const who = opts.customerName ?? opts.projectName;
+    const pmLine = opts.pmNames.length
+      ? `\nAdd PM${opts.pmNames.length > 1 ? "s" : ""} to the distro: ${opts.pmNames.join(", ")}`
+      : "";
+    const message =
+      `📧 Create Zoom email alias — ${opts.alias}\n` +
+      `For ${who} (set by ${opts.actorName} on the ${opts.projectName} project).${pmLine}\n${link}`;
+    const timestamp = Date.now().toString();
+    const url = `${webhookUrl}?format=message&timestamp=${timestamp}`;
+
+    const encoder = new TextEncoder();
+    const key = await crypto.subtle.importKey(
+      "raw",
+      encoder.encode(opts.token),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"]
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(`message&${timestamp}&${message}`));
+    const bytes = new Uint8Array(sig);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const authorization = btoa(binary);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: authorization, "Content-Type": "application/json" },
+      body: message,
+    });
+    if (!res.ok) console.error("[zoom-helpdesk] failed:", res.status, await res.text());
+  } catch (err) {
+    console.error("[zoom-helpdesk] error:", err);
+  }
 }
 
 export async function notifyZoomChat(
