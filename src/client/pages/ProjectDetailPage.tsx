@@ -9,6 +9,7 @@ import {
   type Note,
   type Phase,
   type Stage,
+  type CustomPlanItem,
   type Project,
   type ProjectContact,
   type ProjectStaffMember,
@@ -260,6 +261,14 @@ export default function ProjectDetailPage() {
   const [phases, setPhases] = useState<Phase[]>([]);
   const [selectedPhaseId, setSelectedPhaseId] = useState<string>("");
   const [risks, setRisks] = useState<Risk[]>([]);
+  // MedVet throwaway: on custom-plan projects, blockers link to custom_plan_items
+  // (not standard tasks), so we load the plan for the blocker picker + labels.
+  const usesCustomPlan = project?.uses_custom_plan === 1;
+  const [customPlanItems, setCustomPlanItems] = useState<CustomPlanItem[]>([]);
+  useEffect(() => {
+    if (!project?.id || !usesCustomPlan) { setCustomPlanItems([]); return; }
+    api.customPlan(project.id).then(({ items }) => setCustomPlanItems(items)).catch(() => {});
+  }, [project?.id, usesCustomPlan]);
   const [contacts, setContacts] = useState<ProjectContact[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
   const [crmContacts, setCrmContacts] = useState<DynamicsContact[]>([]);
@@ -326,7 +335,7 @@ export default function ProjectDetailPage() {
 
   const [showRiskModal, setShowRiskModal] = useState(false);
   const [editingRisk, setEditingRisk] = useState<Risk | null>(null);
-  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "" });
+  const [riskForm, setRiskForm] = useState({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "", custom_plan_item_id: "" });
   const [savingRisk, setSavingRisk] = useState(false);
 
   const [currentUserRole, setCurrentUserRole] = useState<string>("");
@@ -1021,7 +1030,7 @@ export default function ProjectDetailPage() {
 
   function openNewRisk() {
     setEditingRisk(null);
-    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "" });
+    setRiskForm({ title: "", description: "", severity: "medium", status: "open", owner_user_id: "", owner_contact_id: "", task_id: "", custom_plan_item_id: "" });
     setShowRiskModal(true);
   }
   function openEditRisk(risk: Risk) {
@@ -1034,6 +1043,7 @@ export default function ProjectDetailPage() {
       owner_user_id: risk.owner_user_id ?? "",
       owner_contact_id: risk.owner_contact_id ?? "",
       task_id: risk.task_id ?? "",
+      custom_plan_item_id: risk.custom_plan_item_id ?? "",
     });
     setShowRiskModal(true);
   }
@@ -1049,7 +1059,10 @@ export default function ProjectDetailPage() {
         status: riskForm.status as "open" | "mitigated" | "closed",
         owner_user_id: riskForm.owner_user_id || null,
         owner_contact_id: riskForm.owner_contact_id || null,
-        task_id: riskForm.task_id || null,
+        // Custom-plan projects link the blocker to a custom_plan_item; standard
+        // projects use task_id. Only one is ever set.
+        task_id: usesCustomPlan ? null : (riskForm.task_id || null),
+        custom_plan_item_id: usesCustomPlan ? (riskForm.custom_plan_item_id || null) : null,
       };
       if (editingRisk) {
         const updated = await api.updateRisk(project.id, editingRisk.id, payload);
@@ -2292,6 +2305,10 @@ export default function ProjectDetailPage() {
                       {risk.description && <div style={{ color: "#64748b", fontSize: 13, marginBottom: 4 }}>{risk.description}</div>}
                       <div style={{ fontSize: 12, color: "#64748b" }}>
                         Severity: {risk.severity ?? "—"} · Owner: {ownerLabel}
+                        {risk.custom_plan_item_id && (() => {
+                          const it = customPlanItems.find((i) => i.id === risk.custom_plan_item_id);
+                          return it ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{it.name}</span></> : null;
+                        })()}
                         {risk.task_id && (() => {
                           const t = tasks.find((t) => t.id === risk.task_id);
                           return t ? <> · Blocking: <span style={{ fontWeight: 600, color: "#d13438" }}>{t.title}</span></> : null;
@@ -3278,12 +3295,21 @@ export default function ProjectDetailPage() {
                 {!clientEditMode && (
                   <label className="ms-label">
                     <span>Blocking Task</span>
-                    <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
-                      <option value="">— Not task-specific —</option>
-                      {tasks.filter((t) => t.status !== "completed").map((t) => (
-                        <option key={t.id} value={t.id}>{t.title}</option>
-                      ))}
-                    </select>
+                    {usesCustomPlan ? (
+                      <select className="ms-input" value={riskForm.custom_plan_item_id} onChange={(e) => setRiskForm({ ...riskForm, custom_plan_item_id: e.target.value })}>
+                        <option value="">— Not task-specific —</option>
+                        {customPlanItems.filter((it) => it.status !== "completed").map((it) => (
+                          <option key={it.id} value={it.id}>{it.section} › {it.name}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <select className="ms-input" value={riskForm.task_id} onChange={(e) => setRiskForm({ ...riskForm, task_id: e.target.value })}>
+                        <option value="">— Not task-specific —</option>
+                        {tasks.filter((t) => t.status !== "completed").map((t) => (
+                          <option key={t.id} value={t.id}>{t.title}</option>
+                        ))}
+                      </select>
+                    )}
                   </label>
                 )}
                 <div style={{ display: "grid", gridTemplateColumns: clientEditMode ? "1fr" : "1fr 1fr 1fr", gap: 12 }}>

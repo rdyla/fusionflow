@@ -10,7 +10,7 @@ import { syncProjectStatus } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-const RISK_COLUMNS = "id, project_id, title, description, severity, status, owner_user_id, owner_contact_id, task_id";
+const RISK_COLUMNS = "id, project_id, title, description, severity, status, owner_user_id, owner_contact_id, task_id, custom_plan_item_id";
 
 app.get("/:id/risks", async (c) => {
   const auth = c.get("auth");
@@ -41,6 +41,7 @@ const riskSchema = z.object({
   owner_user_id: z.string().nullable().optional(),
   owner_contact_id: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
+  custom_plan_item_id: z.string().nullable().optional(),
 });
 
 app.post("/:id/risks", async (c) => {
@@ -54,15 +55,15 @@ app.post("/:id/risks", async (c) => {
   const parsed = riskSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { title, description, severity, status, owner_user_id, owner_contact_id, task_id } = parsed.data;
+  const { title, description, severity, status, owner_user_id, owner_contact_id, task_id, custom_plan_item_id } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
     .prepare(
-      `INSERT INTO risks (id, project_id, title, description, severity, status, owner_user_id, owner_contact_id, task_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO risks (id, project_id, title, description, severity, status, owner_user_id, owner_contact_id, task_id, custom_plan_item_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null, owner_contact_id ?? null, task_id ?? null)
+    .bind(id, projectId, title, description ?? null, severity ?? "medium", status ?? "open", owner_user_id ?? null, owner_contact_id ?? null, task_id ?? null, custom_plan_item_id ?? null)
     .run();
 
   const created = await db.prepare(`SELECT ${RISK_COLUMNS} FROM risks WHERE id = ? LIMIT 1`).bind(id).first<{ id: string; title: string; description: string | null; severity: string | null; owner_user_id: string | null; owner_contact_id: string | null; task_id: string | null }>();
@@ -130,6 +131,7 @@ const updateRiskSchema = z.object({
   owner_user_id: z.string().nullable().optional(),
   owner_contact_id: z.string().nullable().optional(),
   task_id: z.string().nullable().optional(),
+  custom_plan_item_id: z.string().nullable().optional(),
 });
 
 // Fields a client (customer portal user) is allowed to change on a blocker
