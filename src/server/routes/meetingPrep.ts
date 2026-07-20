@@ -637,6 +637,7 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
         customerName: project.customer_name,
         alias: typedAlias,
         actorName: auth.user.name ?? auth.user.email,
+        token: c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN,
       }));
     }
   }

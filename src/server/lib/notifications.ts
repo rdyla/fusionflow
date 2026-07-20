@@ -24,13 +24,18 @@ export async function notifyZoomEmailAlias(
     customerName: string | null;
     alias: string;
     actorName: string;
+    /** Verification token from the Zoom webhook config, if issued. Sent in the
+     *  Authorization header; omit when the token is already baked into the URL. */
+    token?: string;
   }
 ): Promise<void> {
   const link = `${appUrl.replace(/\/$/, "")}/projects/${opts.projectId}`;
   const who = opts.customerName ?? opts.projectName;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts.token) headers["Authorization"] = opts.token;
   await fetch(webhookUrl, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       content: {
         head: { text: "CloudConnect", sub_head: { text: "📧 Create Zoom email alias" } },
