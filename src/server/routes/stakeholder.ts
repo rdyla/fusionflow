@@ -86,6 +86,12 @@ app.get("/:id/stakeholder-summary", async (c) => {
 
   const today = new Date();
 
+  // MedVet throwaway: a project on the custom (Asana) plan keeps its tasks in
+  // custom_plan_items, not the standard `tasks` table (the standard rows are an
+  // unused template), so the dashboard task rollup must read from there.
+  const cpRow = await db.prepare("SELECT uses_custom_plan FROM projects WHERE id = ?").bind(projectId).first<{ uses_custom_plan: number }>();
+  const usesCustomPlan = cpRow?.uses_custom_plan === 1;
+
   // ── Parallel: everything scoped to this one project ────────────────────────
   const [
     phasesRows,
@@ -312,8 +318,22 @@ app.get("/:id/stakeholder-summary", async (c) => {
   }, today);
 
   // ── Stat tiles ─────────────────────────────────────────────────────────────
-  const totalTasks = taskStats?.total ?? 0;
-  const doneTasks = taskStats?.done ?? 0;
+  // Custom-plan projects roll up from custom_plan_items (same status vocabulary).
+  const effectiveTaskStats = usesCustomPlan
+    ? await db
+        .prepare(
+          `SELECT
+             COUNT(*) AS total,
+             SUM(CASE WHEN status = 'completed'   THEN 1 ELSE 0 END) AS done,
+             SUM(CASE WHEN status = 'in_progress' THEN 1 ELSE 0 END) AS in_progress,
+             SUM(CASE WHEN status IS NULL OR status NOT IN ('completed','in_progress') THEN 1 ELSE 0 END) AS not_started
+           FROM custom_plan_items WHERE project_id = ?`
+        )
+        .bind(projectId)
+        .first<{ total: number; done: number; in_progress: number; not_started: number }>()
+    : taskStats;
+  const totalTasks = effectiveTaskStats?.total ?? 0;
+  const doneTasks = effectiveTaskStats?.done ?? 0;
   const overallPct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
   const blockerRows = blockers.results ?? [];
   const criticalCount = blockerRows.filter((b) => b.severity === "critical").length;
@@ -399,8 +419,8 @@ app.get("/:id/stakeholder-summary", async (c) => {
       tasks: {
         total: totalTasks,
         done: doneTasks,
-        in_progress: taskStats?.in_progress ?? 0,
-        not_started: taskStats?.not_started ?? 0,
+        in_progress: effectiveTaskStats?.in_progress ?? 0,
+        not_started: effectiveTaskStats?.not_started ?? 0,
       },
       blockers: {
         total: blockerRows.length,
@@ -454,7 +474,9 @@ app.get("/:id/stakeholder-summary", async (c) => {
       timeline_url: `/projects/${project.id}#timeline`,
       next_call_join_url: nextCall?.join_url ?? null,
     },
-    stage_progress: buildStageProgress(stageRows.results ?? [], phases),
+    // Custom-plan projects don't use the standard stages/tasks, so the standard
+    // stage matrix would contradict the (custom-plan) task rollup — hide it.
+    stage_progress: usesCustomPlan ? [] : buildStageProgress(stageRows.results ?? [], phases),
   });
 });
 
