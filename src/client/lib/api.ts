@@ -958,6 +958,9 @@ export type Risk = {
   owner_user_id: string | null;
   owner_contact_id: string | null;
   task_id: string | null;
+  /** MedVet throwaway: link to a custom_plan_items task (used instead of
+   *  task_id on custom-plan projects). */
+  custom_plan_item_id: string | null;
 };
 
 export type Document = {
@@ -1904,6 +1907,7 @@ export const api = {
       owner_user_id?: string | null;
       owner_contact_id?: string | null;
       task_id?: string | null;
+      custom_plan_item_id?: string | null;
     }
   ) =>
     request<Risk>(`/projects/${projectId}/risks`, {
@@ -1922,6 +1926,7 @@ export const api = {
       owner_user_id?: string | null;
       owner_contact_id?: string | null;
       task_id?: string | null;
+      custom_plan_item_id?: string | null;
     }
   ) =>
     request<Risk>(`/projects/${projectId}/risks/${riskId}`, {
