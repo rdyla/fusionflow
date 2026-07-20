@@ -84,9 +84,9 @@ export type Bindings = {
   // Zoom Team Chat incoming webhook for the helpdesk channel — prompts the team
   // to create a project's Zoom email alias / distribution list (URL-gated).
   ZOOM_HELPDESK_WEBHOOK_URL?: string;
-  // Optional verification token for the helpdesk incoming webhook. If the Zoom
-  // webhook config issued a token, it's sent in the Authorization header; omit
-  // it when the token is already embedded in the URL.
+  // Verification token for the helpdesk incoming webhook — the HMAC-SHA256
+  // signing key for Zoom's signed incoming-webhook scheme (see
+  // notifyZoomEmailAlias). Required alongside the URL for the prompt to fire.
   ZOOM_HELPDESK_WEBHOOK_TOKEN?: string;
   // Zoom Custom App webhook + shared secret for support-case notifications (HMAC-signed)
   ZOOM_WEBHOOK_URL?: string;
