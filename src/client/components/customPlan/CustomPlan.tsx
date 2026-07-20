@@ -123,6 +123,21 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
     catch (err) { showToast(err instanceof Error ? err.message : "Delete failed", "error"); }
   }
   async function runImport() {
+    // Re-import REPLACES the plan (delete + reinsert with fresh ids), so it
+    // discards everything done since the last import. Guard the destructive case
+    // with an explicit confirm so nothing is lost silently — notably blocker
+    // links, which otherwise vanish (the FK is ON DELETE SET NULL) while the
+    // blockers themselves linger orphaned on the Blockers tab. First-time import
+    // (empty state) has nothing to lose, so it skips the prompt.
+    if (items.length > 0 && !window.confirm(
+      "Re-import REPLACES the entire plan with the Asana baseline.\n\n" +
+      "This permanently discards everything changed since the last import:\n" +
+      "• edits, added tasks, dates, statuses\n" +
+      "• assignees\n" +
+      "• task dependencies (blocked-by)\n" +
+      "• blocker links — the blockers stay on the Blockers tab but lose their task association\n\n" +
+      "Continue?"
+    )) return;
     setImporting(true);
     try { const { imported } = await api.importCustomPlan(projectId); showToast(`Imported ${imported} plan items.`, "success"); load(); }
     catch (err) { showToast(err instanceof Error ? err.message : "Import failed", "error"); }
