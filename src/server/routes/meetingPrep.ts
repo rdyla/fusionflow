@@ -20,6 +20,7 @@ import { canEditProject, canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
+import { notifyZoomEmailAlias } from "../lib/notifications";
 import { parseSolutionTypes, joinSolutionTypeLabels, type SolutionType } from "../../shared/solutionTypes";
 import {
   applyMeetingPrepSectionDefaults,
@@ -55,13 +56,14 @@ type ProjectRow = {
   kickoff_date: string | null;
   target_go_live_date: string | null;
   kickoff_meeting_url: string | null;
+  zoom_email_alias: string | null;
   pm_user_id: string | null;
 };
 
 async function loadProject(db: D1Database, projectId: string): Promise<ProjectRow | null> {
   const row = await db
     .prepare(`SELECT id, name, customer_name, customer_id, solution_types, vendor, kickoff_date,
-                     target_go_live_date, kickoff_meeting_url, pm_user_id
+                     target_go_live_date, kickoff_meeting_url, zoom_email_alias, pm_user_id
               FROM projects WHERE id = ? LIMIT 1`)
     .bind(projectId)
     .first<Omit<ProjectRow, "solution_types"> & { solution_types: string }>();
@@ -263,6 +265,9 @@ app.get("/:projectId/meeting-prep/:meetingType/options", async (c) => {
       kickoffDate: project.kickoff_date,
       targetGoLiveDate: project.target_go_live_date,
       kickoffMeetingUrl: project.kickoff_meeting_url,
+      // Stored alias the PM previously set (seeds the modal); the suggested one
+      // is the auto-derived long form used only when nothing's stored yet.
+      distributionListEmail: project.zoom_email_alias,
       suggestedDistributionListEmail: computeDistributionListEmail(project.vendor, project.customer_name),
     },
     recipients: {
@@ -369,6 +374,7 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
   const portalUrl = `${c.env.APP_URL ?? ""}/projects/${project.id}`;
 
   const distributionListEmail = draft.distributionListEmail?.trim()
+    || project.zoom_email_alias
     || computeDistributionListEmail(project.vendor, project.customer_name);
 
   const catalog = getCatalogFor(meetingType);
@@ -613,6 +619,27 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
       .prepare("UPDATE projects SET kickoff_meeting_url = ?, updated_at = ? WHERE id = ?")
       .bind(parsed.data.kickoffMeetingUrl, now, projectId)
       .run();
+  }
+
+  // Persist the PM's chosen Zoom email alias (only when they actually typed one
+  // — the field is the welcome/kickoff DL). When it's first set or changed,
+  // prompt the helpdesk team to create the mailbox. Reused by future sends.
+  const typedAlias = parsed.data.distributionListEmail?.trim() || null;
+  if (meetingType === "kickoff" && typedAlias && typedAlias !== project.zoom_email_alias) {
+    await c.env.DB
+      .prepare("UPDATE projects SET zoom_email_alias = ?, updated_at = ? WHERE id = ?")
+      .bind(typedAlias, now, projectId)
+      .run();
+    if (c.env.ZOOM_HELPDESK_WEBHOOK_URL) {
+      c.executionCtx.waitUntil(notifyZoomEmailAlias(c.env.ZOOM_HELPDESK_WEBHOOK_URL, c.env.APP_URL ?? "", {
+        projectId,
+        projectName: project.name,
+        customerName: project.customer_name,
+        alias: typedAlias,
+        actorName: auth.user.name ?? auth.user.email,
+        token: c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN,
+      }));
+    }
   }
 
   return c.json({ ok: true, sentTo: recipientEmails, sentAt: now, sendId });

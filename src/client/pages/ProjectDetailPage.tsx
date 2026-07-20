@@ -1159,6 +1159,12 @@ export default function ProjectDetailPage() {
             ) : (
               <span style={{ fontSize: 13, color: "#94a3b8" }}>No CRM customer linked</span>
             )}
+            {project.zoom_email_alias && (
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }} title="Zoom email alias / distribution list set from the welcome email">
+                <span style={{ fontWeight: 600, marginRight: 4 }}>📧 Alias:</span>
+                <a href={`mailto:${project.zoom_email_alias}`} style={{ color: "#0b9aad", textDecoration: "none" }}>{project.zoom_email_alias}</a>
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             {project.created_at && (

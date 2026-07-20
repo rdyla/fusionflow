@@ -69,7 +69,7 @@ export default function MeetingPrepModal({ projectId, meetingType, options, onCl
   const [phaseId, setPhaseId] = useState<string>(requiresPhase ? options.phases[0]!.id : "");
   const [kickoffMeetingUrl, setKickoffMeetingUrl] = useState(options.project.kickoffMeetingUrl ?? "");
   const [kickoffWhen, setKickoffWhen] = useState(options.project.kickoffDate ?? "");
-  const [distributionListEmail, setDistributionListEmail] = useState(options.project.suggestedDistributionListEmail ?? "");
+  const [distributionListEmail, setDistributionListEmail] = useState(options.project.distributionListEmail ?? options.project.suggestedDistributionListEmail ?? "");
 
   // Sections applicable to this project's solution types — catalog-driven.
   const projectSolutionTypes = useMemo(

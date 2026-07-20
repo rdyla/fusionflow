@@ -10,6 +10,52 @@ const STATUS_LABELS: Record<string, string> = {
   lost: "Lost",
 };
 
+/**
+ * Prompt the helpdesk Zoom Team Chat channel to create a project's Zoom email
+ * alias / distribution list, fired when a PM first sets (or changes) the alias
+ * from the welcome/kickoff meeting-prep flow. Simple URL-gated JSON POST.
+ */
+export async function notifyZoomEmailAlias(
+  webhookUrl: string,
+  appUrl: string,
+  opts: {
+    projectId: string;
+    projectName: string;
+    customerName: string | null;
+    alias: string;
+    actorName: string;
+    /** Verification token from the Zoom webhook config, if issued. Sent in the
+     *  Authorization header; omit when the token is already baked into the URL. */
+    token?: string;
+  }
+): Promise<void> {
+  const link = `${appUrl.replace(/\/$/, "")}/projects/${opts.projectId}`;
+  const who = opts.customerName ?? opts.projectName;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts.token) headers["Authorization"] = opts.token;
+  await fetch(webhookUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      content: {
+        head: { text: "CloudConnect", sub_head: { text: "📧 Create Zoom email alias" } },
+        body: [
+          { type: "message", text: `Please create the email alias / distribution list ${opts.alias} for ${who} (set by ${opts.actorName} on the ${opts.projectName} project).` },
+          {
+            type: "attachments",
+            resource_url: link,
+            img_url: "",
+            information: {
+              title: { text: "View project →" },
+              description: { text: opts.projectName },
+            },
+          },
+        ],
+      },
+    }),
+  });
+}
+
 export async function notifyZoomChat(
   webhookUrl: string,
   appUrl: string,
