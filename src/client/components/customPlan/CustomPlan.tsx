@@ -11,7 +11,7 @@
  * the customPlan route + medvetPlan.json + migration 0129's table/flag.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type CustomPlanItem } from "../../lib/api";
+import { api, type CustomPlanItem, type Risk } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 
 const STATUS = ["not_started", "in_progress", "completed", "blocked"] as const;
@@ -38,6 +38,9 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
   // and customer/partner contacts (contact ids). Carry ids, not just names.
   const [staff, setStaff] = useState<{ id: string; name: string }[]>([]);
   const [contacts, setContacts] = useState<{ id: string; name: string }[]>([]);
+  // Blockers (risks) that link to a plan item — drives the ⛔ glyph on the Tasks
+  // outline. Managed from the project's Blockers tab; read-only indicator here.
+  const [blockers, setBlockers] = useState<Risk[]>([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -45,6 +48,7 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
       .then(({ items }) => setItems(items))
       .catch(() => {})
       .finally(() => setLoading(false));
+    api.risks(projectId).then(setBlockers).catch(() => {});
   }, [projectId]);
   useEffect(load, [load]);
 
@@ -72,6 +76,18 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
     for (const it of items) if (!seen.has(it.section)) { seen.add(it.section); out.push(it.section); }
     return out;
   }, [items]);
+
+  // Active (non-closed) blockers keyed by the plan item they block.
+  const blockersByItem = useMemo(() => {
+    const m = new Map<string, Risk[]>();
+    for (const b of blockers) {
+      if (!b.custom_plan_item_id || b.status === "closed") continue;
+      const arr = m.get(b.custom_plan_item_id) ?? [];
+      arr.push(b);
+      m.set(b.custom_plan_item_id, arr);
+    }
+    return m;
+  }, [blockers]);
 
   async function patch(id: string, field: keyof CustomPlanItem, value: unknown) {
     setItems((prev) => prev.map((it) => (it.id === id ? { ...it, [field]: value } as CustomPlanItem : it)));
@@ -127,7 +143,7 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
 
   return view === "timeline"
     ? <TimelineView items={items} sections={sections} />
-    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} />;
+    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} blockersByItem={blockersByItem} />;
 }
 
 // ── Timeline: sections as dated bands over the project range; each expands to
@@ -200,7 +216,7 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
 }
 
 // ── Tasks: nested outline grouped by section, inline-editable ──────────────────
-function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, onReimport, importing, staff, contacts }: {
+function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, onReimport, importing, staff, contacts, blockersByItem }: {
   items: CustomPlanItem[]; sections: string[]; canEdit: boolean;
   patch: (id: string, f: keyof CustomPlanItem, v: unknown) => void;
   patchMany: (id: string, partial: Partial<CustomPlanItem>) => void;
@@ -210,6 +226,7 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
   removeDep: (itemId: string, depId: string) => void;
   onReimport?: () => void; importing: boolean;
   staff: { id: string; name: string }[]; contacts: { id: string; name: string }[];
+  blockersByItem: Map<string, Risk[]>;
 }) {
   // Order within a section: preserve sort_order, but render as a tree (parents
   // before their children). The seed is already in document order, so sort_order
@@ -276,6 +293,12 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
                           title={it.notes ?? undefined}
                         />
                         {it.notes && <span title={it.notes} style={{ color: "#94a3b8", flexShrink: 0, cursor: "help" }}>🗒</span>}
+                        {(() => {
+                          const bl = blockersByItem.get(it.id);
+                          if (!bl?.length) return null;
+                          const tip = "Blocked by:\n" + bl.map((b) => `⛔ ${b.title}${b.severity ? ` (${b.severity})` : ""}`).join("\n") + "\n\n(manage on the Blockers tab)";
+                          return <span title={tip} style={{ color: "#d13438", flexShrink: 0, cursor: "help", fontSize: 12 }}>⛔</span>;
+                        })()}
                         {canEdit && (
                           <button
                             onClick={() => setAddDepFor((cur) => (cur === it.id ? null : it.id))}
