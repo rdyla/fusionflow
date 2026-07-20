@@ -445,6 +445,9 @@ export type Project = {
   /** One-off: when 1, this project's Timeline/Tasks tabs render the custom
    *  (Asana-mirroring) plan instead of the standard modules. */
   uses_custom_plan?: number;
+  /** Zoom email alias / distribution list (e.g. zm-sanford@packetfusion.com),
+   *  set by the PM in the welcome/kickoff flow. Null until first set. */
+  zoom_email_alias: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -3045,6 +3048,9 @@ export type MeetingPrepOptions = {
     kickoffDate: string | null;
     targetGoLiveDate: string | null;
     kickoffMeetingUrl: string | null;
+    /** Stored alias the PM set previously (seeds the field); null until set. */
+    distributionListEmail: string | null;
+    /** Auto-derived long-form fallback used only when nothing's stored. */
     suggestedDistributionListEmail: string | null;
   };
   recipients: {
