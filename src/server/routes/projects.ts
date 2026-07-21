@@ -316,6 +316,11 @@ const updateProjectSchema = z.object({
   /** One-off: opt this project into the custom (Asana-mirroring) Timeline+Tasks
    *  plan. Throwaway — see migration 0129 / customPlan route. */
   uses_custom_plan: z.number().int().min(0).max(1).optional(),
+  /** Zoom email alias / distribution list (e.g. zm-sanford@packetfusion.com).
+   *  Usually captured from the welcome email; editable here for documentation
+   *  without re-sending. Setting it here does NOT fire the helpdesk chat prompt
+   *  (that stays tied to the welcome-email flow). */
+  zoom_email_alias: z.string().max(255).nullable().optional(),
   /** When a PM removes one or more solution_types from a combo project,
    *  setting this list also cleans up tasks tagged with those types via
    *  buildTaggedTitle. Tasks whose only types are in the cleanup list get

@@ -1890,6 +1890,8 @@ export const api = {
       status_meeting_join_url?: string | null;
       /** One-off: opt into the custom (Asana-mirroring) Timeline+Tasks plan. */
       uses_custom_plan?: number;
+      /** Zoom email alias / distribution list — editable for documentation. */
+      zoom_email_alias?: string | null;
       /** Bundles a solution-type-removal task cleanup with the project
        *  update — see PATCH /:id handler in routes/projects.ts. */
       cleanup_solution_types?: SolutionType[];
