@@ -798,16 +798,18 @@ export async function revokeCompletedProjectGrants(env: GraphEnv, db: D1Database
 
 export async function deleteSharePointFile(
   env: GraphEnv,
-  fileWebUrl: string
+  folderUrl: string,
+  itemId: string
 ): Promise<void> {
   const token = await getGraphToken(env);
-  const { driveId, segments } = await resolveSharePointPath(token, fileWebUrl);
-
-  const encodedPath = graphPath(segments);
-  const item = await graphGet<{ id: string }>(token, `/drives/${driveId}/root:/${encodedPath}`);
+  // Resolve the drive from the FOLDER url — a real library path. We can't parse
+  // the file's own webUrl, because for Office docs Graph returns the viewer form
+  // (…/_layouts/15/Doc.aspx?sourcedoc=…) whose first path segment ("_layouts")
+  // isn't a document library. Delete directly by driveItem id (from the listing).
+  const { driveId } = await resolveSharePointPath(token, folderUrl);
 
   const res = await fetch(
-    `${GRAPH_API_BASE}/drives/${driveId}/items/${item.id}`,
+    `${GRAPH_API_BASE}/drives/${driveId}/items/${itemId}`,
     { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }
   );
 
