@@ -11,6 +11,7 @@ import {
   type User,
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import PersonAvatar from "../components/ui/PersonAvatar";
 import { resolveVendorBadge } from "../lib/vendorBadge";
 import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
@@ -443,10 +444,9 @@ export default function CustomerDetailPage() {
                 const abbr = name ? name.trim().split(/\s+/).map((w: string) => w[0]).slice(0, 2).join("").toUpperCase() : "?";
                 return (
                   <div key={label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                    {photo
-                      ? <img src={photo} alt={name ?? ""} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                      : <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{name ? abbr : "—"}</div>
-                    }
+                    <PersonAvatar src={photo} alt={name ?? ""} size={40} fallback={
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "#63c1ea" }}>{name ? abbr : "—"}</div>
+                    } />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{label}</div>
                       {name ? (

@@ -23,6 +23,7 @@ import {
   type ZoomRecordingFile,
 } from "../lib/api";
 import ProjectTimeline from "../components/timeline/ProjectTimeline";
+import PersonAvatar from "../components/ui/PersonAvatar";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
@@ -1352,9 +1353,9 @@ export default function ProjectDetailPage() {
           const abbr = (p.name || p.email || "?").trim().split(/\s+/).map((w) => w[0]).slice(0, 2).join("").toUpperCase();
           return (
             <div key={p.key} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 12px", background: "#f8fafc", borderRadius: 6, border: "1px solid #f1f5f9" }}>
-              {p.photo
-                ? <img src={p.photo} alt={p.name} style={{ width: 40, height: 40, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                : <span style={{ width: 40, height: 40, borderRadius: "50%", background: accent.pill, color: accent.fg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{abbr}</span>}
+              <PersonAvatar src={p.photo} alt={p.name} size={40} fallback={
+                <span style={{ width: 40, height: 40, borderRadius: "50%", background: accent.pill, color: accent.fg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{abbr}</span>
+              } />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{p.name}</span>
