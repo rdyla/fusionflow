@@ -2212,8 +2212,8 @@ export const api = {
     opts?.onProgress?.(100);
     return res.json();
   },
-  spDelete: (webUrl: string) =>
-    request<{ ok: boolean }>(`/sharepoint/file?webUrl=${encodeURIComponent(webUrl)}`, { method: "DELETE" }),
+  spDelete: (folderUrl: string, spItemId: string) =>
+    request<{ ok: boolean }>(`/sharepoint/file?url=${encodeURIComponent(folderUrl)}&spItemId=${encodeURIComponent(spItemId)}`, { method: "DELETE" }),
   // ── One-off MedVet custom plan (throwaway) ────────────────────────────────
   customPlan: (projectId: string) =>
     request<{ items: CustomPlanItem[] }>(`/projects/${projectId}/custom-plan`),
