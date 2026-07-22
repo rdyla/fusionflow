@@ -469,19 +469,22 @@ app.get("/file/history", async (c) => {
   }
 });
 
-// DELETE /api/sharepoint/file?webUrl=xxx
-// Deletes a file by its SharePoint web URL. Also cleans up its sharepoint_uploads
-// attribution row (by web_url) — best-effort, leftover rows are harmless.
+// DELETE /api/sharepoint/file?url=<folderUrl>&spItemId=<driveItemId>
+// Deletes a file by its Graph driveItem id (resolving the drive from the folder
+// URL). Keyed on the item id — not the file's webUrl — because Office docs'
+// webUrl is the viewer form (…/_layouts/15/Doc.aspx?…), which can't be resolved
+// to a library path. Also cleans up attribution rows (by sp_item_id).
 app.delete("/file", async (c) => {
-  const webUrl = c.req.query("webUrl");
-  if (!webUrl) return c.json({ error: "webUrl required" }, 400);
+  const folderUrl = c.req.query("url");
+  const spItemId = c.req.query("spItemId");
+  if (!folderUrl || !spItemId) return c.json({ error: "url and spItemId required" }, 400);
 
   try {
-    await deleteSharePointFile(c.env, webUrl);
+    await deleteSharePointFile(c.env, folderUrl, spItemId);
     try {
       await c.env.DB.batch([
-        c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE web_url = ?").bind(webUrl),
-        c.env.DB.prepare("DELETE FROM sharepoint_file_events WHERE web_url = ?").bind(webUrl),
+        c.env.DB.prepare("DELETE FROM sharepoint_uploads WHERE sp_item_id = ?").bind(spItemId),
+        c.env.DB.prepare("DELETE FROM sharepoint_file_events WHERE sp_item_id = ?").bind(spItemId),
       ]);
     } catch (cleanupErr) {
       console.warn("[sp.delete] attribution cleanup failed:", cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);

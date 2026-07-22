@@ -370,9 +370,13 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
 
   async function handleDelete(file: SPFile) {
     if (!window.confirm(`Delete "${file.name}" from SharePoint?`)) return;
+    const currentUrl = folderStack.length > 0 ? folderStack[folderStack.length - 1].url : null;
+    if (!currentUrl) { showToast("Couldn't resolve the folder to delete from.", "error"); return; }
     setDeletingId(file.id);
     try {
-      await api.spDelete(file.webUrl);
+      // Delete by driveItem id (resolving the drive from the folder URL) — the
+      // file's own webUrl can be the Office viewer form, which isn't resolvable.
+      await api.spDelete(currentUrl, file.id);
       setFiles((prev) => prev.filter((f) => f.id !== file.id));
       showToast(`"${file.name}" deleted.`, "success");
     } catch (err) {
