@@ -11,6 +11,7 @@ import {
   inviteGuestAndGrantWrite,
   grantFolderEdit,
   revokeFolderEdit,
+  getSharePointItemId,
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
@@ -172,12 +173,32 @@ app.get("/files", async (c) => {
     if (isExternalRole(auth?.role)) {
       // Does the folder being listed itself include this viewer's audience?
       // (root project folder is 'internal', so its loose files stay hidden.)
-      // Matched by web_url. Sub-folders are filtered by their own audience.
-      const cur = await c.env.DB
-        .prepare("SELECT audience FROM sharepoint_folder_visibility WHERE web_url = ? LIMIT 1")
-        .bind(url)
-        .first<{ audience: string }>();
-      const currentFolderVisible = viewerSeesAudience(auth?.role, cur?.audience);
+      // Key on the folder's STABLE driveItem id, not web_url — a rename changes
+      // web_url, and a web_url-keyed lookup would then miss and hide every file
+      // in the folder. Sub-folders are filtered by their own (id-keyed) audience.
+      let curAudience: string | undefined;
+      const folderId = await getSharePointItemId(c.env, url);
+      if (folderId) {
+        const cur = await c.env.DB
+          .prepare("SELECT audience, web_url FROM sharepoint_folder_visibility WHERE sp_item_id = ? LIMIT 1")
+          .bind(folderId)
+          .first<{ audience: string; web_url: string | null }>();
+        curAudience = cur?.audience;
+        // Self-heal the stored web_url if the folder was renamed/moved.
+        if (cur && cur.web_url !== url) {
+          await c.env.DB
+            .prepare("UPDATE sharepoint_folder_visibility SET web_url = ? WHERE sp_item_id = ?")
+            .bind(url, folderId).run();
+        }
+      } else {
+        // Fallback to the legacy web_url match if the id couldn't be resolved.
+        const cur = await c.env.DB
+          .prepare("SELECT audience FROM sharepoint_folder_visibility WHERE web_url = ? LIMIT 1")
+          .bind(url)
+          .first<{ audience: string }>();
+        curAudience = cur?.audience;
+      }
+      const currentFolderVisible = viewerSeesAudience(auth?.role, curAudience);
       files = files.filter((f) => (f.isFolder ? viewerSeesAudience(auth?.role, f.audience) : currentFolderVisible));
     }
 
