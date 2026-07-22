@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api, ApiError, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate, type SolutionStaffMember } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import PersonAvatar from "../components/ui/PersonAvatar";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
@@ -481,10 +482,9 @@ export default function SolutionDetailPage() {
               const abbr = m.name!.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join("").toUpperCase();
               return (
                 <div key={m.role} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", background: "#f8fafc", borderRadius: 8, border: "1px solid rgba(0,0,0,0.06)" }}>
-                  {photo
-                    ? <img src={photo} alt={m.name!} style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-                    : <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
-                  }
+                  <PersonAvatar src={photo} alt={m.name!} size={36} fallback={
+                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: "linear-gradient(135deg, rgba(0,120,212,0.3), rgba(99,193,234,0.2))", border: "1px solid rgba(99,193,234,0.25)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 12, fontWeight: 700, color: "#63c1ea" }}>{abbr}</div>
+                  } />
                   <div>
                     <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 2 }}>{m.role}</div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{m.name}</div>

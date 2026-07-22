@@ -21,16 +21,23 @@ app.get("/photos", async (c) => {
   const result: Record<string, string | null> = {};
   const toFetch: string[] = [];
 
-  // Check DB first
   const placeholders = emails.map(() => "?").join(",");
   const dbRows = await db
-    .prepare(`SELECT email, avatar_url FROM users WHERE lower(email) IN (${placeholders})`)
+    .prepare(`SELECT email, avatar_url, avatar_r2_key FROM users WHERE lower(email) IN (${placeholders})`)
     .bind(...emails)
-    .all<{ email: string; avatar_url: string | null }>();
+    .all<{ email: string; avatar_url: string | null; avatar_r2_key: string | null }>();
+  const rowByEmail = new Map<string, { avatar_url: string | null; avatar_r2_key: string | null }>();
+  for (const r of dbRows.results ?? []) {
+    rowByEmail.set(r.email.toLowerCase(), { avatar_url: r.avatar_url, avatar_r2_key: r.avatar_r2_key });
+  }
 
   for (const email of emails) {
-    const row = dbRows.results?.find((r) => r.email.toLowerCase() === email);
-    if (row?.avatar_url) {
+    const row = rowByEmail.get(email);
+    // A user-UPLOADED avatar (R2-backed, avatar_r2_key set) is stable — use it.
+    // Everything else (a Zoom-derived URL, or nothing) is re-resolved from Zoom
+    // via the KV cache so it can't go stale: Zoom photo URLs rotate, and a value
+    // frozen permanently in D1 would 404 forever once Zoom cycles it.
+    if (row?.avatar_r2_key && row.avatar_url) {
       result[email] = row.avatar_url;
     } else {
       result[email] = null;
@@ -38,14 +45,18 @@ app.get("/photos", async (c) => {
     }
   }
 
-  // For those without a stored URL, try Zoom and persist any hits
   if (toFetch.length > 0) {
     const zoomPhotos = await getStaffPhotos(c.env.KV, c.env, toFetch);
-    for (const [email, url] of Object.entries(zoomPhotos)) {
+    for (const email of toFetch) {
+      const url = zoomPhotos[email] ?? null;
       result[email] = url;
-      if (url) {
+      // Mirror the freshly-resolved value into D1 for surfaces that read
+      // users.avatar_url directly — but only for non-uploaded rows, and only
+      // when it actually changed (writes the new URL, or clears a stale one).
+      const prev = rowByEmail.get(email)?.avatar_url ?? null;
+      if (rowByEmail.has(email) && url !== prev) {
         await db
-          .prepare("UPDATE users SET avatar_url = ? WHERE lower(email) = ? AND (avatar_url IS NULL OR avatar_url = '')")
+          .prepare("UPDATE users SET avatar_url = ? WHERE lower(email) = ? AND avatar_r2_key IS NULL")
           .bind(url, email)
           .run();
       }
