@@ -44,6 +44,7 @@ export default function AppShell() {
   const [isClient, setIsClient] = useState(false);
   const [isPartnerAe, setIsPartnerAe] = useState(false);
   const [canProspect, setCanProspect] = useState(false);
+  const [canSalesTools, setCanSalesTools] = useState(false);
   const [isLeadership, setIsLeadership] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
@@ -93,6 +94,7 @@ export default function AppShell() {
         setIsClient(res.role === "client");
         setIsPartnerAe(res.role === "partner_ae");
         setCanProspect(["admin", "executive", "pf_ae", "partner_ae"].includes(res.role));
+        setCanSalesTools(res.role === "admin" || res.user.is_sales_tools === 1);
         setIsLeadership(res.role === "admin" || res.role === "executive");
       })
       .catch(() => {});
@@ -182,6 +184,7 @@ export default function AppShell() {
             )}
             <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
             <SideLink to="/roadmap" icon={NAV_ICONS.roadmap} onClick={() => setDrawerOpen(false)}>Roadmap</SideLink>
+            {canSalesTools && <SideLink to="/sales-tools" icon={NAV_ICONS.salesTools} onClick={() => setDrawerOpen(false)}>Sales Tools</SideLink>}
             {isLeadership && <SideLink to="/leadership" icon={NAV_ICONS.leadership} onClick={() => setDrawerOpen(false)}>Leadership</SideLink>}
           </>
         )}
@@ -656,6 +659,12 @@ const NAV_ICONS = {
     <I>
       <path d="M3 3v18h18"/>
       <path d="M7 14l4-4 3 3 5-6"/>
+    </I>
+  ),
+  salesTools: (
+    <I>
+      <line x1="12" y1="1" x2="12" y2="23"/>
+      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
     </I>
   ),
   adminRoadmap: (

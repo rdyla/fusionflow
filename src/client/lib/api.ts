@@ -82,6 +82,7 @@ export type User = {
   is_support_supervisor?: number;
   is_project_resource?: number;
   is_pm_eligible?: number;
+  is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
   phone?: string | null;
@@ -2397,6 +2398,7 @@ export const api = {
       is_support_supervisor?: number;
       is_project_resource?: number;
       is_pm_eligible?: number;
+      is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
       zoom_user_id?: string | null;
