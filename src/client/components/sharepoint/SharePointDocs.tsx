@@ -118,6 +118,9 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   const projectId = owner?.kind === "project" ? owner.id : null;
   const [editPickerFolder, setEditPickerFolder] = useState<SPFile | null>(null);
   const [pickerContacts, setPickerContacts] = useState<ProjectContact[]>([]);
+  // Project partner AEs (PF users staffed as partner_ae) — grantable to edit,
+  // same guest workflow as customer contacts, on partner-shared folders.
+  const [pickerPartners, setPickerPartners] = useState<{ id: string; name: string; email: string }[]>([]);
   const [grantedEmails, setGrantedEmails] = useState<Set<string>>(new Set());
   const [pickerLoading, setPickerLoading] = useState(false);
   const [grantingEmail, setGrantingEmail] = useState<string | null>(null);
@@ -271,11 +274,17 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     setPickerEditingOn(folder.clientEditing === true);
     setPickerLoading(true);
     try {
-      const [contacts, { grants }] = await Promise.all([
+      const [contacts, staff, { grants }] = await Promise.all([
         api.projectContacts(projectId),
+        api.projectStaff(projectId),
         api.spEditGrants(projectId),
       ]);
       setPickerContacts(contacts.filter((c) => !!c.email));
+      setPickerPartners(
+        staff
+          .filter((s) => s.staff_role === "partner_ae" && !!s.email)
+          .map((s) => ({ id: s.id, name: s.name ?? s.email, email: s.email }))
+      );
       setGrantedEmails(new Set(grants.map((g) => g.grantee_email.toLowerCase())));
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to load contacts", "error");
@@ -611,16 +620,16 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
               <button onClick={() => setEditPickerFolder(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#64748b", lineHeight: 1 }}>×</button>
             </div>
             <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
-              Give customer contacts edit access to <strong>{editPickerFolder.name}</strong>. They're invited as guests and edit its documents in Office online — attributed to them.
+              Give customer contacts and partner AEs edit access to <strong>{editPickerFolder.name}</strong>. They're invited as guests and edit its documents in Office online — attributed to them.
             </div>
 
             {/* Phase 2: bulk toggle — grants everyone now + auto-grants future contacts. */}
             <label style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", background: pickerEditingOn ? "rgba(16,124,16,0.08)" : "#f8fafc", border: `1px solid ${pickerEditingOn ? "rgba(16,124,16,0.35)" : "#eef2f7"}`, borderRadius: 6, marginBottom: 12, cursor: togglingEditing ? "default" : "pointer" }}>
               <input type="checkbox" checked={pickerEditingOn} disabled={togglingEditing} onChange={(e) => toggleClientEditing(e.target.checked)} style={{ marginTop: 2 }} />
               <span style={{ fontSize: 13, color: "#1e293b" }}>
-                <strong>Allow all project contacts to edit</strong>
+                <strong>Allow the whole project team to edit</strong>
                 <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {togglingEditing ? "Updating…" : "Grants everyone on the project now, and auto-grants any contact added later."}
+                  {togglingEditing ? "Updating…" : "Grants the project's contacts (and partner AEs on partner-shared folders) now, and auto-grants people added later."}
                 </div>
               </span>
             </label>
@@ -629,9 +638,9 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
               <div style={{ fontSize: 13, color: "#94a3b8" }}>Loading contacts…</div>
             ) : (
               <div style={{ display: "grid", gap: 8 }}>
-                {pickerContacts.length === 0 && (
+                {pickerContacts.length === 0 && pickerPartners.length === 0 && (
                   <div style={{ fontSize: 13, color: "#94a3b8" }}>
-                    No project contacts with an email yet — add one on the Overview tab, or enter an email below.
+                    No project contacts or partner AEs with an email yet — add one on the Overview tab, or enter an email below.
                   </div>
                 )}
                 {pickerContacts.map((ct) => {
@@ -659,6 +668,37 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                     </div>
                   );
                 })}
+
+                {pickerPartners.length > 0 && (
+                  <>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: "#94a3b8", marginTop: 4 }}>Partner AEs</div>
+                    {pickerPartners.map((p) => {
+                      const granted = grantedEmails.has(p.email.toLowerCase());
+                      return (
+                        <div key={p.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", background: "#f8fafc", border: "1px solid #eef2f7", borderRadius: 6 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>
+                              {p.name}<span style={{ fontWeight: 400, color: "#94a3b8" }}> · Partner AE</span>
+                            </div>
+                            <div style={{ fontSize: 12, color: "#64748b", overflow: "hidden", textOverflow: "ellipsis" }}>{p.email}</div>
+                          </div>
+                          {granted ? (
+                            <span style={{ display: "inline-flex", alignItems: "center", gap: 8, whiteSpace: "nowrap" }}>
+                              <span style={{ fontSize: 12, fontWeight: 600, color: "#107c10" }}>✓ Can edit</span>
+                              <button className="ms-btn-ghost" style={{ fontSize: 11, color: "#d13438" }} disabled={revokingEmail === p.email} onClick={() => revokeEditFrom(p.email)}>
+                                {revokingEmail === p.email ? "…" : "Revoke"}
+                              </button>
+                            </span>
+                          ) : (
+                            <button className="ms-btn-secondary" style={{ fontSize: 12, whiteSpace: "nowrap" }} disabled={grantingEmail === p.email} onClick={() => grantEditTo(p.email, p.name)}>
+                              {grantingEmail === p.email ? "Granting…" : "Grant edit"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
 
                 <div style={{ display: "flex", gap: 6, marginTop: 6, borderTop: "1px solid #eef2f7", paddingTop: 10 }}>
                   <input className="ms-input" type="email" placeholder="Or enter an email…" value={manualEmail} onChange={(e) => setManualEmail(e.target.value)} style={{ flex: 1, fontSize: 13 }} />
