@@ -330,6 +330,24 @@ function mapDriveItem(item: GraphDriveItem): SPFile {
   };
 }
 
+/** Resolve a folder/file's STABLE Graph driveItem id from its absolute URL.
+ *  Used to key overlays (audience/visibility) on the id rather than web_url,
+ *  which changes when a folder is renamed/moved. Returns null on any failure. */
+export async function getSharePointItemId(env: GraphEnv, absoluteUrl: string): Promise<string | null> {
+  try {
+    const token = await getGraphToken(env);
+    const { driveId, segments } = await resolveSharePointPath(token, absoluteUrl);
+    const encodedPath = graphPath(segments);
+    const item = await graphGet<{ id: string }>(
+      token,
+      encodedPath ? `/drives/${driveId}/root:/${encodedPath}` : `/drives/${driveId}/root`
+    );
+    return item.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: string): Promise<SPFile[]> {
   const token = await getGraphToken(env);
   const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);
