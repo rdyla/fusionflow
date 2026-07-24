@@ -829,7 +829,9 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engi
     c.executionCtx.waitUntil((async () => {
       try {
         const folders = await db
-          .prepare(`SELECT web_url FROM sharepoint_folder_visibility WHERE project_id = ? AND client_editing = 1 AND web_url IS NOT NULL`)
+          .prepare(`SELECT web_url FROM sharepoint_folder_visibility
+                    WHERE project_id = ? AND client_editing = 1 AND web_url IS NOT NULL
+                      AND audience IN ('internal_customer', 'internal_customer_partner')`)
           .bind(projectId)
           .all<{ web_url: string }>();
         for (const f of folders.results ?? []) {
@@ -919,6 +921,36 @@ app.post("/:id/staff", async (c) => {
     FROM project_staff ps JOIN users u ON u.id = ps.user_id
     WHERE ps.project_id = ? AND ps.user_id = ? AND ps.staff_role = ? LIMIT 1
   `).bind(projectId, userId, staffRole).first();
+
+  // Auto-grant edit to a newly-added partner AE on any folder that has editing
+  // enabled AND is shared with partners — mirrors the contact-add auto-grant so
+  // partners get the same guest-edit workflow. Best-effort, off the response path.
+  if (staffRole === "partner_ae") {
+    const partner = created as { email?: string | null; name?: string | null } | null;
+    const pEmail = partner?.email?.trim();
+    if (pEmail) {
+      c.executionCtx.waitUntil((async () => {
+        try {
+          const folders = await db
+            .prepare(`SELECT web_url FROM sharepoint_folder_visibility
+                      WHERE project_id = ? AND client_editing = 1 AND web_url IS NOT NULL
+                        AND audience IN ('internal_partner', 'internal_customer_partner')`)
+            .bind(projectId)
+            .all<{ web_url: string }>();
+          for (const f of folders.results ?? []) {
+            try {
+              await grantFolderEdit(c.env, db, { projectId, webUrl: f.web_url, email: pEmail, name: partner?.name ?? null, grantedByUserId: auth.user.id });
+            } catch (err) {
+              console.warn(`[projects.staff] partner auto-grant edit for ${pEmail} on ${f.web_url} failed:`, err instanceof Error ? err.message : err);
+            }
+          }
+        } catch (err) {
+          console.warn("[projects.staff] partner auto-grant lookup failed:", err instanceof Error ? err.message : err);
+        }
+      })());
+    }
+  }
+
   return c.json(created, 201);
 });
 
