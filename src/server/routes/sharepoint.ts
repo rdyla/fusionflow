@@ -695,9 +695,20 @@ app.post("/folder/allow-editing", async (c) => {
   if (!spItemId || !webUrl || !projectId) return c.json({ error: "sp_item_id, web_url, project_id required" }, 400);
   if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
 
-  // Persist the flag. Enabling client editing implies the customer can see the
-  // folder (can't edit what you can't see), so it adds the customer bit to the
-  // audience; disabling leaves the audience untouched.
+  // Editing is audience-driven: you can only edit what you can see. Enabling on
+  // an untagged folder defaults it to customer-visible (back-compat); on a
+  // folder already shared with partners (or both) we keep that audience, so
+  // enabling editing there grants the partner AEs. visible_to_client mirrors the
+  // customer bit. Disabling leaves the audience untouched.
+  const existing = await c.env.DB
+    .prepare("SELECT audience FROM sharepoint_folder_visibility WHERE sp_item_id = ? LIMIT 1")
+    .bind(spItemId).first<{ audience: string }>();
+  const currentAudience = (existing?.audience as Audience) ?? "internal";
+  const effectiveAudience: Audience = enabled
+    ? (currentAudience === "internal" ? "internal_customer" : currentAudience)
+    : currentAudience;
+  const visibleToClient = audienceIncludesCustomer(effectiveAudience) ? 1 : 0;
+
   await c.env.DB
     .prepare(
       `INSERT INTO sharepoint_folder_visibility
@@ -706,44 +717,46 @@ app.post("/folder/allow-editing", async (c) => {
        ON CONFLICT(sp_item_id) DO UPDATE SET
          project_id        = excluded.project_id,
          web_url           = excluded.web_url,
+         audience          = excluded.audience,
+         visible_to_client = excluded.visible_to_client,
          client_editing    = excluded.client_editing,
          set_by_user_id    = excluded.set_by_user_id,
          updated_at        = CURRENT_TIMESTAMP`
     )
-    .bind(spItemId, projectId, webUrl, enabled ? "internal_customer" : "internal", enabled ? 1 : 0, enabled ? 1 : 0, auth.user.id)
+    .bind(spItemId, projectId, webUrl, effectiveAudience, visibleToClient, enabled ? 1 : 0, auth.user.id)
     .run();
-
-  // On enable, fold the customer into whatever audience the folder already had
-  // (internal → internal_customer, internal_partner → internal_customer_partner)
-  // and keep the legacy visible_to_client mirror in sync.
-  if (enabled) {
-    await c.env.DB
-      .prepare(
-        `UPDATE sharepoint_folder_visibility
-           SET audience = CASE audience
-                 WHEN 'internal' THEN 'internal_customer'
-                 WHEN 'internal_partner' THEN 'internal_customer_partner'
-                 ELSE audience END,
-               visible_to_client = 1
-         WHERE sp_item_id = ?`
-      )
-      .bind(spItemId).run();
-  }
 
   if (!enabled) return c.json({ ok: true, enabled: false, granted: [] });
 
-  // Grant every current project contact with an email (in parallel — each
-  // invite may wait out the provisioning race, so serial would be slow).
-  const contacts = await c.env.DB
-    .prepare(`SELECT name, email FROM project_contacts WHERE project_id = ? AND email IS NOT NULL AND TRIM(email) != ''`)
-    .bind(projectId)
-    .all<{ name: string | null; email: string }>();
-  const list = contacts.results ?? [];
+  // Grant edit to whichever external audiences the folder is shared with:
+  // customer contacts (if customer-visible) and/or the project's partner AEs
+  // (if partner-visible). Parallel — each invite may wait out the guest
+  // provisioning race, so serial would be slow.
+  const grantees: { name: string | null; email: string }[] = [];
+  if (audienceIncludesCustomer(effectiveAudience)) {
+    const contacts = await c.env.DB
+      .prepare(`SELECT name, email FROM project_contacts WHERE project_id = ? AND email IS NOT NULL AND TRIM(email) != ''`)
+      .bind(projectId)
+      .all<{ name: string | null; email: string }>();
+    grantees.push(...(contacts.results ?? []));
+  }
+  if (audienceIncludesPartner(effectiveAudience)) {
+    const partners = await c.env.DB
+      .prepare(`SELECT u.name, u.email FROM project_staff ps JOIN users u ON u.id = ps.user_id
+                WHERE ps.project_id = ? AND ps.staff_role = 'partner_ae' AND u.email IS NOT NULL AND TRIM(u.email) != ''`)
+      .bind(projectId)
+      .all<{ name: string | null; email: string }>();
+    grantees.push(...(partners.results ?? []));
+  }
+  // De-dupe by email (a person could be both, in theory).
+  const seen = new Set<string>();
+  const list = grantees.filter((g) => { const e = g.email.toLowerCase(); if (seen.has(e)) return false; seen.add(e); return true; });
+
   const results = await Promise.allSettled(
-    list.map((ct) => grantFolderEdit(c.env, c.env.DB, { projectId, webUrl, email: ct.email, name: ct.name, grantedByUserId: auth.user!.id }))
+    list.map((g) => grantFolderEdit(c.env, c.env.DB, { projectId, webUrl, email: g.email, name: g.name, grantedByUserId: auth.user!.id }))
   );
-  const granted = list.filter((_, i) => results[i].status === "fulfilled").map((ct) => ct.email);
-  const failed = list.filter((_, i) => results[i].status === "rejected").map((ct) => ct.email);
+  const granted = list.filter((_, i) => results[i].status === "fulfilled").map((g) => g.email);
+  const failed = list.filter((_, i) => results[i].status === "rejected").map((g) => g.email);
   if (failed.length) console.warn("[sp.allow-editing] some grants failed:", failed.join(", "));
   return c.json({ ok: true, enabled: true, granted, failed });
 });
