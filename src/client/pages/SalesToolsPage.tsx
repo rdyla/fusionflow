@@ -1,4 +1,5 @@
 import { useState } from "react";
+import CommissionsCalculator from "../components/salesTools/CommissionsCalculator";
 
 type Tab = "commissions" | "zoom_resell" | "zoom_agency";
 
@@ -47,7 +48,7 @@ export default function SalesToolsPage() {
         ))}
       </div>
 
-      {tab === "commissions" && <ComingSoon label="Commissions Calculator" />}
+      {tab === "commissions" && <CommissionsCalculator />}
       {tab === "zoom_resell" && <ComingSoon label="Zoom Resell" />}
       {tab === "zoom_agency" && <ComingSoon label="Zoom Agency" />}
     </div>
