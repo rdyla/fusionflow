@@ -679,7 +679,10 @@ export async function inviteGuestAndGrantWrite(
   // ("try again later") — a retry a few seconds later succeeds. Retry the share
   // with backoff to absorb that provisioning lag. Only `sharingFailed` is
   // retried; any other error is a real failure and bubbles immediately.
-  const backoffMs = [0, 3000, 6000];
+  // A brand-new external guest (esp. a fresh partner domain) can take longer
+  // than a few seconds to provision, so widen the window (~26s total across 5
+  // tries). Only `sharingFailed` is retried; any other error bubbles immediately.
+  const backoffMs = [0, 3000, 5000, 8000, 10000];
   let lastErr: unknown;
   for (let attempt = 0; attempt < backoffMs.length; attempt++) {
     if (backoffMs[attempt] > 0) await new Promise((r) => setTimeout(r, backoffMs[attempt]));
@@ -692,6 +695,16 @@ export async function inviteGuestAndGrantWrite(
       if (!msg.includes("sharingFailed")) throw err;
       console.warn(`[graph] share attempt ${attempt + 1}/${backoffMs.length} for ${email} hit sharingFailed; retrying…`);
     }
+  }
+  // Exhausted on sharingFailed: the guest WAS invited, so it's a provisioning
+  // lag, not a hard failure — surface an actionable message so the user retries
+  // (a second attempt a moment later almost always succeeds) rather than seeing
+  // a raw Graph 400.
+  const lastMsg = lastErr instanceof Error ? lastErr.message : String(lastErr);
+  if (lastMsg.includes("sharingFailed")) {
+    throw new Error(
+      `Microsoft is still setting up ${email} as a guest — this can take up to a minute for a brand-new external user. Please try Grant edit again in a moment.`
+    );
   }
   throw lastErr;
 }
