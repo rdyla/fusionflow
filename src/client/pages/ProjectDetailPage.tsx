@@ -316,6 +316,9 @@ export default function ProjectDetailPage() {
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   // PM-initiated date cascade — which task is the shift anchor (null = closed).
   const [cascadeFromTask, setCascadeFromTask] = useState<Task | null>(null);
+  // Task note editor — which task's note glyph is expanded (null = closed) + its draft text.
+  const [openNoteTaskId, setOpenNoteTaskId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
   const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
   const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", note: "" });
@@ -2094,6 +2097,26 @@ export default function ProjectDetailPage() {
                                     <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                                       {/* Time is logged at the stage level now — see the
                                           "Log time" button on each stage header. */}
+                                      <button
+                                        type="button"
+                                        title={task.notes ? "View/edit note" : "Add note"}
+                                        onClick={() => {
+                                          if (openNoteTaskId === task.id) {
+                                            setOpenNoteTaskId(null);
+                                          } else {
+                                            setOpenNoteTaskId(task.id);
+                                            setNoteDraft(task.notes ?? "");
+                                          }
+                                        }}
+                                        style={{
+                                          background: openNoteTaskId === task.id ? "rgba(11,154,173,0.12)" : "none",
+                                          border: `1px solid ${task.notes ? "#0b9aad" : "#cbd5e1"}`,
+                                          color: task.notes ? "#0b9aad" : "#94a3b8",
+                                          borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                        }}
+                                      >
+                                        📝
+                                      </button>
                                       {canManageTasks && task.due_date && (
                                         <button
                                           title="Cascade dates downstream from this task"
@@ -2134,6 +2157,43 @@ export default function ProjectDetailPage() {
                                             </span>
                                           </div>
                                         ))}
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {openNoteTaskId === task.id && (
+                                    <tr>
+                                      <td colSpan={8} style={{ padding: "4px 8px 10px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                        <textarea
+                                          autoFocus
+                                          value={noteDraft}
+                                          onChange={(e) => setNoteDraft(e.target.value)}
+                                          placeholder="Note for this task…"
+                                          style={{
+                                            width: "100%", minHeight: 60, resize: "vertical", fontSize: 12.5,
+                                            fontFamily: "inherit", padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: 4,
+                                          }}
+                                        />
+                                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                                          <button
+                                            type="button"
+                                            className="ms-btn-primary"
+                                            style={{ fontSize: 11, padding: "3px 10px" }}
+                                            onClick={() => {
+                                              patchTask(task.id, { notes: noteDraft.trim() || null });
+                                              setOpenNoteTaskId(null);
+                                            }}
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="ms-btn-secondary"
+                                            style={{ fontSize: 11, padding: "3px 10px" }}
+                                            onClick={() => setOpenNoteTaskId(null)}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
                                       </td>
                                     </tr>
                                   )}
