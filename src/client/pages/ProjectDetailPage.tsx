@@ -2109,10 +2109,12 @@ export default function ProjectDetailPage() {
                                           }
                                         }}
                                         style={{
-                                          background: openNoteTaskId === task.id ? "rgba(11,154,173,0.12)" : "none",
+                                          background: task.notes ? "#0b9aad" : "none",
                                           border: `1px solid ${task.notes ? "#0b9aad" : "#cbd5e1"}`,
-                                          color: task.notes ? "#0b9aad" : "#94a3b8",
+                                          color: task.notes ? "#fff" : "#94a3b8",
+                                          boxShadow: openNoteTaskId === task.id ? "0 0 0 2px rgba(11,154,173,0.35)" : "none",
                                           borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                          fontWeight: task.notes ? 700 : 400,
                                         }}
                                       >
                                         📝
