@@ -27,7 +27,7 @@ async function isStaffedEngineer(db: D1Database, auth: { user: { id: string }; r
 
 const TASK_SELECT = `
   SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority, is_go_live_event,
+         completed_at, status, priority, is_go_live_event, notes,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
@@ -173,6 +173,7 @@ const updateTaskSchema = z.object({
   completed_at: z.string().nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
+  notes: z.string().max(10000).nullable().optional(),
 });
 
 app.patch("/:id/tasks/:taskId", async (c) => {
