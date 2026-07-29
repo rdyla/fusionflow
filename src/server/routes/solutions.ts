@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDate } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution, syncSolutionStatus } from "../lib/teamUtils";
@@ -180,7 +181,7 @@ const createSolutionSchema = z.object({
    *  solution and synced to the bound opp; also editable later in the overview.
    *  am_revenuesource: Installed Base 930680000 | New Logo 930680001. */
   revenue_source: z.union([z.literal(930680000), z.literal(930680001)]).optional(),
-  estimated_close_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  estimated_close_date: zPlanDate.optional(),
 });
 
 app.post("/", async (c) => {
@@ -404,12 +405,12 @@ const updateSolutionSchema = z.object({
   /** Cloud contract expiration date (when customer's existing cloud
    *  contract ends — drives renewal-window planning). ISO YYYY-MM-DD.
    *  Maps to am_cloudcontractexpiration on the bound D365 opportunity. */
-  cloud_contract_expiration_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
+  cloud_contract_expiration_date: zPlanDate.nullable().optional().or(z.literal("")),
   /** Opportunity fields, editable any time from the solution overview. Synced
    *  to the bound D365 opp by syncOpportunityFromSolution.
    *  revenue_source → am_revenuesource; estimated_close_date → estimatedclosedate. */
   revenue_source: z.union([z.literal(930680000), z.literal(930680001)]).nullable().optional(),
-  estimated_close_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional().or(z.literal("")),
+  estimated_close_date: zPlanDate.nullable().optional().or(z.literal("")),
   add_ons: z.array(addOnSchema).optional(),
   blended_rate: z.number().positive().finite().optional(),
   pricing_mode: z.enum(["tiered", "basic", "advanced"]).optional(),
@@ -756,8 +757,8 @@ app.post("/:id/sow-version", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_cs
 });
 
 const sowMetadataSchema = z.object({
-  msa_date:             z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  target_go_live_date:  z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  msa_date:             zPlanDate.nullable().optional(),
+  target_go_live_date:  zPlanDate.nullable().optional(),
   duration_band:        z.enum(["4_6_weeks", "6_8_weeks", "8_12_weeks", "custom"]).nullable().optional(),
   custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
   customer_legal_name:  z.string().trim().max(200).nullable().optional(),

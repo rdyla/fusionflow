@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type ExternalResource, type ExternalResourceInput, type ExternalResourceStatus } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
 
 const STATUS_OPTIONS: { value: ExternalResourceStatus; label: string }[] = [
   { value: "new",         label: "New" },
@@ -70,7 +71,7 @@ function DraftForm({ draft, setDraft, canEdit }: { draft: DraftFields; setDraft:
     <div style={{ display: "grid", gridTemplateColumns: "repeat(12, 1fr)", gap: 10 }}>
       <div style={{ gridColumn: "span 3" }}>
         <label style={labelStyle}>Date</label>
-        <input type="date" style={inputStyle} value={draft.engagement_date} onChange={(e) => set("engagement_date", e.target.value)} disabled={!canEdit} />
+        <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} style={inputStyle} value={draft.engagement_date} onChange={(e) => set("engagement_date", e.target.value)} disabled={!canEdit} />
       </div>
       <div style={{ gridColumn: "span 5" }}>
         <label style={labelStyle}>Contractor Name</label>

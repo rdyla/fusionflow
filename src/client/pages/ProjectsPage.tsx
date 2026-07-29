@@ -10,6 +10,7 @@ import { resolveVendorBadge } from "../lib/vendorBadge";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { humanize } from "../lib/format";
 import { sortProjects, nextSort, statusOptions, SortableTh, StatusFilter, type ProjectSort, type ProjectSortKey } from "../lib/projectSort";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 /** Latest in_progress stage name — what the project is "currently doing".
  *  Multi-phase projects may have the same stage repeated per phase; using
@@ -515,11 +516,11 @@ export default function ProjectsPage() {
                 </label>
                 <label className="ms-label">
                   <span>Kickoff Date</span>
-                  <input type="date" className="ms-input" value={form.kickoff_date} onChange={(e) => setForm({ ...form, kickoff_date: e.target.value })} />
+                  <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={form.kickoff_date} onChange={(e) => setForm({ ...form, kickoff_date: e.target.value })} />
                 </label>
                 <label className="ms-label">
                   <span>Target Go-Live</span>
-                  <input type="date" className="ms-input" value={form.target_go_live_date} onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })} />
+                  <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={form.target_go_live_date} onChange={(e) => setForm({ ...form, target_go_live_date: e.target.value })} />
                 </label>
               </div>
               <label className="ms-label">

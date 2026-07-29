@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact, type SupportCase } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import { formatDateOnly } from "../../lib/dates";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
 
 export default function PhasesPanel({ projectId, canEdit, onChange }: { projectId: string; canEdit: boolean; onChange?: () => void }) {
   const { showToast } = useToast();
@@ -237,6 +238,8 @@ function PhaseRow({ phase, canEdit, scoped, projectId, dynamicsAccountId, contac
           <input
             className="ms-input"
             type="date"
+            min={PLAN_DATE_MIN}
+            max={PLAN_DATE_MAX}
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             style={{ width: 160, padding: "4px 8px", fontSize: 13 }}
@@ -539,6 +542,8 @@ function AddPhaseModal({ projectId, onClose, onCreated }: { projectId: string; o
           <input
             className="ms-input"
             type="date"
+            min={PLAN_DATE_MIN}
+            max={PLAN_DATE_MAX}
             value={target}
             onChange={(e) => setTarget(e.target.value)}
             style={{ marginTop: 4, width: "100%" }}
@@ -654,6 +659,8 @@ function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectI
           <input
             className="ms-input"
             type="date"
+            min={PLAN_DATE_MIN}
+            max={PLAN_DATE_MAX}
             value={goLive}
             onChange={(e) => setGoLive(e.target.value)}
             disabled={applying}

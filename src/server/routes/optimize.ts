@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDate, zPlanDateOrBlank } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { refreshAccountTeamIfStale, syncAccountTeamToCustomer } from "../lib/accountTeamSync";
@@ -176,8 +177,8 @@ const directEnrollSchema = z.object({
   customer_name: z.string().min(1).max(500),
   vendor: z.string().max(100).nullable().optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).default([]),
-  actual_go_live_date: z.string().nullable().optional(),
-  next_review_date: z.string().nullable().optional(),
+  actual_go_live_date: zPlanDateOrBlank.nullable().optional(),
+  next_review_date: zPlanDateOrBlank.nullable().optional(),
   notes: z.string().nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
   project_id: z.string().nullable().optional(),
@@ -285,7 +286,7 @@ app.post("/accounts/direct", async (c) => {
 // ── Graduate a project ─────────────────────────────────────────────────────────
 
 const graduateSchema = z.object({
-  next_review_date: z.string().nullable().optional(),
+  next_review_date: zPlanDateOrBlank.nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 
@@ -319,7 +320,7 @@ app.post("/accounts/:projectId/graduate", async (c) => {
 
 const updateAccountSchema = z.object({
   optimize_status: z.enum(["active", "paused", "churned"]).optional(),
-  next_review_date: z.string().nullable().optional(),
+  next_review_date: zPlanDateOrBlank.nullable().optional(),
   notes: z.string().nullable().optional(),
 });
 
@@ -386,7 +387,7 @@ app.get("/accounts/:projectId/assessments", async (c) => {
 });
 
 const impactAssessmentSchema = z.object({
-  conducted_date: z.string().min(1),
+  conducted_date: zPlanDate,
   conducted_by_user_id: z.string().nullable().optional(),
   solution_types: z.array(z.string()).min(1),
   answers: z.record(z.string(), z.unknown()),
@@ -477,7 +478,7 @@ const techStackSchema = z.object({
   functional_fit: z.number().int().min(1).max(5).nullable().optional(),
   technical_fit: z.number().int().min(1).max(5).nullable().optional(),
   contract_expiration: z.string().nullable().optional(),
-  initiative_start: z.string().nullable().optional(),
+  initiative_start: zPlanDateOrBlank.nullable().optional(),
   time_rating: z.enum(["tolerate", "invest", "migrate", "eliminate"]).nullable().optional(),
   notes: z.string().nullable().optional(),
   last_reviewed: z.string().nullable().optional(),
@@ -586,7 +587,7 @@ const roadmapSchema = z.object({
   priority: z.enum(["high", "medium", "low"]).default("medium"),
   time_rating: z.enum(["tolerate", "invest", "migrate", "eliminate"]).nullable().optional(),
   status: z.enum(["identified", "evaluating", "approved", "in_progress", "completed", "deferred"]).default("identified"),
-  target_date: z.string().nullable().optional(),
+  target_date: zPlanDateOrBlank.nullable().optional(),
 });
 
 app.post("/accounts/:projectId/roadmap", async (c) => {

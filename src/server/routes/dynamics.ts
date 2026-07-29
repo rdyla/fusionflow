@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDate } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { createAccount, createOpportunity, searchAccounts, getAccountContacts, getAccountOpportunities, getPacketFusionPMs, getPacketFusionAEs, getPacketFusionSAs, getPacketFusionCSMs, getPacketFusionEngineers, getCases, getCaseByTicketNumber, diagnoseCaseTimeEntries, inspectTimeEntry } from "../services/dynamicsService";
@@ -86,7 +87,7 @@ const createOpportunitySchema = z.object({
   // am_revenuesource option-set: Installed Base (930680000) | New Logo (930680001).
   revenue_source: z.union([z.literal(930680000), z.literal(930680001)]).optional(),
   // estimatedclosedate — DateOnly, yyyy-MM-dd.
-  estimated_close_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  estimated_close_date: zPlanDate.optional(),
 });
 app.post("/opportunities", requireRole("admin", "pf_sa"), async (c) => {
   const parsed = createOpportunitySchema.safeParse(await c.req.json().catch(() => ({})));

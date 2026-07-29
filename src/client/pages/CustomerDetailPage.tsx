@@ -17,6 +17,7 @@ import SharePointDocs from "../components/sharepoint/SharePointDocs";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypePills } from "../components/ui/SolutionTypePills";
 import { solutionTypeLabel, type SolutionType } from "../../shared/solutionTypes";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 type Tab = "overview" | "solutions" | "implementations" | "optimizations" | "documents";
 
@@ -985,6 +986,8 @@ export default function CustomerDetailPage() {
                 <input
                   className="ms-input"
                   type="date"
+                  min={PLAN_DATE_MIN}
+                  max={PLAN_DATE_MAX}
                   value={newProjectForm.target_go_live_date}
                   onChange={(e) => setNewProjectForm((f) => ({ ...f, target_go_live_date: e.target.value }))}
                 />

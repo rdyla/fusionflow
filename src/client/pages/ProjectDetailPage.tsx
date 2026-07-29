@@ -40,6 +40,7 @@ import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypeFilterPills } from "../components/ui/SolutionTypeFilterPills";
 import { parseSolutionTypes, parseTaggedTitle, SOLUTION_TYPES, SOLUTION_TYPE_LABELS, type SolutionType } from "../../shared/solutionTypes";
 import { VENDOR_OPTIONS, vendorLabel } from "../../shared/vendors";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN, commitIfPlanDate } from "../../shared/planDates";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
@@ -1721,28 +1722,32 @@ export default function ProjectDetailPage() {
                       Start
                       <input
                         type="date"
+                        min={PLAN_DATE_MIN}
+                        max={PLAN_DATE_MAX}
                         value={stage.planned_start ?? ""}
                         disabled={!canManageTasks}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canManageTasks ? "#fff" : "#f8fafc", color: "#1e293b" }}
-                        onChange={async (e) => {
+                        onChange={(e) => commitIfPlanDate(e.target.value, async (planned_start) => {
                           if (!project) return;
-                          const updated = await api.updateStage(project.id, stage.id, { planned_start: e.target.value || null });
+                          const updated = await api.updateStage(project.id, stage.id, { planned_start });
                           setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-                        }}
+                        })}
                       />
                     </label>
                     <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                       End
                       <input
                         type="date"
+                        min={PLAN_DATE_MIN}
+                        max={PLAN_DATE_MAX}
                         value={stage.planned_end ?? ""}
                         disabled={!canManageTasks}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canManageTasks ? "#fff" : "#f8fafc", color: "#1e293b" }}
-                        onChange={async (e) => {
+                        onChange={(e) => commitIfPlanDate(e.target.value, async (planned_end) => {
                           if (!project) return;
-                          const updated = await api.updateStage(project.id, stage.id, { planned_end: e.target.value || null });
+                          const updated = await api.updateStage(project.id, stage.id, { planned_end });
                           setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-                        }}
+                        })}
                       />
                     </label>
                     {/* Stage status is now auto-derived from task statuses on
@@ -2037,10 +2042,12 @@ export default function ProjectDetailPage() {
                                     <td style={cellStyle}>
                                       <input
                                         type="date"
+                                        min={PLAN_DATE_MIN}
+                                        max={PLAN_DATE_MAX}
                                         value={task.due_date ?? ""}
                                         disabled={!canManageTasks}
                                         style={rowInputStyle}
-                                        onChange={(e) => patchTask(task.id, { due_date: e.target.value || null })}
+                                        onChange={(e) => commitIfPlanDate(e.target.value, (due_date) => patchTask(task.id, { due_date }))}
                                       />
                                     </td>
                                     <td style={cellStyle}>
@@ -2082,9 +2089,11 @@ export default function ProjectDetailPage() {
                                         {isDone && (
                                           <input
                                             type="date"
+                                            min={PLAN_DATE_MIN}
+                                            max={PLAN_DATE_MAX}
                                             value={task.completed_at?.slice(0, 10) ?? ""}
                                             disabled={!canManageTasks}
-                                            onChange={(e) => patchTask(task.id, { completed_at: e.target.value || null })}
+                                            onChange={(e) => commitIfPlanDate(e.target.value, (completed_at) => patchTask(task.id, { completed_at }))}
                                             style={{ ...cellInputStyle, color: isBlocked ? "#dc2626" : "#059669", fontWeight: 500, padding: "3px 4px" }}
                                             title="Edit completion date"
                                           />
