@@ -387,6 +387,39 @@ export type LeadershipDashboardResponse = {
       status: string | null;
     }[];
   };
+  pipeline: {
+    solutions: {
+      byStatus: { status: string; n: number }[];
+      wonThisPeriod: number;
+      lostThisPeriod: number;
+      recentWon: {
+        id: string;
+        name: string | null;
+        customer_name: string | null;
+        vendor: string | null;
+        date: string | null;
+      }[];
+    };
+    cloudSupport: {
+      proposalsThisPeriod: number;
+      recent: {
+        id: string;
+        name: string | null;
+        customer_name: string | null;
+        creator_name: string | null;
+        date: string | null;
+      }[];
+    };
+  };
+  optimizations: {
+    graduatedThisPeriod: number;
+    graduated: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      date: string | null;
+    }[];
+  };
 };
 
 export type Project = {

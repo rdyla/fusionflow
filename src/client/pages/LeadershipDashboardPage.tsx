@@ -16,6 +16,18 @@ const WINDOW_OPTIONS: { value: "week" | "month" | "quarter"; label: string }[] =
   { value: "quarter", label: "Quarter" },
 ];
 
+// Active (pre-won/lost) solution pipeline stages, in funnel order. Mirrors
+// SolutionsPage's STATUS_LABELS — kept as a small local copy rather than a
+// shared export since it's only these 5 stages (won/lost are outcomes here).
+const PIPELINE_STATUS_ORDER = ["draft", "assessment", "requirements", "scope", "handoff"];
+const PIPELINE_STATUS_LABELS: Record<string, string> = {
+  draft: "Draft",
+  assessment: "Needs Assessment",
+  requirements: "Requirements",
+  scope: "Scope of Work",
+  handoff: "Handoff Ready",
+};
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function MetricCard({
@@ -226,8 +238,111 @@ export default function LeadershipDashboardPage() {
               )}
             </div>
           </div>
+
+          {/* ── Pipeline ─────────────────────────────────────────────────── */}
+          <div className="ms-section-title" style={{ marginBottom: 12, marginTop: 28 }}>Pipeline</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 20 }}>
+            <MetricCard
+              title="Solutions Won"
+              value={data.pipeline.solutions.wonThisPeriod}
+              accent={data.pipeline.solutions.wonThisPeriod > 0 ? "#107c10" : undefined}
+            />
+            <MetricCard
+              title="Solutions Lost"
+              value={data.pipeline.solutions.lostThisPeriod}
+              accent={data.pipeline.solutions.lostThisPeriod > 0 ? "#d13438" : undefined}
+            />
+            <MetricCard title="Cloud Support Proposals" value={data.pipeline.cloudSupport.proposalsThisPeriod} />
+            <MetricCard
+              title="Optimizations Graduated"
+              value={data.optimizations.graduatedThisPeriod}
+              accent={data.optimizations.graduatedThisPeriod > 0 ? "#107c10" : undefined}
+            />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Solutions pipeline</div>
+              <StatusFunnel byStatus={data.pipeline.solutions.byStatus} />
+              {data.pipeline.solutions.recentWon.length > 0 && (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em", margin: "16px 0 8px" }}>
+                    Won this period
+                  </div>
+                  {data.pipeline.solutions.recentWon.map((s) => (
+                    <ListRow
+                      key={s.id}
+                      to={`/solutions/${s.id}`}
+                      title={s.name ?? "Untitled"}
+                      subtitle={s.customer_name}
+                      right={formatDate(s.date)}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Cloud Support proposals</div>
+              {data.pipeline.cloudSupport.recent.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No proposals created in this period.</div>
+              ) : (
+                <div>
+                  {data.pipeline.cloudSupport.recent.map((p) => (
+                    <ListRow
+                      key={p.id}
+                      to={`/solutions/cloudsupport/${p.id}`}
+                      title={p.name ?? "Untitled"}
+                      subtitle={p.customer_name ?? p.creator_name}
+                      right={formatDate(p.date)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Graduated to Optimize</div>
+              {data.optimizations.graduated.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No graduations in this period.</div>
+              ) : (
+                <div>
+                  {data.optimizations.graduated.map((o) => (
+                    <ListRow
+                      key={o.id}
+                      to={`/optimize/${o.id}`}
+                      title={o.name ?? "Untitled"}
+                      subtitle={o.customer_name}
+                      right={formatDate(o.date)}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function StatusFunnel({ byStatus }: { byStatus: { status: string; n: number }[] }) {
+  const counts = new Map(byStatus.map((s) => [s.status, s.n]));
+  const max = Math.max(...PIPELINE_STATUS_ORDER.map((s) => counts.get(s) ?? 0), 1);
+  return (
+    <div>
+      {PIPELINE_STATUS_ORDER.map((status) => {
+        const n = counts.get(status) ?? 0;
+        return (
+          <div key={status} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+              <span style={{ fontSize: 13, color: "#334155" }}>{PIPELINE_STATUS_LABELS[status]}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{n}</span>
+            </div>
+            <div style={{ height: 6, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${(n / max) * 100}%`, background: "#8764b8", borderRadius: 4 }} />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

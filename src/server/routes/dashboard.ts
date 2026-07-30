@@ -332,6 +332,13 @@ app.get("/leadership", async (c) => {
     atRisk,
     blocked,
     openBlockers,
+    solutionsByStatus,
+    solutionsWon,
+    solutionsLost,
+    recentWonSolutions,
+    csProposalsCount,
+    csProposalsRecent,
+    optimizeGraduated,
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
@@ -430,6 +437,57 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT COUNT(*) AS n FROM risks WHERE status = 'open'`
     ).first<{ n: number }>(),
+
+    // ── Solutions pipeline (pre-sales) ──────────────────────────────────────
+    // Current-state funnel snapshot — excludes won/lost, which are outcomes
+    // reported separately (time-boxed to the window, like go-lives).
+    db.prepare(
+      `SELECT status, COUNT(*) AS n FROM solutions
+       WHERE status NOT IN ('won', 'lost')
+       GROUP BY status`
+    ).all<{ status: string; n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM solutions WHERE status = 'won' AND updated_at >= ? AND updated_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM solutions WHERE status = 'lost' AND updated_at >= ? AND updated_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, vendor, updated_at
+       FROM solutions
+       WHERE status = 'won' AND updated_at >= ? AND updated_at < ?
+       ORDER BY updated_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
+
+    // ── Cloud Support Calculator proposals ──────────────────────────────────
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM cs_proposals WHERE created_at >= ? AND created_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT cp.id, cp.name, cp.customer_name, u.name AS creator_name, cp.created_at
+       FROM cs_proposals cp
+       LEFT JOIN users u ON u.id = cp.creator_id
+       WHERE cp.created_at >= ? AND cp.created_at < ?
+       ORDER BY cp.created_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; creator_name: string | null; created_at: string }>(),
+
+    // ── Optimize graduations ────────────────────────────────────────────────
+    // Projects that completed implementation and moved to Optimize this window.
+    db.prepare(
+      `SELECT p.id AS project_id, p.name, COALESCE(cu.name, p.customer_name) AS customer_name, oa.graduated_at
+       FROM optimize_accounts oa
+       JOIN projects p ON p.id = oa.project_id
+       LEFT JOIN customers cu ON cu.id = oa.customer_id
+       WHERE oa.graduated_at >= ? AND oa.graduated_at < ?
+       ORDER BY oa.graduated_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ project_id: string; name: string; customer_name: string | null; graduated_at: string }>(),
   ]);
 
   return c.json({
@@ -482,6 +540,39 @@ app.get("/leadership", async (c) => {
         customer_name: r.customer_name,
         date: r.actual_go_live_date,
         status: r.status,
+      })),
+    },
+    pipeline: {
+      solutions: {
+        byStatus: (solutionsByStatus.results ?? []).map((r) => ({ status: r.status, n: r.n })),
+        wonThisPeriod: solutionsWon?.n ?? 0,
+        lostThisPeriod: solutionsLost?.n ?? 0,
+        recentWon: (recentWonSolutions.results ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          customer_name: r.customer_name,
+          vendor: r.vendor,
+          date: r.updated_at,
+        })),
+      },
+      cloudSupport: {
+        proposalsThisPeriod: csProposalsCount?.n ?? 0,
+        recent: (csProposalsRecent.results ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          customer_name: r.customer_name,
+          creator_name: r.creator_name,
+          date: r.created_at,
+        })),
+      },
+    },
+    optimizations: {
+      graduatedThisPeriod: optimizeGraduated.results?.length ?? 0,
+      graduated: (optimizeGraduated.results ?? []).map((r) => ({
+        id: r.project_id,
+        name: r.name,
+        customer_name: r.customer_name,
+        date: r.graduated_at,
       })),
     },
   });
