@@ -361,8 +361,12 @@ export type LeadershipDashboardResponse = {
     atRiskProjects: number;
     blockedProjects: number;
     openBlockers: number;
-    tasksCompleted: number;
     tasksByEngineer: {
+      user_id: string | null;
+      name: string | null;
+      n: number;
+    }[];
+    projectsByPM: {
       user_id: string | null;
       name: string | null;
       n: number;
@@ -385,13 +389,6 @@ export type LeadershipDashboardResponse = {
       customer_name: string | null;
       date: string | null;
       status: string | null;
-    }[];
-    tasksCompletedList: {
-      id: string;
-      title: string | null;
-      project_id: string;
-      project_name: string | null;
-      date: string | null;
     }[];
     activeProjectsList: {
       id: string;
