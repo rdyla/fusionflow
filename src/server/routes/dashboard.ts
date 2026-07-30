@@ -323,8 +323,8 @@ app.get("/leadership", async (c) => {
     timePrev,
     byEngineer,
     byProject,
-    tasksCompleted,
     tasksByEngineer,
+    projectsByPM,
     goLives,
     upcomingGoLives,
     wentLiveStillOpen,
@@ -339,7 +339,6 @@ app.get("/leadership", async (c) => {
     csProposalsCount,
     csProposalsRecent,
     optimizeGraduated,
-    tasksCompletedList,
     activeProjectsList,
     atRiskProjectsList,
     blockedProjectsList,
@@ -384,10 +383,6 @@ app.get("/leadership", async (c) => {
     ).bind(start, end).all<{ project_id: string | null; name: string | null; customer_name: string | null; entries: number; hours: number }>(),
 
     db.prepare(
-      `SELECT COUNT(*) AS n FROM tasks WHERE completed_at >= ? AND completed_at < ?`
-    ).bind(start, end).first<{ n: number }>(),
-
-    db.prepare(
       `SELECT t.assignee_user_id, u.name, COUNT(*) AS n
        FROM tasks t
        LEFT JOIN users u ON u.id = t.assignee_user_id
@@ -397,6 +392,17 @@ app.get("/leadership", async (c) => {
        ORDER BY n DESC
        LIMIT 10`
     ).bind(start, end).all<{ assignee_user_id: string | null; name: string | null; n: number }>(),
+
+    // Active-project headcount per PM — current snapshot, not time-boxed.
+    // Surfaces who's carrying the most projects right now (workload signal).
+    db.prepare(
+      `SELECT p.pm_user_id, u.name, COUNT(*) AS n
+       FROM projects p
+       LEFT JOIN users u ON u.id = p.pm_user_id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+       GROUP BY p.pm_user_id
+       ORDER BY n DESC`
+    ).all<{ pm_user_id: string | null; name: string | null; n: number }>(),
 
     db.prepare(
       `SELECT id, name, customer_name, actual_go_live_date
@@ -497,15 +503,6 @@ app.get("/leadership", async (c) => {
 
     // ── Click-to-expand detail lists — each backs a metric tile's drill-down ──
     db.prepare(
-      `SELECT t.id, t.title, t.project_id, p.name AS project_name, t.completed_at
-       FROM tasks t
-       JOIN projects p ON p.id = t.project_id
-       WHERE t.completed_at >= ? AND t.completed_at < ?
-       ORDER BY t.completed_at DESC
-       LIMIT 15`
-    ).bind(start, end).all<{ id: string; title: string; project_id: string; project_name: string; completed_at: string }>(),
-
-    db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
        WHERE (archived = 0 OR archived IS NULL)
@@ -576,9 +573,13 @@ app.get("/leadership", async (c) => {
       atRiskProjects: atRisk?.n ?? 0,
       blockedProjects: blocked?.n ?? 0,
       openBlockers: openBlockers?.n ?? 0,
-      tasksCompleted: tasksCompleted?.n ?? 0,
       tasksByEngineer: (tasksByEngineer.results ?? []).map((r) => ({
         user_id: r.assignee_user_id,
+        name: r.name,
+        n: r.n,
+      })),
+      projectsByPM: (projectsByPM.results ?? []).map((r) => ({
+        user_id: r.pm_user_id,
         name: r.name,
         n: r.n,
       })),
@@ -600,13 +601,6 @@ app.get("/leadership", async (c) => {
         customer_name: r.customer_name,
         date: r.actual_go_live_date,
         status: r.status,
-      })),
-      tasksCompletedList: (tasksCompletedList.results ?? []).map((r) => ({
-        id: r.id,
-        title: r.title,
-        project_id: r.project_id,
-        project_name: r.project_name,
-        date: r.completed_at,
       })),
       activeProjectsList: (activeProjectsList.results ?? []).map((r) => ({
         id: r.id,

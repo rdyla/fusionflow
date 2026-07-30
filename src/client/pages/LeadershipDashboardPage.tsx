@@ -201,36 +201,33 @@ export default function LeadershipDashboardPage() {
           <p style={{ fontSize: 12, color: "#94a3b8", marginTop: -8, marginBottom: 12 }}>Click any tile to see what makes it up.</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, marginBottom: 28 }}>
             <MetricCard
-              title="Tasks Completed"
-              value={data.projects.tasksCompleted}
-              expandKey="tasksCompleted"
-              expanded={expandedKeys.has("tasksCompleted")}
+              title="Projects by PM"
+              value={data.projects.projectsByPM.filter((r) => r.user_id).length}
+              sub={
+                data.projects.projectsByPM[0]?.user_id
+                  ? `busiest: ${data.projects.projectsByPM[0].name ?? "Unknown"} (${data.projects.projectsByPM[0].n})`
+                  : undefined
+              }
+              expandKey="projectsByPM"
+              expanded={expandedKeys.has("projectsByPM")}
               onToggle={toggleExpand}
             >
-              {data.projects.tasksCompletedList.length === 0 ? (
-                <EmptyNote>No tasks completed in this period.</EmptyNote>
+              {data.projects.projectsByPM.length === 0 ? (
+                <EmptyNote>No active projects assigned to a PM.</EmptyNote>
               ) : (
-                <>
-                  {data.projects.tasksCompletedList.map((t) => (
-                    <ListRow
-                      key={t.id}
-                      to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}
-                      title={t.title ?? "Untitled"}
-                      subtitle={t.project_name}
-                      right={formatDate(t.date)}
-                    />
-                  ))}
-                  {data.projects.tasksCompleted > data.projects.tasksCompletedList.length && (
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
-                      Showing {data.projects.tasksCompletedList.length} of {data.projects.tasksCompleted}.
-                    </div>
-                  )}
-                </>
+                <HoursLeaderboard
+                  rows={data.projects.projectsByPM.map((r) => ({
+                    key: r.user_id ?? "unassigned",
+                    label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
+                    hours: r.n,
+                  }))}
+                  unit=""
+                />
               )}
             </MetricCard>
 
             <MetricCard
-              title="Go-Lives"
+              title={`Go-Lives This ${windowLabel}`}
               value={data.projects.goLives.length}
               accent={data.projects.goLives.length > 0 ? "#107c10" : undefined}
               expandKey="goLives"
@@ -550,7 +547,7 @@ function TotalHoursCard({ total, prev, entries }: { total: number; prev: number;
   );
 }
 
-function HoursLeaderboard({ rows }: { rows: { key: string; label: string; hours: number }[] }) {
+function HoursLeaderboard({ rows, unit = "h" }: { rows: { key: string; label: string; hours: number }[]; unit?: string }) {
   const max = rows.reduce((m, r) => Math.max(m, r.hours), 0) || 1;
   return (
     <div>
@@ -558,7 +555,9 @@ function HoursLeaderboard({ rows }: { rows: { key: string; label: string; hours:
         <div key={r.key} style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
             <span style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", flexShrink: 0, marginLeft: 8 }}>{r.hours.toFixed(1)} h</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", flexShrink: 0, marginLeft: 8 }}>
+              {unit === "h" ? `${r.hours.toFixed(1)} h` : `${r.hours}${unit ? ` ${unit}` : ""}`}
+            </span>
           </div>
           <div style={{ height: 6, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${(r.hours / max) * 100}%`, background: "#0b9aad", borderRadius: 4 }} />
