@@ -1,7 +1,11 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
-import { zPlanDate, zPlanDateOrBlank, zPlanTimestamp } from "../lib/dateSchemas";
+// Time-entry schemas below use zPlanTimestamp, not zPlanDate: their
+// scheduled_start / scheduled_end are full ISO datetimes bound for D365
+// msdyn_timeentry ("2026-07-30T15:00:00.000Z"), whereas tasks.scheduled_* and
+// due_date are date-only values that drive the Gantt.
+import { zPlanDateOrBlank, zPlanTimestamp } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { maybeSendEmail } from "../services/emailService";
@@ -543,8 +547,8 @@ app.get("/:id/time-entry/setup", async (c) => {
 });
 
 const logTimeSchema = z.object({
-  scheduled_start: zPlanDate,
-  scheduled_end: zPlanDate,
+  scheduled_start: zPlanTimestamp,
+  scheduled_end: zPlanTimestamp,
   pay_code_id: z.string(),
   cost_code_id: z.string().nullable().optional(),
   case_id: z.string(),
@@ -659,8 +663,8 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
 // Both pay code (labor) and cost code are REQUIRED here.
 
 const logStageTimeSchema = z.object({
-  scheduled_start: zPlanDate,
-  scheduled_end: zPlanDate,
+  scheduled_start: zPlanTimestamp,
+  scheduled_end: zPlanTimestamp,
   pay_code_id: z.string().min(1),
   cost_code_id: z.string().min(1),
   /** Optional free-text note; combined into the CRM subject as
@@ -829,8 +833,8 @@ app.delete("/:id/stages/:stageId/time-entries/:entryId", async (c) => {
 // client. Both pay code (labor) and cost code are REQUIRED here.
 
 const logProjectTimeSchema = z.object({
-  scheduled_start: zPlanDate,
-  scheduled_end: zPlanDate,
+  scheduled_start: zPlanTimestamp,
+  scheduled_end: zPlanTimestamp,
   pay_code_id: z.string().min(1),
   cost_code_id: z.string().min(1),
   /** Optional free-text note; combined into the CRM subject as
