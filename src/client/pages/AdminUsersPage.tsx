@@ -182,6 +182,7 @@ export default function AdminUsersPage() {
       is_support_supervisor: user.is_support_supervisor ?? 0,
       is_project_resource: user.is_project_resource ?? 0,
       is_pm_eligible: user.is_pm_eligible ?? 0,
+      is_sales_tools: user.is_sales_tools ?? 0,
       email_notifications: user.email_notifications ?? "all",
     });
   }
@@ -202,6 +203,7 @@ export default function AdminUsersPage() {
         is_support_supervisor: editForm.role === "client" ? 0 : (editForm.is_support_supervisor ?? 0),
         is_project_resource: editForm.role === "client" ? 0 : (editForm.is_project_resource ?? 0),
         is_pm_eligible: editForm.role === "client" ? 0 : (editForm.is_pm_eligible ?? 0),
+        is_sales_tools: editForm.role === "client" ? 0 : (editForm.is_sales_tools ?? 0),
         email_notifications: (editForm.email_notifications ?? "all") as "all" | "important" | "off",
       });
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -738,6 +740,29 @@ export default function AdminUsersPage() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Available as PM</div>
                     <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
                       Lets this user be assigned as a project's Project Manager regardless of their primary role (e.g. an admin who also runs projects). PM-only — does not make them an Implementation Engineer option.
+                    </div>
+                  </div>
+                </label>
+              )}
+
+              {/* Sales Tools flag — internal only */}
+              {editForm.role !== "client" && (
+                <label
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer",
+                    border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", background: "#f8fafc",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={(editForm.is_sales_tools ?? 0) === 1}
+                    onChange={(e) => setEditForm({ ...editForm, is_sales_tools: e.target.checked ? 1 : 0 })}
+                    style={{ marginTop: 3, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Sales Tools</div>
+                    <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+                      Grants access to the Sales Tools module (Commissions Calculator, Zoom Resell, Zoom Agency). Additive to the user's role.
                     </div>
                   </div>
                 </label>

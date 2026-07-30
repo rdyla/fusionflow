@@ -40,6 +40,7 @@ import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import { SolutionTypeFilterPills } from "../components/ui/SolutionTypeFilterPills";
 import { parseSolutionTypes, parseTaggedTitle, SOLUTION_TYPES, SOLUTION_TYPE_LABELS, type SolutionType } from "../../shared/solutionTypes";
 import { VENDOR_OPTIONS, vendorLabel } from "../../shared/vendors";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN, commitIfPlanDate } from "../../shared/planDates";
 import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
@@ -316,6 +317,9 @@ export default function ProjectDetailPage() {
   const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
   // PM-initiated date cascade — which task is the shift anchor (null = closed).
   const [cascadeFromTask, setCascadeFromTask] = useState<Task | null>(null);
+  // Task note editor — which task's note glyph is expanded (null = closed) + its draft text.
+  const [openNoteTaskId, setOpenNoteTaskId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
   const [timeEntrySetup, setTimeEntrySetup] = useState<import("../lib/api").TimeEntrySetup | null>(null);
   const [timeEntryLoadingSetup, setTimeEntryLoadingSetup] = useState(false);
   const [timeEntryForm, setTimeEntryForm] = useState({ date: "", startTime: "", endTime: "", payCodeId: "", costCodeId: "", note: "" });
@@ -1721,28 +1725,32 @@ export default function ProjectDetailPage() {
                       Start
                       <input
                         type="date"
+                        min={PLAN_DATE_MIN}
+                        max={PLAN_DATE_MAX}
                         value={stage.planned_start ?? ""}
                         disabled={!canManageTasks}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canManageTasks ? "#fff" : "#f8fafc", color: "#1e293b" }}
-                        onChange={async (e) => {
+                        onChange={(e) => commitIfPlanDate(e.target.value, async (planned_start) => {
                           if (!project) return;
-                          const updated = await api.updateStage(project.id, stage.id, { planned_start: e.target.value || null });
+                          const updated = await api.updateStage(project.id, stage.id, { planned_start });
                           setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-                        }}
+                        })}
                       />
                     </label>
                     <label style={{ fontSize: 11, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                       End
                       <input
                         type="date"
+                        min={PLAN_DATE_MIN}
+                        max={PLAN_DATE_MAX}
                         value={stage.planned_end ?? ""}
                         disabled={!canManageTasks}
                         style={{ fontSize: 11, padding: "2px 6px", border: "1px solid #d1d5db", borderRadius: 4, background: canManageTasks ? "#fff" : "#f8fafc", color: "#1e293b" }}
-                        onChange={async (e) => {
+                        onChange={(e) => commitIfPlanDate(e.target.value, async (planned_end) => {
                           if (!project) return;
-                          const updated = await api.updateStage(project.id, stage.id, { planned_end: e.target.value || null });
+                          const updated = await api.updateStage(project.id, stage.id, { planned_end });
                           setStages((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
-                        }}
+                        })}
                       />
                     </label>
                     {/* Stage status is now auto-derived from task statuses on
@@ -2037,10 +2045,12 @@ export default function ProjectDetailPage() {
                                     <td style={cellStyle}>
                                       <input
                                         type="date"
+                                        min={PLAN_DATE_MIN}
+                                        max={PLAN_DATE_MAX}
                                         value={task.due_date ?? ""}
                                         disabled={!canManageTasks}
                                         style={rowInputStyle}
-                                        onChange={(e) => patchTask(task.id, { due_date: e.target.value || null })}
+                                        onChange={(e) => commitIfPlanDate(e.target.value, (due_date) => patchTask(task.id, { due_date }))}
                                       />
                                     </td>
                                     <td style={cellStyle}>
@@ -2082,9 +2092,11 @@ export default function ProjectDetailPage() {
                                         {isDone && (
                                           <input
                                             type="date"
+                                            min={PLAN_DATE_MIN}
+                                            max={PLAN_DATE_MAX}
                                             value={task.completed_at?.slice(0, 10) ?? ""}
                                             disabled={!canManageTasks}
-                                            onChange={(e) => patchTask(task.id, { completed_at: e.target.value || null })}
+                                            onChange={(e) => commitIfPlanDate(e.target.value, (completed_at) => patchTask(task.id, { completed_at }))}
                                             style={{ ...cellInputStyle, color: isBlocked ? "#dc2626" : "#059669", fontWeight: 500, padding: "3px 4px" }}
                                             title="Edit completion date"
                                           />
@@ -2094,6 +2106,28 @@ export default function ProjectDetailPage() {
                                     <td style={{ ...cellStyle, textAlign: "right", whiteSpace: "nowrap" }}>
                                       {/* Time is logged at the stage level now — see the
                                           "Log time" button on each stage header. */}
+                                      <button
+                                        type="button"
+                                        title={task.notes ? "View/edit note" : "Add note"}
+                                        onClick={() => {
+                                          if (openNoteTaskId === task.id) {
+                                            setOpenNoteTaskId(null);
+                                          } else {
+                                            setOpenNoteTaskId(task.id);
+                                            setNoteDraft(task.notes ?? "");
+                                          }
+                                        }}
+                                        style={{
+                                          background: task.notes ? "#0b9aad" : "none",
+                                          border: `1px solid ${task.notes ? "#0b9aad" : "#cbd5e1"}`,
+                                          color: task.notes ? "#fff" : "#94a3b8",
+                                          boxShadow: openNoteTaskId === task.id ? "0 0 0 2px rgba(11,154,173,0.35)" : "none",
+                                          borderRadius: 4, padding: "3px 8px", fontSize: 11, cursor: "pointer", marginRight: 4,
+                                          fontWeight: task.notes ? 700 : 400,
+                                        }}
+                                      >
+                                        📝
+                                      </button>
                                       {canManageTasks && task.due_date && (
                                         <button
                                           title="Cascade dates downstream from this task"
@@ -2134,6 +2168,43 @@ export default function ProjectDetailPage() {
                                             </span>
                                           </div>
                                         ))}
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {openNoteTaskId === task.id && (
+                                    <tr>
+                                      <td colSpan={8} style={{ padding: "4px 8px 10px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                        <textarea
+                                          autoFocus
+                                          value={noteDraft}
+                                          onChange={(e) => setNoteDraft(e.target.value)}
+                                          placeholder="Note for this task…"
+                                          style={{
+                                            width: "100%", minHeight: 60, resize: "vertical", fontSize: 12.5,
+                                            fontFamily: "inherit", padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: 4,
+                                          }}
+                                        />
+                                        <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                                          <button
+                                            type="button"
+                                            className="ms-btn-primary"
+                                            style={{ fontSize: 11, padding: "3px 10px" }}
+                                            onClick={() => {
+                                              patchTask(task.id, { notes: noteDraft.trim() || null });
+                                              setOpenNoteTaskId(null);
+                                            }}
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="ms-btn-secondary"
+                                            style={{ fontSize: 11, padding: "3px 10px" }}
+                                            onClick={() => setOpenNoteTaskId(null)}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
                                       </td>
                                     </tr>
                                   )}

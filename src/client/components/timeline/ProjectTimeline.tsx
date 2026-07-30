@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import type { Stage, Task, ZoomRecording } from "../../lib/api";
 import { type SolutionType, parseTaggedTitle } from "../../../shared/solutionTypes";
 import { SolutionTypeFilterPills } from "../ui/SolutionTypeFilterPills";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN, planDateMs, planTimestampMs } from "../../../shared/planDates";
 
 const GANTT_COLLAPSED_KEY = "cloudconnect:timeline:gantt:collapsed";
 const PHASE_EXPANDED_KEY_PREFIX = "cloudconnect:timeline:gantt:expandedStages:";
@@ -32,10 +33,18 @@ type Props = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Implausible dates resolve to null so a stray year can neither position a bar
+// nor bound the axis. A single year-26 value (what `<input type="date">` reports
+// for a year typed as "26") would otherwise stretch the span by ~2000 years and
+// squash every real bar into a sliver at the right edge. See shared/planDates.
 function parseDate(s: string | null): number | null {
-  if (!s) return null;
-  const ms = new Date(s).getTime();
-  return isNaN(ms) ? null : ms;
+  return planDateMs(s);
+}
+
+/** For columns that may carry a time component (completed_at is stamped with
+ *  SQLite CURRENT_TIMESTAMP on auto-complete). */
+function parseStamp(s: string | null): number | null {
+  return planTimestampMs(s);
 }
 
 function getMonthsBetween(minMs: number, maxMs: number) {
@@ -140,26 +149,34 @@ export default function ProjectTimeline({ stages, tasks = [], recordings = [], p
 
   // ── Gantt ──────────────────────────────────────────────────────────────────
 
-  const datedStages = stages.filter((p) => p.planned_start && p.planned_end);
+  // Plausibility, not truthiness — an out-of-window planned_start would parse to
+  // null and the axis would then bound off a bogus value.
+  const datedStages = stages.filter((p) => parseDate(p.planned_start) !== null && parseDate(p.planned_end) !== null);
   let ganttContent: React.ReactNode = null;
 
-  // Type-filter first, then keep tasks that have at least one date (due/done/scheduled) for bounding
+  // Type-filter first, then keep tasks that have at least one usable date (due/done/scheduled) for bounding
   const filteredTasks = tasks.filter(taskMatchesTypeFilter);
-  const datedTasks = filteredTasks.filter((t) => t.scheduled_start || t.scheduled_end || t.due_date || t.completed_at);
+  const datedTasks = filteredTasks.filter(
+    (t) => parseDate(t.scheduled_start) !== null || parseDate(t.scheduled_end) !== null || parseDate(t.due_date) !== null || parseStamp(t.completed_at) !== null,
+  );
 
   if (datedStages.length > 0 || datedTasks.length > 0) {
     const allMs: number[] = [];
-    datedStages.forEach((p) => { allMs.push(parseDate(p.planned_start)!, parseDate(p.planned_end)!); });
-    datedTasks.forEach((t) => {
-      const s = parseDate(t.scheduled_start); if (s) allMs.push(s);
-      const e = parseDate(t.scheduled_end);   if (e) allMs.push(e);
-      const d = parseDate(t.due_date);        if (d) allMs.push(d);
-      const c = parseDate(t.completed_at);    if (c) allMs.push(c);
+    datedStages.forEach((p) => {
+      const s = parseDate(p.planned_start); if (s !== null) allMs.push(s);
+      const e = parseDate(p.planned_end);   if (e !== null) allMs.push(e);
     });
-    recordings.forEach((r) => { const ms = parseDate(r.start_time.slice(0, 10)); if (ms) allMs.push(ms); });
+    datedTasks.forEach((t) => {
+      const s = parseDate(t.scheduled_start); if (s !== null) allMs.push(s);
+      const e = parseDate(t.scheduled_end);   if (e !== null) allMs.push(e);
+      const d = parseDate(t.due_date);        if (d !== null) allMs.push(d);
+      const c = parseStamp(t.completed_at);   if (c !== null) allMs.push(c);
+    });
+    recordings.forEach((r) => { const ms = parseDate(r.start_time.slice(0, 10)); if (ms !== null) allMs.push(ms); });
 
-    const rawMin = Math.min(...allMs);
-    const rawMax = Math.max(...allMs);
+    // Every contributor is now guaranteed in-window, so min/max can't blow out.
+    const rawMin = allMs.length ? Math.min(...allMs) : Date.parse(PLAN_DATE_MIN);
+    const rawMax = allMs.length ? Math.max(...allMs) : Date.parse(PLAN_DATE_MAX);
     const pad = Math.max((rawMax - rawMin) * 0.03, 3 * 24 * 60 * 60 * 1000);
     const minMs = rawMin - pad;
     const maxMs = rawMax + pad;
@@ -335,7 +352,7 @@ export default function ProjectTimeline({ stages, tasks = [], recordings = [], p
                   {/* Task rows — only when stage expanded. Each task: hollow ring at due, filled dot at done, line between. */}
                   {isExpanded && stageTasks.map((task) => {
                     const dueMs  = parseDate(task.due_date);
-                    const doneMs = parseDate(task.completed_at);
+                    const doneMs = parseStamp(task.completed_at);
                     const taskColor = STATUS_COLOR[task.status ?? "not_started"] ?? STATUS_COLOR.not_started;
                     const dueLeft  = dueMs  !== null ? pct(dueMs,  minMs, totalMs) : null;
                     const doneLeft = doneMs !== null ? pct(doneMs, minMs, totalMs) : null;
@@ -547,19 +564,19 @@ export default function ProjectTimeline({ stages, tasks = [], recordings = [], p
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
                       <label className="ms-label">
                         <span>Planned Start</span>
-                        <input type="date" className="ms-input" value={stageForm.planned_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_start: e.target.value })} />
+                        <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={stageForm.planned_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_start: e.target.value })} />
                       </label>
                       <label className="ms-label">
                         <span>Planned End</span>
-                        <input type="date" className="ms-input" value={stageForm.planned_end ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_end: e.target.value })} />
+                        <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={stageForm.planned_end ?? ""} onChange={(e) => setStageForm({ ...stageForm, planned_end: e.target.value })} />
                       </label>
                       <label className="ms-label">
                         <span>Actual Start</span>
-                        <input type="date" className="ms-input" value={stageForm.actual_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, actual_start: e.target.value })} />
+                        <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={stageForm.actual_start ?? ""} onChange={(e) => setStageForm({ ...stageForm, actual_start: e.target.value })} />
                       </label>
                       <label className="ms-label">
                         <span>Actual End</span>
-                        <input type="date" className="ms-input" value={stageForm.actual_end ?? ""} onChange={(e) => setStageForm({ ...stageForm, actual_end: e.target.value })} />
+                        <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={stageForm.actual_end ?? ""} onChange={(e) => setStageForm({ ...stageForm, actual_end: e.target.value })} />
                       </label>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>

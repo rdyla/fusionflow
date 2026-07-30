@@ -22,6 +22,7 @@ import {
   splitAnswersByType,
   type SolutionTypeKey,
 } from "../lib/needsAssessmentLibrary";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -555,6 +556,8 @@ export default function SolutionDetailPage() {
               <input
                 className="ms-input"
                 type="date"
+                min={PLAN_DATE_MIN}
+                max={PLAN_DATE_MAX}
                 defaultValue={solution.cloud_contract_expiration_date ?? ""}
                 disabled={!canEdit || saving}
                 onBlur={(e) => {
@@ -594,6 +597,8 @@ export default function SolutionDetailPage() {
               <input
                 className="ms-input"
                 type="date"
+                min={PLAN_DATE_MIN}
+                max={PLAN_DATE_MAX}
                 defaultValue={solution.estimated_close_date ?? ""}
                 disabled={!canEdit || saving}
                 onBlur={(e) => {

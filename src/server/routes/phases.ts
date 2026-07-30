@@ -21,6 +21,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDate } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject, visiblePhaseIds } from "../services/accessService";
 import { ensurePhaseSharePointFolder } from "../services/graphService";
@@ -46,8 +47,6 @@ type PhaseRow = {
 
 const PHASE_SELECT_COLS =
   "id, project_id, name, target_go_live_date, display_order, crm_case_id, sharepoint_folder_url, created_at, updated_at";
-
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // ── List ─────────────────────────────────────────────────────────────────────
 
@@ -77,7 +76,7 @@ app.get("/:id/phases", async (c) => {
 
 const createSchema = z.object({
   name: z.string().min(1).max(255),
-  target_go_live_date: z.string().regex(ISO_DATE).nullable().optional(),
+  target_go_live_date: zPlanDate.nullable().optional(),
 });
 
 app.post("/:id/phases", async (c) => {
@@ -203,7 +202,7 @@ app.post("/:id/phases", async (c) => {
 
 const updateSchema = z.object({
   name: z.string().min(1).max(255).optional(),
-  target_go_live_date: z.string().regex(ISO_DATE).nullable().optional(),
+  target_go_live_date: zPlanDate.nullable().optional(),
   display_order: z.number().int().min(0).optional(),
   // Phase-scoped CRM case for time-entry routing. Null clears the link
   // and time entries fall back to projects.crm_case_id.

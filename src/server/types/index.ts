@@ -8,6 +8,7 @@ export interface AppUser {
   role: AppRole;
   is_active: number;
   is_support_supervisor?: number; // additive flag — supervisor-only digest feature
+  is_sales_tools?: number; // additive flag — Sales Tools module access (Commissions Calculator, Zoom Resell, Zoom Agency)
   dynamics_account_id: string | null;
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions

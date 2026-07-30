@@ -82,6 +82,7 @@ export type User = {
   is_support_supervisor?: number;
   is_project_resource?: number;
   is_pm_eligible?: number;
+  is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
   phone?: string | null;
@@ -886,6 +887,8 @@ export type Task = {
   /** Additional resources beyond the primary assignee (migration 0124).
    *  Rendered as sub-rows on the Tasks tab. */
   assignees?: TaskAssignee[];
+  /** Free-text note, editable via the note glyph on the Tasks tab (migration 0136). */
+  notes: string | null;
 };
 
 /** One extra resource on a task, from task_assignees. Exactly one of
@@ -2003,6 +2006,7 @@ export const api = {
       completed_at?: string | null;
       priority?: "low" | "medium" | "high" | null;
       status?: "not_started" | "in_progress" | "completed" | "blocked";
+      notes?: string | null;
     }
   ) =>
     request<Task>(`/projects/${projectId}/tasks/${taskId}`, {
@@ -2397,6 +2401,7 @@ export const api = {
       is_support_supervisor?: number;
       is_project_resource?: number;
       is_pm_eligible?: number;
+      is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
       zoom_user_id?: string | null;

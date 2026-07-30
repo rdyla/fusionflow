@@ -6,6 +6,7 @@ import {
 } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { useDemoMode } from "../lib/demoMode";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 // ── Journey data ──────────────────────────────────────────────────────────────
 
@@ -601,6 +602,8 @@ export default function SolutionsPage() {
                     <input
                       className="ms-input"
                       type="date"
+                      min={PLAN_DATE_MIN}
+                      max={PLAN_DATE_MAX}
                       value={newOpportunityCloseDate}
                       onChange={(e) => setNewOpportunityCloseDate(e.target.value)}
                       disabled={creatingOpportunity}

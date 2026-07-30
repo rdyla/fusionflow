@@ -30,6 +30,7 @@ import {
   TECHNICAL_FIT_LABELS,
   type TimeRating,
 } from "../../shared/timeFramework";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 type Tab = "assessments" | "tech-stack" | "roadmap" | "utilization";
 
@@ -632,7 +633,7 @@ export default function OptimizeAccountPage() {
                     </label>
                     <label className="ms-label">
                       <span>Contract Expiration</span>
-                      <input type="date" className="ms-input" value={techForm.contract_expiration} onChange={(e) => setTechForm({ ...techForm, contract_expiration: e.target.value })} />
+                      <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={techForm.contract_expiration} onChange={(e) => setTechForm({ ...techForm, contract_expiration: e.target.value })} />
                     </label>
                     <label className="ms-label">
                       <span>Initiative Start</span>
@@ -806,7 +807,7 @@ export default function OptimizeAccountPage() {
                     </label>
                     <label className="ms-label">
                       <span>Target Date</span>
-                      <input type="date" className="ms-input" value={roadmapForm.target_date} onChange={(e) => setRoadmapForm({ ...roadmapForm, target_date: e.target.value })} />
+                      <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={roadmapForm.target_date} onChange={(e) => setRoadmapForm({ ...roadmapForm, target_date: e.target.value })} />
                     </label>
                   </div>
                   <label className="ms-label">

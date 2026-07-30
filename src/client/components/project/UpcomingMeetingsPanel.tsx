@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type ProjectMeeting, type MeetingInput } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
 
 // Curated tz list — same set the old cadence panel offered. "—" clears it.
 const TZ_OPTIONS: Array<{ label: string; tz: string }> = [
@@ -287,7 +288,7 @@ function MeetingEditor({
         </label>
         <label style={fieldLabel}>
           Date
-          <input className="ms-input" style={inputStyle} type="date" value={form.meeting_date} onChange={(e) => setForm((f) => ({ ...f, meeting_date: e.target.value }))} />
+          <input className="ms-input" style={inputStyle} type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} value={form.meeting_date} onChange={(e) => setForm((f) => ({ ...f, meeting_date: e.target.value }))} />
         </label>
         <label style={fieldLabel}>
           Duration (min)

@@ -41,6 +41,7 @@ import stagingPromoteRoutes from "./routes/stagingPromote";
 import stakeholderRoutes from "./routes/stakeholder";
 import phasesRoutes from "./routes/phases";
 import meRoutes from "./routes/me";
+import salesToolsRoutes from "./routes/salesTools";
 import customPlanRoutes from "./routes/customPlan"; // one-off MedVet custom plan (throwaway)
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder } from "./lib/emailTemplates";
@@ -104,6 +105,7 @@ app.route("/api/projects", stakeholderRoutes);
 app.route("/api/projects", phasesRoutes);
 app.route("/api/projects", customPlanRoutes);
 app.route("/api/me", meRoutes);
+app.route("/api/sales-tools", salesToolsRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means
