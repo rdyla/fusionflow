@@ -386,6 +386,41 @@ export type LeadershipDashboardResponse = {
       date: string | null;
       status: string | null;
     }[];
+    tasksCompletedList: {
+      id: string;
+      title: string | null;
+      project_id: string;
+      project_name: string | null;
+      date: string | null;
+    }[];
+    activeProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      health: string | null;
+      status: string | null;
+    }[];
+    atRiskProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      health: string | null;
+      status: string | null;
+    }[];
+    blockedProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      health: string | null;
+      status: string | null;
+    }[];
+    openRisksList: {
+      id: string;
+      title: string | null;
+      severity: string | null;
+      project_id: string;
+      project_name: string | null;
+    }[];
   };
   pipeline: {
     solutions: {
@@ -393,6 +428,13 @@ export type LeadershipDashboardResponse = {
       wonThisPeriod: number;
       lostThisPeriod: number;
       recentWon: {
+        id: string;
+        name: string | null;
+        customer_name: string | null;
+        vendor: string | null;
+        date: string | null;
+      }[];
+      recentLost: {
         id: string;
         name: string | null;
         customer_name: string | null;
