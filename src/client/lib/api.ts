@@ -348,13 +348,6 @@ export type LeadershipDashboardResponse = {
       hours: number;
       entries: number;
     }[];
-    byProject: {
-      project_id: string | null;
-      name: string | null;
-      customer_name: string | null;
-      hours: number;
-      entries: number;
-    }[];
   };
   projects: {
     activeProjects: number;
@@ -458,6 +451,19 @@ export type LeadershipDashboardResponse = {
       customer_name: string | null;
       date: string | null;
     }[];
+  };
+  hoursRisk: {
+    atRiskCount: number;
+    atRisk: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      hoursLogged: number;
+      quotedHours: number | null;
+      pct: number | null;
+    }[];
+    noQuoteCount: number;
+    candidatesChecked: number;
   };
 };
 
