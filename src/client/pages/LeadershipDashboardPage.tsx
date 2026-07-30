@@ -28,24 +28,86 @@ const PIPELINE_STATUS_LABELS: Record<string, string> = {
   handoff: "Handoff Ready",
 };
 
+const SEVERITY_COLOR: Record<string, string> = {
+  critical: "#d13438",
+  high: "#ff8c00",
+  medium: "#eab308",
+  low: "#94a3b8",
+};
+
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>{children}</div>;
+}
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
+// A metric tile that, when given `expandKey` + `onToggle`, becomes clickable —
+// click reveals `children` (the list/detail comprising that number) inline,
+// via a rotating chevron affordance. Portfolio-wide numbers here have no
+// single project's tab to drill into (unlike the per-project Dashboard's
+// tab-switch KPI tiles), so this expands in place instead of navigating.
 function MetricCard({
   title,
   value,
   accent,
   sub,
+  expandKey,
+  expanded,
+  onToggle,
+  children,
 }: {
   title: string;
   value: number | string;
   accent?: string;
   sub?: React.ReactNode;
+  expandKey?: string;
+  expanded?: boolean;
+  onToggle?: (key: string) => void;
+  children?: React.ReactNode;
 }) {
+  const expandable = !!expandKey && !!onToggle;
   return (
-    <div className="ms-metric-card">
-      <div className="ms-metric-label">{title}</div>
+    <div
+      className="ms-metric-card"
+      role={expandable ? "button" : undefined}
+      tabIndex={expandable ? 0 : undefined}
+      aria-expanded={expandable ? expanded : undefined}
+      onClick={expandable ? () => onToggle!(expandKey!) : undefined}
+      onKeyDown={
+        expandable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onToggle!(expandKey!);
+              }
+            }
+          : undefined
+      }
+      style={expandable ? { cursor: "pointer" } : undefined}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="ms-metric-label">{title}</div>
+        {expandable && (
+          <span
+            style={{
+              fontSize: 10,
+              color: "#94a3b8",
+              display: "inline-block",
+              transform: expanded ? "rotate(90deg)" : "none",
+              transition: "transform 0.15s",
+            }}
+          >
+            ▶
+          </span>
+        )}
+      </div>
       <div className="ms-metric-value" style={accent ? { color: accent } : undefined}>{value}</div>
       {sub && <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{sub}</div>}
+      {expandable && expanded && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f1f5f9" }} onClick={(e) => e.stopPropagation()}>
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -91,6 +153,16 @@ export default function LeadershipDashboardPage() {
   const [data, setData] = useState<LeadershipDashboardResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+
+  function toggleExpand(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -126,77 +198,178 @@ export default function LeadershipDashboardPage() {
         <>
           {/* ── Outcomes ─────────────────────────────────────────────────── */}
           <div className="ms-section-title" style={{ marginBottom: 12 }}>Outcomes</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 16, marginBottom: 20 }}>
-            <MetricCard title="Tasks Completed" value={data.projects.tasksCompleted} />
-            <MetricCard title="Go-Lives" value={data.projects.goLives.length} accent={data.projects.goLives.length > 0 ? "#107c10" : undefined} />
-            <MetricCard title="Upcoming Go-Lives" value={data.projects.upcomingGoLives.length} />
+          <p style={{ fontSize: 12, color: "#94a3b8", marginTop: -8, marginBottom: 12 }}>Click any tile to see what makes it up.</p>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16, marginBottom: 28 }}>
+            <MetricCard
+              title="Tasks Completed"
+              value={data.projects.tasksCompleted}
+              expandKey="tasksCompleted"
+              expanded={expandedKeys.has("tasksCompleted")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.tasksCompletedList.length === 0 ? (
+                <EmptyNote>No tasks completed in this period.</EmptyNote>
+              ) : (
+                <>
+                  {data.projects.tasksCompletedList.map((t) => (
+                    <ListRow
+                      key={t.id}
+                      to={`/projects/${t.project_id}?tab=tasks&taskId=${t.id}`}
+                      title={t.title ?? "Untitled"}
+                      subtitle={t.project_name}
+                      right={formatDate(t.date)}
+                    />
+                  ))}
+                  {data.projects.tasksCompleted > data.projects.tasksCompletedList.length && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                      Showing {data.projects.tasksCompletedList.length} of {data.projects.tasksCompleted}.
+                    </div>
+                  )}
+                </>
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="Go-Lives"
+              value={data.projects.goLives.length}
+              accent={data.projects.goLives.length > 0 ? "#107c10" : undefined}
+              expandKey="goLives"
+              expanded={expandedKeys.has("goLives")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.goLives.length === 0 ? (
+                <EmptyNote>No go-lives in this period.</EmptyNote>
+              ) : (
+                data.projects.goLives.map((g) => (
+                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
+                ))
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="Upcoming Go-Lives"
+              value={data.projects.upcomingGoLives.length}
+              expandKey="upcomingGoLives"
+              expanded={expandedKeys.has("upcomingGoLives")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.upcomingGoLives.length === 0 ? (
+                <EmptyNote>No upcoming go-lives in the next 30 days.</EmptyNote>
+              ) : (
+                data.projects.upcomingGoLives.map((g) => (
+                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
+                ))
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="Went Live · Still Open"
+              value={data.projects.wentLiveStillOpen.length}
+              expandKey="wentLiveStillOpen"
+              expanded={expandedKeys.has("wentLiveStillOpen")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.wentLiveStillOpen.length === 0 ? (
+                <EmptyNote>Nothing lingering — go-lives are wrapped up or in Optimize.</EmptyNote>
+              ) : (
+                data.projects.wentLiveStillOpen.map((g) => (
+                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
+                ))
+              )}
+            </MetricCard>
+
             <MetricCard
               title="Active Projects"
               value={data.projects.activeProjects}
-              sub={`${data.projects.atRiskProjects} at risk · ${data.projects.blockedProjects} blocked`}
-            />
+              expandKey="activeProjects"
+              expanded={expandedKeys.has("activeProjects")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.activeProjectsList.length === 0 ? (
+                <EmptyNote>No active projects.</EmptyNote>
+              ) : (
+                <>
+                  {data.projects.activeProjectsList.map((p) => (
+                    <ListRow key={p.id} to={`/projects/${p.id}`} title={p.name ?? "Untitled"} subtitle={p.customer_name} right={p.health ?? p.status} />
+                  ))}
+                  {data.projects.activeProjects > data.projects.activeProjectsList.length && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                      Showing {data.projects.activeProjectsList.length} of {data.projects.activeProjects}.
+                    </div>
+                  )}
+                </>
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="At Risk"
+              value={data.projects.atRiskProjects}
+              accent={data.projects.atRiskProjects > 0 ? "#ff8c00" : undefined}
+              expandKey="atRiskProjects"
+              expanded={expandedKeys.has("atRiskProjects")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.atRiskProjectsList.length === 0 ? (
+                <EmptyNote>No at-risk projects.</EmptyNote>
+              ) : (
+                data.projects.atRiskProjectsList.map((p) => (
+                  <ListRow key={p.id} to={`/projects/${p.id}`} title={p.name ?? "Untitled"} subtitle={p.customer_name} right={p.status} />
+                ))
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="Blocked"
+              value={data.projects.blockedProjects}
+              accent={data.projects.blockedProjects > 0 ? "#d13438" : undefined}
+              expandKey="blockedProjects"
+              expanded={expandedKeys.has("blockedProjects")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.blockedProjectsList.length === 0 ? (
+                <EmptyNote>No blocked projects.</EmptyNote>
+              ) : (
+                data.projects.blockedProjectsList.map((p) => (
+                  <ListRow key={p.id} to={`/projects/${p.id}`} title={p.name ?? "Untitled"} subtitle={p.customer_name} right={p.health} />
+                ))
+              )}
+            </MetricCard>
+
             <MetricCard
               title="Open Blockers"
               value={data.projects.openBlockers}
               accent={data.projects.openBlockers > 0 ? "#d13438" : undefined}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Go-lives this period</div>
-              {data.projects.goLives.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No go-lives in this period.</div>
+              expandKey="openBlockers"
+              expanded={expandedKeys.has("openBlockers")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.openRisksList.length === 0 ? (
+                <EmptyNote>No open blockers.</EmptyNote>
               ) : (
-                <div>
-                  {data.projects.goLives.map((g) => (
+                <>
+                  {data.projects.openRisksList.map((r) => (
                     <ListRow
-                      key={g.id}
-                      to={`/projects/${g.id}`}
-                      title={g.name ?? "Untitled"}
-                      subtitle={g.customer_name}
-                      right={formatDate(g.date)}
+                      key={r.id}
+                      to={`/projects/${r.project_id}?tab=risks`}
+                      title={r.title ?? "Untitled"}
+                      subtitle={r.project_name}
+                      right={
+                        r.severity ? (
+                          <span style={{ color: SEVERITY_COLOR[r.severity] ?? "#64748b", fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>
+                            {r.severity}
+                          </span>
+                        ) : undefined
+                      }
                     />
                   ))}
-                </div>
+                  {data.projects.openBlockers > data.projects.openRisksList.length && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                      Showing {data.projects.openRisksList.length} of {data.projects.openBlockers}.
+                    </div>
+                  )}
+                </>
               )}
-            </div>
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Upcoming go-lives (30d)</div>
-              {data.projects.upcomingGoLives.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No upcoming go-lives in the next 30 days.</div>
-              ) : (
-                <div>
-                  {data.projects.upcomingGoLives.map((g) => (
-                    <ListRow
-                      key={g.id}
-                      to={`/projects/${g.id}`}
-                      title={g.name ?? "Untitled"}
-                      subtitle={g.customer_name}
-                      right={formatDate(g.date)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Went live · still open</div>
-              {data.projects.wentLiveStillOpen.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>Nothing lingering — go-lives are wrapped up or in Optimize.</div>
-              ) : (
-                <div>
-                  {data.projects.wentLiveStillOpen.map((g) => (
-                    <ListRow
-                      key={g.id}
-                      to={`/projects/${g.id}`}
-                      title={g.name ?? "Untitled"}
-                      subtitle={g.customer_name}
-                      right={formatDate(g.date)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
+            </MetricCard>
           </div>
 
           {/* ── Capacity ─────────────────────────────────────────────────── */}
@@ -241,82 +414,89 @@ export default function LeadershipDashboardPage() {
 
           {/* ── Pipeline ─────────────────────────────────────────────────── */}
           <div className="ms-section-title" style={{ marginBottom: 12, marginTop: 28 }}>Pipeline</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
             <MetricCard
               title="Solutions Won"
               value={data.pipeline.solutions.wonThisPeriod}
               accent={data.pipeline.solutions.wonThisPeriod > 0 ? "#107c10" : undefined}
-            />
+              expandKey="solutionsWon"
+              expanded={expandedKeys.has("solutionsWon")}
+              onToggle={toggleExpand}
+            >
+              {data.pipeline.solutions.recentWon.length === 0 ? (
+                <EmptyNote>No solutions won in this period.</EmptyNote>
+              ) : (
+                data.pipeline.solutions.recentWon.map((s) => (
+                  <ListRow key={s.id} to={`/solutions/${s.id}`} title={s.name ?? "Untitled"} subtitle={s.customer_name} right={formatDate(s.date)} />
+                ))
+              )}
+            </MetricCard>
+
             <MetricCard
               title="Solutions Lost"
               value={data.pipeline.solutions.lostThisPeriod}
               accent={data.pipeline.solutions.lostThisPeriod > 0 ? "#d13438" : undefined}
-            />
-            <MetricCard title="Cloud Support Proposals" value={data.pipeline.cloudSupport.proposalsThisPeriod} />
+              expandKey="solutionsLost"
+              expanded={expandedKeys.has("solutionsLost")}
+              onToggle={toggleExpand}
+            >
+              {data.pipeline.solutions.recentLost.length === 0 ? (
+                <EmptyNote>No solutions lost in this period.</EmptyNote>
+              ) : (
+                data.pipeline.solutions.recentLost.map((s) => (
+                  <ListRow key={s.id} to={`/solutions/${s.id}`} title={s.name ?? "Untitled"} subtitle={s.customer_name} right={formatDate(s.date)} />
+                ))
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="Active Solutions"
+              value={data.pipeline.solutions.byStatus.reduce((sum, s) => sum + s.n, 0)}
+              expandKey="activeSolutions"
+              expanded={expandedKeys.has("activeSolutions")}
+              onToggle={toggleExpand}
+            >
+              <StatusFunnel byStatus={data.pipeline.solutions.byStatus} />
+            </MetricCard>
+
+            <MetricCard
+              title="Cloud Support Proposals"
+              value={data.pipeline.cloudSupport.proposalsThisPeriod}
+              expandKey="csProposals"
+              expanded={expandedKeys.has("csProposals")}
+              onToggle={toggleExpand}
+            >
+              {data.pipeline.cloudSupport.recent.length === 0 ? (
+                <EmptyNote>No proposals created in this period.</EmptyNote>
+              ) : (
+                data.pipeline.cloudSupport.recent.map((p) => (
+                  <ListRow
+                    key={p.id}
+                    to={`/solutions/cloudsupport/${p.id}`}
+                    title={p.name ?? "Untitled"}
+                    subtitle={p.customer_name ?? p.creator_name}
+                    right={formatDate(p.date)}
+                  />
+                ))
+              )}
+            </MetricCard>
+
             <MetricCard
               title="Optimizations Graduated"
               value={data.optimizations.graduatedThisPeriod}
               accent={data.optimizations.graduatedThisPeriod > 0 ? "#107c10" : undefined}
-            />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16 }}>
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Solutions pipeline</div>
-              <StatusFunnel byStatus={data.pipeline.solutions.byStatus} />
-              {data.pipeline.solutions.recentWon.length > 0 && (
-                <>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.04em", margin: "16px 0 8px" }}>
-                    Won this period
-                  </div>
-                  {data.pipeline.solutions.recentWon.map((s) => (
-                    <ListRow
-                      key={s.id}
-                      to={`/solutions/${s.id}`}
-                      title={s.name ?? "Untitled"}
-                      subtitle={s.customer_name}
-                      right={formatDate(s.date)}
-                    />
-                  ))}
-                </>
-              )}
-            </div>
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Cloud Support proposals</div>
-              {data.pipeline.cloudSupport.recent.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No proposals created in this period.</div>
-              ) : (
-                <div>
-                  {data.pipeline.cloudSupport.recent.map((p) => (
-                    <ListRow
-                      key={p.id}
-                      to={`/solutions/cloudsupport/${p.id}`}
-                      title={p.name ?? "Untitled"}
-                      subtitle={p.customer_name ?? p.creator_name}
-                      right={formatDate(p.date)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Graduated to Optimize</div>
+              expandKey="optimizeGraduated"
+              expanded={expandedKeys.has("optimizeGraduated")}
+              onToggle={toggleExpand}
+            >
               {data.optimizations.graduated.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No graduations in this period.</div>
+                <EmptyNote>No graduations in this period.</EmptyNote>
               ) : (
-                <div>
-                  {data.optimizations.graduated.map((o) => (
-                    <ListRow
-                      key={o.id}
-                      to={`/optimize/${o.id}`}
-                      title={o.name ?? "Untitled"}
-                      subtitle={o.customer_name}
-                      right={formatDate(o.date)}
-                    />
-                  ))}
-                </div>
+                data.optimizations.graduated.map((o) => (
+                  <ListRow key={o.id} to={`/optimize/${o.id}`} title={o.name ?? "Untitled"} subtitle={o.customer_name} right={formatDate(o.date)} />
+                ))
               )}
-            </div>
+            </MetricCard>
           </div>
         </>
       ) : null}

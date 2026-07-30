@@ -339,6 +339,12 @@ app.get("/leadership", async (c) => {
     csProposalsCount,
     csProposalsRecent,
     optimizeGraduated,
+    tasksCompletedList,
+    activeProjectsList,
+    atRiskProjectsList,
+    blockedProjectsList,
+    openRisksList,
+    recentLostSolutions,
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
@@ -488,6 +494,60 @@ app.get("/leadership", async (c) => {
        ORDER BY oa.graduated_at DESC
        LIMIT 10`
     ).bind(start, end).all<{ project_id: string; name: string; customer_name: string | null; graduated_at: string }>(),
+
+    // ── Click-to-expand detail lists — each backs a metric tile's drill-down ──
+    db.prepare(
+      `SELECT t.id, t.title, t.project_id, p.name AS project_name, t.completed_at
+       FROM tasks t
+       JOIN projects p ON p.id = t.project_id
+       WHERE t.completed_at >= ? AND t.completed_at < ?
+       ORDER BY t.completed_at DESC
+       LIMIT 15`
+    ).bind(start, end).all<{ id: string; title: string; project_id: string; project_name: string; completed_at: string }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, health, status
+       FROM projects
+       WHERE (archived = 0 OR archived IS NULL)
+       ORDER BY name ASC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, health, status
+       FROM projects
+       WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk'
+       ORDER BY name ASC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, health, status
+       FROM projects
+       WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked'
+       ORDER BY name ASC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
+
+    // Open risks, worst severity first (critical > high > medium > low > unset).
+    db.prepare(
+      `SELECT r.id, r.title, r.severity, r.project_id, p.name AS project_name
+       FROM risks r
+       JOIN projects p ON p.id = r.project_id
+       WHERE r.status = 'open'
+       ORDER BY CASE r.severity
+         WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4
+       END ASC
+       LIMIT 15`
+    ).all<{ id: string; title: string; severity: string | null; project_id: string; project_name: string }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, vendor, updated_at
+       FROM solutions
+       WHERE status = 'lost' AND updated_at >= ? AND updated_at < ?
+       ORDER BY updated_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
   ]);
 
   return c.json({
@@ -541,6 +601,41 @@ app.get("/leadership", async (c) => {
         date: r.actual_go_live_date,
         status: r.status,
       })),
+      tasksCompletedList: (tasksCompletedList.results ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        project_id: r.project_id,
+        project_name: r.project_name,
+        date: r.completed_at,
+      })),
+      activeProjectsList: (activeProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        health: r.health,
+        status: r.status,
+      })),
+      atRiskProjectsList: (atRiskProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        health: r.health,
+        status: r.status,
+      })),
+      blockedProjectsList: (blockedProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        health: r.health,
+        status: r.status,
+      })),
+      openRisksList: (openRisksList.results ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        severity: r.severity,
+        project_id: r.project_id,
+        project_name: r.project_name,
+      })),
     },
     pipeline: {
       solutions: {
@@ -548,6 +643,13 @@ app.get("/leadership", async (c) => {
         wonThisPeriod: solutionsWon?.n ?? 0,
         lostThisPeriod: solutionsLost?.n ?? 0,
         recentWon: (recentWonSolutions.results ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          customer_name: r.customer_name,
+          vendor: r.vendor,
+          date: r.updated_at,
+        })),
+        recentLost: (recentLostSolutions.results ?? []).map((r) => ({
           id: r.id,
           name: r.name,
           customer_name: r.customer_name,
