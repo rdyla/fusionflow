@@ -1,6 +1,25 @@
 -- ── Remove redundant team columns — account team now lives on customers ─────────
 -- Columns with table-level FK constraints cannot use DROP COLUMN in SQLite;
 -- those tables are recreated. All data is test data — safe to truncate if needed.
+--
+-- NOTE (2026-07-30): this rebuild used to carry `dynamics_account_id`, a column
+-- that had been added to production by hand before migration tracking existed.
+-- Production therefore had it when this ran, but a FRESH database does not —
+-- the column is only added by 0047, which sorts AFTER this file. So replaying
+-- the chain from scratch died here ("no such column: dynamics_account_id"),
+-- and took 0034 down with it (0033 aborting left the old `projects` table, so
+-- 0034's DROP COLUMN still hit idx_projects_solution_id from 0026).
+--
+-- 0047's own comment says it exists to "ensure fresh databases have
+-- dynamics_account_id before migration 0033 runs" — right intent, wrong
+-- ordering. Fixed by dropping the column from this rebuild and letting 0047
+-- add it, which is the honest history: at this point in time it didn't exist.
+--
+-- Editing an applied migration rather than inserting an earlier one is
+-- deliberate: wrangler tracks by filename, so this is a no-op on prod/staging
+-- (already recorded in d1_migrations), whereas a NEW early file — 0032b_… —
+-- would be unrecorded and wrangler would try to apply it on the next prod
+-- deploy, failing on a duplicate column and taking the deploy with it.
 
 PRAGMA foreign_keys = OFF;
 
@@ -19,7 +38,7 @@ CREATE TABLE projects_new (
   pm_user_id          TEXT,
   created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
   updated_at          TEXT DEFAULT CURRENT_TIMESTAMP,
-  dynamics_account_id TEXT,
+  -- dynamics_account_id intentionally absent here — added by 0047. See header.
   archived            INTEGER DEFAULT 0,
   asana_project_id    TEXT,
   managed_in_asana    INTEGER DEFAULT 0,
@@ -35,7 +54,7 @@ CREATE TABLE projects_new (
 INSERT INTO projects_new
   SELECT id, name, customer_name, vendor, solution_type, status, health,
          kickoff_date, target_go_live_date, actual_go_live_date,
-         pm_user_id, created_at, updated_at, dynamics_account_id,
+         pm_user_id, created_at, updated_at,
          archived, asana_project_id, managed_in_asana, health_override,
          solution_id, customer_id, crm_case_id, crm_opportunity_id
   FROM projects;
