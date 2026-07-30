@@ -478,7 +478,11 @@ const techStackSchema = z.object({
   functional_fit: z.number().int().min(1).max(5).nullable().optional(),
   technical_fit: z.number().int().min(1).max(5).nullable().optional(),
   contract_expiration: z.string().nullable().optional(),
-  initiative_start: zPlanDateOrBlank.nullable().optional(),
+  // Deliberately NOT a date validator. This is a free-text horizon — the UI's
+  // own placeholder is "e.g. Q1 27, 3/1/2027, 2027, TBD" — so "Q1 27" and "TBD"
+  // are valid values. The date-hardening pass wrongly typed it as a date and
+  // rejected them. Name ends in _start but it isn't a timestamp.
+  initiative_start: z.string().max(120).nullable().optional(),
   time_rating: z.enum(["tolerate", "invest", "migrate", "eliminate"]).nullable().optional(),
   notes: z.string().nullable().optional(),
   last_reviewed: z.string().nullable().optional(),
