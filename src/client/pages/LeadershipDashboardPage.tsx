@@ -370,6 +370,30 @@ export default function LeadershipDashboardPage() {
                 </>
               )}
             </MetricCard>
+
+            <MetricCard
+              title="Slipped Timelines"
+              value={data.slippedTimelines.projectCount}
+              accent={data.slippedTimelines.projectCount > 0 ? "#d13438" : undefined}
+              sub="stage past due, 0 hours logged"
+              expandKey="slippedTimelines"
+              expanded={expandedKeys.has("slippedTimelines")}
+              onToggle={toggleExpand}
+            >
+              {data.slippedTimelines.stages.length === 0 ? (
+                <EmptyNote>No overdue stages with zero logged hours.</EmptyNote>
+              ) : (
+                data.slippedTimelines.stages.map((s) => (
+                  <ListRow
+                    key={s.id}
+                    to={`/projects/${s.projectId}`}
+                    title={s.stageName ?? "Untitled stage"}
+                    subtitle={s.projectName}
+                    right={<span style={{ color: "#d13438", fontWeight: 700 }}>{s.daysOverdue}d overdue</span>}
+                  />
+                ))
+              )}
+            </MetricCard>
           </div>
 
           {/* ── Capacity ─────────────────────────────────────────────────── */}

@@ -345,6 +345,7 @@ app.get("/leadership", async (c) => {
     openRisksList,
     recentLostSolutions,
     hoursRiskCandidates,
+    slippedStages,
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
@@ -552,6 +553,23 @@ app.get("/leadership", async (c) => {
        ORDER BY hours_logged DESC
        LIMIT 20`
     ).all<{ id: string; name: string; customer_name: string | null; crm_opportunity_id: string; hours_logged: number }>(),
+
+    // Slipped timelines: a stage whose planned end has already passed with
+    // ZERO time logged against it — the strongest available "nothing actually
+    // happened here" signal (as opposed to at_risk/blocked, which are PM
+    // judgment calls). Not scoped to the current window; this is a standing
+    // portfolio check, not a period metric.
+    db.prepare(
+      `SELECT s.id, s.name AS stage_name, s.planned_end, s.project_id, p.name AS project_name, p.customer_name
+       FROM stages s
+       JOIN projects p ON p.id = s.project_id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND s.planned_end IS NOT NULL
+         AND s.planned_end < ?
+         AND NOT EXISTS (SELECT 1 FROM stage_time_entries ste WHERE ste.stage_id = s.id)
+       ORDER BY s.planned_end ASC
+       LIMIT 20`
+    ).bind(today).all<{ id: string; stage_name: string; planned_end: string; project_id: string; project_name: string; customer_name: string | null }>(),
   ]);
 
   // ── Hours vs. quoted SOW (live Dynamics) ──────────────────────────────────
@@ -584,6 +602,17 @@ app.get("/leadership", async (c) => {
     .filter((r) => r.pct !== null && r.pct >= HOURS_RISK_PCT)
     .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
   const hoursRiskNoQuote = hoursRiskChecked.filter((r) => r.pct === null);
+
+  const slippedTimelines = (slippedStages.results ?? []).map((r) => ({
+    id: r.id,
+    stageName: r.stage_name,
+    projectId: r.project_id,
+    projectName: r.project_name,
+    customerName: r.customer_name,
+    plannedEnd: r.planned_end,
+    daysOverdue: Math.round((Date.parse(today) - Date.parse(r.planned_end)) / 86_400_000),
+  }));
+  const slippedTimelinesProjectCount = new Set(slippedTimelines.map((s) => s.projectId)).size;
 
   return c.json({
     window: { window, start, end },
@@ -707,6 +736,10 @@ app.get("/leadership", async (c) => {
       atRisk: hoursRiskAtRisk,
       noQuoteCount: hoursRiskNoQuote.length,
       candidatesChecked: hoursRiskChecked.length,
+    },
+    slippedTimelines: {
+      projectCount: slippedTimelinesProjectCount,
+      stages: slippedTimelines,
     },
   });
 });

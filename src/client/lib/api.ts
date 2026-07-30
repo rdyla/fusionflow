@@ -465,6 +465,18 @@ export type LeadershipDashboardResponse = {
     noQuoteCount: number;
     candidatesChecked: number;
   };
+  slippedTimelines: {
+    projectCount: number;
+    stages: {
+      id: string;
+      stageName: string | null;
+      projectId: string;
+      projectName: string | null;
+      customerName: string | null;
+      plannedEnd: string | null;
+      daysOverdue: number;
+    }[];
+  };
 };
 
 export type Project = {
