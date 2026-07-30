@@ -348,21 +348,18 @@ export type LeadershipDashboardResponse = {
       hours: number;
       entries: number;
     }[];
-    byProject: {
-      project_id: string | null;
-      name: string | null;
-      customer_name: string | null;
-      hours: number;
-      entries: number;
-    }[];
   };
   projects: {
     activeProjects: number;
     atRiskProjects: number;
     blockedProjects: number;
     openBlockers: number;
-    tasksCompleted: number;
     tasksByEngineer: {
+      user_id: string | null;
+      name: string | null;
+      n: number;
+    }[];
+    projectsByPM: {
       user_id: string | null;
       name: string | null;
       n: number;
@@ -385,6 +382,99 @@ export type LeadershipDashboardResponse = {
       customer_name: string | null;
       date: string | null;
       status: string | null;
+    }[];
+    activeProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      health: string | null;
+      status: string | null;
+    }[];
+    atRiskProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      health: string | null;
+      status: string | null;
+    }[];
+    blockedProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      health: string | null;
+      status: string | null;
+    }[];
+    openRisksList: {
+      id: string;
+      title: string | null;
+      severity: string | null;
+      project_id: string;
+      project_name: string | null;
+    }[];
+  };
+  pipeline: {
+    solutions: {
+      byStatus: { status: string; n: number }[];
+      wonThisPeriod: number;
+      lostThisPeriod: number;
+      recentWon: {
+        id: string;
+        name: string | null;
+        customer_name: string | null;
+        vendor: string | null;
+        date: string | null;
+      }[];
+      recentLost: {
+        id: string;
+        name: string | null;
+        customer_name: string | null;
+        vendor: string | null;
+        date: string | null;
+      }[];
+    };
+    cloudSupport: {
+      proposalsThisPeriod: number;
+      recent: {
+        id: string;
+        name: string | null;
+        customer_name: string | null;
+        creator_name: string | null;
+        date: string | null;
+      }[];
+    };
+  };
+  optimizations: {
+    graduatedThisPeriod: number;
+    graduated: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      date: string | null;
+    }[];
+  };
+  hoursRisk: {
+    atRiskCount: number;
+    atRisk: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      hoursLogged: number;
+      quotedHours: number | null;
+      pct: number | null;
+    }[];
+    noQuoteCount: number;
+    candidatesChecked: number;
+  };
+  slippedTimelines: {
+    projectCount: number;
+    stages: {
+      id: string;
+      stageName: string | null;
+      projectId: string;
+      projectName: string | null;
+      customerName: string | null;
+      plannedEnd: string | null;
+      daysOverdue: number;
     }[];
   };
 };

@@ -4,6 +4,7 @@ import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
+import { getOpportunityQuotes } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -322,9 +323,8 @@ app.get("/leadership", async (c) => {
     timeCur,
     timePrev,
     byEngineer,
-    byProject,
-    tasksCompleted,
     tasksByEngineer,
+    projectsByPM,
     goLives,
     upcomingGoLives,
     wentLiveStillOpen,
@@ -332,6 +332,20 @@ app.get("/leadership", async (c) => {
     atRisk,
     blocked,
     openBlockers,
+    solutionsByStatus,
+    solutionsWon,
+    solutionsLost,
+    recentWonSolutions,
+    csProposalsCount,
+    csProposalsRecent,
+    optimizeGraduated,
+    activeProjectsList,
+    atRiskProjectsList,
+    blockedProjectsList,
+    openRisksList,
+    recentLostSolutions,
+    hoursRiskCandidates,
+    slippedStages,
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
@@ -359,22 +373,6 @@ app.get("/leadership", async (c) => {
     ).bind(start, end).all<{ user_id: string | null; name: string | null; email: string | null; entries: number; hours: number }>(),
 
     db.prepare(
-      `SELECT ste.project_id, p.name, p.customer_name, COUNT(*) AS entries,
-              COALESCE(SUM(${hoursExprAlias}),0) AS hours
-       FROM stage_time_entries ste
-       LEFT JOIN projects p ON p.id = ste.project_id
-       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
-         AND ste.scheduled_end IS NOT NULL
-       GROUP BY ste.project_id
-       ORDER BY hours DESC
-       LIMIT 10`
-    ).bind(start, end).all<{ project_id: string | null; name: string | null; customer_name: string | null; entries: number; hours: number }>(),
-
-    db.prepare(
-      `SELECT COUNT(*) AS n FROM tasks WHERE completed_at >= ? AND completed_at < ?`
-    ).bind(start, end).first<{ n: number }>(),
-
-    db.prepare(
       `SELECT t.assignee_user_id, u.name, COUNT(*) AS n
        FROM tasks t
        LEFT JOIN users u ON u.id = t.assignee_user_id
@@ -384,6 +382,17 @@ app.get("/leadership", async (c) => {
        ORDER BY n DESC
        LIMIT 10`
     ).bind(start, end).all<{ assignee_user_id: string | null; name: string | null; n: number }>(),
+
+    // Active-project headcount per PM — current snapshot, not time-boxed.
+    // Surfaces who's carrying the most projects right now (workload signal).
+    db.prepare(
+      `SELECT p.pm_user_id, u.name, COUNT(*) AS n
+       FROM projects p
+       LEFT JOIN users u ON u.id = p.pm_user_id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+       GROUP BY p.pm_user_id
+       ORDER BY n DESC`
+    ).all<{ pm_user_id: string | null; name: string | null; n: number }>(),
 
     db.prepare(
       `SELECT id, name, customer_name, actual_go_live_date
@@ -430,7 +439,180 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT COUNT(*) AS n FROM risks WHERE status = 'open'`
     ).first<{ n: number }>(),
+
+    // ── Solutions pipeline (pre-sales) ──────────────────────────────────────
+    // Current-state funnel snapshot — excludes won/lost, which are outcomes
+    // reported separately (time-boxed to the window, like go-lives).
+    db.prepare(
+      `SELECT status, COUNT(*) AS n FROM solutions
+       WHERE status NOT IN ('won', 'lost')
+       GROUP BY status`
+    ).all<{ status: string; n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM solutions WHERE status = 'won' AND updated_at >= ? AND updated_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM solutions WHERE status = 'lost' AND updated_at >= ? AND updated_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, vendor, updated_at
+       FROM solutions
+       WHERE status = 'won' AND updated_at >= ? AND updated_at < ?
+       ORDER BY updated_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
+
+    // ── Cloud Support Calculator proposals ──────────────────────────────────
+    db.prepare(
+      `SELECT COUNT(*) AS n FROM cs_proposals WHERE created_at >= ? AND created_at < ?`
+    ).bind(start, end).first<{ n: number }>(),
+
+    db.prepare(
+      `SELECT cp.id, cp.name, cp.customer_name, u.name AS creator_name, cp.created_at
+       FROM cs_proposals cp
+       LEFT JOIN users u ON u.id = cp.creator_id
+       WHERE cp.created_at >= ? AND cp.created_at < ?
+       ORDER BY cp.created_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; creator_name: string | null; created_at: string }>(),
+
+    // ── Optimize graduations ────────────────────────────────────────────────
+    // Projects that completed implementation and moved to Optimize this window.
+    db.prepare(
+      `SELECT p.id AS project_id, p.name, COALESCE(cu.name, p.customer_name) AS customer_name, oa.graduated_at
+       FROM optimize_accounts oa
+       JOIN projects p ON p.id = oa.project_id
+       LEFT JOIN customers cu ON cu.id = oa.customer_id
+       WHERE oa.graduated_at >= ? AND oa.graduated_at < ?
+       ORDER BY oa.graduated_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ project_id: string; name: string; customer_name: string | null; graduated_at: string }>(),
+
+    // ── Click-to-expand detail lists — each backs a metric tile's drill-down ──
+    db.prepare(
+      `SELECT id, name, customer_name, health, status
+       FROM projects
+       WHERE (archived = 0 OR archived IS NULL)
+       ORDER BY name ASC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, health, status
+       FROM projects
+       WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk'
+       ORDER BY name ASC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, health, status
+       FROM projects
+       WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked'
+       ORDER BY name ASC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
+
+    // Open risks, worst severity first (critical > high > medium > low > unset).
+    db.prepare(
+      `SELECT r.id, r.title, r.severity, r.project_id, p.name AS project_name
+       FROM risks r
+       JOIN projects p ON p.id = r.project_id
+       WHERE r.status = 'open'
+       ORDER BY CASE r.severity
+         WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4
+       END ASC
+       LIMIT 15`
+    ).all<{ id: string; title: string; severity: string | null; project_id: string; project_name: string }>(),
+
+    db.prepare(
+      `SELECT id, name, customer_name, vendor, updated_at
+       FROM solutions
+       WHERE status = 'lost' AND updated_at >= ? AND updated_at < ?
+       ORDER BY updated_at DESC
+       LIMIT 10`
+    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
+
+    // Lifetime (not window-scoped) hours logged per active project that has a
+    // linked CRM opportunity — candidate pool for the hours-vs-SOW-quote check
+    // below. Capped so the live Dynamics fan-out stays bounded regardless of
+    // portfolio size; ranked by hours so the projects most likely to matter
+    // (heaviest logged time) are the ones we bother checking.
+    db.prepare(
+      `SELECT p.id, p.name, p.customer_name, p.crm_opportunity_id,
+              COALESCE(SUM(${hoursExprAlias}),0) AS hours_logged
+       FROM projects p
+       JOIN stage_time_entries ste ON ste.project_id = p.id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND p.crm_opportunity_id IS NOT NULL
+         AND ste.scheduled_end IS NOT NULL
+       GROUP BY p.id
+       ORDER BY hours_logged DESC
+       LIMIT 20`
+    ).all<{ id: string; name: string; customer_name: string | null; crm_opportunity_id: string; hours_logged: number }>(),
+
+    // Slipped timelines: a stage whose planned end has already passed with
+    // ZERO time logged against it — the strongest available "nothing actually
+    // happened here" signal (as opposed to at_risk/blocked, which are PM
+    // judgment calls). Not scoped to the current window; this is a standing
+    // portfolio check, not a period metric.
+    db.prepare(
+      `SELECT s.id, s.name AS stage_name, s.planned_end, s.project_id, p.name AS project_name, p.customer_name
+       FROM stages s
+       JOIN projects p ON p.id = s.project_id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND s.planned_end IS NOT NULL
+         AND s.planned_end < ?
+         AND NOT EXISTS (SELECT 1 FROM stage_time_entries ste WHERE ste.stage_id = s.id)
+       ORDER BY s.planned_end ASC
+       LIMIT 20`
+    ).bind(today).all<{ id: string; stage_name: string; planned_end: string; project_id: string; project_name: string; customer_name: string | null }>(),
   ]);
+
+  // ── Hours vs. quoted SOW (live Dynamics) ──────────────────────────────────
+  // Actual hours come from the local D1 total above (stage_time_entries already
+  // mirrors CRM time entries 1:1 — every entry logged in-app pushes a linked
+  // msdyn_timeentry). Quoted hours are NOT cached anywhere and only live on the
+  // opportunity's quote (am_sow), so this is the one live-CRM piece of the
+  // leadership dashboard — bounded to the <=20 candidates queried above.
+  // getOpportunityQuotes already no-ops to [] when Dynamics isn't configured
+  // (e.g. local dev), so this degrades to "no quote data" rather than failing.
+  const HOURS_RISK_PCT = 80; // >= 80% of quote = at risk
+  const hoursRiskChecked = await Promise.all(
+    (hoursRiskCandidates.results ?? []).map(async (p) => {
+      const quotes = await getOpportunityQuotes(c.env, p.crm_opportunity_id).catch(() => []);
+      const withSow = quotes.filter((q) => q.am_sow != null);
+      const priority = (q: { statecode: number }) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
+      withSow.sort((a, b) => priority(a) - priority(b));
+      const quotedHours = withSow[0]?.am_sow ?? null;
+      return {
+        id: p.id,
+        name: p.name,
+        customer_name: p.customer_name,
+        hoursLogged: round1(p.hours_logged),
+        quotedHours,
+        pct: quotedHours ? round1((p.hours_logged / quotedHours) * 100) : null,
+      };
+    })
+  );
+  const hoursRiskAtRisk = hoursRiskChecked
+    .filter((r) => r.pct !== null && r.pct >= HOURS_RISK_PCT)
+    .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+  const hoursRiskNoQuote = hoursRiskChecked.filter((r) => r.pct === null);
+
+  const slippedTimelines = (slippedStages.results ?? []).map((r) => ({
+    id: r.id,
+    stageName: r.stage_name,
+    projectId: r.project_id,
+    projectName: r.project_name,
+    customerName: r.customer_name,
+    plannedEnd: r.planned_end,
+    daysOverdue: Math.round((Date.parse(today) - Date.parse(r.planned_end)) / 86_400_000),
+  }));
+  const slippedTimelinesProjectCount = new Set(slippedTimelines.map((s) => s.projectId)).size;
 
   return c.json({
     window: { window, start, end },
@@ -445,22 +627,19 @@ app.get("/leadership", async (c) => {
         hours: round1(r.hours),
         entries: r.entries,
       })),
-      byProject: (byProject.results ?? []).map((r) => ({
-        project_id: r.project_id,
-        name: r.name,
-        customer_name: r.customer_name,
-        hours: round1(r.hours),
-        entries: r.entries,
-      })),
     },
     projects: {
       activeProjects: activeProjects?.n ?? 0,
       atRiskProjects: atRisk?.n ?? 0,
       blockedProjects: blocked?.n ?? 0,
       openBlockers: openBlockers?.n ?? 0,
-      tasksCompleted: tasksCompleted?.n ?? 0,
       tasksByEngineer: (tasksByEngineer.results ?? []).map((r) => ({
         user_id: r.assignee_user_id,
+        name: r.name,
+        n: r.n,
+      })),
+      projectsByPM: (projectsByPM.results ?? []).map((r) => ({
+        user_id: r.pm_user_id,
         name: r.name,
         n: r.n,
       })),
@@ -483,6 +662,84 @@ app.get("/leadership", async (c) => {
         date: r.actual_go_live_date,
         status: r.status,
       })),
+      activeProjectsList: (activeProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        health: r.health,
+        status: r.status,
+      })),
+      atRiskProjectsList: (atRiskProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        health: r.health,
+        status: r.status,
+      })),
+      blockedProjectsList: (blockedProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        health: r.health,
+        status: r.status,
+      })),
+      openRisksList: (openRisksList.results ?? []).map((r) => ({
+        id: r.id,
+        title: r.title,
+        severity: r.severity,
+        project_id: r.project_id,
+        project_name: r.project_name,
+      })),
+    },
+    pipeline: {
+      solutions: {
+        byStatus: (solutionsByStatus.results ?? []).map((r) => ({ status: r.status, n: r.n })),
+        wonThisPeriod: solutionsWon?.n ?? 0,
+        lostThisPeriod: solutionsLost?.n ?? 0,
+        recentWon: (recentWonSolutions.results ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          customer_name: r.customer_name,
+          vendor: r.vendor,
+          date: r.updated_at,
+        })),
+        recentLost: (recentLostSolutions.results ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          customer_name: r.customer_name,
+          vendor: r.vendor,
+          date: r.updated_at,
+        })),
+      },
+      cloudSupport: {
+        proposalsThisPeriod: csProposalsCount?.n ?? 0,
+        recent: (csProposalsRecent.results ?? []).map((r) => ({
+          id: r.id,
+          name: r.name,
+          customer_name: r.customer_name,
+          creator_name: r.creator_name,
+          date: r.created_at,
+        })),
+      },
+    },
+    optimizations: {
+      graduatedThisPeriod: optimizeGraduated.results?.length ?? 0,
+      graduated: (optimizeGraduated.results ?? []).map((r) => ({
+        id: r.project_id,
+        name: r.name,
+        customer_name: r.customer_name,
+        date: r.graduated_at,
+      })),
+    },
+    hoursRisk: {
+      atRiskCount: hoursRiskAtRisk.length,
+      atRisk: hoursRiskAtRisk,
+      noQuoteCount: hoursRiskNoQuote.length,
+      candidatesChecked: hoursRiskChecked.length,
+    },
+    slippedTimelines: {
+      projectCount: slippedTimelinesProjectCount,
+      stages: slippedTimelines,
     },
   });
 });
