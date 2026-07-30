@@ -86,14 +86,24 @@ app.post("/:id/custom-plan/import", async (c) => {
   return c.json({ ok: true, imported: seed.length });
 });
 
+// A plan date must be a real calendar date in a plausible project window. The
+// bare `^\d{4}-\d{2}-\d{2}$` shape check accepted "0026-09-02" — the value a
+// `<input type="date">` reports for a half-typed year — and one such row scaled
+// the Timeline axis out by ~2000 years, squashing every bar into a sliver.
+const planDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((d) => d >= "2000-01-01" && d <= "2100-12-31", { message: "Date must be between 2000-01-01 and 2100-12-31" })
+  .refine((d) => new Date(d + "T00:00:00Z").toISOString().slice(0, 10) === d, { message: "Not a real calendar date" });
+
 const itemSchema = z.object({
   section: z.string().min(1).max(120).optional(),
   parent_id: z.string().nullable().optional(),
   depth: z.number().int().min(0).max(3).optional(),
   name: z.string().min(1).max(500).optional(),
   module: z.string().max(120).nullable().optional(),
-  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  start_date: planDate.nullable().optional(),
+  due_date: planDate.nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
   assignee: z.string().max(255).nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
@@ -160,7 +170,9 @@ app.patch("/:id/custom-plan/:itemId", async (c) => {
   const itemId = c.req.param("itemId");
   if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
   const parsed = itemSchema.safeParse(await c.req.json());
-  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
+  // Surface the specific issue — a rejected date needs to say WHY, or the PM
+  // just sees "Save failed" and retypes the same bad year.
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.issues[0]?.message ?? "Invalid request body" });
   const editable: Record<string, unknown> = {};
   const map: Record<string, string> = { name: "name", module: "module", start_date: "start_date", due_date: "due_date", status: "status", assignee: "assignee", assignee_user_id: "assignee_user_id", assignee_contact_id: "assignee_contact_id", notes: "notes", section: "section" };
   for (const [k, col] of Object.entries(map)) {

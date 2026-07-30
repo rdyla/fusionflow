@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { api, type OptimizeAccount, type User } from "../lib/api";
 import { humanize } from "../lib/format";
 import { useToast } from "../components/ui/ToastProvider";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "#22c55e",
@@ -165,7 +166,7 @@ export default function AdminOptimizePage() {
                 </label>
                 <label className="ms-label">
                   <span>Next Review</span>
-                  <input type="date" className="ms-input" value={editForm.next_review_date} onChange={(e) => setEditForm({ ...editForm, next_review_date: e.target.value })} />
+                  <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={editForm.next_review_date} onChange={(e) => setEditForm({ ...editForm, next_review_date: e.target.value })} />
                 </label>
                 <label className="ms-label">
                   <span>SA</span>

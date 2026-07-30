@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDate, zPlanDateOrBlank } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
@@ -167,8 +168,8 @@ const createProjectSchema = z.object({
   customer_id: z.string().nullable().optional(),
   vendor: z.string().max(500).optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).default([]),
-  kickoff_date: z.string().optional(),
-  target_go_live_date: z.string().optional(),
+  kickoff_date: zPlanDateOrBlank.optional(),
+  target_go_live_date: zPlanDateOrBlank.optional(),
   pm_user_id: z.string().nullable().optional(),
   dynamics_account_id: z.string().nullable().optional(),
   crm_case_id: z.string().nullable().optional(),
@@ -296,8 +297,8 @@ const updateProjectSchema = z.object({
   on_hold: z.number().int().min(0).max(1).optional(),
   phase_scoped_visibility: z.number().int().min(0).max(1).optional(),
   clear_health_override: z.boolean().optional(),
-  target_go_live_date: z.string().optional(),
-  actual_go_live_date: z.string().optional(),
+  target_go_live_date: zPlanDateOrBlank.optional(),
+  actual_go_live_date: zPlanDateOrBlank.optional(),
   pm_user_id: z.string().nullable().optional(),
   vendor: z.string().nullable().optional(),
   solution_types: z.array(z.enum(SOLUTION_TYPES)).optional(),
@@ -1057,7 +1058,7 @@ app.post("/:id/crm-sync", async (c) => {
 // (amount / 165) and as a billable total at project close.
 const EXTERNAL_STATUSES = ["new", "posted", "assigned", "in_progress", "closed", "billed"] as const;
 const externalResourceSchema = z.object({
-  engagement_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  engagement_date: zPlanDate.nullable().optional(),
   contractor_name: z.string().min(1).max(255),
   contractor_email: z.string().max(320).nullable().optional(),
   task_description: z.string().max(5000).nullable().optional(),
@@ -1216,7 +1217,7 @@ app.delete("/:id/shipments/:sid", requireRole("admin", "pm", "pf_sa", "pf_csm", 
 const MEETING_COLS = "id, project_id, title, meeting_date, start_time_local, timezone, duration_min, join_url, notes, created_at";
 const meetingSchema = z.object({
   title: z.string().max(255).nullable().optional(),
-  meeting_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  meeting_date: zPlanDate,
   start_time_local: z.string().regex(/^\d{2}:\d{2}$/).nullable().optional(),
   timezone: z.string().max(64).nullable().optional(),
   duration_min: z.number().int().min(5).max(480).nullable().optional(),

@@ -4,6 +4,7 @@ import { useToast } from "../ui/ToastProvider";
 import { chainForward, parseISODate, startFromGoLive, workday, workdaysBetween, type StageInput } from "../../../shared/workdayMath";
 import { buildTaggedTitle, canonicalizeSolutionType, type SolutionType } from "../../../shared/solutionTypes";
 import { toTitleCase } from "../../../shared/titleCase";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -451,6 +452,8 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
             <input
               className="ms-input"
               type="date"
+              min={PLAN_DATE_MIN}
+              max={PLAN_DATE_MAX}
               value={goLive}
               onChange={(e) => setGoLive(e.target.value)}
               disabled={selectedIds.length === 0 || applying}
@@ -564,6 +567,8 @@ function StageRows({
         <td style={{ padding: "8px 14px" }}>
           <input
             type="date"
+            min={PLAN_DATE_MIN}
+            max={PLAN_DATE_MAX}
             value={row.start}
             onChange={(e) => onStageChange({ start: e.target.value })}
             disabled={disabled}
@@ -573,6 +578,8 @@ function StageRows({
         <td style={{ padding: "8px 14px" }}>
           <input
             type="date"
+            min={PLAN_DATE_MIN}
+            max={PLAN_DATE_MAX}
             value={row.end}
             onChange={(e) => onStageChange({ end: e.target.value })}
             disabled={disabled}
@@ -595,6 +602,8 @@ function StageRows({
           <td style={{ padding: "5px 14px" }}>
             <input
               type="date"
+              min={PLAN_DATE_MIN}
+              max={PLAN_DATE_MAX}
               value={t.start}
               onChange={(e) => onTaskDate(taskIdx, "start", e.target.value)}
               disabled={disabled}
@@ -604,6 +613,8 @@ function StageRows({
           <td style={{ padding: "5px 14px" }}>
             <input
               type="date"
+              min={PLAN_DATE_MIN}
+              max={PLAN_DATE_MAX}
               value={t.end}
               onChange={(e) => onTaskDate(taskIdx, "end", e.target.value)}
               disabled={disabled}

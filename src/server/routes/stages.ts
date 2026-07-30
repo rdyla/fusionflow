@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDateOrBlank } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject, visiblePhaseIds } from "../services/accessService";
 
@@ -35,8 +36,8 @@ app.get("/:id/stages", async (c) => {
 
 const createStageSchema = z.object({
   name: z.string().min(1).max(120),
-  planned_start: z.string().nullable().optional(),
-  planned_end: z.string().nullable().optional(),
+  planned_start: zPlanDateOrBlank.nullable().optional(),
+  planned_end: zPlanDateOrBlank.nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed"]).optional(),
 });
 
@@ -78,10 +79,10 @@ app.post("/:id/stages", async (c) => {
 // not in this schema. Clients that still send `status` get it silently
 // dropped by zod.
 const updateStageSchema = z.object({
-  planned_start: z.string().nullable().optional(),
-  planned_end: z.string().nullable().optional(),
-  actual_start: z.string().nullable().optional(),
-  actual_end: z.string().nullable().optional(),
+  planned_start: zPlanDateOrBlank.nullable().optional(),
+  planned_end: zPlanDateOrBlank.nullable().optional(),
+  actual_start: zPlanDateOrBlank.nullable().optional(),
+  actual_end: zPlanDateOrBlank.nullable().optional(),
 });
 
 app.patch("/:id/stages/:stageId", async (c) => {

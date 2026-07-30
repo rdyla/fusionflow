@@ -6,6 +6,7 @@ import { useToast } from "../components/ui/ToastProvider";
 import { SolutionTypePicker } from "../components/ui/SolutionTypePicker";
 import type { SolutionType } from "../../shared/solutionTypes";
 import { vendorLabel } from "../../shared/vendors";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../shared/planDates";
 
 const STATUS_COLOR: Record<string, string> = {
   active: "#22c55e",
@@ -424,12 +425,12 @@ export default function OptimizePage() {
                 </label>
                 <label className="ms-label">
                   <span>Go-Live Date</span>
-                  <input type="date" className="ms-input" value={directForm.actual_go_live_date}
+                  <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={directForm.actual_go_live_date}
                     onChange={(e) => setDirectForm({ ...directForm, actual_go_live_date: e.target.value })} />
                 </label>
                 <label className="ms-label">
                   <span>Next Review Date</span>
-                  <input type="date" className="ms-input" value={directForm.next_review_date}
+                  <input type="date" min={PLAN_DATE_MIN} max={PLAN_DATE_MAX} className="ms-input" value={directForm.next_review_date}
                     onChange={(e) => setDirectForm({ ...directForm, next_review_date: e.target.value })} />
                 </label>
                 {!crmTeam && (

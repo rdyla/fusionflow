@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, type CustomPlanItem, type Risk } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+import { PLAN_DATE_MAX, PLAN_DATE_MIN, isPlanDate } from "../../../shared/planDates";
 
 const STATUS = ["not_started", "in_progress", "completed", "blocked"] as const;
 const STATUS_LABEL: Record<string, string> = { not_started: "Not Started", in_progress: "In Progress", completed: "Completed", blocked: "Blocked" };
@@ -28,6 +29,9 @@ function fmt(d: string | null): string {
   if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return "";
   return new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+// Date plausibility (isPlanDate / PLAN_DATE_*) lives in shared/planDates.ts —
+// this module's Timeline is what surfaced the bug, but the guard applies app-wide.
 
 export default function CustomPlan({ projectId, canEdit, view }: { projectId: string; canEdit: boolean; view: "timeline" | "tasks" }) {
   const { showToast } = useToast();
@@ -167,14 +171,50 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggle = (sec: string) => setExpanded((prev) => { const n = new Set(prev); n.has(sec) ? n.delete(sec) : n.add(sec); return n; });
 
-  const dated = items.filter((i) => i.start_date || i.due_date);
-  const startOf = (i: CustomPlanItem) => Date.parse((i.start_date ?? i.due_date)! + "T00:00:00");
-  const endOf = (i: CustomPlanItem) => Date.parse((i.due_date ?? i.start_date)! + "T00:00:00");
+  // Only plausible dates bound the axis — an out-of-window value (see
+  // isPlanDate) would otherwise blow the scale out by centuries. An item keeps
+  // its bar as long as ONE of its two dates is usable; it falls back to that one.
+  const dated = items.filter((i) => isPlanDate(i.start_date) || isPlanDate(i.due_date));
+  const startOf = (i: CustomPlanItem) => Date.parse((isPlanDate(i.start_date) ? i.start_date : i.due_date!) + "T00:00:00");
+  const endOf = (i: CustomPlanItem) => Date.parse((isPlanDate(i.due_date) ? i.due_date : i.start_date!) + "T00:00:00");
+
+  // Rows carrying a date the axis had to ignore — surfaced so a PM can go fix
+  // the value on the Tasks tab instead of wondering why a bar is missing.
+  const badDates = items.filter(
+    (i) => (i.start_date && !isPlanDate(i.start_date)) || (i.due_date && !isPlanDate(i.due_date)),
+  );
+
   const all = dated.flatMap((i) => [startOf(i), endOf(i)]);
-  const min = Math.min(...all), max = Math.max(...all);
+  const min = all.length ? Math.min(...all) : 0, max = all.length ? Math.max(...all) : 0;
   const span = Math.max(1, max - min);
   const pct = (d: number) => `${((d - min) / span) * 100}%`;
   const iso = (d: number) => new Date(d).toISOString().slice(0, 10);
+
+  const badDateNotice = badDates.length > 0 && (
+    <div style={{ marginBottom: 12, padding: "8px 10px", borderRadius: 6, background: "#fef3c7", border: "1px solid #fcd34d", fontSize: 12, color: "#92400e" }}>
+      <strong>{badDates.length} task{badDates.length === 1 ? " has" : "s have"} an out-of-range date</strong> (ignored by the chart) — fix on the Tasks tab:
+      <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+        {badDates.slice(0, 5).map((i) => (
+          <li key={i.id}>
+            {i.name}
+            {i.start_date && !isPlanDate(i.start_date) && <> — start <code>{i.start_date}</code></>}
+            {i.due_date && !isPlanDate(i.due_date) && <> — due <code>{i.due_date}</code></>}
+          </li>
+        ))}
+        {badDates.length > 5 && <li>…and {badDates.length - 5} more</li>}
+      </ul>
+    </div>
+  );
+
+  if (all.length === 0) {
+    return (
+      <div className="ms-section-card">
+        <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Timeline</div>
+        {badDateNotice}
+        <div style={{ fontSize: 13, color: "#64748b", marginTop: 8 }}>No tasks have a usable start or due date yet.</div>
+      </div>
+    );
+  }
 
   return (
     <div className="ms-section-card">
@@ -187,6 +227,7 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
         )}
       </div>
       <div style={{ fontSize: 12, color: "#64748b", marginBottom: 12 }}>{fmt(iso(min))} → {fmt(iso(max))}</div>
+      {badDateNotice}
       <div style={{ display: "grid", gap: 3 }}>
         {sections.map((sec) => {
           const its = dated.filter((i) => i.section === sec);
@@ -227,6 +268,39 @@ function TimelineView({ items, sections }: { items: CustomPlanItem[]; sections: 
         })}
       </div>
     </div>
+  );
+}
+
+// ── A date cell that won't persist a half-typed year ──────────────────────────
+// `<input type="date">` fires `change` on every segment edit, reporting the year
+// zero-padded as it's typed ("2" → 0002, "20" → 0020, "26" → 0026). Saving those
+// intermediates is what put a year-26 date in the plan and wrecked the Timeline
+// axis. Commit only a plausible date; hold anything else until it's usable, and
+// flag it inline so a typo isn't silently dropped.
+function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: string | null) => void }) {
+  const [pending, setPending] = useState<string | null>(null);
+  return (
+    <>
+      <input
+        type="date"
+        min={PLAN_DATE_MIN}
+        max={PLAN_DATE_MAX}
+        defaultValue={value ?? ""}
+        style={{ width: "100%", border: pending ? "1px solid #f0a30a" : "1px solid transparent", background: "transparent", fontSize: 13, padding: "2px 4px", borderRadius: 4, color: "#1e293b" }}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) { setPending(null); onCommit(null); return; }
+          if (isPlanDate(v)) { setPending(null); onCommit(v); return; }
+          setPending(v); // keep typing — year not plausible yet
+        }}
+        onBlur={() => { if (pending) setPending(null); }}
+      />
+      {pending && (
+        <div title={`${pending} is outside ${PLAN_DATE_MIN}…${PLAN_DATE_MAX} — not saved`} style={{ fontSize: 10, color: "#92400e", paddingLeft: 4 }}>
+          not saved — check the year
+        </div>
+      )}
+    </>
   );
 }
 
@@ -378,11 +452,11 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
                       ) : <span style={{ color: "#cbd5e1", fontSize: 11 }}>—</span>}
                     </td>
                     <td style={cell}>
-                      {canEdit ? <input type="date" defaultValue={it.start_date ?? ""} style={input} onChange={(e) => patch(it.id, "start_date", e.target.value || null)} />
+                      {canEdit ? <DateCell value={it.start_date} onCommit={(v) => patch(it.id, "start_date", v)} />
                         : <span style={{ fontSize: 12, color: "#64748b" }}>{fmt(it.start_date)}</span>}
                     </td>
                     <td style={cell}>
-                      {canEdit ? <input type="date" defaultValue={it.due_date ?? ""} style={input} onChange={(e) => patch(it.id, "due_date", e.target.value || null)} />
+                      {canEdit ? <DateCell value={it.due_date} onCommit={(v) => patch(it.id, "due_date", v)} />
                         : <span style={{ fontSize: 12, color: "#64748b" }}>{fmt(it.due_date)}</span>}
                     </td>
                     <td style={cell}>

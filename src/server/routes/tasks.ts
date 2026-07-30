@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
+import { zPlanDate, zPlanDateOrBlank, zPlanTimestamp } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { maybeSendEmail } from "../services/emailService";
@@ -81,9 +82,9 @@ const createTaskSchema = z.object({
   title: z.string().min(1).max(500),
   stage_id: z.string().nullable().optional(),
   assignee_user_id: z.string().max(255).nullable().optional(),
-  due_date: z.string().nullable().optional(),
-  scheduled_start: z.string().nullable().optional(),
-  scheduled_end: z.string().nullable().optional(),
+  due_date: zPlanDateOrBlank.nullable().optional(),
+  scheduled_start: zPlanDateOrBlank.nullable().optional(),
+  scheduled_end: zPlanDateOrBlank.nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).default("not_started"),
 });
@@ -165,12 +166,12 @@ const updateTaskSchema = z.object({
    *  porting coordinator (project_contact with contact_role='Porting
    *  Coordinator'). Set by apply-template; cleared via PATCH. */
   assignee_contact_id: z.string().max(255).nullable().optional(),
-  due_date: z.string().nullable().optional(),
-  scheduled_start: z.string().nullable().optional(),
-  scheduled_end: z.string().nullable().optional(),
+  due_date: zPlanDateOrBlank.nullable().optional(),
+  scheduled_start: zPlanDateOrBlank.nullable().optional(),
+  scheduled_end: zPlanDateOrBlank.nullable().optional(),
   /** Manually-set completion date. When omitted on a status->completed transition,
    *  the server stamps CURRENT_TIMESTAMP; when provided, the explicit value wins. */
-  completed_at: z.string().nullable().optional(),
+  completed_at: zPlanTimestamp.nullable().optional(),
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
   notes: z.string().max(10000).nullable().optional(),
@@ -542,8 +543,8 @@ app.get("/:id/time-entry/setup", async (c) => {
 });
 
 const logTimeSchema = z.object({
-  scheduled_start: z.string(),
-  scheduled_end: z.string(),
+  scheduled_start: zPlanDate,
+  scheduled_end: zPlanDate,
   pay_code_id: z.string(),
   cost_code_id: z.string().nullable().optional(),
   case_id: z.string(),
@@ -658,8 +659,8 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
 // Both pay code (labor) and cost code are REQUIRED here.
 
 const logStageTimeSchema = z.object({
-  scheduled_start: z.string(),
-  scheduled_end: z.string(),
+  scheduled_start: zPlanDate,
+  scheduled_end: zPlanDate,
   pay_code_id: z.string().min(1),
   cost_code_id: z.string().min(1),
   /** Optional free-text note; combined into the CRM subject as
@@ -828,8 +829,8 @@ app.delete("/:id/stages/:stageId/time-entries/:entryId", async (c) => {
 // client. Both pay code (labor) and cost code are REQUIRED here.
 
 const logProjectTimeSchema = z.object({
-  scheduled_start: z.string(),
-  scheduled_end: z.string(),
+  scheduled_start: zPlanDate,
+  scheduled_end: zPlanDate,
   pay_code_id: z.string().min(1),
   cost_code_id: z.string().min(1),
   /** Optional free-text note; combined into the CRM subject as
