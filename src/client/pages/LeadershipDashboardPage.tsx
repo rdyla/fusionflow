@@ -154,6 +154,9 @@ export default function LeadershipDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  // Pipeline is collapsed by default — Outcomes/Capacity get the front seat;
+  // Pipeline is a click away rather than always taking up vertical space.
+  const [showPipeline, setShowPipeline] = useState(false);
 
   function toggleExpand(key: string) {
     setExpandedKeys((prev) => {
@@ -424,7 +427,26 @@ export default function LeadershipDashboardPage() {
           </div>
 
           {/* ── Pipeline ─────────────────────────────────────────────────── */}
-          <div className="ms-section-title" style={{ marginBottom: 12, marginTop: 28 }}>Pipeline</div>
+          <button
+            type="button"
+            onClick={() => setShowPipeline((v) => !v)}
+            aria-expanded={showPipeline}
+            style={{
+              display: "flex", alignItems: "center", gap: 8, marginBottom: showPipeline ? 12 : 28, marginTop: 28,
+              background: "none", border: "none", padding: 0, cursor: "pointer",
+            }}
+          >
+            <span
+              style={{
+                fontSize: 10, color: "#94a3b8", display: "inline-block",
+                transform: showPipeline ? "rotate(90deg)" : "none", transition: "transform 0.15s",
+              }}
+            >
+              ▶
+            </span>
+            <span className="ms-section-title">Pipeline</span>
+          </button>
+          {showPipeline && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
             <MetricCard
               title="Solutions Won"
@@ -509,6 +531,7 @@ export default function LeadershipDashboardPage() {
               )}
             </MetricCard>
           </div>
+          )}
         </>
       ) : null}
     </div>
