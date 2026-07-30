@@ -4,6 +4,7 @@ import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
+import { getOpportunityQuotes } from "../services/dynamicsService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -322,7 +323,6 @@ app.get("/leadership", async (c) => {
     timeCur,
     timePrev,
     byEngineer,
-    byProject,
     tasksByEngineer,
     projectsByPM,
     goLives,
@@ -344,6 +344,7 @@ app.get("/leadership", async (c) => {
     blockedProjectsList,
     openRisksList,
     recentLostSolutions,
+    hoursRiskCandidates,
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
@@ -369,18 +370,6 @@ app.get("/leadership", async (c) => {
        GROUP BY ste.user_id
        ORDER BY hours DESC`
     ).bind(start, end).all<{ user_id: string | null; name: string | null; email: string | null; entries: number; hours: number }>(),
-
-    db.prepare(
-      `SELECT ste.project_id, p.name, p.customer_name, COUNT(*) AS entries,
-              COALESCE(SUM(${hoursExprAlias}),0) AS hours
-       FROM stage_time_entries ste
-       LEFT JOIN projects p ON p.id = ste.project_id
-       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
-         AND ste.scheduled_end IS NOT NULL
-       GROUP BY ste.project_id
-       ORDER BY hours DESC
-       LIMIT 10`
-    ).bind(start, end).all<{ project_id: string | null; name: string | null; customer_name: string | null; entries: number; hours: number }>(),
 
     db.prepare(
       `SELECT t.assignee_user_id, u.name, COUNT(*) AS n
@@ -545,7 +534,56 @@ app.get("/leadership", async (c) => {
        ORDER BY updated_at DESC
        LIMIT 10`
     ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
+
+    // Lifetime (not window-scoped) hours logged per active project that has a
+    // linked CRM opportunity — candidate pool for the hours-vs-SOW-quote check
+    // below. Capped so the live Dynamics fan-out stays bounded regardless of
+    // portfolio size; ranked by hours so the projects most likely to matter
+    // (heaviest logged time) are the ones we bother checking.
+    db.prepare(
+      `SELECT p.id, p.name, p.customer_name, p.crm_opportunity_id,
+              COALESCE(SUM(${hoursExprAlias}),0) AS hours_logged
+       FROM projects p
+       JOIN stage_time_entries ste ON ste.project_id = p.id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND p.crm_opportunity_id IS NOT NULL
+         AND ste.scheduled_end IS NOT NULL
+       GROUP BY p.id
+       ORDER BY hours_logged DESC
+       LIMIT 20`
+    ).all<{ id: string; name: string; customer_name: string | null; crm_opportunity_id: string; hours_logged: number }>(),
   ]);
+
+  // ── Hours vs. quoted SOW (live Dynamics) ──────────────────────────────────
+  // Actual hours come from the local D1 total above (stage_time_entries already
+  // mirrors CRM time entries 1:1 — every entry logged in-app pushes a linked
+  // msdyn_timeentry). Quoted hours are NOT cached anywhere and only live on the
+  // opportunity's quote (am_sow), so this is the one live-CRM piece of the
+  // leadership dashboard — bounded to the <=20 candidates queried above.
+  // getOpportunityQuotes already no-ops to [] when Dynamics isn't configured
+  // (e.g. local dev), so this degrades to "no quote data" rather than failing.
+  const HOURS_RISK_PCT = 80; // >= 80% of quote = at risk
+  const hoursRiskChecked = await Promise.all(
+    (hoursRiskCandidates.results ?? []).map(async (p) => {
+      const quotes = await getOpportunityQuotes(c.env, p.crm_opportunity_id).catch(() => []);
+      const withSow = quotes.filter((q) => q.am_sow != null);
+      const priority = (q: { statecode: number }) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
+      withSow.sort((a, b) => priority(a) - priority(b));
+      const quotedHours = withSow[0]?.am_sow ?? null;
+      return {
+        id: p.id,
+        name: p.name,
+        customer_name: p.customer_name,
+        hoursLogged: round1(p.hours_logged),
+        quotedHours,
+        pct: quotedHours ? round1((p.hours_logged / quotedHours) * 100) : null,
+      };
+    })
+  );
+  const hoursRiskAtRisk = hoursRiskChecked
+    .filter((r) => r.pct !== null && r.pct >= HOURS_RISK_PCT)
+    .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
+  const hoursRiskNoQuote = hoursRiskChecked.filter((r) => r.pct === null);
 
   return c.json({
     window: { window, start, end },
@@ -557,13 +595,6 @@ app.get("/leadership", async (c) => {
         user_id: r.user_id,
         name: r.name,
         email: r.email,
-        hours: round1(r.hours),
-        entries: r.entries,
-      })),
-      byProject: (byProject.results ?? []).map((r) => ({
-        project_id: r.project_id,
-        name: r.name,
-        customer_name: r.customer_name,
         hours: round1(r.hours),
         entries: r.entries,
       })),
@@ -670,6 +701,12 @@ app.get("/leadership", async (c) => {
         customer_name: r.customer_name,
         date: r.graduated_at,
       })),
+    },
+    hoursRisk: {
+      atRiskCount: hoursRiskAtRisk.length,
+      atRisk: hoursRiskAtRisk,
+      noQuoteCount: hoursRiskNoQuote.length,
+      candidatesChecked: hoursRiskChecked.length,
     },
   });
 });

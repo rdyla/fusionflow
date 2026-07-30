@@ -389,24 +389,38 @@ export default function LeadershipDashboardPage() {
               )}
             </div>
 
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Top projects by hours</div>
-              {data.time.totalHours === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No time logged in the app for this period yet.</div>
+            <MetricCard
+              title="Projects at Risk (Hours)"
+              value={data.hoursRisk.atRiskCount}
+              accent={data.hoursRisk.atRiskCount > 0 ? "#d13438" : undefined}
+              sub={data.hoursRisk.candidatesChecked > 0 ? `of ${data.hoursRisk.candidatesChecked} checked vs. SOW quote` : "no candidates to check"}
+              expandKey="hoursRisk"
+              expanded={expandedKeys.has("hoursRisk")}
+              onToggle={toggleExpand}
+            >
+              {data.hoursRisk.atRisk.length === 0 ? (
+                <EmptyNote>No projects logging hours close to or over their quoted SOW.</EmptyNote>
               ) : (
-                <div>
-                  {data.time.byProject.map((p) => (
-                    <ListRow
-                      key={p.project_id ?? p.name ?? "unknown"}
-                      to={p.project_id ? `/projects/${p.project_id}` : undefined}
-                      title={p.name ?? "Unknown project"}
-                      subtitle={p.customer_name}
-                      right={`${p.hours.toFixed(1)} h`}
-                    />
-                  ))}
+                data.hoursRisk.atRisk.map((p) => (
+                  <ListRow
+                    key={p.id}
+                    to={`/projects/${p.id}`}
+                    title={p.name ?? "Untitled"}
+                    subtitle={p.customer_name}
+                    right={
+                      <span style={{ color: (p.pct ?? 0) >= 100 ? "#d13438" : "#ff8c00", fontWeight: 700 }}>
+                        {p.hoursLogged.toFixed(1)}h / {p.quotedHours?.toFixed(0)}h ({p.pct}%)
+                      </span>
+                    }
+                  />
+                ))
+              )}
+              {data.hoursRisk.noQuoteCount > 0 && (
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 8 }}>
+                  {data.hoursRisk.noQuoteCount} project{data.hoursRisk.noQuoteCount === 1 ? "" : "s"} with hours logged have no resolvable SOW quote.
                 </div>
               )}
-            </div>
+            </MetricCard>
           </div>
 
           {/* ── Pipeline ─────────────────────────────────────────────────── */}
