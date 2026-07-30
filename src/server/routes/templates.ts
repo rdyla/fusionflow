@@ -287,7 +287,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
   const allowed = await canEditProject(db, auth.user, projectId);
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { template_id, phase_id, target_go_live_date } = await c.req.json<{
+  const { template_id, phase_id, target_go_live_date, redate_existing_stages } = await c.req.json<{
     template_id: string;
     phase_id?: string | null;
     /** When set, drives stage + task date scheduling via the same workday
@@ -296,6 +296,14 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
      *  new task gets scheduled_start / scheduled_end / due_date = stage's
      *  computed window). Omit to keep legacy dateless behavior. */
     target_go_live_date?: string | null;
+    /** Re-applying a template onto a phase whose stages are already dated is
+     *  ambiguous: honour the newly-typed go-live, or preserve the schedule the
+     *  PM has been maintaining? Rather than guess, the route returns 409
+     *  `stage_redate_required` listing what would change and the caller decides.
+     *  true  → overwrite those stages (and their tasks) from the new anchor
+     *  false → keep their dates; only the canonical go-live event is re-pinned
+     *  null/undefined → unresolved, so ask (the 409). */
+    redate_existing_stages?: boolean | null;
   }>();
   if (!template_id) throw new HTTPException(400, { message: "template_id is required" });
   if (target_go_live_date && !/^\d{4}-\d{2}-\d{2}$/.test(target_go_live_date)) {
@@ -380,17 +388,66 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
   const existingStages = await (
     scopedPhaseId
       ? db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND (phase_id = ? OR phase_id IS NULL)")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end, phase_id FROM stages WHERE project_id = ? AND (phase_id = ? OR phase_id IS NULL)")
           .bind(projectId, scopedPhaseId)
       : db
-          .prepare("SELECT id, name, sort_order, planned_start, planned_end FROM stages WHERE project_id = ? AND phase_id IS NULL")
+          .prepare("SELECT id, name, sort_order, planned_start, planned_end, phase_id FROM stages WHERE project_id = ? AND phase_id IS NULL")
           .bind(projectId)
-  ).all<{ id: string; name: string; sort_order: number; planned_start: string | null; planned_end: string | null }>();
+  ).all<{ id: string; name: string; sort_order: number; planned_start: string | null; planned_end: string | null; phase_id: string | null }>();
   const existingByName: Record<string, string> = {};
   const existingDatesById = new Map<string, { planned_start: string | null; planned_end: string | null }>();
+  // phase_id IS NULL means the stage is shared across every phase (the Initiate
+  // convention on multi-phase projects). Re-dating one of those moves it for the
+  // other phases too, so the conflict payload flags it explicitly.
+  const sharedStageIds = new Set<string>();
   for (const ep of existingStages.results ?? []) {
     existingByName[ep.name.trim().toLowerCase()] = ep.id;
     existingDatesById.set(ep.id, { planned_start: ep.planned_start, planned_end: ep.planned_end });
+    if (ep.phase_id === null) sharedStageIds.add(ep.id);
+  }
+
+  // ── Re-date conflict check ─────────────────────────────────────────────────
+  // Must run BEFORE any write below: the apply is not transactional, so
+  // bailing out mid-loop would leave the project half-rebuilt.
+  //
+  // A conflict is a stage we'd reuse that already carries dates which differ
+  // from what the new go-live anchor computes. Stages with no dates aren't a
+  // conflict (nothing to lose) and neither are stages already on the computed
+  // dates (no-op).
+  const redateConflicts: Array<{
+    stage_id: string; name: string;
+    from_start: string | null; from_end: string | null;
+    to_start: string; to_end: string;
+    /** Stage is shared by every phase — re-dating affects the other phases too. */
+    shared: boolean;
+  }> = [];
+  if (target_go_live_date && stageDateMap.size > 0) {
+    for (const stage of stages.results ?? []) {
+      const reusedId = existingByName[stage.name.trim().toLowerCase()];
+      if (!reusedId) continue;
+      const computed = stageDateMap.get(stage.id);
+      const cur = existingDatesById.get(reusedId);
+      if (!computed || !cur) continue;
+      if (!cur.planned_start && !cur.planned_end) continue;
+      if (cur.planned_start === computed.start && cur.planned_end === computed.end) continue;
+      redateConflicts.push({
+        stage_id: reusedId, name: stage.name,
+        from_start: cur.planned_start, from_end: cur.planned_end,
+        to_start: computed.start, to_end: computed.end,
+        shared: sharedStageIds.has(reusedId),
+      });
+    }
+  }
+  if (redateConflicts.length > 0 && (redate_existing_stages === null || redate_existing_stages === undefined)) {
+    return c.json({
+      error: "stage_redate_required",
+      message:
+        `${redateConflicts.length} existing stage${redateConflicts.length === 1 ? "" : "s"} in this phase already ` +
+        `${redateConflicts.length === 1 ? "has" : "have"} dates that don't match a ${target_go_live_date} go-live. ` +
+        `Re-send with redate_existing_stages=true to re-date them, or false to keep them.`,
+      target_go_live_date,
+      conflicts: redateConflicts,
+    }, 409);
   }
 
   const maxSort = existingStages.results.reduce((m, p) => Math.max(m, p.sort_order ?? 0), 0);
@@ -414,15 +471,18 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
       stageIdMap[stage.id] = reusedId;
       const cur = existingDatesById.get(reusedId) ?? { planned_start: null, planned_end: null };
 
-      // Fill in missing dates only when we have computed ones AND the existing
-      // stage has none. Don't trample PM-set dates.
+      // Fill in missing dates when we have computed ones. PM-set dates are
+      // preserved unless the caller explicitly confirmed a re-date (see the
+      // 409 `stage_redate_required` above), in which case the new go-live
+      // anchor wins and overwrites them.
       let updatedStart = cur.planned_start;
       let updatedEnd   = cur.planned_end;
       if (computed) {
+        const overwrite = redate_existing_stages === true;
         const fields: string[] = [];
         const values: unknown[] = [];
-        if (!cur.planned_start) { fields.push("planned_start = ?"); values.push(computed.start); updatedStart = computed.start; }
-        if (!cur.planned_end)   { fields.push("planned_end = ?");   values.push(computed.end);   updatedEnd   = computed.end; }
+        if (overwrite || !cur.planned_start) { fields.push("planned_start = ?"); values.push(computed.start); updatedStart = computed.start; }
+        if (overwrite || !cur.planned_end)   { fields.push("planned_end = ?");   values.push(computed.end);   updatedEnd   = computed.end; }
         if (fields.length > 0) {
           await db
             .prepare(`UPDATE stages SET ${fields.join(", ")} WHERE id = ?`)
@@ -547,6 +607,8 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
       if (bestScore < FUZZY_MATCH_THRESHOLD) matched = null;
     }
 
+    const isGoLiveEvent = (task.is_go_live_event ?? 0) === 1;
+
     if (matched) {
       // A matching task already exists — don't insert a duplicate. Just clean
       // its title (strip any legacy [type] tag + title-case). Technology-type
@@ -558,6 +620,38 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
         matched.title = newTitle;
         matched.tokens = normalizeTitleTokens(newTitle);
       }
+
+      // The canonical go-live event has to track the supplied date even when
+      // the task already exists. This branch used to `continue` straight past
+      // the date logic, so re-applying a template with a corrected go-live
+      // left the event — and therefore projects.target_go_live_date, which is
+      // derived from it — sitting on the old date. That read as "I set the
+      // go-live date and nothing happened."
+      //
+      // Also (re)assert the flag: tasks created before migration 0095, or by a
+      // path that didn't carry it, are invisible to syncProjectGoLiveDate.
+      if (isGoLiveEvent) {
+        if (target_go_live_date) {
+          await db
+            .prepare("UPDATE tasks SET is_go_live_event = 1, scheduled_start = ?, scheduled_end = ?, due_date = ? WHERE id = ?")
+            .bind(target_go_live_date, target_go_live_date, target_go_live_date, matched.id)
+            .run();
+        } else {
+          await db.prepare("UPDATE tasks SET is_go_live_event = 1 WHERE id = ?").bind(matched.id).run();
+        }
+      } else if (redate_existing_stages === true && mappedStageId) {
+        // Confirmed re-date: pull merged tasks onto the recomputed stage
+        // window too, so the phase doesn't end up with stages on the new
+        // schedule and their tasks on the old one.
+        const sd = stageDatesByDestId.get(mappedStageId);
+        if (sd?.planned_start && sd.planned_end) {
+          await db
+            .prepare("UPDATE tasks SET scheduled_start = ?, scheduled_end = ?, due_date = ? WHERE id = ?")
+            .bind(sd.planned_start, sd.planned_end, sd.planned_end, matched.id)
+            .run();
+        }
+      }
+
       tasksMerged++;
       continue;
     }
@@ -583,7 +677,6 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
     const newTaskId = crypto.randomUUID();
     const insertedTitle = normalizedTitle;
     const stageDates = mappedStageId ? stageDatesByDestId.get(mappedStageId) : undefined;
-    const isGoLiveEvent = (task.is_go_live_event ?? 0) === 1;
     const taskStart = isGoLiveEvent && target_go_live_date
       ? target_go_live_date
       : (stageDates?.planned_start ?? null);
