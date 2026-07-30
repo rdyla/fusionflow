@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { api, type Phase, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact, type SupportCase } from "../../lib/api";
+import { api, ApiError, type Phase, type StageRedateConflict, type Template, type User, type PhaseContact, type PhaseStaffMember, type DynamicsContact, type SupportCase } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import { formatDateOnly } from "../../lib/dates";
 import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
@@ -207,10 +207,19 @@ function PhaseRow({ phase, canEdit, scoped, projectId, dynamicsAccountId, contac
     }
     setSaving(true);
     try {
-      await api.updatePhase(projectId, phase.id, {
+      const res = await api.updatePhase(projectId, phase.id, {
         name: name.trim(),
         target_go_live_date: target || null,
       });
+      // Confirm the knock-on effect, so a moved go-live date doesn't look like
+      // it only changed a label (which is exactly what it used to do).
+      const repinned = res.go_live_tasks_repinned ?? 0;
+      if (repinned > 0) {
+        showToast(
+          `Phase saved — Go-Live event${repinned === 1 ? "" : "s"} moved to ${fmtDate(target)}.`,
+          "success",
+        );
+      }
       setEditing(false);
       onChanged();
     } catch (err) {
@@ -592,19 +601,30 @@ function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectI
     })();
   }, []);
 
-  async function apply() {
+  // Set when the server reports existing dated stages that disagree with the
+  // typed go-live. Holds the choice open until the PM picks.
+  const [redateConflicts, setRedateConflicts] = useState<StageRedateConflict[] | null>(null);
+
+  async function apply(redate?: boolean) {
     if (!selectedId) return;
     setApplying(true);
     try {
-      const res = await api.applyTemplate(projectId, selectedId, phase.id, goLive || null);
+      const res = await api.applyTemplate(projectId, selectedId, phase.id, goLive || null, redate ?? null);
       const parts: string[] = [];
       parts.push(`${res.stages_created} stage${res.stages_created !== 1 ? "s" : ""}`);
       parts.push(`${res.tasks_created} task${res.tasks_created !== 1 ? "s" : ""}`);
       if (res.tasks_merged > 0) parts.push(`${res.tasks_merged} merged`);
       const tail = goLive ? ` (dated from ${fmtDate(goLive)} go-live)` : "";
       showToast(`Applied to ${phase.name}: ${parts.join(" · ")}${tail}.`, "success");
+      setRedateConflicts(null);
       onApplied();
     } catch (err) {
+      // Existing dated stages — surface the choice rather than silently
+      // picking one. Either answer still re-pins the canonical go-live event.
+      if (err instanceof ApiError && err.status === 409 && err.body?.error === "stage_redate_required") {
+        setRedateConflicts((err.body.conflicts as StageRedateConflict[]) ?? []);
+        return;
+      }
       showToast(err instanceof Error ? err.message : "Failed to apply template", "error");
     } finally {
       setApplying(false);
@@ -673,9 +693,49 @@ function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectI
           </span>
         </label>
 
+        {redateConflicts && (
+          <div style={{ marginTop: 14, padding: "10px 12px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#92400e" }}>
+              {redateConflicts.length} existing stage{redateConflicts.length === 1 ? "" : "s"} already dated
+            </div>
+            <div style={{ fontSize: 11, color: "#92400e", marginTop: 4 }}>
+              A {fmtDate(goLive)} go-live puts {redateConflicts.length === 1 ? "it" : "them"} on different dates.
+              Re-dating overwrites the current schedule (including its tasks); keeping leaves it alone.
+              Either way the Go-Live event itself moves to {fmtDate(goLive)}.
+            </div>
+            <div style={{ marginTop: 8, maxHeight: 132, overflowY: "auto", display: "grid", gap: 3 }}>
+              {redateConflicts.map((cf) => (
+                <div key={cf.stage_id} style={{ fontSize: 11, color: "#78350f", display: "flex", justifyContent: "space-between", gap: 8 }}>
+                  <span style={{ fontWeight: 600 }}>
+                    {cf.name}
+                    {cf.shared && (
+                      <span title="Shared by every phase — re-dating moves it for the others too"
+                        style={{ marginLeft: 5, fontWeight: 700, color: "#b45309", cursor: "help" }}>
+                        (shared)
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ whiteSpace: "nowrap" }}>
+                    <s>{cf.from_start ?? "—"} → {cf.from_end ?? "—"}</s>{"  "}
+                    <strong>{cf.to_start} → {cf.to_end}</strong>
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="ms-btn-primary" onClick={() => apply(true)} disabled={applying} style={{ fontSize: 12 }}>
+                {applying ? "Applying…" : `Re-date from ${fmtDate(goLive)}`}
+              </button>
+              <button type="button" className="ms-btn-secondary" onClick={() => apply(false)} disabled={applying} style={{ fontSize: 12 }}>
+                Keep existing dates
+              </button>
+            </div>
+          </div>
+        )}
+
         <div style={{ marginTop: 20, display: "flex", justifyContent: "flex-end", gap: 8 }}>
           <button type="button" className="ms-btn-secondary" onClick={onClose} disabled={applying}>Cancel</button>
-          <button type="button" className="ms-btn-primary" onClick={apply} disabled={applying || !selectedId}>
+          <button type="button" className="ms-btn-primary" onClick={() => apply()} disabled={applying || !selectedId || redateConflicts !== null}>
             {applying ? "Applying…" : "Apply"}
           </button>
         </div>

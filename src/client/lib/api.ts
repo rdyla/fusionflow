@@ -1365,6 +1365,23 @@ export type TemplateStage = {
   tasks: TemplateTask[];
 };
 
+/**
+ * One stage the apply-template call would re-date, returned in the 409
+ * `stage_redate_required` body so the PM can compare current vs. proposed
+ * before choosing.
+ */
+export type StageRedateConflict = {
+  stage_id: string;
+  name: string;
+  from_start: string | null;
+  from_end: string | null;
+  to_start: string;
+  to_end: string;
+  /** Stage is shared by every phase (phase_id IS NULL — the Initiate
+   *  convention). Re-dating it moves it for the other phases too. */
+  shared: boolean;
+};
+
 export type Template = {
   id: string;
   name: string;
@@ -2328,8 +2345,11 @@ export const api = {
     request<Phase[]>(`/projects/${projectId}/phases`),
   createPhase: (projectId: string, payload: { name: string; target_go_live_date?: string | null }) =>
     request<Phase>(`/projects/${projectId}/phases`, { method: "POST", body: JSON.stringify(payload) }),
+  /** Setting `target_go_live_date` also re-pins that phase's canonical go-live
+   *  event task(s) and re-derives projects.target_go_live_date from them;
+   *  `go_live_tasks_repinned` reports how many moved. */
   updatePhase: (projectId: string, phaseId: string, payload: { name?: string; target_go_live_date?: string | null; display_order?: number; crm_case_id?: string | null }) =>
-    request<Phase>(`/projects/${projectId}/phases/${phaseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+    request<Phase & { go_live_tasks_repinned?: number }>(`/projects/${projectId}/phases/${phaseId}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deletePhase: (projectId: string, phaseId: string) =>
     request<{ success: boolean; deleted_stage_count: number }>(`/projects/${projectId}/phases/${phaseId}`, { method: "DELETE" }),
   /** Retro-fit endpoint: create the phase's SharePoint sub-folder if it
@@ -2844,13 +2864,24 @@ export const api = {
    * backward from the go-live and stamp each new task with its stage's
    * window for scheduled_start / scheduled_end / due_date.
    */
-  applyTemplate: (projectId: string, templateId: string, phaseId?: string | null, targetGoLiveDate?: string | null) =>
+  applyTemplate: (
+    projectId: string,
+    templateId: string,
+    phaseId?: string | null,
+    targetGoLiveDate?: string | null,
+    /** Leave undefined on the first call: if the phase already has dated stages
+     *  that disagree with the new anchor, the server answers 409
+     *  `stage_redate_required` with a `conflicts` list so the PM can choose.
+     *  Re-send with true (re-date them) or false (keep them). */
+    redateExistingStages?: boolean | null,
+  ) =>
     request<{ stages_created: number; tasks_created: number; tasks_merged: number }>(`/projects/${projectId}/apply-template`, {
       method: "POST",
       body: JSON.stringify({
         template_id: templateId,
         phase_id: phaseId ?? null,
         target_go_live_date: targetGoLiveDate ?? null,
+        redate_existing_stages: redateExistingStages ?? null,
       }),
     }),
   applyTimeline: (projectId: string, payload: { phase_id?: string | null; stages: Array<{ name: string; start: string; end: string; tasks: Array<{ title: string; role: string | null; priority: string | null; start: string; end: string; isGoLiveEvent?: boolean }> }> }) =>

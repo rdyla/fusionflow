@@ -25,6 +25,7 @@ import { zPlanDate } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { canViewProject, canEditProject, visiblePhaseIds } from "../services/accessService";
 import { ensurePhaseSharePointFolder } from "../services/graphService";
+import { syncProjectGoLiveDate } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -235,6 +236,34 @@ app.patch("/:id/phases/:phaseId", async (c) => {
     .bind(...values, phaseId, projectId)
     .run();
 
+  // Moving a phase's go-live date has to move that phase's canonical go-live
+  // event with it. This used to write the phases row and stop, so the header
+  // read (say) "Go-live Aug 31" while the flagged task — and therefore
+  // projects.target_go_live_date, which syncProjectGoLiveDate derives from the
+  // task — stayed on the old date. The phase date was an inert label.
+  //
+  // Tasks reach a phase through stages.phase_id. Only a real date propagates:
+  // clearing the phase's date shouldn't drag tasks anywhere.
+  const newGoLive = parsed.data.target_go_live_date;
+  let goLiveTasksRepinned = 0;
+  if (newGoLive) {
+    const repin = await c.env.DB
+      .prepare(
+        `UPDATE tasks SET scheduled_start = ?, scheduled_end = ?, due_date = ?
+         WHERE project_id = ? AND is_go_live_event = 1
+           AND stage_id IN (SELECT id FROM stages WHERE project_id = ? AND phase_id = ?)
+           AND (due_date IS NULL OR due_date != ?)`
+      )
+      .bind(newGoLive, newGoLive, newGoLive, projectId, projectId, phaseId, newGoLive)
+      .run();
+    goLiveTasksRepinned = repin.meta?.changes ?? 0;
+    if (goLiveTasksRepinned > 0) {
+      // Re-derive the project's target from the flagged tasks (MAX across
+      // phases on multi-phase projects).
+      await syncProjectGoLiveDate(c.env.DB, projectId);
+    }
+  }
+
   const updated = await c.env.DB
     .prepare(
       `SELECT ${PHASE_SELECT_COLS}
@@ -244,7 +273,7 @@ app.patch("/:id/phases/:phaseId", async (c) => {
     .first<PhaseRow>();
 
   if (!updated) throw new HTTPException(404, { message: "Phase not found" });
-  return c.json(updated);
+  return c.json({ ...updated, go_live_tasks_repinned: goLiveTasksRepinned });
 });
 
 // ── Delete ───────────────────────────────────────────────────────────────────
