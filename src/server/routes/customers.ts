@@ -7,6 +7,8 @@ import { findOrCreatePfUser } from "../lib/crmUsers";
 import { refreshAccountTeamIfStale } from "../lib/accountTeamSync";
 import { normalizeSolutionTypesField, normalizeSolutionRow } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
+import { clientAccountIds } from "../lib/permissions";
+import { inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -143,9 +145,18 @@ app.get("/", async (c) => {
   let sql = `${CUSTOMER_SELECT} WHERE 1=1`;
   const bindings: string[] = [];
 
-  if (auth.role === "client" && auth.user.dynamics_account_id) {
-    sql += " AND c.crm_account_id = ?";
-    bindings.push(auth.user.dynamics_account_id);
+  if (auth.role === "client") {
+    // A contact on two customers (sister agencies sharing staff) sees both.
+    const accountIds = clientAccountIds(auth.user);
+    if (accountIds.length === 0) {
+      // Fail closed. This previously skipped the filter entirely when a client
+      // had no resolvable account, which showed them every customer in the
+      // system — the one client-scoping site that failed open instead of shut.
+      sql += " AND 1=0";
+    } else {
+      sql += ` AND c.crm_account_id IN (${inPlaceholders(accountIds)})`;
+      bindings.push(...accountIds);
+    }
   }
 
   // Demo-mode vendor lens: only customers with ≥1 matching-vendor project.

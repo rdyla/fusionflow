@@ -6,6 +6,7 @@ import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { clientAccountIds } from "../lib/permissions";
 import { maybeSendEmail, sendEmail } from "../services/emailService";
 import { projectAtRisk, contactProjectInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
@@ -67,14 +68,17 @@ app.get("/", async (c) => {
     )`;
     bindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
-    if (!auth.user.dynamics_account_id) return c.json([]);
+    // Any of the client's accounts — a contact can belong to more than one
+    // customer (sister agencies sharing staff).
+    const accountIds = clientAccountIds(auth.user);
+    if (accountIds.length === 0) return c.json([]);
     // Account scoping, plus: on a phase-scoped project the client must be
     // attached to at least one phase (or marked "All phases") to see it at all.
-    sql += ` AND dynamics_account_id = ? AND (phase_scoped_visibility = 0 OR EXISTS (
+    sql += ` AND dynamics_account_id IN (${inPlaceholders(accountIds)}) AND (phase_scoped_visibility = 0 OR EXISTS (
       SELECT 1 FROM phase_contacts pc
       WHERE pc.project_id = projects.id AND pc.email IS NOT NULL AND LOWER(pc.email) = LOWER(?)
     ))`;
-    bindings = [auth.user.dynamics_account_id, auth.user.email];
+    bindings = [...accountIds, auth.user.email];
   }
   // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
 

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { clientAccountIds } from "../lib/permissions";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -46,9 +47,11 @@ app.get("/", async (c) => {
     )`;
     projectBindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
-    if (!auth.user.dynamics_account_id) return c.json({ items: [], total: 0, page, hasMore: false });
-    projectFilter = "dynamics_account_id = ?";
-    projectBindings = [auth.user.dynamics_account_id];
+    // Any of the client's accounts — a contact can belong to more than one customer.
+    const accountIds = clientAccountIds(auth.user);
+    if (accountIds.length === 0) return c.json({ items: [], total: 0, page, hasMore: false });
+    projectFilter = `dynamics_account_id IN (${inPlaceholders(accountIds)})`;
+    projectBindings = [...accountIds];
   }
   // admin, pf_sa, pf_csm, executive: no project filter
 
