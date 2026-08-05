@@ -38,20 +38,30 @@ type ContactCompany = {
 
 /**
  * Resolves a customer contact added anywhere in CloudConnect — a project, a
- * solution, or their company record — to the company they belong to. This lets
+ * solution, or their company record — to the companies they belong to. This lets
  * ad-hoc contacts who aren't CRM portal users log in: they're scoped to their
  * company's CRM account (`dynamics_account_id`), which is how all client-side
  * scoping already works, so they see every item belonging to their company.
  *
- * Returns the most-recently-added match if the email appears in several places.
+ * Returns ONE ROW PER DISTINCT CRM account, most-recently-added first. A contact
+ * can legitimately belong to several customers — sister agencies that share
+ * staff (Placer County and Lake County Superior Courts) put the same person on
+ * both — and collapsing that to a single account is what used to hide one of
+ * their projects. The first row is treated as primary (display label, D365 case
+ * creation); every row contributes to what they can see.
+ *
+ * The bare `contact_id` / `contact_name` / `org` columns pair with `MAX(ts)`
+ * under SQLite's documented bare-column rule, so each account reports the
+ * details of its own most-recent contact row rather than an arbitrary one.
+ *
  * `email` is expected pre-lowercased (the login routes lowercase it).
  */
-async function resolveContactCompany(db: D1Database, email: string): Promise<ContactCompany | null> {
+async function resolveContactCompanies(db: D1Database, email: string): Promise<ContactCompany[]> {
   try {
-    const row = await db
+    const rows = await db
     .prepare(
       `
-      SELECT account_id AS accountId, org AS organization, contact_id AS contactId, contact_name AS contactName
+      SELECT account_id AS accountId, org AS organization, contact_id AS contactId, contact_name AS contactName, MAX(ts) AS ts
       FROM (
         SELECT COALESCE(p.dynamics_account_id, c.crm_account_id) AS account_id,
                COALESCE(c.name, p.customer_name)                 AS org,
@@ -77,19 +87,19 @@ async function resolveContactCompany(db: D1Database, email: string): Promise<Con
         WHERE cc.email IS NOT NULL AND lower(cc.email) = lower(?)
       )
       WHERE account_id IS NOT NULL AND account_id != ''
+      GROUP BY account_id
       ORDER BY ts DESC
-      LIMIT 1
       `
     )
     .bind(email, email, email)
-    .first<ContactCompany>();
+    .all<ContactCompany>();
 
-    return row ?? null;
+    return rows.results ?? [];
   } catch (err) {
     // Never let a contact-table issue break login — fall through to the CRM
     // portal lookup instead of 500ing the verify request.
-    console.error(`[auth] resolveContactCompany failed for ${email}:`, err);
-    return null;
+    console.error(`[auth] resolveContactCompanies failed for ${email}:`, err);
+    return [];
   }
 }
 
@@ -134,24 +144,27 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
       // 1) Contact-based access: a customer contact added to a project,
       //    solution, or their company record can log in even if they aren't a
       //    CRM portal contact, scoped to everything belonging to their company.
-      const company = await resolveContactCompany(env.DB, email);
-      if (company) {
+      const companies = await resolveContactCompanies(env.DB, email);
+      if (companies.length > 0) {
+        // Most-recently-added company is primary; the rest broaden visibility.
+        const primary = companies[0];
         // Case-opening is governed by CRM, not the contact tables: if this
         // person is also a portal user with case-opening enabled in D365, honor
         // it. Ad-hoc contacts not in CRM resolve to null here → view-only.
         const portal = await getPortalContact(env, email);
         const clientUser: AppUser = {
-          id: company.contactId,
+          id: primary.contactId,
           email,
-          name: company.contactName,
-          organization_name: company.organization,
+          name: primary.contactName,
+          organization_name: primary.organization,
           role: "client",
           is_active: 1,
-          dynamics_account_id: company.accountId,
+          dynamics_account_id: primary.accountId,
+          dynamics_account_ids: companies.map((cc) => cc.accountId),
           manager_id: null,
           can_open_cases: portal?.canOpenCases ?? false,
         };
-        return { user: clientUser, role: "client", organization: company.organization };
+        return { user: clientUser, role: "client", organization: primary.organization };
       }
 
       // 2) Fall back to the CRM portal lookup (portal access defined in D365).
@@ -177,6 +190,21 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
   if (!user.is_active) {
     const domain = email.split("@")[1] ?? "";
     return PARTNER_DOMAINS[domain] ? "pending" : null;
+  }
+
+  // Clients acquire a `users` row the first time they open their profile
+  // (ensureUserRow in routes/me.ts), which stamps in whichever single account
+  // they resolved to that day. From then on the DB lookup above short-circuits
+  // this function, so being added to a second customer afterwards had no effect
+  // — the pin was permanent. Re-resolve contact rows on every login and carry
+  // every account they belong to; the stored column stays primary.
+  if (user.role === "client") {
+    const companies = await resolveContactCompanies(env.DB, email);
+    const ids = [...new Set([
+      ...(user.dynamics_account_id ? [user.dynamics_account_id] : []),
+      ...companies.map((cc) => cc.accountId),
+    ])];
+    if (ids.length > 0) user = { ...user, dynamics_account_ids: ids };
   }
 
   return { user, role: user.role, organization: user.organization_name };

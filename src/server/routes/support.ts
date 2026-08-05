@@ -77,6 +77,17 @@ async function resolveAccountId(contactId: string, env: Bindings): Promise<strin
 
 // ── Me ────────────────────────────────────────────────────────────────────────
 
+// NOTE ON MULTI-ACCOUNT CLIENTS: client sessions can now carry several CRM
+// accounts (see clientAccountIds in lib/permissions) because a contact may
+// belong to more than one customer. The support endpoints below deliberately
+// still use the single primary `dynamics_account_id`:
+//   • case creation has to bind exactly one account, so picking among several
+//     is a UI decision (an account picker), not a mechanical widening;
+//   • these paths all hit D365, which can't be exercised locally, so they
+//     belong in their own staging-verified change.
+// Net effect until then: a contact on two customers sees both customers'
+// projects/solutions, but only their primary account's support cases.
+
 // GET /api/support/me
 app.get("/me", (c) => {
   const auth = c.get("auth");

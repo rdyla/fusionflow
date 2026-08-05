@@ -5,6 +5,7 @@ import { zPlanDate } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
 import { getTeamUserIds, inPlaceholders, syncOpportunityFromSolution, syncSolutionStatus } from "../lib/teamUtils";
+import { clientAccountIds } from "../lib/permissions";
 import { getAccountTeam } from "../services/dynamicsService";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { refreshAccountTeamIfStale, syncAccountTeamToCustomer } from "../lib/accountTeamSync";
@@ -109,7 +110,7 @@ function nameFromJourneys(customerName: string, journeys: string[], vendor: stri
  * create-solution endpoint (legacy single-AE field) and the new inline
  * invite endpoint on the solution detail page.
  */
-function accessClause(role: string, teamIds: string[], accountId?: string | null): { where: string; bindings: string[] } {
+function accessClause(role: string, teamIds: string[], accountIds: string[] = []): { where: string; bindings: string[] } {
   if (role === "admin" || role === "executive" || role === "pm" || role === "pf_sa" || role === "pf_csm") return { where: "1=1", bindings: [] };
   if (role === "pf_ae") {
     const ph = inPlaceholders(teamIds);
@@ -119,8 +120,9 @@ function accessClause(role: string, teamIds: string[], accountId?: string | null
     };
   }
   if (role === "client") {
-    if (!accountId) return { where: "1=0", bindings: [] };
-    return { where: "s.dynamics_account_id = ?", bindings: [accountId] };
+    // Any of the client's accounts — a contact can belong to more than one customer.
+    if (accountIds.length === 0) return { where: "1=0", bindings: [] };
+    return { where: `s.dynamics_account_id IN (${inPlaceholders(accountIds)})`, bindings: [...accountIds] };
   }
   // partner_ae — match either the legacy single field OR any solution_staff row
   // (multi-AE support; mirrors the project_staff pattern)
@@ -138,7 +140,7 @@ app.get("/", async (c) => {
   const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
     ? await getTeamUserIds(auth.user.id, c.env.DB)
     : [auth.user.id];
-  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+  const { where, bindings } = accessClause(auth.role, teamIds, clientAccountIds(auth.user));
 
   // Demo-mode vendor lens
   const demoVendor = await getDemoVendor(c.env.DB);
@@ -348,7 +350,7 @@ app.get("/:id", async (c) => {
   const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
     ? await getTeamUserIds(auth.user.id, db)
     : [auth.user.id];
-  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+  const { where, bindings } = accessClause(auth.role, teamIds, clientAccountIds(auth.user));
   const solution = await db
     .prepare(`${SOLUTION_SELECT} WHERE s.id = ? AND (${where}) LIMIT 1`)
     .bind(c.req.param("id"), ...bindings)
@@ -773,7 +775,7 @@ app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_
   const teamIds = (auth.role === "pf_ae" || auth.role === "partner_ae")
     ? await getTeamUserIds(auth.user.id, db)
     : [auth.user.id];
-  const { where, bindings } = accessClause(auth.role, teamIds, auth.user.dynamics_account_id);
+  const { where, bindings } = accessClause(auth.role, teamIds, clientAccountIds(auth.user));
   const existing = await db
     .prepare(`SELECT s.id, s.sow_metadata FROM solutions s WHERE s.id = ? AND (${where}) LIMIT 1`)
     .bind(solutionId, ...bindings)
