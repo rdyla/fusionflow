@@ -29,6 +29,7 @@ import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import PhasesPanel from "../components/project/PhasesPanel";
+import TaskExportMenu from "../components/project/TaskExports";
 import UpcomingMeetingsPanel from "../components/project/UpcomingMeetingsPanel";
 import CustomPlan from "../components/customPlan/CustomPlan"; // one-off MedVet plan (throwaway)
 import ProjectDocuments from "../components/documents/ProjectDocuments";
@@ -1670,7 +1671,20 @@ export default function ProjectDetailPage() {
         <div className="ms-section-card">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
             <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Stage</div>
-            <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
+              <TaskExportMenu
+                project={project}
+                phases={phases}
+                stages={stages}
+                tasks={tasks}
+                viewStages={visibleStages}
+                viewTasks={filteredTasks}
+                viewLabel={multiPhase ? (selectedPhaseId === "shared" ? "Initiate" : phases.find((p) => p.id === selectedPhaseId)?.name ?? null) : null}
+                blockersByTask={activeBlockersByTask}
+                resolveAssignee={assigneeLabel}
+              />
+            </div>
           </div>
           {tasks.length > 0 && filteredTasks.length === 0 && (
             <div style={{ padding: "8px 12px", marginBottom: 12, background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 6, fontSize: 12, color: "#854d0e", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
