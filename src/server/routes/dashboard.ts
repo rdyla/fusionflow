@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { clientAccountIds } from "../lib/permissions";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
 import { getOpportunityQuotes } from "../services/dynamicsService";
@@ -37,11 +38,13 @@ app.get("/summary", async (c) => {
     )`;
     filterBindings = [...teamIds, ...teamIds];
   } else if (auth.role === "client") {
-    if (!auth.user.dynamics_account_id) {
+    // Any of the client's accounts — a contact can belong to more than one customer.
+    const accountIds = clientAccountIds(auth.user);
+    if (accountIds.length === 0) {
       return c.json({ user: auth.user, summary: { activeProjects: 0, atRiskProjects: 0, openTasks: 0, openRisks: 0 }, projects: [], openTasks: [], openRisks: [], stageDistribution: [], vendorDistribution: [], typeDistribution: [] });
     }
-    projectFilter = "WHERE dynamics_account_id = ?";
-    filterBindings = [auth.user.dynamics_account_id];
+    projectFilter = `WHERE dynamics_account_id IN (${inPlaceholders(accountIds)})`;
+    filterBindings = [...accountIds];
   }
   // pf_sa, pf_csm, admin, and executive: no filter — portfolio-wide visibility
 

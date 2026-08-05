@@ -10,6 +10,14 @@ export interface AppUser {
   is_support_supervisor?: number; // additive flag — supervisor-only digest feature
   is_sales_tools?: number; // additive flag — Sales Tools module access (Commissions Calculator, Zoom Resell, Zoom Agency)
   dynamics_account_id: string | null;
+  /** Every CRM account this session may see. A client who is a contact on more
+   *  than one customer (sister agencies sharing staff — e.g. Placer County and
+   *  Lake County Superior Courts) carries all of them; `dynamics_account_id`
+   *  stays the primary, used for display labels and D365 case creation, which
+   *  must pick exactly one. Absent on sessions minted before multi-account
+   *  support existed, so always read it through `clientAccountIds()`, which
+   *  falls back to the single field. */
+  dynamics_account_ids?: string[];
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions
   cs_permission?: "none" | "user" | "power_user"; // cloud support calculator access

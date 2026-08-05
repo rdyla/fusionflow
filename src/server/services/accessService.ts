@@ -1,5 +1,6 @@
 import type { AppRole, AppUser } from "../types";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
+import { clientAccountIds } from "../lib/permissions";
 
 /**
  * For a client on a phase-scoped project, which phases may they see?
@@ -41,10 +42,16 @@ export async function canViewProject(
   if (user.role === "pf_csm") return true;       // CSMs have portfolio-wide visibility
   if (user.role === "pf_engineer") return true;  // Engineers have portfolio-wide visibility
 
-  if (user.role === "client" && user.dynamics_account_id) {
+  if (user.role === "client") {
+    // Clients may be contacts on several customers (sister agencies sharing
+    // staff), so this matches any of their accounts. No accounts at all is
+    // fail-closed rather than falling through to the project_access check
+    // below, which was never meant to grant client access.
+    const accountIds = clientAccountIds(user);
+    if (accountIds.length === 0) return false;
     const owned = await db
-      .prepare("SELECT phase_scoped_visibility FROM projects WHERE id = ? AND dynamics_account_id = ? LIMIT 1")
-      .bind(projectId, user.dynamics_account_id)
+      .prepare(`SELECT phase_scoped_visibility FROM projects WHERE id = ? AND dynamics_account_id IN (${inPlaceholders(accountIds)}) LIMIT 1`)
+      .bind(projectId, ...accountIds)
       .first<{ phase_scoped_visibility: number | null }>();
     if (!owned) return false;
     if (!owned.phase_scoped_visibility) return true;
