@@ -134,22 +134,12 @@ export default function CustomPlan({ project, canEdit, view }: { project: Projec
     try { await api.deleteCustomPlanItem(projectId, it.id); load(); }
     catch (err) { showToast(err instanceof Error ? err.message : "Delete failed", "error"); }
   }
+  // First-time seed only, reachable solely from the empty state below — the
+  // re-import button is gone, because the plan has moved far enough past the
+  // Asana baseline that replacing it is never the intent. Nothing to confirm:
+  // an empty plan has nothing to lose, and the server refuses outright once
+  // items exist, so this can't overwrite work even if it's called some other way.
   async function runImport() {
-    // Re-import REPLACES the plan (delete + reinsert with fresh ids), so it
-    // discards everything done since the last import. Guard the destructive case
-    // with an explicit confirm so nothing is lost silently — notably blocker
-    // links, which otherwise vanish (the FK is ON DELETE SET NULL) while the
-    // blockers themselves linger orphaned on the Blockers tab. First-time import
-    // (empty state) has nothing to lose, so it skips the prompt.
-    if (items.length > 0 && !window.confirm(
-      "Re-import REPLACES the entire plan with the Asana baseline.\n\n" +
-      "This permanently discards everything changed since the last import:\n" +
-      "• edits, added tasks, dates, statuses\n" +
-      "• assignees\n" +
-      "• task dependencies (blocked-by)\n" +
-      "• blocker links — the blockers stay on the Blockers tab but lose their task association\n\n" +
-      "Continue?"
-    )) return;
     setImporting(true);
     try { const { imported } = await api.importCustomPlan(projectId); showToast(`Imported ${imported} plan items.`, "success"); load(); }
     catch (err) { showToast(err instanceof Error ? err.message : "Import failed", "error"); }
@@ -170,7 +160,7 @@ export default function CustomPlan({ project, canEdit, view }: { project: Projec
 
   return view === "timeline"
     ? <TimelineView items={items} sections={sections} />
-    : <TasksView project={project} items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} blockersByItem={blockersByItem} />;
+    : <TasksView project={project} items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} staff={staff} contacts={contacts} blockersByItem={blockersByItem} />;
 }
 
 // ── Timeline: sections as dated bands over the project range; each expands to
@@ -313,7 +303,7 @@ function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: str
 }
 
 // ── Tasks: nested outline grouped by section, inline-editable ──────────────────
-function TasksView({ project, items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, onReimport, importing, staff, contacts, blockersByItem }: {
+function TasksView({ project, items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, staff, contacts, blockersByItem }: {
   project: Project;
   items: CustomPlanItem[]; sections: string[]; canEdit: boolean;
   patch: (id: string, f: keyof CustomPlanItem, v: unknown) => void;
@@ -322,7 +312,6 @@ function TasksView({ project, items, sections, canEdit, patch, patchMany, addIte
   del: (it: CustomPlanItem) => void;
   addDep: (itemId: string, dependsOnItemId: string) => void;
   removeDep: (itemId: string, depId: string) => void;
-  onReimport?: () => void; importing: boolean;
   staff: { id: string; name: string }[]; contacts: { id: string; name: string }[];
   blockersByItem: Map<string, Risk[]>;
 }) {
@@ -361,11 +350,6 @@ function TasksView({ project, items, sections, canEdit, patch, patchMany, addIte
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
-        {canEdit && (
-          <button className="ms-btn-ghost" style={{ fontSize: 12 }} onClick={onReimport} disabled={importing} title="Re-import from the Asana export (replaces the current plan)">
-            {importing ? "Re-importing…" : "↻ Re-import from Asana"}
-          </button>
-        )}
         <CustomPlanExportMenu
           project={project}
           items={items}
