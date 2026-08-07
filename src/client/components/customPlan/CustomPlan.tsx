@@ -8,12 +8,16 @@
  * `uses_custom_plan` flag is set, in place of the standard Timeline/Tasks tabs.
  *
  * Teardown: delete this folder + its two mount points in ProjectDetailPage +
- * the customPlan route + medvetPlan.json + migration 0129's table/flag.
+ * the customPlan route + medvetPlan.json + migration 0129's table/flag. The
+ * export (CustomPlanExports) lives in this folder for that reason; it borrows
+ * primitives from project/TaskExports, never the reverse, so the delete is
+ * self-contained.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, type CustomPlanItem, type Risk } from "../../lib/api";
+import { api, type CustomPlanItem, type Project, type Risk } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import { PLAN_DATE_MAX, PLAN_DATE_MIN, isPlanDate } from "../../../shared/planDates";
+import CustomPlanExportMenu from "./CustomPlanExports";
 
 const STATUS = ["not_started", "in_progress", "completed", "blocked"] as const;
 const STATUS_LABEL: Record<string, string> = { not_started: "Not Started", in_progress: "In Progress", completed: "Completed", blocked: "Blocked" };
@@ -33,7 +37,11 @@ function fmt(d: string | null): string {
 // Date plausibility (isPlanDate / PLAN_DATE_*) lives in shared/planDates.ts —
 // this module's Timeline is what surfaced the bug, but the guard applies app-wide.
 
-export default function CustomPlan({ projectId, canEdit, view }: { projectId: string; canEdit: boolean; view: "timeline" | "tasks" }) {
+export default function CustomPlan({ project, canEdit, view }: { project: Project; canEdit: boolean; view: "timeline" | "tasks" }) {
+  // The whole module was written against a bare projectId; `project` arrived
+  // later for the export's cover page, so keep the local alias rather than
+  // rewriting every call site of a throwaway.
+  const projectId = project.id;
   const { showToast } = useToast();
   const [items, setItems] = useState<CustomPlanItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -162,7 +170,7 @@ export default function CustomPlan({ projectId, canEdit, view }: { projectId: st
 
   return view === "timeline"
     ? <TimelineView items={items} sections={sections} />
-    : <TasksView items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} blockersByItem={blockersByItem} />;
+    : <TasksView project={project} items={items} sections={sections} canEdit={canEdit} patch={patch} patchMany={patchMany} addItem={addItem} del={del} addDep={addDep} removeDep={removeDep} onReimport={canEdit ? runImport : undefined} importing={importing} staff={staff} contacts={contacts} blockersByItem={blockersByItem} />;
 }
 
 // ── Timeline: sections as dated bands over the project range; each expands to
@@ -305,7 +313,8 @@ function DateCell({ value, onCommit }: { value: string | null; onCommit: (v: str
 }
 
 // ── Tasks: nested outline grouped by section, inline-editable ──────────────────
-function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, onReimport, importing, staff, contacts, blockersByItem }: {
+function TasksView({ project, items, sections, canEdit, patch, patchMany, addItem, del, addDep, removeDep, onReimport, importing, staff, contacts, blockersByItem }: {
+  project: Project;
   items: CustomPlanItem[]; sections: string[]; canEdit: boolean;
   patch: (id: string, f: keyof CustomPlanItem, v: unknown) => void;
   patchMany: (id: string, partial: Partial<CustomPlanItem>) => void;
@@ -340,15 +349,31 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
   const cell: React.CSSProperties = { padding: "3px 6px", fontSize: 13, verticalAlign: "top" };
   const input: React.CSSProperties = { width: "100%", border: "1px solid transparent", background: "transparent", fontSize: 13, padding: "2px 4px", borderRadius: 4, color: "#1e293b" };
 
+  // Display name for an item's assignee: a real user/contact ref wins, else the
+  // imported Asana label (a role like "Customer, Engineer"). Hoisted out of the
+  // table cell so the export renders exactly what the screen does.
+  const resolveAssignee = useCallback((it: CustomPlanItem): string => {
+    if (it.assignee_user_id) return staff.find((s) => s.id === it.assignee_user_id)?.name ?? it.assignee ?? "";
+    if (it.assignee_contact_id) return contacts.find((ct) => ct.id === it.assignee_contact_id)?.name ?? it.assignee ?? "";
+    return it.assignee ?? "";
+  }, [staff, contacts]);
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      {canEdit && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 10 }}>
+        {canEdit && (
           <button className="ms-btn-ghost" style={{ fontSize: 12 }} onClick={onReimport} disabled={importing} title="Re-import from the Asana export (replaces the current plan)">
             {importing ? "Re-importing…" : "↻ Re-import from Asana"}
           </button>
-        </div>
-      )}
+        )}
+        <CustomPlanExportMenu
+          project={project}
+          items={items}
+          sections={sections}
+          blockersByItem={blockersByItem}
+          resolveAssignee={resolveAssignee}
+        />
+      </div>
       {sections.map((sec) => (
         <div key={sec} className="ms-section-card" style={{ overflow: "hidden" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
@@ -467,13 +492,7 @@ function TasksView({ items, sections, canEdit, patch, patchMany, addItem, del, a
                     </td>
                     <td style={cell}>
                       {(() => {
-                        // Resolved display name: real user/contact ref wins, else
-                        // the imported Asana label (a role like "Customer, Engineer").
-                        const resolved = it.assignee_user_id
-                          ? staff.find((s) => s.id === it.assignee_user_id)?.name ?? it.assignee
-                          : it.assignee_contact_id
-                          ? contacts.find((ct) => ct.id === it.assignee_contact_id)?.name ?? it.assignee
-                          : it.assignee;
+                        const resolved = resolveAssignee(it);
                         if (!canEdit) return <span style={{ fontSize: 12, color: "#475569" }}>{resolved || "—"}</span>;
                         // A real assignment (a person) selects that option; an
                         // un-mapped imported label shows via the sentinel "lbl".
