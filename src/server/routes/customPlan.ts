@@ -53,20 +53,39 @@ app.get("/:id/custom-plan", async (c) => {
   return c.json({ items });
 });
 
-// POST /api/projects/:id/custom-plan/import — (re)seed from the bundled Asana
-// export and flip projects.uses_custom_plan on. Idempotent: clears first.
+// POST /api/projects/:id/custom-plan/import — seed from the bundled Asana
+// export and flip projects.uses_custom_plan on.
+//
+// FIRST IMPORT ONLY. This clears the project's plan before reseeding, and
+// MedVet now has months of post-import work on theirs — statuses, dates,
+// assignees, added tasks, dependencies, blocker links. Re-importing is never
+// what anyone wants, so the endpoint refuses when a plan already exists rather
+// than relying on the UI not to offer it. The re-import button is gone from
+// the Tasks tab; this is what makes that a guarantee instead of a convention.
 app.post("/:id/custom-plan/import", async (c) => {
   const auth = c.get("auth");
   const db = c.env.DB;
   const projectId = c.req.param("id");
   if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
 
+  const existing = await db
+    .prepare("SELECT COUNT(*) AS n FROM custom_plan_items WHERE project_id = ?")
+    .bind(projectId)
+    .first<{ n: number }>();
+  if ((existing?.n ?? 0) > 0) {
+    throw new HTTPException(409, {
+      message: `This project already has a plan (${existing?.n} items). Re-importing would replace it and discard every change made since the original import.`,
+    });
+  }
+
   const seed = medvetPlan as SeedItem[];
-  // Fresh UUIDs so re-imports (and importing to multiple test projects) don't
-  // collide on the Asana ids. Map Asana id → new id to resolve parent links.
+  // Fresh UUIDs so importing to multiple test projects doesn't collide on the
+  // Asana ids. Map Asana id → new id to resolve parent links.
   const idMap = new Map<string, string>();
   for (const it of seed) idMap.set(it.id, crypto.randomUUID());
 
+  // No-op after the guard above — kept so a partially-failed first import
+  // can't leave orphan rows behind on a retry.
   await db.prepare("DELETE FROM custom_plan_items WHERE project_id = ?").bind(projectId).run();
 
   // Insert in document order (parents precede children) in batches.
