@@ -1273,7 +1273,7 @@ export default function ProjectDetailPage() {
       {/* ── Timeline (gantt) ──────────────────────────────────────────────── */}
       {/* One-off: MedVet renders its Asana-mirroring plan here instead. */}
       {tab === "timeline" && project.uses_custom_plan === 1 && (
-        <CustomPlan projectId={project.id} canEdit={canEdit} view="timeline" />
+        <CustomPlan project={project} canEdit={canEdit} view="timeline" />
       )}
 
       {tab === "timeline" && !project.uses_custom_plan && (
@@ -1655,7 +1655,7 @@ export default function ProjectDetailPage() {
       {/* ── Tasks ─────────────────────────────────────────────────────────── */}
       {/* One-off: MedVet renders its Asana-mirroring plan here instead. */}
       {tab === "tasks" && project.uses_custom_plan === 1 && (
-        <CustomPlan projectId={project.id} canEdit={canEdit} view="tasks" />
+        <CustomPlan project={project} canEdit={canEdit} view="tasks" />
       )}
 
       {tab === "tasks" && !project.uses_custom_plan && (
