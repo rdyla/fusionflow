@@ -143,6 +143,32 @@ export async function canEditProject(
   return false;
 }
 
+/**
+ * May this user log time against the project (task / stage / project-admin)?
+ *
+ * Deliberately wider than canEditProject: PMs and implementation engineers get
+ * pulled into projects they aren't staffed on all the time (covering for
+ * someone out, a one-off assist, a call they got dragged into), and Dynamics is
+ * the system of record for those hours. Denying the entry doesn't protect
+ * anything — it just means the hours never reach CRM and never get billed.
+ *
+ * Both roles already have portfolio-wide read via canViewProject, so this
+ * grants no visibility they didn't have, and every entry still carries a local
+ * user_id plus a Dynamics owner resolved from the caller's own email, so
+ * attribution is unchanged.
+ *
+ * This is log-time only. Editing the project, its stages, or its tasks still
+ * goes through canEditProject.
+ */
+export async function canLogTimeOnProject(
+  db: D1Database,
+  user: AppUser,
+  projectId: string
+): Promise<boolean> {
+  if (user.role === "pm" || user.role === "pf_engineer") return true;
+  return canEditProject(db, user, projectId);
+}
+
 export function canManageUsers(role: AppRole): boolean {
   return role === "admin";
 }

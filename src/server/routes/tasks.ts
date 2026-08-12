@@ -7,7 +7,7 @@ import { z } from "zod";
 // due_date are date-only values that drive the Gantt.
 import { zPlanDateOrBlank, zPlanTimestamp } from "../lib/dateSchemas";
 import type { Bindings, Variables } from "../types";
-import { canEditProject, canViewProject, visiblePhaseIds } from "../services/accessService";
+import { canEditProject, canLogTimeOnProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { maybeSendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification } from "../lib/notifications";
@@ -593,9 +593,11 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
     .first<{ id: string; title: string; assignee_user_id: string | null; status: string | null }>();
   if (!task) throw new HTTPException(404, { message: "Task not found" });
 
-  const isEngineerOnOwnTask = auth.role === "pf_engineer" && task.assignee_user_id === auth.user.id;
-  const canEdit = await canEditProject(db, auth.user, projectId);
-  if (!canEdit && !isEngineerOnOwnTask) throw new HTTPException(403, { message: "Forbidden" });
+  // Project editors, plus any PM/IE — see canLogTimeOnProject. Supersedes the
+  // old "engineer on their own task" carve-out, which the pf_engineer branch of
+  // that helper now covers.
+  const canLogTime = await canLogTimeOnProject(db, auth.user, projectId);
+  if (!canLogTime) throw new HTTPException(403, { message: "Forbidden" });
 
   const body = await c.req.json();
   const parsed = logTimeSchema.safeParse(body);
@@ -712,19 +714,11 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
     .first<{ id: string; name: string }>();
   if (!stage) throw new HTTPException(404, { message: "Stage not found" });
 
-  // PFI users who can edit the project may log time; engineers who are project
-  // staff may log time even without full edit rights (mirrors the per-task rule,
-  // but stage-level has no single assignee so membership is the gate).
-  const canEdit = await canEditProject(db, auth.user, projectId);
-  let isEngineerOnProject = false;
-  if (!canEdit && auth.role === "pf_engineer") {
-    const staffRow = await db
-      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
-      .bind(projectId, auth.user.id)
-      .first();
-    isEngineerOnProject = !!staffRow;
-  }
-  if (!canEdit && !isEngineerOnProject) throw new HTTPException(403, { message: "Forbidden" });
+  // Project editors, plus any PM/IE — see canLogTimeOnProject. Replaces the old
+  // "engineer must be on project_staff" gate: PMs and IEs log stage time on
+  // projects they aren't staffed on, and the hours belong in CRM either way.
+  const canLogTime = await canLogTimeOnProject(db, auth.user, projectId);
+  if (!canLogTime) throw new HTTPException(403, { message: "Forbidden" });
 
   const body = await c.req.json();
   const parsed = logStageTimeSchema.safeParse(body);
@@ -880,20 +874,9 @@ app.post("/:id/time-entries", async (c) => {
     .first<{ id: string; crm_case_id: string | null }>();
   if (!project) throw new HTTPException(404, { message: "Project not found" });
 
-  // PFI users who can edit the project may log time; engineers who are project
-  // staff may log time even without full edit rights. Copied verbatim from the
-  // stage-level path — project-level admin time has no assignee, so membership
-  // is the gate.
-  const canEdit = await canEditProject(db, auth.user, projectId);
-  let isEngineerOnProject = false;
-  if (!canEdit && auth.role === "pf_engineer") {
-    const staffRow = await db
-      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
-      .bind(projectId, auth.user.id)
-      .first();
-    isEngineerOnProject = !!staffRow;
-  }
-  if (!canEdit && !isEngineerOnProject) throw new HTTPException(403, { message: "Forbidden" });
+  // Same gate as the stage-level path — see canLogTimeOnProject.
+  const canLogTime = await canLogTimeOnProject(db, auth.user, projectId);
+  if (!canLogTime) throw new HTTPException(403, { message: "Forbidden" });
 
   if (!project.crm_case_id) throw new HTTPException(400, { message: "Project has no linked CRM case." });
 
@@ -978,18 +961,13 @@ app.delete("/:id/time-entries/:entryId", async (c) => {
     .first<{ id: string; crm_time_entry_id: string | null; user_id: string | null }>();
   if (!entry) throw new HTTPException(404, { message: "Time entry not found" });
 
-  // Same authz as the POST: project editors, or an engineer staffed on the
-  // project, may remove a project-level admin entry.
+  // Project editors may remove any entry; anyone else may remove their own —
+  // same rule as the stage-level delete. Deliberately narrower than the POST:
+  // an unstaffed PM/IE can log time here and undo their own mistake, but not
+  // reach into someone else's hours on a project they don't run.
   const canEdit = await canEditProject(db, auth.user, projectId);
-  let isEngineerOnProject = false;
-  if (!canEdit && auth.role === "pf_engineer") {
-    const staffRow = await db
-      .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
-      .bind(projectId, auth.user.id)
-      .first();
-    isEngineerOnProject = !!staffRow;
-  }
-  if (!canEdit && !isEngineerOnProject) throw new HTTPException(403, { message: "Forbidden" });
+  const isOwnEntry = entry.user_id === auth.user.id;
+  if (!canEdit && !isOwnEntry) throw new HTTPException(403, { message: "Forbidden" });
 
   // Delete the CRM record first so we never leave the local row pointing at a
   // CRM entry we failed to remove. A 404 in CRM is treated as success.

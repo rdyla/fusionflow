@@ -660,6 +660,19 @@ export default function ProjectDetailPage() {
   // mirrored server-side. Scoped to engineers actually on the project_staff list.
   const isStaffedEngineer = currentUserRole === "pf_engineer" && projectStaff.some((s) => s.user_id === currentUserId);
   const canManageTasks = canEdit || isStaffedEngineer;
+  // Logging time is broader than managing the project: any PM or IE may log
+  // against any project, staffed or not (they get pulled into work they aren't
+  // assigned to and the hours still have to reach CRM). Mirrors the server's
+  // canLogTimeOnProject.
+  const canLogTime = canManageTasks || currentUserRole === "pm" || currentUserRole === "pf_engineer";
+  // Removing a time entry is NARROWER than both of the above: the server allows
+  // project editors (canEditProject) or the person who logged it — nothing else.
+  // Note this can't reuse `canEdit`, which counts every pm-role user as an editor
+  // whereas the server requires an actual PM assignment, nor `canManageTasks`,
+  // which counts staffed engineers the delete handler rejects. Using either would
+  // advertise a Delete button that always 403s on someone else's entry.
+  const canDeleteTimeEntry = (entryUserId: string | null | undefined) =>
+    currentUserRole === "admin" || isAssignedPm || entryUserId === currentUserId;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -3211,7 +3224,7 @@ export default function ProjectDetailPage() {
                       </div>
                       <div style={{ fontSize: 12, color: "#94a3b8" }}>Log general project/admin time to this case — not tied to a task or stage.</div>
                     </div>
-                    {canManageTasks && (
+                    {canLogTime && (
                       <button
                         type="button"
                         className="ms-btn-secondary"
@@ -3250,7 +3263,7 @@ export default function ProjectDetailPage() {
                                 {entry.crm_time_entry_id ? " · in CRM" : " · not in CRM"}
                               </div>
                             </div>
-                            {canManageTasks && (
+                            {canDeleteTimeEntry(entry.user_id) && (
                               <button
                                 type="button"
                                 disabled={deletingProjectEntryId === entry.id}
@@ -3696,7 +3709,7 @@ export default function ProjectDetailPage() {
                             {entry.crm_time_entry_id ? " · in CRM" : " · not in CRM"}
                           </div>
                         </div>
-                        {canEdit && (
+                        {canDeleteTimeEntry(entry.user_id) && (
                           <button
                             type="button"
                             disabled={deletingEntryId === entry.id}
