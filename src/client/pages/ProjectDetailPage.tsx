@@ -665,6 +665,14 @@ export default function ProjectDetailPage() {
   // assigned to and the hours still have to reach CRM). Mirrors the server's
   // canLogTimeOnProject.
   const canLogTime = canManageTasks || currentUserRole === "pm" || currentUserRole === "pf_engineer";
+  // Removing a time entry is NARROWER than both of the above: the server allows
+  // project editors (canEditProject) or the person who logged it — nothing else.
+  // Note this can't reuse `canEdit`, which counts every pm-role user as an editor
+  // whereas the server requires an actual PM assignment, nor `canManageTasks`,
+  // which counts staffed engineers the delete handler rejects. Using either would
+  // advertise a Delete button that always 403s on someone else's entry.
+  const canDeleteTimeEntry = (entryUserId: string | null | undefined) =>
+    currentUserRole === "admin" || isAssignedPm || entryUserId === currentUserId;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -3255,10 +3263,7 @@ export default function ProjectDetailPage() {
                                 {entry.crm_time_entry_id ? " · in CRM" : " · not in CRM"}
                               </div>
                             </div>
-                            {/* Editors may remove any entry; anyone may remove
-                                their own (an unstaffed PM/IE who logged here
-                                needs to be able to undo it). Matches the server. */}
-                            {(canManageTasks || entry.user_id === currentUserId) && (
+                            {canDeleteTimeEntry(entry.user_id) && (
                               <button
                                 type="button"
                                 disabled={deletingProjectEntryId === entry.id}
@@ -3704,9 +3709,7 @@ export default function ProjectDetailPage() {
                             {entry.crm_time_entry_id ? " · in CRM" : " · not in CRM"}
                           </div>
                         </div>
-                        {/* Editors may remove any entry; anyone may remove their
-                            own. Matches the server's stage-delete rule. */}
-                        {(canEdit || entry.user_id === currentUserId) && (
+                        {canDeleteTimeEntry(entry.user_id) && (
                           <button
                             type="button"
                             disabled={deletingEntryId === entry.id}
