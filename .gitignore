@@ -200,3 +200,6 @@ dist
 
 ### Staging snapshots (ad-hoc DB dumps for screen-grab workflow) ###
 scripts/snapshots/
+
+# Claude Code personal settings (may contain machine-specific permission grants)
+.claude/settings.local.json
