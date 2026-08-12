@@ -415,6 +415,64 @@ async function planWave3Restructure(db: D1Database, projectId: string) {
   }
 
   const deletedIds = new Set(toDelete.map((r) => r.id));
+
+  // Where each deleted row ends up. Two ways a deleted row has a Wave 3
+  // successor: it IS a template (or one of the template's children), or it's a
+  // same-named copy from another phase — the go-live-readiness leaves — which
+  // resolve by name onto the single Wave 3 item, same rule the risk repointing
+  // uses. Anything else is genuinely gone.
+  const successor = new Map<string, { name: string; childIndex: number | null }>();
+  for (const t of templates) {
+    successor.set(t.template.id, { name: t.name, childIndex: null });
+    t.children.forEach((k, i) => successor.set(k.id, { name: t.name, childIndex: i }));
+  }
+  for (const r of toDelete) {
+    if (successor.has(r.id)) continue;
+    const match = templates.find((t) => t.name.toLowerCase() === r.name.trim().toLowerCase());
+    if (match) successor.set(r.id, { name: match.name, childIndex: null });
+  }
+  const resolve = (id: string) =>
+    !deletedIds.has(id)
+      ? ({ kind: "keep", id } as const)
+      : successor.has(id)
+        ? ({ kind: "remap", ...successor.get(id)! } as const)
+        : ({ kind: "lost" } as const);
+
+  // Dependency edges touching the delete set. custom_plan_deps cascades on BOTH
+  // columns, so deleting a row silently destroys every blocked-by edge on it —
+  // and the replacements get fresh ids, so the edges can't reattach themselves.
+  // Capture and remap, exactly as the risks are.
+  const edges = (
+    await db
+      .prepare(
+        `SELECT d.item_id, d.depends_on_item_id
+         FROM custom_plan_deps d
+         JOIN custom_plan_items i ON i.id = d.item_id
+         WHERE i.project_id = ?`
+      )
+      .bind(projectId).all<{ item_id: string; depends_on_item_id: string }>()
+  ).results ?? [];
+
+  const depPlan = edges
+    .filter((e) => deletedIds.has(e.item_id) || deletedIds.has(e.depends_on_item_id))
+    .map((e) => {
+      const from = resolve(e.item_id);
+      const to = resolve(e.depends_on_item_id);
+      const nameOf = (id: string) => all.find((r) => r.id === id)?.name ?? id;
+      // Both endpoints collapsing onto the same Wave 3 row (e.g. Wave 1 QM
+      // blocked by Wave 2 QM, both now one item) would be a self-edge — the
+      // deps POST guards against those, so drop it rather than write one.
+      const collapses =
+        from.kind === "remap" && to.kind === "remap" &&
+        from.name === to.name && from.childIndex === to.childIndex;
+      const dropped = from.kind === "lost" || to.kind === "lost" || collapses;
+      return {
+        from, to, dropped,
+        label: `"${nameOf(e.item_id)}" blocked by "${nameOf(e.depends_on_item_id)}"`,
+        reason: collapses ? "both ends collapse to the same Wave 3 item" : dropped ? "one end has no Wave 3 successor" : null,
+      };
+    });
+
   const riskRows = deletedIds.size
     ? (await db
         .prepare(`SELECT id, description, custom_plan_item_id FROM risks WHERE project_id = ? AND custom_plan_item_id IS NOT NULL`)
@@ -443,10 +501,13 @@ async function planWave3Restructure(db: D1Database, projectId: string) {
   }
   const missing = WAVE3_TARGET_NAMES.filter((n) => !templates.some((t) => t.name === n));
   for (const n of missing) warnings.push(`No source item named "${n}" was found — Wave 3 will not contain it.`);
+  for (const d of depPlan) {
+    if (d.dropped) warnings.push(`Dependency ${d.label} cannot be carried over (${d.reason}) — the edge will be lost.`);
+  }
 
   const maxSort = all.reduce((m, r) => Math.max(m, r.sort_order), 0);
 
-  return { all, templates, toDelete, riskRepoints, warnings, maxSort };
+  return { all, templates, toDelete, riskRepoints, depPlan, warnings, maxSort };
 }
 
 // GET /api/projects/:id/custom-plan/wave3 — preview. Read-only; open it in a
@@ -457,7 +518,7 @@ app.get("/:id/custom-plan/wave3", async (c) => {
   const projectId = c.req.param("id");
   if (!(await canEditProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
 
-  const { templates, toDelete, riskRepoints, warnings } = await planWave3Restructure(db, projectId);
+  const { templates, toDelete, riskRepoints, depPlan, warnings } = await planWave3Restructure(db, projectId);
   const already = await db
     .prepare("SELECT COUNT(*) AS n FROM custom_plan_items WHERE project_id = ? AND section = ?")
     .bind(projectId, WAVE3_SECTION).first<{ n: number }>();
@@ -477,6 +538,11 @@ app.get("/:id/custom-plan/wave3", async (c) => {
       items: toDelete.map((r) => ({ section: r.section, depth: r.depth, name: r.name, status: r.status })),
     },
     will_repoint_risks: riskRepoints,
+    dependencies: {
+      touched: depPlan.length,
+      will_remap: depPlan.filter((d) => !d.dropped).map((d) => d.label),
+      will_be_lost: depPlan.filter((d) => d.dropped).map((d) => ({ edge: d.label, reason: d.reason })),
+    },
     warnings,
     to_commit: `POST this same URL with body {"confirm":"${WAVE3_SECTION}"}. Add "start_date"/"due_date" (YYYY-MM-DD) to date the new items — without dates the section is invisible on the Timeline tab.`,
   });
@@ -518,7 +584,7 @@ app.post("/:id/custom-plan/wave3", async (c) => {
     throw new HTTPException(409, { message: `${WAVE3_SECTION} already exists (${already?.n} items). Refusing to run twice.` });
   }
 
-  const { templates, toDelete, riskRepoints, warnings, maxSort } = await planWave3Restructure(db, projectId);
+  const { templates, toDelete, riskRepoints, depPlan, warnings, maxSort } = await planWave3Restructure(db, projectId);
   if (templates.length === 0) throw new HTTPException(400, { message: "Found no QM / WFM / AI Expert Assist items to restructure." });
 
   const insert = db.prepare(`INSERT INTO custom_plan_items (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
@@ -526,10 +592,15 @@ app.post("/:id/custom-plan/wave3", async (c) => {
   let sort = maxSort + 1;
   // name → new id, so risk repointing can find its replacement.
   const newIdByName = new Map<string, string>();
+  // "name" / "name#childIndex" → new id, so dependency edges can reattach to the
+  // specific replacement row (a child edge must land on that child, not the parent).
+  const newIdBySlot = new Map<string, string>();
+  const slot = (name: string, childIndex: number | null) => `${name.toLowerCase()}${childIndex === null ? "" : `#${childIndex}`}`;
 
   for (const t of templates) {
     const parentId = crypto.randomUUID();
     newIdByName.set(t.name.toLowerCase(), parentId);
+    newIdBySlot.set(slot(t.name, null), parentId);
     stmts.push(insert.bind(
       parentId, projectId, WAVE3_SECTION, null, 0, sort++,
       t.template.name, t.template.module, newStart, newDue, "not_started",
@@ -539,13 +610,15 @@ app.post("/:id/custom-plan/wave3", async (c) => {
     // subtree depth-first) and sit one level under the new parent. Source
     // depth is re-derived rather than copied: a child three levels deep in
     // PLANNING becomes depth 1 here, since its grandparent isn't coming along.
-    for (const kid of t.children) {
+    t.children.forEach((kid, i) => {
+      const kidId = crypto.randomUUID();
+      newIdBySlot.set(slot(t.name, i), kidId);
       stmts.push(insert.bind(
-        crypto.randomUUID(), projectId, WAVE3_SECTION, parentId, 1, sort++,
+        kidId, projectId, WAVE3_SECTION, parentId, 1, sort++,
         kid.name, kid.module, newStart, newDue, "not_started",
         kid.assignee, kid.assignee_user_id, kid.assignee_contact_id, kid.notes,
       ));
-    }
+    });
   }
 
   for (const rp of riskRepoints) {
@@ -555,8 +628,24 @@ app.post("/:id/custom-plan/wave3", async (c) => {
     }
   }
 
-  // Deletes last: the risk repoints above must land before the FK's ON DELETE
-  // SET NULL fires, or the links are nulled out before we can move them.
+  // Re-create the dependency edges on the new rows. OR IGNORE because two
+  // distinct old edges can remap onto one new edge (the per-phase copies all
+  // collapse to a single Wave 3 item), which would otherwise trip the PK.
+  let edgesRemapped = 0;
+  for (const d of depPlan) {
+    // The explicit "lost" checks are what narrow the union for the lookups
+    // below; `dropped` already covers them but the compiler can't see that.
+    if (d.dropped || d.from.kind === "lost" || d.to.kind === "lost") continue;
+    const from = d.from.kind === "keep" ? d.from.id : newIdBySlot.get(slot(d.from.name, d.from.childIndex));
+    const to = d.to.kind === "keep" ? d.to.id : newIdBySlot.get(slot(d.to.name, d.to.childIndex));
+    if (!from || !to || from === to) continue;
+    stmts.push(db.prepare("INSERT OR IGNORE INTO custom_plan_deps (item_id, depends_on_item_id) VALUES (?, ?)").bind(from, to));
+    edgesRemapped++;
+  }
+
+  // Deletes last: the risk repoints and dependency re-inserts above must land
+  // before the FKs fire — ON DELETE SET NULL would null the risk links, and
+  // ON DELETE CASCADE would take the old edges with the rows.
   for (const r of toDelete) {
     stmts.push(db.prepare("DELETE FROM custom_plan_items WHERE id = ? AND project_id = ?").bind(r.id, projectId));
   }
@@ -572,6 +661,8 @@ app.post("/:id/custom-plan/wave3", async (c) => {
     created: templates.reduce((n, t) => n + 1 + t.children.length, 0),
     deleted: toDelete.length,
     risks_repointed: riskRepoints.filter((r) => r.to_name).length,
+    dependencies_remapped: edgesRemapped,
+    dependencies_lost: depPlan.filter((d) => d.dropped).length,
     warnings,
   });
 });
