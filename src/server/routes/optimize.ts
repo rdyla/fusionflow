@@ -256,10 +256,15 @@ app.post("/accounts/direct", async (c) => {
 
   // Create the optimize account
   const accountId = crypto.randomUUID();
+  // customer_id is denormalized off the project. Every graduation path used to
+  // omit it, leaving it NULL on every row — which made the customer record's
+  // Optimizations tab permanently empty, since it filtered on this column.
+  // Reads still COALESCE through the project, but writing it keeps the column
+  // honest for anything that queries it directly.
   await db.prepare(`
-    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method, next_review_date, notes)
-    VALUES (?, ?, ?, 'direct', ?, ?)
-  `).bind(accountId, projectId, auth.user.id, d.next_review_date ?? null, d.notes ?? null).run();
+    INSERT INTO optimize_accounts (id, project_id, customer_id, graduated_by, graduation_method, next_review_date, notes)
+    VALUES (?, ?, (SELECT customer_id FROM projects WHERE id = ?), ?, 'direct', ?, ?)
+  `).bind(accountId, projectId, projectId, auth.user.id, d.next_review_date ?? null, d.notes ?? null).run();
 
   // Return in list-query shape
   const created = await db.prepare(`
@@ -307,10 +312,11 @@ app.post("/accounts/:projectId/graduate", async (c) => {
   const data = parsed.success ? parsed.data : {};
 
   const id = crypto.randomUUID();
+  // See the 'direct' path above — customer_id comes from the project.
   await db.prepare(`
-    INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method, next_review_date, notes)
-    VALUES (?, ?, ?, 'manual', ?, ?)
-  `).bind(id, projectId, auth.user.id, data.next_review_date ?? null, data.notes ?? null).run();
+    INSERT INTO optimize_accounts (id, project_id, customer_id, graduated_by, graduation_method, next_review_date, notes)
+    VALUES (?, ?, (SELECT customer_id FROM projects WHERE id = ?), ?, 'manual', ?, ?)
+  `).bind(id, projectId, projectId, auth.user.id, data.next_review_date ?? null, data.notes ?? null).run();
 
   const created = await db.prepare("SELECT * FROM optimize_accounts WHERE id = ? LIMIT 1").bind(id).first();
   return c.json(created, 201);

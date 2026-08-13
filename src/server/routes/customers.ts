@@ -528,7 +528,13 @@ app.get("/:id/optimizations", async (c) => {
              p.name AS project_name, p.vendor, p.solution_types, p.actual_go_live_date
       FROM optimize_accounts oa
       JOIN projects p ON p.id = oa.project_id
-      WHERE oa.customer_id = ?${vendorClause}
+      -- COALESCE, not oa.customer_id alone: that column is DENORMALIZED and no
+      -- graduation path has ever written it (see routes/optimize.ts INSERTs),
+      -- so it was NULL on every row and this tab was empty for every customer.
+      -- The authoritative link is the project's — optimize accounts hang off a
+      -- project 1:1, and projects carry customer_id. Same pattern already used
+      -- by routes/optimize.ts:140, which hit this first.
+      WHERE COALESCE(oa.customer_id, p.customer_id) = ?${vendorClause}
       ORDER BY oa.graduated_at DESC
     `)
     .bind(c.req.param("id"), ...vendorBinding)
