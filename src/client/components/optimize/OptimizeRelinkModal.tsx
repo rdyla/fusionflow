@@ -36,7 +36,9 @@ export default function OptimizeRelinkModal({ currentProjectId, customerName, on
   const [relinking, setRelinking] = useState(false);
 
   useEffect(() => {
-    api.projects()
+    // scope:"all" — relinking must be able to target any project, and
+    // /api/projects now defaults to scope=mine for admins and SAs.
+    api.projects({ scope: "all" })
       .then((p) => setProjects(p))
       .catch(() => showToast("Failed to load projects", "error"))
       .finally(() => setLoading(false));

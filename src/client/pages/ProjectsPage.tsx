@@ -85,6 +85,28 @@ const EMPTY_FORM: {
   dynamics_account_id: "",
 };
 
+/** Roles that land on their own projects and can zoom out to the portfolio.
+ *  Mirrored server-side in routes/projects.ts — a role listed here without a
+ *  matching `scope === "mine"` branch there gets a toggle that does nothing. */
+const SCOPE_TOGGLE_ROLES = ["pm", "pf_engineer", "pf_sa", "admin"];
+
+/** Remembers the My/All choice so nobody re-clicks it every visit. Deliberately
+ *  NOT keyed by user id: reading it needs to be synchronous at mount, and keying
+ *  it would make the project fetch wait on /me first, adding latency for
+ *  everyone. It's only a view preference — the server enforces access
+ *  regardless of what's stored here — and it matches the existing
+ *  `cloudconnect:*` keys elsewhere in the app. */
+const SCOPE_PREF_KEY = "cloudconnect:projects:scope";
+
+function readScopePref(): "mine" | "all" | null {
+  try {
+    const v = window.localStorage.getItem(SCOPE_PREF_KEY);
+    return v === "mine" || v === "all" ? v : null;
+  } catch {
+    return null; // storage disabled / private mode — fall back to the default
+  }
+}
+
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectStages, setProjectStages] = useState<Record<string, Stage[]>>({});
@@ -94,8 +116,17 @@ export default function ProjectsPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
-  // PMs/IEs default to their own projects but can zoom out to the full portfolio.
-  const [scope, setScope] = useState<"mine" | "all">("mine");
+  // PMs/IEs/SAs/admins default to their own projects but can zoom out to the
+  // full portfolio. A saved choice wins over the default; captured once at mount
+  // so the auto-fallback below can tell "never chose" from "chose mine".
+  const savedScope = useRef(readScopePref());
+  const [scope, setScope] = useState<"mine" | "all">(savedScope.current ?? "mine");
+  /** Toggle handler — persists, so the choice survives reloads. */
+  const chooseScope = (s: "mine" | "all") => {
+    savedScope.current = s;
+    setScope(s);
+    try { window.localStorage.setItem(SCOPE_PREF_KEY, s); } catch { /* storage disabled */ }
+  };
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sort, setSort] = useState<ProjectSort>(null);
@@ -160,6 +191,23 @@ export default function ProjectsPage() {
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
   }, [pfAeIdFilter, partnerAeIdFilter, scope]);
+
+  // Zero-tie users (an admin who is never assigned to projects) would otherwise
+  // land on an empty "My Projects" and have to click "All" on every fresh
+  // browser. If they've never expressed a preference and their own list comes
+  // back empty, show them the portfolio instead.
+  //
+  // Gated on `savedScope.current === null` so an explicit "mine" is never
+  // overridden — someone who chose it and happens to be between projects keeps
+  // the empty list and the explanatory message. Waits for currentRole so this
+  // only ever applies to toggle roles, and doesn't fire mid-load.
+  useEffect(() => {
+    if (savedScope.current !== null) return;
+    if (loading || !currentRole) return;
+    if (scope !== "mine" || projects.length > 0) return;
+    if (!SCOPE_TOGGLE_ROLES.includes(currentRole)) return;
+    setScope("all"); // not persisted — it's an inference, so it re-evaluates if they're assigned later
+  }, [loading, currentRole, scope, projects.length]);
 
   useEffect(() => {
     if (projects.length === 0) return;
@@ -281,13 +329,16 @@ export default function ProjectsPage() {
         <StatusFilter value={statusFilter} onChange={setStatusFilter} options={statusOptions(projects)} />
       </div>
 
-      {/* PMs/IEs: default to their own projects, zoom out to the whole portfolio. */}
-      {(currentRole === "pm" || currentRole === "pf_engineer") && (
+      {/* PMs, IEs, SAs and admins: default to their own projects, zoom out to the
+          whole portfolio. SAs and admins keep portfolio-wide ACCESS either way —
+          this only changes which list they land on. For an SA "mine" runs through
+          the customer's account team, since there's no SA slot in project_staff. */}
+      {SCOPE_TOGGLE_ROLES.includes(currentRole) && (
         <div style={{ display: "inline-flex", marginBottom: 16, border: "1px solid #cbd5e1", borderRadius: 6, overflow: "hidden" }}>
           {(["mine", "all"] as const).map((s) => (
             <button
               key={s}
-              onClick={() => setScope(s)}
+              onClick={() => chooseScope(s)}
               style={{ padding: "6px 16px", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", background: scope === s ? "#0891b2" : "#fff", color: scope === s ? "#fff" : "#475569" }}
             >
               {s === "mine" ? "My Projects" : "All Projects"}
@@ -347,6 +398,27 @@ export default function ProjectsPage() {
                     ? "No projects match your search."
                     : healthFilter
                     ? `No projects with health "${healthFilter.replace("_", " ")}".`
+                    : scope === "mine" && SCOPE_TOGGLE_ROLES.includes(currentRole)
+                    ? (
+                      // An empty "My Projects" is a normal state — nobody is on
+                      // the account team of every customer — but a blank table
+                      // reads as a broken page. Say why, and offer the way out,
+                      // rather than leaving them to find the toggle above.
+                      <>
+                        <div style={{ marginBottom: 8 }}>
+                          You're not assigned to any active projects
+                          {currentRole === "pf_sa" || currentRole === "admin" ? " or customer account teams" : ""}.
+                        </div>
+                        <button
+                          type="button"
+                          className="ms-btn-secondary"
+                          onClick={() => chooseScope("all")}
+                          style={{ fontSize: 12 }}
+                        >
+                          Show all projects
+                        </button>
+                      </>
+                    )
                     : "No projects yet."}
                 </td>
               </tr>
