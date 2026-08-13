@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useToast } from "../ui/ToastProvider";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { todayLocalIso } from "../../lib/dates";
 
 // ── Zoom 11x Agency SPIFF rate table ─────────────────────────────────────────
 // Program period: Feb 1 – Jul 31, 2026. Source: Zoom 11x Agency SPIFF Terms & Conditions.
@@ -489,7 +490,7 @@ export default function CommissionsCalculator() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `packetfusion-spiff-log-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `packetfusion-spiff-log-${todayLocalIso()}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

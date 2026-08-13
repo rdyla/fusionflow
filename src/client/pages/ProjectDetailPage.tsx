@@ -47,6 +47,7 @@ import MeetingPrepCard from "../components/meetingPrep/MeetingPrepCard";
 import { useToast } from "../components/ui/ToastProvider";
 import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
+import { todayLocalIso } from "../lib/dates";
 
 type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "meetings" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
 
@@ -1826,7 +1827,7 @@ export default function ProjectDetailPage() {
                             title="Log time for this stage"
                             style={{ fontSize: 11, padding: "2px 10px" }}
                             onClick={() => {
-                              const today = new Date().toISOString().slice(0, 10);
+                              const today = todayLocalIso();
                               setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", note: "" });
                               setTimeEntrySetup(null);
                               setTimeEntryStage(stage);
@@ -1915,7 +1916,7 @@ export default function ProjectDetailPage() {
                             {stageTasks.map((task) => {
                               const taskRecordings = recordings.filter((r) => r.task_id === task.id);
                               const isDone = task.status === "completed";
-                              const todayIso = new Date().toISOString().slice(0, 10);
+                              const todayIso = todayLocalIso();
                               const isOverdue = !!task.due_date && !isDone && task.due_date < todayIso;
                               const subRowCount = taskRecordings.length;
                               // A task with an active blocker renders its whole row in red.
@@ -3255,7 +3256,7 @@ export default function ProjectDetailPage() {
                         className="ms-btn-secondary"
                         style={{ fontSize: 12, padding: "4px 12px", whiteSpace: "nowrap" }}
                         onClick={() => {
-                          const today = new Date().toISOString().slice(0, 10);
+                          const today = todayLocalIso();
                           setTimeEntryForm({ date: today, startTime: "08:00", endTime: "09:00", payCodeId: "", costCodeId: "", note: "" });
                           setTimeEntrySetup(null);
                           setTimeEntryStage(null);
