@@ -651,7 +651,7 @@ app.patch("/:id", async (c) => {
 
 // ── SOW Metadata + Versioning ─────────────────────────────────────────────────
 //
-// sow_metadata is a JSON blob on the solution row: { msa_date?, revisions[] }.
+// sow_metadata is a JSON blob on the solution row: { doc_stage?, revisions[] }.
 // "Generate Version" appends to revisions[]. The latest revision's `version`
 // (e.g. "V3") is the SOW's current version; the array doubles as the revision
 // history shown on the SOW cover page.
@@ -678,7 +678,11 @@ type SowRevision = {
 type DurationBand = "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom";
 
 type SowMetadata = {
-  msa_date?: string | null;
+  /** Document lifecycle stage printed on the SOW and gating its signature
+   *  block. Explicit rather than inferred — see SowDocStage in the shared
+   *  template types. Null on records saved before this existed; the client
+   *  falls back to publish/pipeline state so nothing regresses. */
+  doc_stage?: "draft" | "for_review" | "final" | "executed" | null;
   target_go_live_date?: string | null;
   duration_band?: DurationBand | null;
   custom_weeks?: number | null;
@@ -694,7 +698,7 @@ function readSowMetadata(blob: string | null | undefined): SowMetadata {
   try {
     const parsed = JSON.parse(blob) as Partial<SowMetadata>;
     return {
-      msa_date: parsed.msa_date ?? null,
+      doc_stage: parsed.doc_stage ?? null,
       target_go_live_date: parsed.target_go_live_date ?? null,
       duration_band: parsed.duration_band ?? null,
       custom_weeks: parsed.custom_weeks ?? null,
@@ -759,7 +763,7 @@ app.post("/:id/sow-version", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_cs
 });
 
 const sowMetadataSchema = z.object({
-  msa_date:             zPlanDate.nullable().optional(),
+  doc_stage:            z.enum(["draft", "for_review", "final", "executed"]).nullable().optional(),
   target_go_live_date:  zPlanDate.nullable().optional(),
   duration_band:        z.enum(["4_6_weeks", "6_8_weeks", "8_12_weeks", "custom"]).nullable().optional(),
   custom_weeks:         z.number().int().min(1).max(52).nullable().optional(),
@@ -786,7 +790,7 @@ app.patch("/:id/sow-metadata", requireRole("admin", "pm", "pf_ae", "pf_sa", "pf_
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
   const meta = readSowMetadata(existing.sow_metadata);
-  if (parsed.data.msa_date !== undefined)             meta.msa_date = parsed.data.msa_date;
+  if (parsed.data.doc_stage !== undefined)            meta.doc_stage = parsed.data.doc_stage;
   if (parsed.data.target_go_live_date !== undefined)  meta.target_go_live_date = parsed.data.target_go_live_date;
   if (parsed.data.duration_band !== undefined)        meta.duration_band = parsed.data.duration_band;
   if (parsed.data.custom_weeks !== undefined)         meta.custom_weeks = parsed.data.custom_weeks;

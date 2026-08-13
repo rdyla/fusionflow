@@ -27,6 +27,25 @@ export type SowSolutionTypeKey =
 export type SowVendorKey = "zoom" | "ringcentral" | "tbd";
 
 /**
+ * Document lifecycle stage, chosen by the PM on the SOW page. Deliberately
+ * separate from both `solutions.status` (pipeline position) and
+ * `solutions.sow_published` (client-portal visibility): a SOW can be visible to
+ * the customer while still being a draft, and can be final without the
+ * opportunity being closed-won.
+ *
+ * `draft` is the only value that suppresses the signature block.
+ */
+export type SowDocStage = "draft" | "for_review" | "final" | "executed";
+
+/** Printed value of the cover's "SOW Status" row, per stage. */
+export const SOW_DOC_STAGE_LABELS: Record<SowDocStage, string> = {
+  draft:      "Draft — Not for Execution",
+  for_review: "Draft for Customer Review",
+  final:      "Final — Approved for Signature",
+  executed:   "Executed",
+};
+
+/**
  * Inputs the renderer has when building a SOW. Variants use this to compute
  * snapshot tile values, pricing summaries, etc. without needing direct DB
  * access — the renderer assembles everything once at the top.
@@ -38,13 +57,12 @@ export type SowBuildContext = {
   preparedBy: { name: string; title?: string | null; email?: string | null; phone?: string | null };
   /** Project reference line on the cover ("Zoom UCaaS Migration – {short}"). */
   projectReference: string;
-  /** SOW number (auto-iterated V1, V2, ...). Falls back to "V1 (draft)" when
-   *  no revisions exist yet — i.e. PM hasn't clicked "Generate Version". */
+  /** SOW number (auto-iterated V1, V2, ...). Falls back to "V1" when no
+   *  revisions exist yet — i.e. PM hasn't clicked "Generate Version". Carries
+   *  no draft marker; `docStage` is what says whether this is a draft. */
   sowNumber: string;
   /** Issue date — defaults to today; renders as "Month DD, YYYY". */
   issueDateText: string;
-  /** PM-entered MSA date (YYYY-MM-DD) or null. */
-  msaDate: string | null;
   /** PM-entered target go-live date (YYYY-MM-DD). When set, Key Dates rows
    *  on the cover are derived backward from this date — Planning Complete,
    *  Port Orders Submitted, UAT, Go-Live, and Project Closure all compute
@@ -58,8 +76,13 @@ export type SowBuildContext = {
   /** When durationBand === "custom", the explicit week count. Ignored
    *  otherwise. */
   customWeeks: number | null;
-  /** SOW Status — pulled from the solution status. */
-  statusText: string;
+  /** Lifecycle stage of the DOCUMENT, set explicitly by the PM on the SOW page.
+   *  Drives the printed "SOW Status" and — critically — whether the signature
+   *  block renders at all: a `draft` prints no signature block, so a draft can't
+   *  be routed through DocuSign and executed by mistake. Previously this was
+   *  inferred from the solution's pipeline status, which meant a SOW published
+   *  for customer review still printed "Draft". */
+  docStage: SowDocStage;
   /** Revision history rows for the cover-page table. */
   revisions: Array<{ version: string; saved_at: string; saved_by_name: string | null; note?: string | null }>;
   /** Engagement Snapshot tile values — variants drive the labels + computed values via SnapshotField. */

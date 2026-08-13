@@ -165,9 +165,9 @@ export type Solution = {
   handoff_notes: string | null;
   phd_data: string | null;
   sow_data: string | null;
-  /** JSON blob: { msa_date?, revisions[] }. Mutated only via the SOW
+  /** JSON blob: { doc_stage?, revisions[] }. Mutated only via the SOW
    *  metadata endpoints — `generateSowVersion` appends a revision and
-   *  `updateSowMetadata` patches the msa_date. */
+   *  `updateSowMetadata` patches doc_stage / timeline / legal name. */
   sow_metadata: string | null;
   gap_analysis: string | null;
   linked_project_id: string | null;
@@ -2648,21 +2648,21 @@ export const api = {
    *  column in the cover page's revision-history table. */
   generateSowVersion: (id: string, payload: { note?: string | null }) =>
     request<{
-      sow_metadata: { msa_date?: string | null; revisions: Array<{ version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null }> };
+      sow_metadata: { doc_stage?: string | null; revisions: Array<{ version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null }> };
       new_revision: { version: string; saved_at: string; saved_by_user_id: string | null; saved_by_name: string | null; note?: string | null };
     }>(`/solutions/${id}/sow-version`, { method: "POST", body: JSON.stringify(payload) }),
 
-  /** Update SOW cover-page metadata (msa_date, target_go_live_date,
+  /** Update SOW cover-page metadata (doc_stage, target_go_live_date,
    *  duration_band, custom_weeks). Doesn't touch revisions — those are
    *  append-only via generateSowVersion. */
   updateSowMetadata: (id: string, payload: {
-    msa_date?: string | null;
+    doc_stage?: "draft" | "for_review" | "final" | "executed" | null;
     target_go_live_date?: string | null;
     duration_band?: "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | null;
     custom_weeks?: number | null;
     customer_legal_name?: string | null;
   }) =>
-    request<{ sow_metadata: { msa_date?: string | null; target_go_live_date?: string | null; duration_band?: string | null; custom_weeks?: number | null; customer_legal_name?: string | null; revisions: unknown[] } }>(
+    request<{ sow_metadata: { doc_stage?: string | null; target_go_live_date?: string | null; duration_band?: string | null; custom_weeks?: number | null; customer_legal_name?: string | null; revisions: unknown[] } }>(
       `/solutions/${id}/sow-metadata`, { method: "PATCH", body: JSON.stringify(payload) }
     ),
 

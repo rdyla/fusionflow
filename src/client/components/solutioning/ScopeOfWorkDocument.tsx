@@ -20,7 +20,8 @@ import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } fro
 import { parseCcaasComboInputs, isComboMode, sowDataToComboInputs, calcCcaasComboBreakdown } from "../../../shared/ccaasComboPricing";
 import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
 import { resolveSowVariant } from "../../../shared/sowTemplate/variants";
-import type { SowBuildContext } from "../../../shared/sowTemplate/types";
+import type { SowBuildContext, SowDocStage } from "../../../shared/sowTemplate/types";
+import { SOW_DOC_STAGE_LABELS } from "../../../shared/sowTemplate/types";
 import { api } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import logoUrl from "../../assets/packetfusion-fullcolor.png";
@@ -52,7 +53,10 @@ export type SowRevision = {
 export type SowDurationBand = "4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom";
 
 export type SowMetadata = {
-  msa_date?: string | null;
+  /** Explicit document stage — what prints as "SOW Status", and whether the
+   *  signature block renders at all. Null on records predating this control;
+   *  `resolveDocStage` supplies the fallback. */
+  doc_stage?: SowDocStage | null;
   /** PM-entered target go-live (YYYY-MM-DD). When set, the SOW's Key Dates
    *  table auto-derives Kickoff/Planning/Port/UAT/Closure rows from it. */
   target_go_live_date?: string | null;
@@ -66,12 +70,30 @@ export type SowMetadata = {
   revisions: SowRevision[];
 };
 
+/**
+ * Which stage to print when the PM hasn't picked one explicitly.
+ *
+ * Existing SOWs have no `doc_stage`, and the old renderer inferred status from
+ * the solution's pipeline status alone — which is why publishing a SOW for
+ * customer review left it printing "Draft". This fallback keeps those records
+ * sensible AND makes the publish toggle actually move the printed status, while
+ * an explicit choice always wins.
+ */
+export function resolveDocStage(
+  meta: SowMetadata | null | undefined,
+  solution: { status?: string | null; sow_published?: number | null },
+): SowDocStage {
+  if (meta?.doc_stage) return meta.doc_stage;
+  if (solution.status === "won") return "executed";
+  return solution.sow_published === 1 ? "for_review" : "draft";
+}
+
 export function parseSowMetadata(blob: string | null | undefined): SowMetadata {
   if (!blob) return { revisions: [] };
   try {
     const p = JSON.parse(blob) as Partial<SowMetadata>;
     return {
-      msa_date:            p.msa_date ?? null,
+      doc_stage:           p.doc_stage ?? null,
       target_go_live_date: p.target_go_live_date ?? null,
       duration_band:       p.duration_band ?? null,
       custom_weeks:        p.custom_weeks ?? null,
@@ -195,12 +217,13 @@ export default function ScopeOfWorkDocument({
 }: Props) {
   const { showToast } = useToast();
   const [generating, setGenerating] = useState(false);
-  const [savingMsa, setSavingMsa] = useState(false);
+  const [savingStage, setSavingStage] = useState(false);
   // Customers can VIEW a generated SOW (summary + Export/Print PDF) but
   // shouldn't see any of the metadata-editing controls or version-bump
   // affordances. Derived once from currentUser.role.
   const isClient = currentUser?.role === "client";
-  const [msaDateDraft, setMsaDateDraft] = useState(sowMetadata?.msa_date ?? "");
+  /** Effective stage — explicit choice, else derived from publish/pipeline state. */
+  const docStage = resolveDocStage(sowMetadata, solution);
   // Drafts for the timeline-derivation inputs. When blank, the renderer
   // falls back to the needs assessment's project_context answers (target
   // go-live + project_duration_band).
@@ -214,7 +237,6 @@ export default function ScopeOfWorkDocument({
   const [legalNameDraft, setLegalNameDraft] = useState(sowMetadata?.customer_legal_name ?? "");
   const [savingLegalName, setSavingLegalName] = useState(false);
 
-  useEffect(() => { setMsaDateDraft(sowMetadata?.msa_date ?? ""); }, [sowMetadata?.msa_date]);
   useEffect(() => { setLegalNameDraft(sowMetadata?.customer_legal_name ?? ""); }, [sowMetadata?.customer_legal_name]);
   useEffect(() => {
     setGoLiveDraft(sowMetadata?.target_go_live_date ?? "");
@@ -272,9 +294,10 @@ export default function ScopeOfWorkDocument({
       phone: null,
     },
     projectReference: variant.projectReferenceTemplate.replace("{customer}", docCustomerName),
-    sowNumber: sowMetadata?.revisions?.length ? sowMetadata.revisions[sowMetadata.revisions.length - 1].version : "V1 (draft)",
+    // No "(draft)" suffix — docStage carries that now, so the number stays a
+    // clean version even before the first Generate Version click.
+    sowNumber: sowMetadata?.revisions?.length ? sowMetadata.revisions[sowMetadata.revisions.length - 1].version : "V1",
     issueDateText: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
-    msaDate: sowMetadata?.msa_date ?? null,
     // Date cascade for the Key Dates table: PM's explicit SOW form value
     // wins; otherwise pull from the needs assessment (project_context
     // section); otherwise null and the cover renders "[MM/DD/YYYY]" rows.
@@ -285,7 +308,7 @@ export default function ScopeOfWorkDocument({
                ?? (naAnswers["project_duration_band"] as ("4_6_weeks" | "6_8_weeks" | "8_12_weeks" | "custom" | undefined))
                ?? null,
     customWeeks: sowMetadata?.custom_weeks ?? null,
-    statusText: solution.status === "won" ? "Executed" : solution.status === "scope" ? "Draft for Review" : "Draft",
+    docStage,
     revisions: (sowMetadata?.revisions ?? []).map((r) => ({
       version: r.version, saved_at: r.saved_at, saved_by_name: r.saved_by_name, note: r.note,
     })),
@@ -344,16 +367,21 @@ export default function ScopeOfWorkDocument({
     win.focus();
   }
 
-  async function saveMsaDate() {
-    setSavingMsa(true);
+  async function saveDocStage(next: SowDocStage) {
+    setSavingStage(true);
     try {
-      await api.updateSowMetadata(solution.id, { msa_date: msaDateDraft || null });
-      showToast("MSA date saved.", "success");
+      await api.updateSowMetadata(solution.id, { doc_stage: next });
+      showToast(
+        next === "draft"
+          ? "Stage set to Draft — the signature block is now suppressed on the document."
+          : `Stage set to ${SOW_DOC_STAGE_LABELS[next]}.`,
+        "success",
+      );
       onMetadataChanged?.();
     } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to save MSA date", "error");
+      showToast(err instanceof Error ? err.message : "Failed to save document stage", "error");
     } finally {
-      setSavingMsa(false);
+      setSavingStage(false);
     }
   }
 
@@ -436,22 +464,36 @@ export default function ScopeOfWorkDocument({
           Leave blank to use the customer's display name (<strong>{solution.customer_name || "Customer"}</strong>). Set this only when the contract must show a different legal entity name — e.g. the account is tracked under a DBA but the SOW needs the full registered name.
         </p>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 14 }}>
-          <label style={{ display: "block" }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", display: "block", marginBottom: 4 }}>Master Services Agreement date</span>
-            <input
-              type="date"
+        {/* Document stage — what prints as "SOW Status", and the gate on the
+            signature block. Saves immediately on change: it's one field, and a
+            stage the PM believes they set but didn't is exactly the failure this
+            control exists to prevent. */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "flex-end", marginBottom: 6 }}>
+          <label style={{ display: "block", minWidth: 260 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: "#334155", display: "block", marginBottom: 4 }}>Document stage</span>
+            <select
               className="ms-input"
-              value={msaDateDraft}
-              onChange={(e) => setMsaDateDraft(e.target.value)}
-              disabled={savingMsa}
-              style={{ fontSize: 13 }}
-            />
+              value={docStage}
+              onChange={(e) => void saveDocStage(e.target.value as SowDocStage)}
+              disabled={savingStage}
+              style={{ fontSize: 13, width: "100%" }}
+            >
+              {(Object.keys(SOW_DOC_STAGE_LABELS) as SowDocStage[]).map((s) => (
+                <option key={s} value={s}>{SOW_DOC_STAGE_LABELS[s]}</option>
+              ))}
+            </select>
           </label>
-          <button className="ms-btn-secondary" onClick={saveMsaDate} disabled={savingMsa} style={{ fontSize: 12 }}>
-            {savingMsa ? "Saving…" : "Save MSA date"}
-          </button>
+          {savingStage && <span style={{ fontSize: 12, color: "#64748b" }}>Saving…</span>}
         </div>
+        <p style={{ fontSize: 11, color: "#64748b", marginTop: 0, marginBottom: 14 }}>
+          Prints as <strong>SOW Status</strong> on the cover and controls the signature block.
+          {docStage === "draft"
+            ? " While Draft, the document prints no signature block — so it can't be routed for signature by mistake."
+            : " The signature block is included at this stage."}
+          {!sowMetadata?.doc_stage && (
+            <> Currently inferred from {solution.status === "won" ? "the closed-won status" : solution.sow_published === 1 ? "the published-for-review state" : "the unpublished draft state"} — pick a stage to set it explicitly.</>
+          )}
+        </p>
 
         {/* Timeline derivation inputs — drive the Key Dates table on the SOW
             cover. Cascades through naAnswers when blank: when the PM has
