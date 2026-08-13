@@ -429,17 +429,41 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
             <div style={{ display: "flex", flexDirection: "column", gap: 4, padding: "8px 10px", border: "1px solid #cbd5e1", borderRadius: 4, maxHeight: 160, overflowY: "auto" }}>
               {templates.length === 0 ? (
                 <span style={{ color: "#94a3b8", fontSize: 12 }}>No templates available</span>
-              ) : templates.map((t) => (
-                <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(t.id)}
-                    onChange={() => toggleTemplate(t.id)}
-                    disabled={loading || applying}
-                  />
-                  <span>{t.name}</span>
-                </label>
-              ))}
+              ) : (() => {
+                // Globals above, the caller's own saved templates below a labelled
+                // rule. Both groups are selectable together — a user template
+                // merges with globals by stage name like any other, and since it
+                // carries no solution_type its titles aren't re-tagged (they
+                // already hold whatever tags the source project had).
+                const global = templates.filter((t) => !t.owner_user_id);
+                const mine = templates.filter((t) => t.owner_user_id);
+                const row = (t: Template) => (
+                  <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(t.id)}
+                      onChange={() => toggleTemplate(t.id)}
+                      disabled={loading || applying}
+                    />
+                    <span>{t.name}</span>
+                  </label>
+                );
+                return (
+                  <>
+                    {global.map(row)}
+                    {mine.length > 0 && (
+                      <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "6px 0 2px" }}>
+                          <div style={{ height: 1, flex: 1, background: "#e2e8f0" }} />
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" }}>My templates</span>
+                          <div style={{ height: 1, flex: 1, background: "#e2e8f0" }} />
+                        </div>
+                        {mine.map(row)}
+                      </>
+                    )}
+                  </>
+                );
+              })()}
             </div>
             {selectedIds.length > 1 && (
               <div style={{ marginTop: 6, fontSize: 11, color: "#0369a1" }}>

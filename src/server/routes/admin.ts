@@ -12,19 +12,29 @@ import { getDemoVendor, setDemoVendor } from "../lib/appSettings";
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // PM-accessible read endpoints — must be registered BEFORE the admin-only catch-all below
+//
+// This is the list BOTH apply pickers read (api.templatesList → ApplyTemplateModal
+// and TimelineBuilder), so it returns the global library plus the caller's own
+// private templates and nothing else. A missing owner filter here is precisely
+// how one user's private template would surface in another user's picker.
+// Globals sort first so the client renders them above the separator without
+// re-sorting, and owner_user_id comes back so it can tell the two groups apart.
 app.get("/templates-list", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
   const db = c.env.DB;
+  const auth = c.get("auth");
   const templates = await db
     .prepare(
-      `SELECT t.id, t.name, t.solution_type, t.description,
+      `SELECT t.id, t.name, t.solution_type, t.description, t.owner_user_id,
               COUNT(DISTINCT tp.id) AS stage_count,
               COUNT(DISTINCT tt.id) AS task_count
        FROM templates t
        LEFT JOIN template_stages tp ON tp.template_id = t.id
        LEFT JOIN template_tasks tt ON tt.template_id = t.id
+       WHERE t.owner_user_id IS NULL OR t.owner_user_id = ?
        GROUP BY t.id
-       ORDER BY t.name ASC`
+       ORDER BY (t.owner_user_id IS NOT NULL) ASC, t.name ASC`
     )
+    .bind(auth.user.id)
     .all();
   return c.json(templates.results ?? []);
 });
