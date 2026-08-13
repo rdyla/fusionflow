@@ -145,10 +145,13 @@ export async function maybeGraduateProject(db: D1Database, projectId: string, gr
 
   await db
     .prepare(
-      `INSERT INTO optimize_accounts (id, project_id, graduated_by, graduation_method)
-       VALUES (?, ?, ?, 'auto')`
+      // customer_id is denormalized off the project — see routes/optimize.ts.
+      // Omitting it left every auto-graduated account NULL, which emptied the
+      // customer record's Optimizations tab.
+      `INSERT INTO optimize_accounts (id, project_id, customer_id, graduated_by, graduation_method)
+       VALUES (?, ?, (SELECT customer_id FROM projects WHERE id = ?), ?, 'auto')`
     )
-    .bind(crypto.randomUUID(), projectId, graduatedByUserId)
+    .bind(crypto.randomUUID(), projectId, projectId, graduatedByUserId)
     .run();
 }
 
