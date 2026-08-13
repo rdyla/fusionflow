@@ -14,7 +14,11 @@ export default function AdminAccessPage() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    Promise.all([api.projects(), api.adminUsers()])
+    // scope:"all" is required, not cosmetic: /api/projects now defaults to
+    // scope=mine for admins, and this screen grants access to ANY project —
+    // a narrowed list would silently hide most of them (and change which
+    // project gets preselected below).
+    Promise.all([api.projects({ scope: "all" }), api.adminUsers()])
       .then(([p, u]) => {
         setProjects(p);
         setUsers(u);
