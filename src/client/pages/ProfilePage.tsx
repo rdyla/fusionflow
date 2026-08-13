@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, type MyProfile } from "../lib/api";
+import { api, type MyProfile, type MyTemplate } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -294,6 +294,123 @@ export default function ProfilePage() {
           </button>
         </div>
       </form>
+
+      {/* Assets — private templates the user saved off their own projects.
+          Clients have no project plans to template, so the card is hidden for
+          them rather than shown permanently empty. */}
+      {profile.role !== "client" && <MyTemplatesCard />}
+    </div>
+  );
+}
+
+/**
+ * Assets: the caller's private task-list templates, saved from a project's plan
+ * via "Save as template". Rename and delete only — to change a template's task
+ * list you apply it, tune the project, and save a fresh one, so there's no
+ * editor to maintain here.
+ */
+function MyTemplatesCard() {
+  const { showToast } = useToast();
+  const [items, setItems] = useState<MyTemplate[] | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftName, setDraftName] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.myTemplates()
+      .then(setItems)
+      .catch(() => setItems([]));
+  }, []);
+
+  async function saveRename(t: MyTemplate) {
+    const next = draftName.trim();
+    if (!next || next === t.name) { setEditingId(null); return; }
+    setBusyId(t.id);
+    try {
+      const updated = await api.updateMyTemplate(t.id, { name: next });
+      setItems((prev) => (prev ?? []).map((x) => (x.id === t.id ? { ...x, name: updated.name } : x)));
+      setEditingId(null);
+      showToast("Template renamed.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Rename failed", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function remove(t: MyTemplate) {
+    if (!confirm(`Delete "${t.name}"? This removes the template only — projects you already applied it to are unaffected.`)) return;
+    setBusyId(t.id);
+    try {
+      await api.deleteMyTemplate(t.id);
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== t.id));
+      showToast("Template deleted.", "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed", "error");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <div style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 8, padding: 20, marginTop: 16 }}>
+      <h2 style={{ fontSize: 14, fontWeight: 700, color: "#1e293b", margin: "0 0 4px", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        My templates
+      </h2>
+      <div style={{ fontSize: 12, color: "#94a3b8", marginBottom: 14 }}>
+        Private to you. Save one from any project via <strong>Save as template</strong> on its Plan tab, then apply it to future projects.
+      </div>
+
+      {items === null ? (
+        <div style={{ fontSize: 13, color: "#64748b" }}>Loading…</div>
+      ) : items.length === 0 ? (
+        <div style={{ fontSize: 13, color: "#64748b" }}>You haven't saved any templates yet.</div>
+      ) : (
+        <div style={{ display: "grid", gap: 8 }}>
+          {items.map((t) => (
+            <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", border: "1px solid #e2e8f0", borderRadius: 6 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                {editingId === t.id ? (
+                  <input
+                    className="ms-input"
+                    autoFocus
+                    value={draftName}
+                    maxLength={200}
+                    onChange={(e) => setDraftName(e.target.value)}
+                    onBlur={() => void saveRename(t)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void saveRename(t);
+                      if (e.key === "Escape") setEditingId(null);
+                    }}
+                    style={{ width: "100%", fontSize: 13 }}
+                  />
+                ) : (
+                  <button
+                    type="button"
+                    title="Click to rename"
+                    onClick={() => { setEditingId(t.id); setDraftName(t.name); }}
+                    style={{ background: "none", border: "none", padding: 0, cursor: "text", fontSize: 13, fontWeight: 600, color: "#1e293b", textAlign: "left" }}
+                  >
+                    {t.name}
+                  </button>
+                )}
+                <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 2 }}>
+                  {t.stage_count} stage{t.stage_count === 1 ? "" : "s"} · {t.task_count} task{t.task_count === 1 ? "" : "s"}
+                  {t.created_at ? ` · saved ${new Date(t.created_at.replace(" ", "T") + "Z").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` : ""}
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={busyId === t.id}
+                onClick={() => void remove(t)}
+                style={{ background: "none", border: "1px solid #fecaca", color: "#d13438", borderRadius: 4, padding: "4px 10px", fontSize: 11, cursor: "pointer", whiteSpace: "nowrap" }}
+              >
+                {busyId === t.id ? "…" : "Delete"}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

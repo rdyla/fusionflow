@@ -6,6 +6,9 @@
  *   PATCH  /api/me/profile          — update name / title / phone / scheduler_url
  *   POST   /api/me/avatar           — upload avatar (multipart, image only)
  *   DELETE /api/me/avatar           — remove uploaded avatar, fall back to Zoom-cached
+ *   GET    /api/me/templates        — the caller's private task-list templates
+ *   PATCH  /api/me/templates/:id    — rename / re-describe one of them
+ *   DELETE /api/me/templates/:id    — delete one (stages + tasks cascade)
  *
  * Session cache:
  *   AppUser blobs are cached in KV at login time (see auth middleware comment
@@ -221,5 +224,75 @@ async function invalidateUserSession(env: Bindings, userId: string): Promise<voi
     console.warn("[me] session invalidation failed:", err instanceof Error ? err.message : err);
   }
 }
+
+
+// ── My templates (private assets) ─────────────────────────────────────────────
+// Scoped to owner_user_id = caller on every statement. Deliberately not
+// admin-overridable: "private to the user" is the whole point, so an admin
+// can't list, rename or delete someone else's saved templates.
+
+app.get("/templates", async (c) => {
+  const auth = c.get("auth");
+  const rows = await c.env.DB
+    .prepare(
+      `SELECT t.id, t.name, t.description, t.created_at, t.updated_at,
+              COUNT(DISTINCT ts.id) AS stage_count,
+              COUNT(DISTINCT tt.id) AS task_count
+       FROM templates t
+       LEFT JOIN template_stages ts ON ts.template_id = t.id
+       LEFT JOIN template_tasks tt ON tt.template_id = t.id
+       WHERE t.owner_user_id = ?
+       GROUP BY t.id
+       ORDER BY t.created_at DESC`
+    )
+    .bind(auth.user.id)
+    .all();
+  return c.json(rows.results ?? []);
+});
+
+const renameMyTemplateSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().max(2000).nullable().optional(),
+});
+
+app.patch("/templates/:id", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const id = c.req.param("id");
+  const parsed = renameMyTemplateSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.issues[0]?.message ?? "Invalid request body" });
+  const { name, description } = parsed.data;
+  if (name === undefined && description === undefined) throw new HTTPException(400, { message: "Nothing to update" });
+
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (name !== undefined) { fields.push("name = ?"); values.push(name.trim()); }
+  if (description !== undefined) { fields.push("description = ?"); values.push(description?.trim() || null); }
+  fields.push("updated_at = CURRENT_TIMESTAMP");
+
+  // owner_user_id in the WHERE, not a pre-check: the update itself is the guard,
+  // so there's no path where a mismatched owner still writes.
+  const res = await db
+    .prepare(`UPDATE templates SET ${fields.join(", ")} WHERE id = ? AND owner_user_id = ?`)
+    .bind(...values, id, auth.user.id)
+    .run();
+  if (!res.meta.changes) throw new HTTPException(404, { message: "Template not found" });
+
+  const updated = await db
+    .prepare("SELECT id, name, description, created_at, updated_at FROM templates WHERE id = ? LIMIT 1")
+    .bind(id).first();
+  return c.json(updated);
+});
+
+app.delete("/templates/:id", async (c) => {
+  const auth = c.get("auth");
+  // template_stages / template_tasks cascade from templates(id).
+  const res = await c.env.DB
+    .prepare("DELETE FROM templates WHERE id = ? AND owner_user_id = ?")
+    .bind(c.req.param("id"), auth.user.id)
+    .run();
+  if (!res.meta.changes) throw new HTTPException(404, { message: "Template not found" });
+  return c.json({ success: true });
+});
 
 export default app;

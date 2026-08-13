@@ -30,6 +30,7 @@ import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import PhasesPanel from "../components/project/PhasesPanel";
 import TaskExportMenu from "../components/project/TaskExports";
+import SaveAsTemplateModal from "../components/project/SaveAsTemplateModal";
 import UpcomingMeetingsPanel from "../components/project/UpcomingMeetingsPanel";
 import CustomPlan from "../components/customPlan/CustomPlan"; // one-off MedVet plan (throwaway)
 import ProjectDocuments from "../components/documents/ProjectDocuments";
@@ -312,6 +313,8 @@ export default function ProjectDetailPage() {
   // stage/task). When true, the modal submits via api.logProjectTime instead of
   // api.logStageTime and timeEntryStage is null.
   const [timeEntryProjectMode, setTimeEntryProjectMode] = useState(false);
+  /** "Save as template" dialog on the Tasks tab. */
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [deletingProjectEntryId, setDeletingProjectEntryId] = useState<string | null>(null);
   // Stage whose logged time entries are being viewed/managed in the list popup.
   const [viewEntriesStage, setViewEntriesStage] = useState<Stage | null>(null);
@@ -1686,6 +1689,28 @@ export default function ProjectDetailPage() {
             <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Tasks by Stage</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <SolutionTypeFilterPills available={availableTypes} selected={selectedTypes} onToggle={toggleSolutionType} />
+              {/* Save the task list as a private template. Sits next to the export
+                  menu — both take this list somewhere else, and this is the tab
+                  where the PM is actually looking at the list they want to keep.
+                  Not gated on canEdit: it only reads the plan and writes an asset
+                  on the caller's own account, matching the server's canViewProject
+                  gate. Hidden from external roles, who have no use for it.
+                  Disabled on the shared Initiate view — that view spans phases, so
+                  there's no single phase to attribute the snapshot to. */}
+              {currentUserRole !== "client" && currentUserRole !== "partner_ae" && (
+                <button
+                  type="button"
+                  className="ms-btn-secondary"
+                  disabled={multiPhase && selectedPhaseId === "shared"}
+                  title={multiPhase && selectedPhaseId === "shared"
+                    ? "Pick a phase above to save its plan as a template"
+                    : "Save these stages + tasks as a private template you can apply to future projects"}
+                  style={{ fontSize: 12, padding: "4px 12px", whiteSpace: "nowrap" }}
+                  onClick={() => setSaveTplOpen(true)}
+                >
+                  ⭳ Save as template
+                </button>
+              )}
               <TaskExportMenu
                 project={project}
                 phases={phases}
@@ -3523,6 +3548,21 @@ export default function ProjectDetailPage() {
 
       {/* ── Task Modal ─────────────────────────────────────────────────────── */}
       {/* ── Time Entry Modal ──────────────────────────────────────────────── */}
+      {/* Save-as-template. phaseId is the Tasks tab's current phase on multi-phase
+          projects, null on single-phase (the server resolves the sole phase).
+          The shared "Initiate" view can't reach here — its button is disabled. */}
+      {saveTplOpen && project && (() => {
+        const activePhase = multiPhase ? phases.find((p) => p.id === selectedPhaseId) ?? null : null;
+        return (
+          <SaveAsTemplateModal
+            projectId={project.id}
+            phaseId={activePhase?.id ?? null}
+            phaseName={activePhase?.name ?? null}
+            onClose={() => setSaveTplOpen(false)}
+          />
+        );
+      })()}
+
       {(timeEntryStage || timeEntryProjectMode) && (
         <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) { setTimeEntryStage(null); setTimeEntryProjectMode(false); } }}>
           <div className="ms-modal" style={{ maxWidth: 480 }}>

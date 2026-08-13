@@ -1482,6 +1482,21 @@ export type Template = {
   stages?: TemplateStage[];
   created_at: string;
   updated_at: string;
+  /** NULL / absent = global library template. Non-null = private to that user;
+   *  the list endpoint only ever returns the caller's own, so any non-null value
+   *  here means "mine" and drives the grouped rendering in the apply pickers. */
+  owner_user_id?: string | null;
+};
+
+/** One of the caller's private templates, as listed in the profile assets card. */
+export type MyTemplate = {
+  id: string;
+  name: string;
+  description: string | null;
+  stage_count: number;
+  task_count: number;
+  created_at: string;
+  updated_at: string;
 };
 
 export type FeatureStatus = "submitted" | "under_review" | "planned" | "in_progress" | "released" | "declined";
@@ -2925,10 +2940,30 @@ export const api = {
     request<{ success: boolean }>(`/solutions/${solutionId}/needs-assessments/${solutionType}`, { method: "DELETE" }),
 
   // ── Templates ────────────────────────────────────────────────────────────────
+  /** Global library + the caller's own private templates, globals first. Feeds
+   *  both apply pickers. */
   templatesList: () => request<Template[]>("/admin/templates-list"), // admin + pm
   /** Fetch one template with its stages + tasks. PM-accessible (for Timeline Builder). */
   template: (id: string) => request<Template>(`/admin/templates/${id}`),
+  /** Globals only — the admin library management list. */
   adminTemplates: () => request<Template[]>("/admin/templates"),
+
+  // ── My templates (private) ───────────────────────────────────────────────────
+  /** Snapshot a project's plan (stages + tasks) into a private template.
+   *  `phase_id` is required on multi-phase projects. */
+  saveProjectAsTemplate: (
+    projectId: string,
+    payload: { name: string; description?: string | null; phase_id?: string | null },
+  ) =>
+    request<{ id: string; name: string; stages_saved: number; tasks_saved: number; tasks_skipped_no_stage: number }>(
+      `/projects/${projectId}/save-as-template`,
+      { method: "POST", body: JSON.stringify(payload) },
+    ),
+  myTemplates: () => request<MyTemplate[]>("/me/templates"),
+  updateMyTemplate: (id: string, payload: { name?: string; description?: string | null }) =>
+    request<MyTemplate>(`/me/templates/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteMyTemplate: (id: string) =>
+    request<{ success: boolean }>(`/me/templates/${id}`, { method: "DELETE" }),
   adminTemplate: (id: string) => request<Template>(`/admin/templates/${id}`),
   adminCreateTemplate: (payload: { name: string; solution_type?: string; description?: string }) =>
     request<Template>("/admin/templates", { method: "POST", body: JSON.stringify(payload) }),

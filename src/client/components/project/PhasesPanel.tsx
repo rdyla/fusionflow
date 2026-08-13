@@ -665,12 +665,24 @@ function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectI
             style={{ marginTop: 4, width: "100%" }}
           >
             <option value="">{loading ? "Loading…" : "Pick a template"}</option>
-            {templates.map((t) => (
+            {/* Global library first, then the caller's own saved templates under a
+                labelled group. optgroup gives the separator natively rather than a
+                fake disabled divider option, so it reads correctly to screen
+                readers too. The list arrives globals-first from the server; the
+                partition here is by owner, not by position, so it holds either way. */}
+            {templates.filter((t) => !t.owner_user_id).map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
                 {t.solution_type ? ` (${t.solution_type})` : ""}
               </option>
             ))}
+            {templates.some((t) => t.owner_user_id) && (
+              <optgroup label="My templates">
+                {templates.filter((t) => t.owner_user_id).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
 
