@@ -24,6 +24,7 @@ import type {
   RoadmapItem,
   TechStackItem,
 } from "../../lib/api";
+import { todayLocalIso } from "../../lib/dates";
 
 // ── Brand constants (mirrors ScopeOfWorkDocument) ──────────────────────────
 const PF_NAVY  = "#003B5C";
@@ -508,7 +509,7 @@ function buildTechStackHtml(items: TechStackItem[], account: OptimizeAccount): s
     meta: [
       { label: "Account Status", value: account.optimize_status ?? "—" },
       { label: "Areas Mapped",   value: String(items.length) },
-      { label: "Issued",         value: formatDate(new Date().toISOString().slice(0,10)) },
+      { label: "Issued",         value: formatDate(todayLocalIso()) },
     ],
     logoAbsolute: logo,
   })}
@@ -678,7 +679,7 @@ function buildAccountSummaryHtml(opts: {
     title: "Account Summary",
     customerName: cust,
     meta: [
-      { label: "Issued",         value: formatDate(new Date().toISOString().slice(0,10)) },
+      { label: "Issued",         value: formatDate(todayLocalIso()) },
       { label: "Optimize Status",value: a.optimize_status ?? "—" },
       { label: "Completed",      value: formatDate(a.graduated_at) },
     ],

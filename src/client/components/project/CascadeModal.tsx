@@ -19,6 +19,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type CascadePreview, type Task } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
+import { todayLocalIso } from "../../lib/dates";
 
 type Props = {
   projectId: string;
@@ -50,7 +51,7 @@ export default function CascadeModal({ projectId, fromTask, onClose, onApplied }
   // Otherwise 0 (PM models a future delay manually).
   const defaultSlip = useMemo(() => {
     if (!fromTask.due_date) return 0;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayLocalIso();
     return today > fromTask.due_date ? workdaysBetween(fromTask.due_date, today) : 0;
   }, [fromTask.due_date]);
 

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type ImpactAssessment } from "../../lib/api";
 import surveyDef from "../../assets/client_impact_assessment_unified_v1.json";
+import { todayLocalIso } from "../../lib/dates";
 
 interface Props {
   projectId: string;
@@ -121,7 +122,7 @@ export default function ImpactAssessmentWizard({ projectId, accountName, onCompl
     try {
       const result = await api.optimizeCreateAssessment({
         project_id: projectId,
-        conducted_date: new Date().toISOString().slice(0, 10),
+        conducted_date: todayLocalIso(),
         solution_types: solutionTypes,
         answers,
       });

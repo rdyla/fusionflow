@@ -5,6 +5,7 @@ import { chainForward, parseISODate, startFromGoLive, workday, workdaysBetween, 
 import { buildTaggedTitle, canonicalizeSolutionType, type SolutionType } from "../../../shared/solutionTypes";
 import { toTitleCase } from "../../../shared/titleCase";
 import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
+import { todayLocalIso } from "../../lib/dates";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -277,7 +278,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
       // Already cached — rebuild rows from the latest selection + go-live
       const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
       const total = workdaysThroughGoLive(mergeTemplates(selected));
-      const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
+      const anchor = goLive ? startFromGoLive(goLive, total) : todayLocalIso();
       setRows(rowsFromTemplates(selected, anchor, goLive));
       return;
     }
@@ -300,7 +301,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
     const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
     if (selected.length === 0) return;
     const total = workdaysThroughGoLive(mergeTemplates(selected));
-    const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
+    const anchor = goLive ? startFromGoLive(goLive, total) : todayLocalIso();
     setRows(rowsFromTemplates(selected, anchor, goLive));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goLive]);
@@ -328,7 +329,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
         merged.end = workday(merged.start, Math.max(merged.working_days, 0));
       }
       next[idx] = merged;
-      const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
+      const anchor = next[0]?.start ?? todayLocalIso();
       return recomputeChain(next, anchor, goLive);
     });
   }
@@ -343,7 +344,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
       task[field] = newDate;
       task.pinned = true;
       stage.tasks = applyTaskShift(stage.tasks, taskIdx, deltaWd);
-      const anchor = next[0]?.start ?? new Date().toISOString().slice(0, 10);
+      const anchor = next[0]?.start ?? todayLocalIso();
       return recomputeChain(next, anchor, goLive);
     });
   }
@@ -352,7 +353,7 @@ export default function TimelineBuilder({ project, phases, stages, tasks, onAppl
     const selected = selectedIds.map((id) => loadedTemplates[id]).filter(Boolean);
     if (selected.length === 0) return;
     const total = workdaysThroughGoLive(mergeTemplates(selected));
-    const anchor = goLive ? startFromGoLive(goLive, total) : new Date().toISOString().slice(0, 10);
+    const anchor = goLive ? startFromGoLive(goLive, total) : todayLocalIso();
     setRows(rowsFromTemplates(selected, anchor, goLive));
   }
 
