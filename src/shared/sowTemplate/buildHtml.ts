@@ -9,6 +9,7 @@
  */
 
 import type { SowVariant, SowBuildContext, StageSection, OptionalService, Deliverable } from "./types";
+import { SOW_DOC_STAGE_LABELS } from "./types";
 import {
   SHARED_OUT_OF_SCOPE,
   SHARED_ASSUMPTIONS,
@@ -132,12 +133,16 @@ function documentControlPage(_variant: SowVariant, ctx: SowBuildContext): string
   if (ctx.preparedBy.title) preparedByLines.push(esc(ctx.preparedBy.title));
   if (ctx.preparedBy.email) preparedByLines.push(`${esc(ctx.preparedBy.email)}${ctx.preparedBy.phone ? `  |  ${esc(ctx.preparedBy.phone)}` : ""}`);
 
+  // The "Master Agreement dated …" row was removed: we're never given the MSA
+  // execution date, so it printed a "[MM/DD/YYYY]" placeholder on every SOW. The
+  // row carried nothing else — § 1.1 already states the SOW is executed under
+  // the MSA (or the Zoom Reseller Customer Agreement, per isZoomReseller), which
+  // is the reference § 11's order-of-precedence clause relies on.
   const detailsRows = [
     { label: "SOW Number",        value: esc(ctx.sowNumber) },
     { label: "Issue Date",        value: esc(ctx.issueDateText) },
-    { label: "Master Agreement",  value: `Packet Fusion Master Services Agreement dated ${esc(fmtDate(ctx.msaDate))}` },
     { label: "Project Reference", value: esc(ctx.projectReference) },
-    { label: "SOW Status",        value: esc(ctx.statusText) },
+    { label: "SOW Status",        value: esc(SOW_DOC_STAGE_LABELS[ctx.docStage]) },
   ];
 
   const revisionRows = ctx.revisions.length > 0
@@ -533,6 +538,26 @@ function section11Terms(): string {
 }
 
 function section12Signature(ctx: SowBuildContext): string {
+  // A draft prints NO signature block. Drafts were being routed through
+  // DocuSign and signed while still marked draft; removing the signature lines
+  // makes that materially harder than a status line the signer skims past.
+  //
+  // The section is replaced rather than omitted: a SOW that simply ends after
+  // § 11 reads like a truncated document, and whoever received it would ask for
+  // the missing page instead of asking for a final version.
+  if (ctx.docStage === "draft") {
+    return `
+    <section class="page-section signature-page">
+      <h1>12.  Authorization &amp; Signature</h1>
+      <div class="draft-no-sig">
+        <div class="draft-no-sig-title">This draft is not for execution.</div>
+        <p>No signature block is included while this Statement of Work is in draft. A final version — carrying the signature block for both parties — will be issued once scope, pricing, and timeline are agreed.</p>
+        <p class="muted">If you received this document for signature, please request the final version from your Packet Fusion contact.</p>
+      </div>
+    </section>
+  `;
+  }
+
   // Per Ryan: sig block names parties only — no individual names.
   // .signature-page class enforces page-break-before so the signature always
   // starts on a fresh sheet — no orphaned half-page sig blocks.
@@ -662,6 +687,12 @@ function styles(): string {
     .stub-banner { background: #fef3c7; border: 1px solid #fde68a; color: #854d0e; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 10pt; font-weight: 700; }
     /* Confidentiality */
     .confidentiality { font-size: 9pt; color: #555; border-top: 1px solid #ccc; padding-top: 10px; margin-top: 14px; }
+    /* Draft stand-in where the signature block would be */
+    .draft-no-sig { border: 2px solid ${NAVY}; border-radius: 4px; padding: 20px 24px; margin-top: 18px; background: #f8fafc; }
+    .draft-no-sig-title { font-size: 13pt; font-weight: 700; color: ${NAVY}; margin-bottom: 10px; }
+    .draft-no-sig p { margin: 0 0 8px; }
+    .draft-no-sig p:last-child { margin-bottom: 0; }
+
     /* Budgetary watermark */
     .budgetary-watermark { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-30deg); font-size: 96pt; font-weight: 900; color: rgba(0, 59, 92, 0.08); letter-spacing: 0.05em; pointer-events: none; z-index: 0; }
     /* Stage */
