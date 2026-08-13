@@ -70,7 +70,10 @@ export default function OptimizePage() {
   useEffect(() => {
     load();
     api.users().then(setUsers).catch(() => {});
-    api.projects().then(setProjects).catch(() => {});
+    // scope:"all" — this list resolves project names for every optimize account
+    // and drives the graduation pickers, so it must not narrow to the caller's
+    // own work (/api/projects defaults to scope=mine for admins and SAs).
+    api.projects({ scope: "all" }).then(setProjects).catch(() => {});
   }, []);
 
   async function load() {

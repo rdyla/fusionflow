@@ -53,6 +53,30 @@ app.get("/", async (c) => {
       sql += " AND id IN (SELECT project_id FROM project_staff WHERE user_id = ?)";
       bindings = [auth.user.id];
     }
+  } else if (auth.role === "pf_sa" || auth.role === "admin") {
+    // SAs and admins keep portfolio-wide ACCESS but now default to their own
+    // work, same as PMs and IEs — an SA asked to stop opening a list of every
+    // project in the company.
+    //
+    // "Mine" has to be broader than the PM/IE clauses because there is no
+    // staff_role='sa': project_staff only carries pm / engineer / ae /
+    // partner_ae. An SA's tie to a project runs through the CUSTOMER's account
+    // team (customers.pf_sa_user_id), the way pf_ae scoping already works.
+    // Direct ties are included too, so a project you're PM of, staffed on, or
+    // explicitly granted can never be hidden from "My Projects".
+    //
+    // The account-team check is role-agnostic (SA, AE or CSM slot) rather than
+    // matching only the caller's own role — people wear more than one hat, and
+    // the same clause then serves admins without a second variant.
+    if (scope === "mine") {
+      sql += ` AND (
+        pm_user_id = ?
+        OR id IN (SELECT project_id FROM project_staff WHERE user_id = ?)
+        OR id IN (SELECT project_id FROM project_access WHERE user_id = ?)
+        OR customer_id IN (SELECT id FROM customers WHERE pf_sa_user_id = ? OR pf_ae_user_id = ? OR pf_csm_user_id = ?)
+      )`;
+      bindings = Array(6).fill(auth.user.id);
+    }
   } else if (auth.role === "pf_ae") {
     const teamIds = await getTeamUserIds(auth.user.id, db);
     const ph = inPlaceholders(teamIds);
@@ -80,7 +104,9 @@ app.get("/", async (c) => {
     ))`;
     bindings = [...accountIds, auth.user.email];
   }
-  // pf_sa, pf_csm, and admin: no filter — portfolio-wide visibility
+  // pf_csm and executive: no filter — portfolio-wide visibility, no toggle.
+  // (pf_sa and admin are handled above: portfolio-wide access, but the list
+  // defaults to their own work via ?scope=mine.)
 
   // Demo-mode vendor lens: silently filters every list view to a single vendor.
   const demoVendor = await getDemoVendor(db);
