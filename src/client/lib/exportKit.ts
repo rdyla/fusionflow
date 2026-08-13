@@ -14,6 +14,7 @@
  */
 
 import logoUrl from "../assets/packetfusion-fullcolor.png";
+import { todayLocalIso } from "./dates";
 
 // ── Brand constants (mirrors OptimizeExports / ScopeOfWorkDocument) ─────────
 export const PF_NAVY  = "#003B5C";
@@ -29,7 +30,7 @@ export const STATUS_COLOR: Record<string, string> = {
 };
 
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayLocalIso();
 }
 
 export function slugify(s: string): string {

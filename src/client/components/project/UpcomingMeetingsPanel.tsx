@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, type ProjectMeeting, type MeetingInput } from "../../lib/api";
 import { useToast } from "../ui/ToastProvider";
 import { PLAN_DATE_MAX, PLAN_DATE_MIN } from "../../../shared/planDates";
+import { todayLocalIso } from "../../lib/dates";
 
 // Curated tz list — same set the old cadence panel offered. "—" clears it.
 const TZ_OPTIONS: Array<{ label: string; tz: string }> = [
@@ -72,7 +73,7 @@ export default function UpcomingMeetingsPanel({
     return () => { live = false; };
   }, [projectId]);
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = todayLocalIso();
   const { upcoming, past } = useMemo(() => {
     const up: ProjectMeeting[] = [];
     const pa: ProjectMeeting[] = [];

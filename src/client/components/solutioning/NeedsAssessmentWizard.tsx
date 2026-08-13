@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { api, type NeedsAssessment } from "../../lib/api";
+import { todayLocalIso } from "../../lib/dates";
 
 // ── Types from JSON ────────────────────────────────────────────────────────────
 
@@ -427,7 +428,7 @@ export default function NeedsAssessmentWizard({ solutionId, solutionType, custom
       const merged = {
         ...answers,
         customer_name: customerName,
-        assessment_date: new Date().toISOString().slice(0, 10),
+        assessment_date: todayLocalIso(),
       };
       const result = onSave
         ? await onSave(merged)
