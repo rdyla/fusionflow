@@ -3,7 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
 import { requireRole } from "../middleware/requireRole";
-import { canEditProject } from "../services/accessService";
+import { canEditProject, canViewProject } from "../services/accessService";
 import { syncProjectGoLiveDate } from "../lib/teamUtils";
 import {
   canonicalizeSolutionType,
@@ -11,7 +11,7 @@ import {
   type SolutionType,
 } from "../../shared/solutionTypes";
 import { toTitleCase } from "../../shared/titleCase";
-import { chainForward, startFromGoLive } from "../../shared/workdayMath";
+import { chainForward, startFromGoLive, workdaysBetween } from "../../shared/workdayMath";
 
 // ── Fuzzy title matching ──────────────────────────────────────────────────────
 // Two template tasks count as the same work if their normalized token sets
@@ -49,6 +49,13 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // ── Template CRUD — read endpoints open to PM so they can pick a template
 //    to apply; mutations stay admin-only so PMs can't edit the global library.
 
+// Mounted at /api/admin/templates — this is the ADMIN LIBRARY list (api.adminTemplates),
+// which manages the shared global set. Private user templates are excluded outright:
+// the library page offers edit/delete on every row it shows, and those mutations are
+// scoped to globals, so listing private templates here would only render rows whose
+// buttons 404. Note the consequence — an admin has no view of users' private
+// templates and so can't tidy up someone else's clutter for them.
+// The apply pickers read /api/admin/templates-list (see routes/admin.ts) instead.
 app.get("/templates", requireRole("admin", "pm"), async (c) => {
   const db = c.env.DB;
   const templates = await db
@@ -59,6 +66,7 @@ app.get("/templates", requireRole("admin", "pm"), async (c) => {
        FROM templates t
        LEFT JOIN template_stages tp ON tp.template_id = t.id
        LEFT JOIN template_tasks tt ON tt.template_id = t.id
+       WHERE t.owner_user_id IS NULL
        GROUP BY t.id
        ORDER BY t.name ASC`
     )
@@ -71,11 +79,15 @@ app.get("/templates", requireRole("admin", "pm"), async (c) => {
 // is reused by relaxing the gate.
 app.get("/templates/:id", requireRole("admin", "pm"), async (c) => {
   const db = c.env.DB;
+  const auth = c.get("auth");
   const templateId = c.req.param("id");
 
+  // Owner filter, not just an id lookup: template ids are guessable enough that
+  // without it any PM could read another user's private template by id. 404
+  // rather than 403 — a private template shouldn't confirm its own existence.
   const template = await db
-    .prepare("SELECT * FROM templates WHERE id = ? LIMIT 1")
-    .bind(templateId)
+    .prepare("SELECT * FROM templates WHERE id = ? AND (owner_user_id IS NULL OR owner_user_id = ?) LIMIT 1")
+    .bind(templateId, auth.user.id)
     .first();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
 
@@ -134,6 +146,26 @@ app.post("/templates", requireRole("admin"), async (c) => {
   return c.json(created, 201);
 });
 
+/**
+ * Existence check for the admin-only mutation routes below, narrowed to the
+ * GLOBAL library. Every route here is reached through the admin templates UI,
+ * which has no business editing a user's private template — without the owner
+ * clause an admin could rename, gut or delete someone's saved template by id.
+ *
+ * Only the existence check needs the clause, not the follow-up UPDATE/DELETE:
+ * ownership is set once at creation and never changes, so there's no window in
+ * which a row could become private between the two statements.
+ *
+ * 404, not 403 — a private template shouldn't confirm its own existence.
+ */
+async function assertGlobalTemplate(db: D1Database, templateId: string): Promise<void> {
+  const row = await db
+    .prepare("SELECT id FROM templates WHERE id = ? AND owner_user_id IS NULL LIMIT 1")
+    .bind(templateId)
+    .first();
+  if (!row) throw new HTTPException(404, { message: "Template not found" });
+}
+
 const updateTemplateSchema = z.object({
   name: z.string().min(1).max(500).optional(),
   solution_type: z.string().max(100).nullable().optional(),
@@ -144,8 +176,7 @@ app.patch("/templates/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(templateId).first();
-  if (!existing) throw new HTTPException(404, { message: "Template not found" });
+  await assertGlobalTemplate(db, templateId);
 
   const parsed = updateTemplateSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
@@ -178,8 +209,7 @@ app.delete("/templates/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(templateId).first();
-  if (!existing) throw new HTTPException(404, { message: "Template not found" });
+  await assertGlobalTemplate(db, templateId);
 
   await db.prepare("DELETE FROM templates WHERE id = ?").bind(templateId).run();
   return c.json({ success: true });
@@ -196,8 +226,7 @@ app.post("/templates/:id/stages", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(templateId).first();
-  if (!existing) throw new HTTPException(404, { message: "Template not found" });
+  await assertGlobalTemplate(db, templateId);
 
   const parsed = addStageSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
@@ -242,8 +271,7 @@ app.post("/templates/:id/tasks", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const templateId = c.req.param("id");
 
-  const existing = await db.prepare("SELECT id FROM templates WHERE id = ? LIMIT 1").bind(templateId).first();
-  if (!existing) throw new HTTPException(404, { message: "Template not found" });
+  await assertGlobalTemplate(db, templateId);
 
   const parsed = addTaskSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
@@ -275,6 +303,144 @@ app.delete("/templates/:id/tasks/:taskId", requireRole("admin"), async (c) => {
 
   await db.prepare("DELETE FROM template_tasks WHERE id = ?").bind(taskId).run();
   return c.json({ success: true });
+});
+
+// ── Save a project's plan as a private template ───────────────────────────────
+// PMs already add, remove and re-title tasks freely on a live project, so the
+// cheapest route to "a task list tuned exactly how I want it" is to snapshot a
+// plan they've already built and proved out, rather than build a second editor.
+//
+// What is deliberately NOT carried over:
+//   * dates — a template holds shape, not schedule. Stage windows are reduced to
+//     working_days (what the Timeline Builder actually consumes) and per-task
+//     dates are dropped; apply recomputes them from the target go-live.
+//   * concrete assignees — storing assignee_user_id would bake this project's
+//     people into a template reused on unrelated projects. Assignees are instead
+//     reverse-mapped to the same role strings apply-template resolves forward
+//     ('pm' / 'ie' / 'zoom_porting'), and anything else becomes unassigned.
+//   * status / completion — every task comes back as fresh work.
+
+const PER_USER_TEMPLATE_CAP = 25;
+
+const saveAsTemplateSchema = z.object({
+  name: z.string().min(1).max(200),
+  description: z.string().max(2000).nullable().optional(),
+  /** Which phase's stages to capture. Required on multi-phase projects for the
+   *  same reason apply-timeline requires it: a template spanning two phases'
+   *  worth of same-named stages would merge into nonsense on apply. */
+  phase_id: z.string().min(1).nullable().optional(),
+});
+
+app.post("/:projectId/save-as-template", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("projectId");
+
+  // View, not edit: this only reads the plan, and produces a private asset in
+  // the caller's own account. A PM with read access to a project they aren't
+  // assigned to can still learn from its plan shape.
+  if (!(await canViewProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+
+  const parsed = saveAsTemplateSchema.safeParse(await c.req.json());
+  if (!parsed.success) throw new HTTPException(400, { message: parsed.error.issues[0]?.message ?? "Invalid request body" });
+  const { name, description, phase_id } = parsed.data;
+
+  const owned = await db
+    .prepare("SELECT COUNT(*) AS n FROM templates WHERE owner_user_id = ?")
+    .bind(auth.user.id).first<{ n: number }>();
+  if ((owned?.n ?? 0) >= PER_USER_TEMPLATE_CAP) {
+    throw new HTTPException(409, { message: `You already have ${PER_USER_TEMPLATE_CAP} saved templates. Delete one from your profile first.` });
+  }
+
+  // Resolve which phase to capture, mirroring apply-timeline's rules.
+  const phases = (await db
+    .prepare("SELECT id, name FROM phases WHERE project_id = ? ORDER BY display_order ASC")
+    .bind(projectId).all<{ id: string; name: string }>()).results ?? [];
+  let targetPhaseId: string | null = null;
+  if (phase_id) {
+    if (!phases.some((p) => p.id === phase_id)) throw new HTTPException(400, { message: "phase_id does not belong to this project" });
+    targetPhaseId = phase_id;
+  } else if (phases.length > 1) {
+    throw new HTTPException(400, { message: "phase_id is required for multi-phase projects" });
+  }
+
+  // Stages: the target phase's own stages, plus any shared stage (phase_id IS
+  // NULL) — that's where multi-phase projects keep the shared Initiate, and a
+  // template that silently omitted it would come back missing its first stage.
+  const stages = (await db
+    .prepare(
+      targetPhaseId
+        ? `SELECT id, name, sort_order, planned_start, planned_end FROM stages
+           WHERE project_id = ? AND (phase_id = ? OR phase_id IS NULL) ORDER BY sort_order ASC`
+        : `SELECT id, name, sort_order, planned_start, planned_end FROM stages
+           WHERE project_id = ? ORDER BY sort_order ASC`
+    )
+    .bind(...(targetPhaseId ? [projectId, targetPhaseId] : [projectId]))
+    .all<{ id: string; name: string; sort_order: number; planned_start: string | null; planned_end: string | null }>()).results ?? [];
+  if (stages.length === 0) throw new HTTPException(400, { message: "This project has no stages to save." });
+
+  const stageIds = new Set(stages.map((s) => s.id));
+  const allTasks = (await db
+    .prepare("SELECT id, stage_id, title, priority, assignee_user_id, assignee_contact_id, is_go_live_event FROM tasks WHERE project_id = ? ORDER BY stage_id, id")
+    .bind(projectId)
+    .all<{ id: string; stage_id: string | null; title: string; priority: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; is_go_live_event: number }>()).results ?? [];
+  // Only tasks under a captured stage. Stage-less tasks are dropped rather than
+  // stored unstaged: on apply they'd land nowhere useful, and the PM would have
+  // no way to see why a task vanished.
+  const tasks = allTasks.filter((t) => t.stage_id && stageIds.has(t.stage_id));
+
+  // Reverse assignee resolution — the inverse of the roleToUserId maps used by
+  // apply-template and apply-timeline.
+  const projectRow = await db.prepare("SELECT pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ pm_user_id: string | null }>();
+  const ieRow = await db
+    .prepare("SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'engineer' ORDER BY created_at ASC LIMIT 1")
+    .bind(projectId).first<{ user_id: string }>();
+  const portingRow = await db
+    .prepare("SELECT id FROM project_contacts WHERE project_id = ? AND contact_role = 'Porting Coordinator' ORDER BY added_at ASC LIMIT 1")
+    .bind(projectId).first<{ id: string }>();
+  const roleFor = (t: { assignee_user_id: string | null; assignee_contact_id: string | null }): string | null => {
+    if (t.assignee_contact_id && portingRow?.id && t.assignee_contact_id === portingRow.id) return "zoom_porting";
+    if (t.assignee_user_id && projectRow?.pm_user_id && t.assignee_user_id === projectRow.pm_user_id) return "pm";
+    if (t.assignee_user_id && ieRow?.user_id && t.assignee_user_id === ieRow.user_id) return "ie";
+    return null;
+  };
+
+  const templateId = crypto.randomUUID();
+  const stmts: D1PreparedStatement[] = [
+    // solution_type stays NULL: a snapshot may span several solution types, and
+    // the merge path treats a null type as "already-tagged, don't re-tag" —
+    // which is right, since these titles carry whatever tags apply gave them.
+    db.prepare("INSERT INTO templates (id, name, solution_type, description, owner_user_id) VALUES (?, ?, NULL, ?, ?)")
+      .bind(templateId, name.trim(), description?.trim() || null, auth.user.id),
+  ];
+
+  const insertStage = db.prepare("INSERT INTO template_stages (id, template_id, name, order_index, working_days) VALUES (?, ?, ?, ?, ?)");
+  const insertTask = db.prepare("INSERT INTO template_tasks (id, template_id, stage_id, title, priority, order_index, default_assignee_role, is_go_live_event) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+
+  stages.forEach((s, i) => {
+    const tplStageId = crypto.randomUUID();
+    // workdaysBetween is exclusive of the end date, so a stage that starts and
+    // ends on the same day is 0 there — store 1 so applying it can't produce a
+    // zero-length stage. Undated stages also fall back to 1.
+    const wd = s.planned_start && s.planned_end ? Math.max(1, workdaysBetween(s.planned_start, s.planned_end)) : 1;
+    stmts.push(insertStage.bind(tplStageId, templateId, s.name, i + 1, wd));
+    tasks.filter((t) => t.stage_id === s.id).forEach((t, ti) => {
+      stmts.push(insertTask.bind(
+        crypto.randomUUID(), templateId, tplStageId, t.title, t.priority ?? "medium", ti + 1,
+        roleFor(t), t.is_go_live_event ? 1 : 0,
+      ));
+    });
+  });
+
+  for (let i = 0; i < stmts.length; i += 100) await db.batch(stmts.slice(i, i + 100));
+
+  return c.json({
+    id: templateId,
+    name: name.trim(),
+    stages_saved: stages.length,
+    tasks_saved: tasks.length,
+    tasks_skipped_no_stage: allTasks.length - tasks.length,
+  }, 201);
 });
 
 // ── Apply Template to Project ─────────────────────────────────────────────────
@@ -310,9 +476,12 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
     throw new HTTPException(400, { message: "target_go_live_date must be YYYY-MM-DD" });
   }
 
+  // Owner clause: template_id arrives from the client, so without it any PM
+  // could apply another user's private template by supplying its id — the plan
+  // it produces would expose that template's whole task list.
   const template = await db
-    .prepare("SELECT id, solution_type FROM templates WHERE id = ? LIMIT 1")
-    .bind(template_id)
+    .prepare("SELECT id, solution_type FROM templates WHERE id = ? AND (owner_user_id IS NULL OR owner_user_id = ?) LIMIT 1")
+    .bind(template_id, auth.user.id)
     .first<{ id: string; solution_type: string | null }>();
   if (!template) throw new HTTPException(404, { message: "Template not found" });
 

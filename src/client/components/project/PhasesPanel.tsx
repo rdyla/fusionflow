@@ -198,6 +198,7 @@ function PhaseRow({ phase, canEdit, scoped, projectId, dynamicsAccountId, contac
   const [target, setTarget] = useState(phase.target_go_live_date ?? "");
   const [saving, setSaving] = useState(false);
   const [applyOpen, setApplyOpen] = useState(false);
+  const [saveTplOpen, setSaveTplOpen] = useState(false);
   const [integrationsOpen, setIntegrationsOpen] = useState(false);
 
   async function save() {
@@ -280,6 +281,13 @@ function PhaseRow({ phase, canEdit, scoped, projectId, dynamicsAccountId, contac
               {phase.crm_case_id || phase.sharepoint_folder_url ? "🔗 Linked" : "Link"}
             </button>
           )}
+          {/* Saving a template only READS this phase's plan and writes a private
+              asset on the caller's account, so it isn't gated on canEdit — it
+              matches the server's canViewProject gate. A PM who can see a
+              well-built plan can keep its shape for their own future projects. */}
+          <button onClick={() => setSaveTplOpen(true)} style={{ ...iconBtn, padding: "2px 10px" }} title="Save this phase's stages + tasks as a private template">
+            ⭳ Save as template
+          </button>
           {canEdit && (
             <>
               <button onClick={onPeople} style={{ ...iconBtn, padding: "2px 10px" }} title="Manage people for this phase">
@@ -304,6 +312,14 @@ function PhaseRow({ phase, canEdit, scoped, projectId, dynamicsAccountId, contac
             setApplyOpen(false);
             onChanged();
           }}
+        />
+      )}
+
+      {saveTplOpen && (
+        <SaveAsTemplateModal
+          projectId={projectId}
+          phase={phase}
+          onClose={() => setSaveTplOpen(false)}
         />
       )}
 
@@ -578,6 +594,95 @@ function AddPhaseModal({ projectId, onClose, onCreated }: { projectId: string; o
  * Zoom Phone + Zoom CC combo project carry two distinct sets of stages
  * with the same names (Plan, Execute, ...) on each side.
  */
+/**
+ * Snapshot this phase's stages + tasks into a private template.
+ *
+ * Nothing about the project changes, so there's no confirm step and no
+ * onApplied callback — the caller just closes. What the snapshot deliberately
+ * drops (dates, real assignees, statuses) is spelled out inline, because a PM
+ * who expects a full clone and gets a shape would otherwise think it half-worked.
+ */
+function SaveAsTemplateModal({ projectId, phase, onClose }: { projectId: string; phase: Phase; onClose: () => void }) {
+  const { showToast } = useToast();
+  const [name, setName] = useState(`${phase.name} plan`);
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function save() {
+    if (!name.trim()) { showToast("Give the template a name.", "error"); return; }
+    setSaving(true);
+    try {
+      const res = await api.saveProjectAsTemplate(projectId, {
+        name: name.trim(),
+        description: description.trim() || null,
+        phase_id: phase.id,
+      });
+      const skipped = res.tasks_skipped_no_stage > 0
+        ? ` ${res.tasks_skipped_no_stage} task${res.tasks_skipped_no_stage === 1 ? "" : "s"} outside a stage were skipped.`
+        : "";
+      showToast(`Saved "${res.name}" — ${res.stages_saved} stage${res.stages_saved === 1 ? "" : "s"}, ${res.tasks_saved} task${res.tasks_saved === 1 ? "" : "s"}.${skipped}`, "success");
+      onClose();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to save template", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      onClick={onClose}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.6)", zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center" }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 10, padding: 24, width: 480, maxWidth: "90vw", boxShadow: "0 20px 60px rgba(0,0,0,0.3)" }}
+      >
+        <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "#0f172a" }}>
+          Save {phase.name} as a template
+        </h3>
+        <div style={{ marginTop: 10, padding: "10px 12px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, fontSize: 12, color: "#1e40af" }}>
+          Captures the <strong>stage and task structure</strong> of this phase, private to you. Dates become stage durations, assignees keep only their role (PM / IE / porting), and every task comes back as new work. Nothing on this project changes.
+        </div>
+
+        <label style={{ display: "block", marginTop: 14, fontSize: 12, fontWeight: 600, color: "#334155" }}>
+          Template name
+          <input
+            className="ms-input"
+            autoFocus
+            value={name}
+            maxLength={200}
+            onChange={(e) => setName(e.target.value)}
+            disabled={saving}
+            style={{ marginTop: 4, width: "100%" }}
+          />
+        </label>
+
+        <label style={{ display: "block", marginTop: 12, fontSize: 12, fontWeight: 600, color: "#334155" }}>
+          Description <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional)</span>
+          <input
+            className="ms-input"
+            value={description}
+            maxLength={2000}
+            placeholder="e.g. Multi-site UCaaS with onsite install"
+            onChange={(e) => setDescription(e.target.value)}
+            disabled={saving}
+            style={{ marginTop: 4, width: "100%" }}
+          />
+        </label>
+
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 18 }}>
+          <button onClick={onClose} className="ms-btn-secondary" disabled={saving} style={{ fontSize: 13 }}>Cancel</button>
+          <button onClick={() => void save()} className="ms-btn-primary" disabled={saving || !name.trim()} style={{ fontSize: 13 }}>
+            {saving ? "Saving…" : "Save template"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectId: string; phase: Phase; onClose: () => void; onApplied: () => void }) {
   const { showToast } = useToast();
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -665,12 +770,24 @@ function ApplyTemplateModal({ projectId, phase, onClose, onApplied }: { projectI
             style={{ marginTop: 4, width: "100%" }}
           >
             <option value="">{loading ? "Loading…" : "Pick a template"}</option>
-            {templates.map((t) => (
+            {/* Global library first, then the caller's own saved templates under a
+                labelled group. optgroup gives the separator natively rather than a
+                fake disabled divider option, so it reads correctly to screen
+                readers too. The list arrives globals-first from the server; the
+                partition here is by owner, not by position, so it holds either way. */}
+            {templates.filter((t) => !t.owner_user_id).map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
                 {t.solution_type ? ` (${t.solution_type})` : ""}
               </option>
             ))}
+            {templates.some((t) => t.owner_user_id) && (
+              <optgroup label="My templates">
+                {templates.filter((t) => t.owner_user_id).map((t) => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </label>
 
