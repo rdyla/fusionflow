@@ -6,7 +6,8 @@ import PersonAvatar from "../components/ui/PersonAvatar";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
 import NeedsAssessmentSOR from "../components/solutioning/NeedsAssessmentSOR";
-import ScopeOfWorkDocument, { parseSowMetadata } from "../components/solutioning/ScopeOfWorkDocument";
+import ScopeOfWorkDocument, { parseSowMetadata, resolveDocStage } from "../components/solutioning/ScopeOfWorkDocument";
+import { SOW_DOC_STAGE_LABELS } from "../../shared/sowTemplate/types";
 import SowAddOnsEditor from "../components/solutioning/SowAddOnsEditor";
 import SowSizingForm, { type SowData } from "../components/solutioning/SowSizingForm";
 import ProjectHandoffDocument from "../components/solutioning/ProjectHandoffDocument";
@@ -80,6 +81,9 @@ export default function SolutionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("overview");
   const [saving, setSaving] = useState(false);
+  /** Separate from `saving` so the one-click stage nudge on the SOW visibility
+   *  card doesn't disable the publish button alongside it. */
+  const [savingStageNudge, setSavingStageNudge] = useState(false);
   const [creatingProject, setCreatingProject] = useState(false);
   const [currentRole, setCurrentRole] = useState("");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1413,32 +1417,91 @@ export default function SolutionDetailPage() {
       {/* ── Scope Tab ── */}
       {/* Always mounted (display:none when inactive) so unsaved sizing data isn't lost on tab switch */}
       <div style={{ display: tab === "scope" ? "grid" : "none", gap: 20 }}>
-          {/* SOW publish gate — staff control whether the customer can see the
-              finalized SOW + pricing. Customers see nothing here until published. */}
-          {!isClient && (
-            <div className="ms-card" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", borderLeft: `4px solid ${sowPublished ? "#107c10" : "#ff8c00"}` }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>
-                  SOW Visibility: {sowPublished ? "Published" : "Draft"}
+          {/* SOW publish gate + document stage.
+              These are two DIFFERENT things and were previously easy to conflate,
+              because both used the word "draft":
+                · visibility (sow_published) — can the customer see it at all
+                · document stage (doc_stage)  — what the document says about
+                  itself, and whether it carries a signature block
+              Publishing does NOT make a SOW signable. So the visibility wording
+              here avoids "draft" entirely, the stage is surfaced alongside it
+              rather than only further down the page, and a published-but-draft
+              SOW gets an explicit warning with a one-click fix. */}
+          {!isClient && (() => {
+            const sowMeta = parseSowMetadata(solution.sow_metadata);
+            const docStage = resolveDocStage(sowMeta, solution);
+            const stageInferred = !sowMeta.doc_stage;
+            const signable = docStage !== "draft";
+            return (
+            <div className="ms-card" style={{ borderLeft: `4px solid ${sowPublished ? "#107c10" : "#ff8c00"}` }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "#1e293b" }}>
+                    {sowPublished ? "Visible to customer" : "Hidden from customer"}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
+                    {sowPublished
+                      ? "The customer can see the pricing summary and the rendered SOW in their portal."
+                      : "The customer cannot see the pricing or SOW yet. Publish when it's ready for their review."}
+                  </div>
+                  {/* Stage shown next to visibility so the two aren't read as one
+                      thing. Full control lives in the SOW Metadata panel below. */}
+                  <div style={{ fontSize: 12, color: "#475569", marginTop: 6 }}>
+                    Document stage: <strong>{SOW_DOC_STAGE_LABELS[docStage]}</strong>
+                    {stageInferred && <span style={{ color: "#94a3b8" }}> (inferred — set it explicitly below)</span>}
+                    <span style={{ color: signable ? "#107c10" : "#b45309" }}>
+                      {signable ? " · signature block included" : " · no signature block"}
+                    </span>
+                  </div>
                 </div>
-                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
-                  {sowPublished
-                    ? "The customer can see the pricing summary and the rendered SOW in their portal."
-                    : "Draft — the customer cannot see the pricing or SOW yet. Publish when it's ready for their review."}
-                </div>
+                {canEdit && (
+                  <button
+                    className="ms-btn-primary"
+                    disabled={saving}
+                    style={{ background: sowPublished ? "#64748b" : "#107c10", flexShrink: 0 }}
+                    onClick={() => save({ sow_published: sowPublished ? 0 : 1 })}
+                  >
+                    {saving ? "Saving…" : sowPublished ? "Hide from customer" : "Publish for customer review"}
+                  </button>
+                )}
               </div>
-              {canEdit && (
-                <button
-                  className="ms-btn-primary"
-                  disabled={saving}
-                  style={{ background: sowPublished ? "#64748b" : "#107c10", flexShrink: 0 }}
-                  onClick={() => save({ sow_published: sowPublished ? 0 : 1 })}
-                >
-                  {saving ? "Saving…" : sowPublished ? "Unpublish (back to draft)" : "Publish for customer review"}
-                </button>
+
+              {/* The combination that trips people up: published, so the customer
+                  is reading it, but still staged Draft — so it prints
+                  "Not for Execution" with no signature block. Legitimate for
+                  gathering feedback, wrong if you think you've sent it for
+                  signature, so it's stated rather than left to be discovered. */}
+              {sowPublished && !signable && (
+                <div style={{ marginTop: 12, padding: "10px 12px", background: "#fffbeb", border: "1px solid #fcd34d", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 12, color: "#92400e" }}>
+                    <strong>This is visible to the customer but not signable.</strong> The document prints “{SOW_DOC_STAGE_LABELS.draft}” and carries no signature block. That's right for review; move it to <strong>Final</strong> when it's ready for signature.
+                  </div>
+                  {canEdit && (
+                    <button
+                      className="ms-btn-secondary"
+                      disabled={savingStageNudge}
+                      style={{ fontSize: 12, whiteSpace: "nowrap", flexShrink: 0 }}
+                      onClick={async () => {
+                        setSavingStageNudge(true);
+                        try {
+                          await api.updateSowMetadata(solution.id, { doc_stage: "for_review" });
+                          setSolution(await api.solution(solution.id));
+                          showToast(`Stage set to ${SOW_DOC_STAGE_LABELS.for_review}.`, "success");
+                        } catch (err) {
+                          showToast(err instanceof Error ? err.message : "Failed to update stage", "error");
+                        } finally {
+                          setSavingStageNudge(false);
+                        }
+                      }}
+                    >
+                      {savingStageNudge ? "Saving…" : `Mark as “${SOW_DOC_STAGE_LABELS.for_review}”`}
+                    </button>
+                  )}
+                </div>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Customer-facing draft placeholder — replaces the pricing + SOW doc
               until staff publish. */}
