@@ -321,7 +321,7 @@ export function assembleSowFromCatalog(
   // as `tbd`; unknown solution types are filtered out so they can't match
   // anything (the renderer still produces a usable doc).
   const v: SowVendorKey = vendor === "zoom" || vendor === "ringcentral" ? vendor : "tbd";
-  const allowed = new Set<SowSolutionTypeKey>(["ucaas", "ccaas", "ci", "va", "rc_air", "wfm", "qm"]);
+  const allowed = new Set<SowSolutionTypeKey>(["ucaas", "ccaas", "ci", "va", "aiea", "rc_air", "wfm", "qm"]);
   const types = solutionTypes
     .map((t) => (t ?? "").toLowerCase())
     // Both Zoom AI Virtual Agent (zoom_zva) and RingCentral AI Receptionist
@@ -349,6 +349,10 @@ export function assembleSowFromCatalog(
     // SOWs report their first-listed type; nothing structural depends on
     // this beyond legacy callers (which the catalog has replaced).
     id: (types[0] ?? "ucaas") as SowSolutionTypeKey,
+    // Full normalized set, not just the primary — shared prose in buildHtml
+    // needs it to stay product-accurate (e.g. the Acceptance section must not
+    // demand ported numbers on an engagement with no telephony).
+    solutionTypes: types,
     vendor: v,
     productLine: meta.productLine,
     projectReferenceTemplate: meta.projectReferenceTemplate,

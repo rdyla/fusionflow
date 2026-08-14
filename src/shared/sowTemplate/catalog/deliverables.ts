@@ -116,6 +116,13 @@ export const DELIVERABLES: DeliverableEntry[] = [
     sortOrder: 30,
   },
   {
+    appliesTo: ["aiea"],
+    name: "AI Expert Assist Configuration Summary",
+    format: "PDF",
+    acceptanceCriteria: "Documents the knowledge sources connected to AI Expert Assist, the agent-facing surfaces enabled, and the supervisor visibility configured; approved by Customer authorized signer.",
+    sortOrder: 36,
+  },
+  {
     appliesTo: ["va"],
     name: "Intent Library",
     format: "Platform export",

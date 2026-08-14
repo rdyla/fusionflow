@@ -340,6 +340,13 @@ export default function ScopeOfWorkDocument({
     ccaasAgentCount: counts.ccaasAgents,
     ciSeatCount:     counts.ciSeats,
     vaWorkflowCount: counts.vaWorkflows,
+    // WHICH channels, not just how many — the scope rows name them, so a
+    // voice-only engagement stops printing a promise of web chat.
+    vaChannels: ([
+      sowData?.va?.voice ? "voice" as const : null,
+      sowData?.va?.chat  ? "chat"  as const : null,
+      sowData?.va?.sms   ? "sms"   as const : null,
+    ].filter(Boolean) as Array<"voice" | "chat" | "sms">),
     ditNumbers:      counts.dids,
     meetingsCount:   counts.meetings,
     goLiveCount:     counts.goLives,

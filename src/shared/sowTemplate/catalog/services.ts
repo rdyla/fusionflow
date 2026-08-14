@@ -2,7 +2,7 @@
  * Engineering / integration + optional service catalog entries.
  *
  * The renderer surfaces these in Section 2.9 (engineering) + Section 2.10
- * (optional service bullets) + Section 9.2 (priced optional service table).
+ * (optional service bullets) + Section 8.2 (priced optional service table).
  * Tagging follows the same pattern as the rest of the catalog.
  */
 
@@ -37,9 +37,15 @@ export const ENGINEERING: EngineeringBullet[] = [
   // VA engineering
   { appliesTo: ["va"], bullet: "Knowledge-source ingestion — connectors to FAQ / KB sources with refresh cadence.", sortOrder: 10 },
   { appliesTo: ["va"], bullet: "Intent training — iterative tuning against a corpus of representative utterances.", sortOrder: 20 },
-  { appliesTo: ["va"], bullet: "Voice + chat channel wiring — IVR overlay, web chat widget, mobile SDK integration where in scope.", sortOrder: 30 },
+  { appliesTo: ["va"], bullet: "Channel wiring for the in-scope channels only — IVR overlay, web chat widget, or mobile SDK integration as applicable. See Section 1.3 for the channels in scope.", sortOrder: 30 },
   { appliesTo: ["va"], bullet: "Live-agent handoff — queue + context-transfer configuration.", sortOrder: 40 },
   { appliesTo: ["va"], bullet: "CRM context API — surface caller / chat context for downstream review.", sortOrder: 50 },
+
+  // AI Expert Assist engineering
+  { appliesTo: ["aiea"], bullet: "Knowledge-source connection — the corpora AI Expert Assist draws on, with refresh cadence; shared with the virtual agent where both are in scope.", sortOrder: 12 },
+  { appliesTo: ["aiea"], bullet: "Agent-surface enablement — which agent desktop panels present suggestions, and for which interaction types.", sortOrder: 14 },
+  { appliesTo: ["aiea"], bullet: "Suggestion tuning — review of surfaced content against representative interactions, with adjustment of source weighting.", sortOrder: 16 },
+  { appliesTo: ["aiea"], bullet: "Supervisor visibility configuration — reporting on suggestion usage where enabled.", sortOrder: 18 },
 
   // AIR engineering
   { appliesTo: ["rc_air"], bullet: "AI Receptionist persona + greeting flow configuration.", sortOrder: 10 },
@@ -73,7 +79,7 @@ export const OPTIONAL_BULLETS: OptionalServiceBullet[] = [
   { bullet: "Additional live, instructor-led remote training sessions.", sortOrder: 90 },
 ];
 
-// ── Optional Service Table (Section 9.2 pricing) ─────────────────────────────
+// ── Optional Service Table (Section 8.2 pricing) ─────────────────────────────
 
 export const OPTIONAL_ROWS: OptionalServiceRow[] = [
   // UCaaS-only
