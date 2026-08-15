@@ -2,8 +2,8 @@
  * Shared SOW sections — content that doesn't vary across variants.
  *
  * Section 4 (Out of Scope), 5 (Assumptions), 6 (Customer Responsibilities),
- * 10 (Change Management), 11 (Acceptance Process), 12 (Terms & References),
- * and 13 (Signature) are uniform across the SOW. Variants can override
+ * 9 (Change Management), 10 (Acceptance Process), 11 (Terms & References),
+ * and 12 (Signature) are uniform across the SOW. Variants can override
  * via outOfScopeOverride etc. when needed.
  *
  * Section 7 (Governance / RACI / Cadence / Escalation / Status Reporting)

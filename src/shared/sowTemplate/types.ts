@@ -20,6 +20,7 @@ export type SowSolutionTypeKey =
   | "ccaas"
   | "ci"          // Conversation Intelligence (Zoom Revenue Accelerator / RingCentral ACE)
   | "va"          // Virtual Agent (Zoom AI Virtual Agent / RingCentral AVA)
+  | "aiea"        // AI Expert Assist — real-time agent assist. CCaaS/VA add-on
   | "rc_air"      // RingCentral AIR (AI Receptionist)
   | "wfm"         // Workforce Management (Zoom Contact Center WFM) — CCaaS add-on
   | "qm";         // Quality Management (Zoom Contact Center QM) — CCaaS add-on
@@ -118,6 +119,13 @@ export type SowBuildContext = {
   ccaasAgentCount: number;
   ciSeatCount: number;
   vaWorkflowCount: number;
+  /** WHICH virtual-agent channels are in scope, from sow_data.va. The count
+   *  above says how many; this says which — needed because the scope rows used
+   *  to read "Voice and web chat channels enabled and validated" unconditionally,
+   *  so a voice-only SOW promised chat we hadn't sold. Empty array = unknown
+   *  (nothing captured in the sizing form), which falls back to generic wording
+   *  rather than naming channels we can't confirm. */
+  vaChannels: Array<"voice" | "chat" | "sms">;
   /** Optional secondary counts that variants may use (DIDs, Meetings, queues, etc.). */
   ditNumbers: number;          // DIDs to port
   meetingsCount: number;       // Zoom Meetings licenses (UCaaS variants)
@@ -202,7 +210,13 @@ export type SowVariant = {
   /** Section 4 — Out of Scope bullets. Variants may override; shared default
    *  comes from sections.ts. */
   outOfScopeOverride?: string[];
-  /** Whether to surface the E911 footnote at the end of Section 4. */
+  /** Every normalized solution type this SOW covers. Shared prose reads it to
+   *  stay product-accurate — see § 10's acceptance criteria. */
+  solutionTypes: readonly SowSolutionTypeKey[];
+  /** Whether to surface the E911 footnote at the end of Section 4. Doubles as
+   *  the "this engagement provisions telephony" signal — it is true only for
+   *  UCaaS and UCaaS+CCaaS, i.e. exactly the engagements where numbers are
+   *  ported and E911 locations are configured. § 10 uses it for that. */
   showE911Footnote: boolean;
   /** Whether this variant is FULLY built (false = stub with placeholder content). */
   isStub: boolean;

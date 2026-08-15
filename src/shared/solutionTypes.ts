@@ -6,13 +6,14 @@
  * every map below; the TS Record<SolutionType, ...> constraint will flag gaps.
  */
 
-export const SOLUTION_TYPES = ["ucaas", "ccaas", "va", "ci", "wfm", "qm", "integrations"] as const;
+export const SOLUTION_TYPES = ["ucaas", "ccaas", "va", "aiea", "ci", "wfm", "qm", "integrations"] as const;
 export type SolutionType = typeof SOLUTION_TYPES[number];
 
 export const SOLUTION_TYPE_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
   va: "Virtual Agent",
+  aiea: "AI Expert Assist",
   ci: "Conversation Intelligence",
   wfm: "Workforce Management",
   qm: "Quality Management",
@@ -23,6 +24,7 @@ export const SOLUTION_TYPE_COLORS: Record<SolutionType, string> = {
   ucaas: "#2563eb",
   ccaas: "#0891b2",
   va: "#7c3aed",
+  aiea: "#4338ca",
   ci: "#0b9aad",
   wfm: "#d97706",
   qm: "#059669",
@@ -109,6 +111,7 @@ export const SOLUTION_TYPE_TAG_LABELS: Record<SolutionType, string> = {
   ucaas: "UCaaS",
   ccaas: "CCaaS",
   va: "VA",
+  aiea: "AIEA",
   ci: "CI",
   wfm: "WFM",
   qm: "QM",
