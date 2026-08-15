@@ -37,11 +37,19 @@ export const SCOPE_ITEMS: ScopeItem[] = [
   { appliesTo: ["ci"], element: "CRM integration",                  quantity: "Per design",  notes: "Opportunity / deal linkage so coaching context surfaces in the CRM.",                            sortOrder: 50 },
 
   // ── VA (Virtual Agent) ──────────────────────────────────────────────────
-  { appliesTo: ["va"], element: "Virtual agent workflows",          quantity: "{va_workflows}", notes: "Enabled virtual-agent channels (voice / chat / SMS), each configured as its own workflow.", sortOrder: 20 },
+  { appliesTo: ["va"], element: "Virtual agent workflows",          quantity: "{va_workflows}", notes: "{Va_channels} — each channel configured as its own workflow.", sortOrder: 20 },
   { appliesTo: ["va"], element: "Intent library",                   quantity: "Per design",  notes: "Trained intents drawn from the Customer's call-deflection priorities.",                          sortOrder: 30 },
   { appliesTo: ["va"], element: "Knowledge sources",                quantity: "Per design",  notes: "Ingested knowledge bases / FAQ corpora the bot can reference.",                                 sortOrder: 40 },
-  { appliesTo: ["va"], element: "Channels (voice / chat)",          quantity: "Per design",  notes: "Voice and chat channels enabled and validated.",                                                 sortOrder: 50 },
+  { appliesTo: ["va"], element: "Channels",                         quantity: "{va_channels}", notes: "{Va_channels} enabled and validated. Channels not listed here are out of scope and may be added by change order.", sortOrder: 50 },
   { appliesTo: ["va"], element: "Fallback + escalation paths",      quantity: "Included",    notes: "Live-agent handoff and after-hours fallback flows confirmed.",                                  sortOrder: 60 },
+
+  // ── AIEA (AI Expert Assist) ─────────────────────────────────────────────
+  // Assists LIVE agents rather than deflecting contacts — the opposite side of
+  // the interaction from VA. Configured once regardless of how many virtual
+  // agent workflows are in scope, which is why there's no count placeholder.
+  { appliesTo: ["aiea"], element: "AI Expert Assist",               quantity: "Included",    notes: "Real-time knowledge surfacing and suggested responses for live agents, configured against the same knowledge sources as the virtual agent where both are in scope.", sortOrder: 65 },
+  { appliesTo: ["aiea"], element: "Agent-facing surfaces",          quantity: "Per design",  notes: "Which agent desktop panels present suggestions, and the interaction types they are enabled for.",                                                                       sortOrder: 66 },
+  { appliesTo: ["aiea"], element: "Supervisor visibility",          quantity: "Per design",  notes: "Whether supervisors can review suggestion usage and outcomes, confirmed during design.",                                                                                sortOrder: 67 },
 
   // ── RC AIR (AI Receptionist) ────────────────────────────────────────────
   { appliesTo: ["rc_air"], element: "AI Receptionist numbers",      quantity: "{primary}",   notes: "Inbound numbers routed through the AI Receptionist before reaching a queue or user.",            sortOrder: 20 },

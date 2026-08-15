@@ -21,7 +21,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "zoom_ucaas",
     showE911Footnote: true,
     trainingIncluded: "Self-paced end-user training via Zoom's video library and knowledge base; instructor-led administrator training delivered by Packet Fusion.",
-    trainingOptional: "Live, remote, instructor-led end-user training sessions (up to 20 attendees per session). See Section 9.2 for pricing. Sessions are recorded and download links are provided.",
+    trainingOptional: "Live, remote, instructor-led end-user training sessions (up to 20 attendees per session). See Section 8.2 for pricing. Sessions are recorded and download links are provided.",
   },
   {
     appliesTo: ["ccaas"],
@@ -31,7 +31,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ccaas",
     showE911Footnote: false,
     trainingIncluded: "Self-paced agent training via Zoom's video library and knowledge base; instructor-led administrator + supervisor training delivered by Packet Fusion.",
-    trainingOptional: "Live, remote, instructor-led agent training sessions (up to 20 attendees per session). See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led agent training sessions (up to 20 attendees per session). See Section 8.2 for pricing.",
   },
   {
     // Combo: Zoom UCaaS + Zoom CCaaS
@@ -42,7 +42,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ccaas",
     showE911Footnote: true,
     trainingIncluded: "Self-paced end-user and agent training via Zoom's video library and knowledge base; instructor-led administrator + supervisor training delivered by Packet Fusion for both UCaaS and Contact Center.",
-    trainingOptional: "Live, remote, instructor-led training sessions for end users and agents (up to 20 attendees per session). See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led training sessions for end users and agents (up to 20 attendees per session). See Section 8.2 for pricing.",
     priority: 10,
   },
   {
@@ -53,7 +53,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ai_data",
     showE911Footnote: false,
     trainingIncluded: "Administrator + reviewer training delivered by Packet Fusion covering tracker tuning, scorecard authoring, and recording review workflows.",
-    trainingOptional: "Live, remote, instructor-led sales-team enablement sessions on Revenue Accelerator usage. See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led sales-team enablement sessions on Revenue Accelerator usage. See Section 8.2 for pricing.",
   },
   {
     appliesTo: ["va"],
@@ -63,7 +63,21 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ai_data",
     showE911Footnote: false,
     trainingIncluded: "Administrator + intent-author training delivered by Packet Fusion covering bot persona configuration, intent library management, fallback handling, and conversation analytics.",
-    trainingOptional: "Live, remote, instructor-led intent-design workshops with the Customer's content owners. See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led intent-design workshops with the Customer's content owners. See Section 8.2 for pricing.",
+  },
+  {
+    // AI Expert Assist is usually sold alongside VA or CCaaS, in which case the
+    // combo picks that meta by specificity. This entry covers a standalone AIEA
+    // SOW so it doesn't fall back to the generic placeholder and print the
+    // "STUB — do not issue" banner on a document we actually sell.
+    appliesTo: ["aiea"],
+    vendor: ["zoom"],
+    productLine: "Zoom AI Expert Assist Professional Services",
+    projectReferenceTemplate: "Zoom AI Expert Assist Implementation – {customer}",
+    heroImageKey: "ai_data",
+    showE911Footnote: false,
+    trainingIncluded: "Administrator + supervisor training delivered by Packet Fusion covering knowledge-source management, agent-surface configuration, suggestion tuning, and usage reporting.",
+    trainingOptional: "Live, remote, instructor-led workshops with the Customer's knowledge owners on source curation and tuning. See Section 8.2 for pricing.",
   },
   {
     // WFM is almost always sold alongside Zoom CCaaS, in which case the combo
@@ -76,7 +90,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ccaas",
     showE911Footnote: false,
     trainingIncluded: "Administrator + supervisor training delivered by Packet Fusion covering forecasting, schedule building, intraday management, and adherence monitoring.",
-    trainingOptional: "Live, remote, instructor-led workshops on forecast tuning and schedule optimization. See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led workshops on forecast tuning and schedule optimization. See Section 8.2 for pricing.",
   },
   {
     appliesTo: ["qm"],
@@ -86,7 +100,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ccaas",
     showE911Footnote: false,
     trainingIncluded: "Administrator + supervisor training delivered by Packet Fusion covering evaluation form design, scorecard authoring, calibration, and coaching workflows.",
-    trainingOptional: "Live, remote, instructor-led calibration workshops with the Customer's quality team. See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led calibration workshops with the Customer's quality team. See Section 8.2 for pricing.",
   },
 
   // ─── RingCentral ──────────────────────────────────────────────────────────
@@ -98,7 +112,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ucaas_generic",
     showE911Footnote: true,
     trainingIncluded: "Self-paced end-user training via RingCentral's University library; instructor-led administrator training delivered by Packet Fusion.",
-    trainingOptional: "Live, remote, instructor-led end-user training sessions (up to 20 attendees per session). See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led end-user training sessions (up to 20 attendees per session). See Section 8.2 for pricing.",
   },
   {
     appliesTo: ["ccaas"],
@@ -108,7 +122,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ccaas",
     showE911Footnote: false,
     trainingIncluded: "Self-paced agent training via RingCentral's University library; instructor-led administrator + supervisor training delivered by Packet Fusion.",
-    trainingOptional: "Live, remote, instructor-led agent training sessions (up to 20 attendees per session). See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led agent training sessions (up to 20 attendees per session). See Section 8.2 for pricing.",
   },
   {
     // Combo: RingCentral UCaaS + RingCX
@@ -119,7 +133,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ccaas",
     showE911Footnote: true,
     trainingIncluded: "Self-paced training via RingCentral's University library for end users and agents; instructor-led administrator + supervisor training delivered by Packet Fusion for both UCaaS and RingCX.",
-    trainingOptional: "Live, remote, instructor-led training sessions for end users and agents. See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led training sessions for end users and agents. See Section 8.2 for pricing.",
     priority: 10,
   },
   {
@@ -130,7 +144,7 @@ export const VARIANT_META: VariantMeta[] = [
     heroImageKey: "ai_data",
     showE911Footnote: false,
     trainingIncluded: "Administrator training delivered by Packet Fusion covering AI Receptionist greeting design, routing logic, escalation paths, and conversation analytics.",
-    trainingOptional: "Live, remote, instructor-led workshops to refine receptionist scripts with the Customer's content owners. See Section 9.2 for pricing.",
+    trainingOptional: "Live, remote, instructor-led workshops to refine receptionist scripts with the Customer's content owners. See Section 8.2 for pricing.",
   },
 ];
 

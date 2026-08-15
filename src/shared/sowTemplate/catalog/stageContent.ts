@@ -99,12 +99,27 @@ export const STAGE_INTROS: StageIntro[] = [
   {
     appliesTo: ["va"],
     stage: "executing",
-    intro: "Executing builds the virtual-agent personas, ingests knowledge sources, trains the intent library, and wires the voice + chat channels with the fallback paths agreed during Planning.",
+    intro: "Executing builds the virtual-agent personas, ingests knowledge sources, trains the intent library, and wires the in-scope channels with the fallback paths agreed during Planning.",
   },
   {
     appliesTo: ["rc_air"],
     stage: "executing",
     intro: "Executing configures the AI Receptionist persona, routing logic, and language coverage; greeting flows are recorded and validated end-to-end before customer testing.",
+  },
+  // AI Expert Assist intros carry NEGATIVE priority so that on a VA+AIEA SOW
+  // (the common pairing) the virtual-agent intro wins — it describes the larger
+  // build. These surface only when AIEA is scoped on its own.
+  {
+    appliesTo: ["aiea"],
+    stage: "planning",
+    priority: -1,
+    intro: "Planning produces the inputs required to configure AI Expert Assist — the knowledge sources it draws on, the agent-facing surfaces that present suggestions, and the supervisor visibility to enable.",
+  },
+  {
+    appliesTo: ["aiea"],
+    stage: "executing",
+    priority: -1,
+    intro: "Executing connects the knowledge sources, enables AI Expert Assist on the agreed agent surfaces, and tunes surfaced content against representative interactions before customer testing.",
   },
   {
     appliesTo: ["wfm"],
@@ -332,6 +347,24 @@ export const SUBSECTIONS: Subsection[] = [
     sortOrder: 20,
   },
 
+  // AI Expert Assist — Planning. Kept separate from the VA design subsections
+  // because AIEA is a distinct product that can be scoped without a virtual
+  // agent (it assists live agents rather than deflecting contacts), and the
+  // design questions differ: which sources, which agent surfaces, what
+  // supervisors can see.
+  {
+    appliesTo: ["aiea"],
+    stage: "planning",
+    title: "AI Expert Assist Design",
+    bullets: [
+      "Confirm which knowledge sources AI Expert Assist draws on, and whether that set differs from the virtual agent's where both are in scope.",
+      "Identify the agent-facing surfaces that present suggestions, and the interaction types they are enabled for.",
+      "Agree what supervisors can see regarding suggestion usage and outcomes.",
+      "Define the review cycle for tuning surfaced content against real interactions.",
+    ],
+    sortOrder: 25,
+  },
+
   // AIR-specific Planning
   {
     appliesTo: ["rc_air"],
@@ -479,7 +512,7 @@ export const SUBSECTIONS: Subsection[] = [
     bullets: [
       "Build the bot persona(s) per the Planning-stage design.",
       "Ingest the knowledge sources and train the intent library.",
-      "Wire voice and chat channels and confirm grammars / NLU coverage.",
+      "Wire the in-scope channels and confirm grammars / NLU coverage.",
       "Build live-agent handoff to the agreed queues.",
     ],
     sortOrder: 10,
@@ -599,7 +632,7 @@ export const SUBSECTIONS: Subsection[] = [
     stage: "monitoring",
     title: "Intent Validation + NLP Testing",
     bullets: [
-      "Run test conversations covering the in-scope use cases on voice and chat channels.",
+      "Run test conversations covering the in-scope use cases on each in-scope channel.",
       "Customer reviews intent coverage and disambiguation behavior.",
       "Packet Fusion tunes intent boundaries, phrasing, and fallback triggers.",
       "Customer signs off on the intent library prior to Go-Live.",

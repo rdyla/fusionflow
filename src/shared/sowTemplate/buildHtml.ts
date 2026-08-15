@@ -49,6 +49,29 @@ function bullets(items: string[]): string {
   return `<ul>${items.map((it) => `<li>${it}</li>`).join("")}</ul>`;
 }
 
+/** Human list of the in-scope VA channels: "voice", "voice and web chat", … */
+function vaChannelPhrase(ctx: SowBuildContext): string {
+  const labels: Record<string, string> = { voice: "voice", chat: "web chat", sms: "SMS" };
+  const named = ctx.vaChannels.map((c) => labels[c]).filter(Boolean);
+  if (named.length === 0) return "the in-scope channels";
+  if (named.length === 1) return named[0];
+  return `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+}
+
+/** Sentence-case for use at the start of a note. */
+function upperFirst(s: string): string {
+  return s.length === 0 ? s : s[0].toUpperCase() + s.slice(1);
+}
+
+/** Token substitution for scope-row NOTES. `{va_channels}` renders the channels
+ *  actually captured in the sizing form; `{Va_channels}` is the sentence-initial
+ *  form. */
+function fillScopeNotes(notes: string, ctx: SowBuildContext): string {
+  return notes
+    .replace("{va_channels}", vaChannelPhrase(ctx))
+    .replace("{Va_channels}", upperFirst(vaChannelPhrase(ctx)));
+}
+
 function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
   return q
     .replace("{locations}",    esc(ctx.locationCount))
@@ -57,6 +80,7 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
     .replace("{ccaas_agents}", esc(ctx.ccaasAgentCount))
     .replace("{ci_seats}",     esc(ctx.ciSeatCount))
     .replace("{va_workflows}", esc(ctx.vaWorkflowCount))
+    .replace("{va_channels}",  esc(upperFirst(vaChannelPhrase(ctx))))
     .replace("{dids}",         esc(ctx.ditNumbers))
     .replace("{meetings}",     esc(ctx.meetingsCount))
     .replace("{golives}",      esc(ctx.goLiveCount));
@@ -214,7 +238,7 @@ function snapshotAndPricing(variant: SowVariant, ctx: SowBuildContext): string {
         <tr class="total-row"><td><strong>Project Total</strong></td><td class="num"><strong>${esc(fmtMoney(ctx.projectTotal))}</strong></td></tr>
       </tbody>
     </table>
-    <p class="muted">Optional services are listed in Section 9 and may be added by mutual written agreement.</p>
+    <p class="muted">Optional services are listed in Section 8 and may be added by mutual written agreement.</p>
   `;
 
   return `
@@ -237,9 +261,11 @@ function section1(variant: SowVariant, ctx: SowBuildContext): string {
     const quantity = scoped
       ? `${ctx.trainingSessions} instructor-led session${ctx.trainingSessions === 1 ? "" : "s"}`
       : fillScopeQuantity(r.quantity, ctx);
+    // Notes go through token substitution too, so channel-dependent wording can
+    // name only what's actually scoped instead of asserting voice AND chat.
     const notes = scoped
       ? "Live instructor-led sessions delivered by Packet Fusion; self-paced vendor library also included."
-      : r.notes;
+      : fillScopeNotes(r.notes, ctx);
     return `<tr><td>${esc(r.element)}</td><td>${esc(quantity)}</td><td>${esc(notes)}</td></tr>`;
   }).join("");
 
@@ -321,7 +347,7 @@ function section2(variant: SowVariant): string {
       <p>The following services are included if explicitly indicated in the Scope at a Glance (Section 1.3) or added via change order:</p>
       ${bullets(variant.engineeringAndIntegration)}
       <h3>2.10  Optional Services</h3>
-      <p>The following services are not included in the base scope and may be added by mutual written agreement. Pricing is summarized in Section 9.2.</p>
+      <p>The following services are not included in the base scope and may be added by mutual written agreement. Pricing is summarized in Section 8.2.</p>
       ${bullets(variant.optionalServiceBullets)}
     </section>
   `;
@@ -331,7 +357,7 @@ function section3(deliverables: Deliverable[]): string {
   return `
     <section class="page-section">
       <h1>3.  Deliverables</h1>
-      <p>The following deliverables will be produced under this SOW. Each deliverable is subject to the acceptance process described in Section 11.</p>
+      <p>The following deliverables will be produced under this SOW. Each deliverable is subject to the acceptance process described in Section 10.</p>
       <table class="data-table">
         <thead><tr><th>#</th><th>Deliverable</th><th>Format</th><th>Acceptance Criteria</th></tr></thead>
         <tbody>
@@ -347,7 +373,7 @@ function section4(variant: SowVariant): string {
   return `
     <section class="page-section">
       <h1>4.  Out of Scope</h1>
-      <p>The following are explicitly out of scope for this SOW. They may be added by change order under Section 10 if the Customer wishes Packet Fusion to perform them.</p>
+      <p>The following are explicitly out of scope for this SOW. They may be added by change order under Section 9 if the Customer wishes Packet Fusion to perform them.</p>
       ${bullets(items)}
       ${variant.showE911Footnote ? `<p>${E911_FOOTNOTE}</p>` : ""}
     </section>
@@ -358,7 +384,7 @@ function section5(): string {
   return `
     <section class="page-section">
       <h1>5.  Assumptions</h1>
-      <p>This SOW, including the schedule and fees, is based on the following assumptions. A material change to any assumption may require a change order under Section 10.</p>
+      <p>This SOW, including the schedule and fees, is based on the following assumptions. A material change to any assumption may require a change order under Section 9.</p>
       ${bullets(SHARED_ASSUMPTIONS)}
     </section>
   `;
@@ -502,7 +528,40 @@ function section9ChangeMgmt(): string {
   `;
 }
 
-function section10Acceptance(): string {
+function section10Acceptance(variant: SowVariant, ctx: SowBuildContext): string {
+  // Acceptance criteria must be things we can actually demonstrate on THIS
+  // engagement. The old text hardcoded "ported numbers complete" and "E911
+  // returns correct location data" on every SOW, which on a Virtual Agent /
+  // AI Expert Assist / CI engagement is unsatisfiable — it let a customer
+  // withhold acceptance on criteria that were never in scope, and committed us
+  // to proving something we hadn't sold.
+  //
+  // showE911Footnote is the telephony signal (true only for UCaaS and
+  // UCaaS+CCaaS — the engagements that port numbers and configure E911).
+  const provisionsTelephony = variant.showE911Footnote;
+  const has = (t: string) => variant.solutionTypes.includes(t as never);
+
+  const goLiveHeading = provisionsTelephony ? "10.2  Site Go-Live Acceptance" : "10.2  Go-Live Acceptance";
+
+  const goLiveBody = provisionsTelephony
+    ? `<p>Each site is deemed accepted at Go-Live when: (a) ported numbers complete; (b) test calls succeed in both directions; (c) E911 returns correct location data; and (d) the Customer site lead signs off on the cutover form. Outstanding cosmetic items are captured for Day 1 Support follow-up.</p>`
+    : `<p>Go-Live is deemed accepted when all of the following are confirmed:</p>
+       ${bullets([
+         `Inbound contacts reach the correct destination on each in-scope channel${has("va") ? ` (${vaChannelPhrase(ctx)})` : ""}.`,
+         ...(has("va") ? ["The virtual agent handles the in-scope use cases and hands off to a live agent on the agreed triggers."] : []),
+         ...(has("aiea") ? ["AI Expert Assist surfaces suggestions to agents during a live interaction."] : []),
+         "Any in-scope CRM or business-system integration functions on a representative interaction.",
+         "Reporting reflects activity for the configured period.",
+         "The Customer's designated lead signs off on the cutover record.",
+       ])}
+       <p class="muted">Outstanding cosmetic items are captured for Day 1 Support follow-up.</p>`;
+
+  // Closure wording also assumed sites. On a non-telephony engagement there is
+  // one production cutover rather than a per-site rollout.
+  const closureClauseB = provisionsTelephony
+    ? "all sites have completed Day 1 Support"
+    : "Day 1 Support has completed";
+
   return `
     <section class="page-section">
       <h1>10.  Acceptance Process</h1>
@@ -510,11 +569,11 @@ function section10Acceptance(): string {
       <p>For each deliverable listed in Section 3, the following process applies:</p>
       ${bullets(ACCEPTANCE_DELIVERABLE_STEPS)}
 
-      <h3>10.2  Site Go-Live Acceptance</h3>
-      <p>Each site is deemed accepted at Go-Live when: (a) ported numbers complete; (b) test calls succeed in both directions; (c) E911 returns correct location data; and (d) the Customer site lead signs off on the cutover form. Outstanding cosmetic items are captured for Day 1 Support follow-up.</p>
+      <h3>${goLiveHeading}</h3>
+      ${goLiveBody}
 
       <h3>10.3  Project Closure</h3>
-      <p>The project is closed when: (a) all deliverables in Section 3 have been accepted; (b) all sites have completed Day 1 Support; and (c) the Project Closure Memo is signed by both PMs. Any open items at closure are deferred to a future change order or to the Customer's ongoing support relationship.</p>
+      <p>The project is closed when: (a) all deliverables in Section 3 have been accepted; (b) ${closureClauseB}; and (c) the Project Closure Memo is signed by both PMs. Any open items at closure are deferred to a future change order or to the Customer's ongoing support relationship.</p>
     </section>
   `;
 }
@@ -687,6 +746,23 @@ function styles(): string {
     .stub-banner { background: #fef3c7; border: 1px solid #fde68a; color: #854d0e; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 10pt; font-weight: 700; }
     /* Confidentiality */
     .confidentiality { font-size: 9pt; color: #555; border-top: 1px solid #ccc; padding-top: 10px; margin-top: 14px; }
+    /* Running footer. Chrome repeats position:fixed elements on every printed
+       sheet — the same mechanism the budgetary watermark relies on. Page
+       numbers are NOT possible here: counter(page) only resolves inside @page
+       margin boxes, which browsers don't implement. That would need a real
+       paged-media engine (server-side PDF), so the footer carries identity and
+       confidentiality only. Hidden on screen so it doesn't float over the
+       preview window. */
+    .doc-footer { display: none; }
+    @media print {
+      .doc-footer {
+        display: block; position: fixed; bottom: 0; left: 0; right: 0;
+        font-size: 7.5pt; color: #5b6b75; letter-spacing: 0.02em;
+        padding-top: 4px; border-top: 0.5pt solid ${GREY};
+      }
+      .doc-footer .df-right { float: right; }
+    }
+
     /* Draft stand-in where the signature block would be */
     .draft-no-sig { border: 2px solid ${NAVY}; border-radius: 4px; padding: 20px 24px; margin-top: 18px; background: #f8fafc; }
     .draft-no-sig-title { font-size: 13pt; font-weight: 700; color: ${NAVY}; margin-bottom: 10px; }
@@ -749,10 +825,15 @@ export function buildSowHtml(args: {
     section7Timeline(ctx),
     section8Pricing(variant, ctx, variant.optionalServicesTable),
     section9ChangeMgmt(),
-    section10Acceptance(),
+    section10Acceptance(variant, ctx),
     section11Terms(),
     section12Signature(ctx),
   ].join("\n");
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>SOW — ${esc(ctx.customerName)}</title><style>${styles()}</style></head><body>${watermark}${body}</body></html>`;
+  // Identity + confidentiality on every printed sheet, so a page separated from
+  // the set is still attributable. See the .doc-footer note in styles() for why
+  // there's no page number.
+  const runningFooter = `<div class="doc-footer">Packet Fusion  ·  Confidential<span class="df-right">SOW — ${esc(ctx.customerName)}  ·  ${esc(ctx.sowNumber)}</span></div>`;
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>SOW — ${esc(ctx.customerName)}</title><style>${styles()}</style></head><body>${watermark}${runningFooter}${body}</body></html>`;
 }
