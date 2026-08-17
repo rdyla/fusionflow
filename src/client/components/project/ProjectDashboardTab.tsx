@@ -66,6 +66,7 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
   if (!data) return <Center>No data.</Center>;
 
   const { stats, phases, blockers, stage_progress } = data;
+  const hasBlockers = stats.blockers.total > 0;
   const multiPhase = phases.length > 0;
   const rollupLabel = multiPhase
     ? `Across ${phases.length} phase${phases.length === 1 ? "" : "s"}`
@@ -84,7 +85,7 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
   return (
     <div style={{ maxWidth: 1440, margin: "0 auto" }}>
       {/* ── KPI tiles ─────────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${hasBlockers ? 4 : 3}, 1fr)`, gap: 12, marginBottom: 14 }}>
         <KpiTile
           label="Overall complete"
           value={`${stats.overall_complete_pct}%`}
@@ -99,15 +100,17 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
           onClick={() => onChangeTab?.("tasks")}
           clickLabel="View tasks"
         />
-        <KpiTile
-          label="Blockers"
-          value={`${stats.blockers.total}`}
-          sublabel={stats.blockers.critical > 0 ? `${stats.blockers.critical} critical` : "—"}
-          danger={stats.blockers.critical > 0}
-          graphic={<BlockersAlertIcon critical={stats.blockers.critical > 0} />}
-          onClick={() => onChangeTab?.("blockers")}
-          clickLabel="View blockers"
-        />
+        {hasBlockers && (
+          <KpiTile
+            label="Blockers"
+            value={`${stats.blockers.total}`}
+            sublabel={stats.blockers.critical > 0 ? `${stats.blockers.critical} critical` : "—"}
+            danger={stats.blockers.critical > 0}
+            graphic={<BlockersAlertIcon critical={stats.blockers.critical > 0} />}
+            onClick={() => onChangeTab?.("blockers")}
+            clickLabel="View blockers"
+          />
+        )}
         <KpiTile
           label={multiPhase ? "Days to final go-live" : "Days to go-live"}
           value={stats.days_to_final_go_live !== null ? `${stats.days_to_final_go_live}` : "—"}
@@ -117,7 +120,7 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
       </div>
 
       {/* ── Chart cards row ───────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: hasBlockers ? "1fr 1fr 1fr" : "1fr 1fr", gap: 12, marginBottom: 14 }}>
         <ChartCard title="Tasks overview" onClick={() => onChangeTab?.("tasks")} clickLabel="View tasks">
           <DonutChart
             slices={[
@@ -130,16 +133,18 @@ export default function ProjectDashboardTab({ projectId, onChangeTab }: { projec
             emptyMessage="No tasks yet"
           />
         </ChartCard>
-        <ChartCard title="Blockers by severity" onClick={() => onChangeTab?.("blockers")} clickLabel="View blockers">
-          <DonutChart
-            slices={(["critical","high","medium","low"] as const)
-              .map((sev) => ({ label: capitalize(sev), count: sevCounts[sev] ?? 0, color: SEVERITY_COLOR[sev] }))
-              .filter((s) => s.count > 0)}
-            centerValue={`${stats.blockers.total}`}
-            centerLabel="Total"
-            emptyMessage="No active blockers"
-          />
-        </ChartCard>
+        {hasBlockers && (
+          <ChartCard title="Blockers by severity" onClick={() => onChangeTab?.("blockers")} clickLabel="View blockers">
+            <DonutChart
+              slices={(["critical","high","medium","low"] as const)
+                .map((sev) => ({ label: capitalize(sev), count: sevCounts[sev] ?? 0, color: SEVERITY_COLOR[sev] }))
+                .filter((s) => s.count > 0)}
+              centerValue={`${stats.blockers.total}`}
+              centerLabel="Total"
+              emptyMessage="No active blockers"
+            />
+          </ChartCard>
+        )}
         <ChartCard title={multiPhase ? "Progress by phase" : "Progress"}>
           <PhaseProgressBars phases={phases} multiPhase={multiPhase} overallPct={stats.overall_complete_pct} />
         </ChartCard>
