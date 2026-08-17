@@ -314,13 +314,22 @@ app.get("/leadership", async (c) => {
   const prevEnd = start;                      // current start = previous window's exclusive end
   const prevStart = fmt(addDays(now, -(days - 1) - days));
   const upcomingEnd = fmt(addDays(now, 30));
+  // Fixed trailing 7 days, independent of the week/month/quarter toggle above —
+  // "did this person report time last week" should mean the same thing no
+  // matter what window is currently selected on screen.
+  const lastWeekStart = fmt(addDays(now, -6));
+  const lastWeekEnd = end;
 
   const round1 = (n: number | null | undefined) => Math.round((n ?? 0) * 10) / 10;
 
-  const hoursExpr =
-    "(julianday(scheduled_end) - julianday(scheduled_start)) * 24";
   const hoursExprAlias =
     "(julianday(ste.scheduled_end) - julianday(ste.scheduled_start)) * 24";
+
+  // Every Capacity tile is scoped to actual Packet Fusion staff — internal
+  // roles only, excluding partner_ae (external partner reps) and client
+  // (customer contacts) even though they can't realistically log time or be
+  // set as PM/staff today. Explicit rather than assumed.
+  const PF_ROLES_SQL = "'admin','executive','pm','pf_ae','pf_sa','pf_csm','pf_engineer'";
 
   const [
     timeCur,
@@ -342,28 +351,35 @@ app.get("/leadership", async (c) => {
     openRisksList,
     hoursRiskCandidates,
     slippedStages,
+    assignedPeople,
+    loggedLastWeek,
   ] = await Promise.all([
     db.prepare(
-      `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
-       FROM stage_time_entries
-       WHERE scheduled_start >= ? AND scheduled_start < ?
-         AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL`
+      `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExprAlias}),0) AS hours
+       FROM stage_time_entries ste
+       JOIN users u ON u.id = ste.user_id
+       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
+         AND ste.scheduled_start IS NOT NULL AND ste.scheduled_end IS NOT NULL
+         AND u.role IN (${PF_ROLES_SQL})`
     ).bind(start, end).first<{ entries: number; hours: number }>(),
 
     db.prepare(
-      `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExpr}),0) AS hours
-       FROM stage_time_entries
-       WHERE scheduled_start >= ? AND scheduled_start < ?
-         AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL`
+      `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExprAlias}),0) AS hours
+       FROM stage_time_entries ste
+       JOIN users u ON u.id = ste.user_id
+       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
+         AND ste.scheduled_start IS NOT NULL AND ste.scheduled_end IS NOT NULL
+         AND u.role IN (${PF_ROLES_SQL})`
     ).bind(prevStart, prevEnd).first<{ entries: number; hours: number }>(),
 
     db.prepare(
       `SELECT ste.user_id, u.name, u.email, COUNT(*) AS entries,
               COALESCE(SUM(${hoursExprAlias}),0) AS hours
        FROM stage_time_entries ste
-       LEFT JOIN users u ON u.id = ste.user_id
+       JOIN users u ON u.id = ste.user_id
        WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
          AND ste.scheduled_end IS NOT NULL
+         AND u.role IN (${PF_ROLES_SQL})
        GROUP BY ste.user_id
        ORDER BY hours DESC`
     ).bind(start, end).all<{ user_id: string | null; name: string | null; email: string | null; entries: number; hours: number }>(),
@@ -381,11 +397,14 @@ app.get("/leadership", async (c) => {
 
     // Active-project headcount per PM — current snapshot, not time-boxed.
     // Surfaces who's carrying the most projects right now (workload signal).
+    // Keeps the "no PM assigned" bucket (pm_user_id IS NULL) visible while
+    // still filtering out a PM who somehow isn't PF staff.
     db.prepare(
       `SELECT p.pm_user_id, u.name, COUNT(*) AS n
        FROM projects p
        LEFT JOIN users u ON u.id = p.pm_user_id
        WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND (p.pm_user_id IS NULL OR u.role IN (${PF_ROLES_SQL}))
        GROUP BY p.pm_user_id
        ORDER BY n DESC`
     ).all<{ pm_user_id: string | null; name: string | null; n: number }>(),
@@ -397,9 +416,10 @@ app.get("/leadership", async (c) => {
       `SELECT ps.user_id, u.name, COUNT(DISTINCT ps.project_id) AS n
        FROM project_staff ps
        JOIN projects p ON p.id = ps.project_id
-       LEFT JOIN users u ON u.id = ps.user_id
+       JOIN users u ON u.id = ps.user_id
        WHERE (p.archived = 0 OR p.archived IS NULL)
          AND ps.staff_role IN ('engineer', 'sa')
+         AND u.role IN (${PF_ROLES_SQL})
        GROUP BY ps.user_id
        ORDER BY n DESC`
     ).all<{ user_id: string | null; name: string | null; n: number }>(),
@@ -521,6 +541,31 @@ app.get("/leadership", async (c) => {
        ORDER BY s.planned_end ASC
        LIMIT 20`
     ).bind(today).all<{ id: string; stage_name: string; planned_end: string; project_id: string; project_name: string; customer_name: string | null }>(),
+
+    // Everyone staffed on an active project, any role — PM (projects.pm_user_id)
+    // union'd with AE/SA/CSM/Engineer (project_staff), PF staff only.
+    // Cross-referenced below against who actually logged time last week.
+    db.prepare(
+      `SELECT x.user_id, u.name, COUNT(DISTINCT x.project_id) AS project_count
+       FROM (
+         SELECT p.pm_user_id AS user_id, p.id AS project_id
+         FROM projects p
+         WHERE p.pm_user_id IS NOT NULL AND (p.archived = 0 OR p.archived IS NULL)
+         UNION
+         SELECT ps.user_id AS user_id, ps.project_id AS project_id
+         FROM project_staff ps
+         JOIN projects p ON p.id = ps.project_id
+         WHERE (p.archived = 0 OR p.archived IS NULL)
+       ) x
+       JOIN users u ON u.id = x.user_id
+       WHERE u.role IN (${PF_ROLES_SQL})
+       GROUP BY x.user_id`
+    ).all<{ user_id: string | null; name: string | null; project_count: number }>(),
+
+    db.prepare(
+      `SELECT DISTINCT user_id FROM stage_time_entries
+       WHERE scheduled_start >= ? AND scheduled_start < ? AND scheduled_end IS NOT NULL AND user_id IS NOT NULL`
+    ).bind(lastWeekStart, lastWeekEnd).all<{ user_id: string }>(),
   ]);
 
   // ── Hours vs. quoted SOW (live Dynamics) ──────────────────────────────────
@@ -564,6 +609,12 @@ app.get("/leadership", async (c) => {
     daysOverdue: Math.round((Date.parse(today) - Date.parse(r.planned_end)) / 86_400_000),
   }));
   const slippedTimelinesProjectCount = new Set(slippedTimelines.map((s) => s.projectId)).size;
+
+  const loggedUserIds = new Set((loggedLastWeek.results ?? []).map((r) => r.user_id));
+  const noTimeLastWeek = (assignedPeople.results ?? [])
+    .filter((r) => r.user_id && !loggedUserIds.has(r.user_id))
+    .map((r) => ({ user_id: r.user_id, name: r.name, projectCount: r.project_count }))
+    .sort((a, b) => (b.projectCount ?? 0) - (a.projectCount ?? 0));
 
   return c.json({
     window: { window, start, end },
@@ -656,6 +707,10 @@ app.get("/leadership", async (c) => {
     slippedTimelines: {
       projectCount: slippedTimelinesProjectCount,
       stages: slippedTimelines,
+    },
+    noTimeLastWeek: {
+      count: noTimeLastWeek.length,
+      people: noTimeLastWeek,
     },
   });
 });

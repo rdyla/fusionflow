@@ -493,6 +493,30 @@ export default function LeadershipDashboardPage() {
               )}
             </div>
           </div>
+
+          <div style={{ marginTop: 16 }}>
+            <MetricCard
+              title="No Time Logged (Last Week)"
+              value={data.noTimeLastWeek.count}
+              accent={data.noTimeLastWeek.count > 0 ? "#ff8c00" : undefined}
+              sub="assigned to an active project, 0 hours logged in the last 7 days"
+              expandKey="noTimeLastWeek"
+              expanded={expandedKeys.has("noTimeLastWeek")}
+              onToggle={toggleExpand}
+            >
+              {data.noTimeLastWeek.people.length === 0 ? (
+                <EmptyNote>Everyone assigned logged time in the last week.</EmptyNote>
+              ) : (
+                data.noTimeLastWeek.people.map((p) => (
+                  <ListRow
+                    key={p.user_id}
+                    title={p.name ?? "Unknown"}
+                    right={`${p.projectCount} project${p.projectCount === 1 ? "" : "s"}`}
+                  />
+                ))
+              )}
+            </MetricCard>
+          </div>
         </>
       ) : null}
     </div>
