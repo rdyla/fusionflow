@@ -200,7 +200,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
                 r.owner_user_id, u.name AS owner_name
          FROM risks r
          LEFT JOIN users u ON u.id = r.owner_user_id
-         WHERE r.project_id = ? AND (r.status IS NULL OR r.status != 'resolved')
+         WHERE r.project_id = ? AND (r.status IS NULL OR r.status != 'closed')
          ORDER BY
            CASE r.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
            r.title`
