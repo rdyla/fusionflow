@@ -328,7 +328,7 @@ app.get("/leadership", async (c) => {
     byEngineer,
     tasksByEngineer,
     projectsByPM,
-    projectAssignments,
+    projectAssignmentsIESA,
     goLives,
     upcomingGoLives,
     wentLiveStillOpen,
@@ -390,24 +390,17 @@ app.get("/leadership", async (c) => {
        ORDER BY n DESC`
     ).all<{ pm_user_id: string | null; name: string | null; n: number }>(),
 
-    // Active-project count per person across EVERY staffing role, not just PM —
-    // PM assignment lives on projects.pm_user_id, everything else (ae/sa/csm/
-    // engineer) lives in project_staff. UNION dedupes a person who's somehow
-    // both for the same project.
+    // Active-project count per person, scoped to IE (engineer) + SA staffing
+    // roles only — the PM breakdown is projectsByPM above (pm_user_id lives on
+    // projects directly, not project_staff).
     db.prepare(
-      `SELECT x.user_id, u.name, COUNT(DISTINCT x.project_id) AS n
-       FROM (
-         SELECT p.pm_user_id AS user_id, p.id AS project_id
-         FROM projects p
-         WHERE p.pm_user_id IS NOT NULL AND (p.archived = 0 OR p.archived IS NULL)
-         UNION
-         SELECT ps.user_id AS user_id, ps.project_id AS project_id
-         FROM project_staff ps
-         JOIN projects p ON p.id = ps.project_id
-         WHERE (p.archived = 0 OR p.archived IS NULL)
-       ) x
-       LEFT JOIN users u ON u.id = x.user_id
-       GROUP BY x.user_id
+      `SELECT ps.user_id, u.name, COUNT(DISTINCT ps.project_id) AS n
+       FROM project_staff ps
+       JOIN projects p ON p.id = ps.project_id
+       LEFT JOIN users u ON u.id = ps.user_id
+       WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND ps.staff_role IN ('engineer', 'sa')
+       GROUP BY ps.user_id
        ORDER BY n DESC`
     ).all<{ user_id: string | null; name: string | null; n: number }>(),
 
@@ -601,7 +594,7 @@ app.get("/leadership", async (c) => {
         name: r.name,
         n: r.n,
       })),
-      projectAssignments: (projectAssignments.results ?? []).map((r) => ({
+      projectAssignmentsIESA: (projectAssignmentsIESA.results ?? []).map((r) => ({
         user_id: r.user_id,
         name: r.name,
         n: r.n,
