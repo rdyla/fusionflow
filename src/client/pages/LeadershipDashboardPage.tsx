@@ -36,18 +36,6 @@ const WINDOW_OPTIONS: { value: "week" | "month" | "quarter"; label: string }[] =
   { value: "quarter", label: "Quarter" },
 ];
 
-// Active (pre-won/lost) solution pipeline stages, in funnel order. Mirrors
-// SolutionsPage's STATUS_LABELS — kept as a small local copy rather than a
-// shared export since it's only these 5 stages (won/lost are outcomes here).
-const PIPELINE_STATUS_ORDER = ["draft", "assessment", "requirements", "scope", "handoff"];
-const PIPELINE_STATUS_LABELS: Record<string, string> = {
-  draft: "Draft",
-  assessment: "Needs Assessment",
-  requirements: "Requirements",
-  scope: "Scope of Work",
-  handoff: "Handoff Ready",
-};
-
 const SEVERITY_COLOR: Record<string, string> = {
   critical: "#d13438",
   high: "#ff8c00",
@@ -174,9 +162,6 @@ export default function LeadershipDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
-  // Pipeline is collapsed by default — Outcomes/Capacity get the front seat;
-  // Pipeline is a click away rather than always taking up vertical space.
-  const [showPipeline, setShowPipeline] = useState(false);
 
   function toggleExpand(key: string) {
     setExpandedKeys((prev) => {
@@ -423,11 +408,11 @@ export default function LeadershipDashboardPage() {
 
           {/* ── Capacity ─────────────────────────────────────────────────── */}
           <div className="ms-section-title" style={{ marginBottom: 12 }}>Capacity</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
             <TotalHoursCard total={data.time.totalHours} prev={data.time.prevTotalHours} entries={data.time.entries} />
 
             <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Hours by engineer</div>
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Hours by Project Member</div>
               {data.time.totalHours === 0 ? (
                 <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No time logged in the app for this period yet.</div>
               ) : (
@@ -437,6 +422,22 @@ export default function LeadershipDashboardPage() {
                     label: e.name ?? e.email ?? "Unassigned",
                     hours: e.hours,
                   }))}
+                />
+              )}
+            </div>
+
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Project Assignments</div>
+              {data.projects.projectAssignments.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No active project assignments.</div>
+              ) : (
+                <HoursLeaderboard
+                  rows={data.projects.projectAssignments.map((r) => ({
+                    key: r.user_id ?? "unassigned",
+                    label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
+                    hours: r.n,
+                  }))}
+                  unit=""
                 />
               )}
             </div>
@@ -474,138 +475,8 @@ export default function LeadershipDashboardPage() {
               )}
             </MetricCard>
           </div>
-
-          {/* ── Pipeline ─────────────────────────────────────────────────── */}
-          <button
-            type="button"
-            onClick={() => setShowPipeline((v) => !v)}
-            aria-expanded={showPipeline}
-            style={{
-              display: "flex", alignItems: "center", gap: 8, marginBottom: showPipeline ? 12 : 28, marginTop: 28,
-              background: "none", border: "none", padding: 0, cursor: "pointer",
-            }}
-          >
-            <span
-              style={{
-                fontSize: 10, color: "#94a3b8", display: "inline-block",
-                transform: showPipeline ? "rotate(90deg)" : "none", transition: "transform 0.15s",
-              }}
-            >
-              ▶
-            </span>
-            <span className="ms-section-title">Pipeline</span>
-          </button>
-          {showPipeline && (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 16 }}>
-            <MetricCard
-              title="Solutions Won"
-              value={data.pipeline.solutions.wonThisPeriod}
-              accent={data.pipeline.solutions.wonThisPeriod > 0 ? "#107c10" : undefined}
-              expandKey="solutionsWon"
-              expanded={expandedKeys.has("solutionsWon")}
-              onToggle={toggleExpand}
-            >
-              {data.pipeline.solutions.recentWon.length === 0 ? (
-                <EmptyNote>No solutions won in this period.</EmptyNote>
-              ) : (
-                data.pipeline.solutions.recentWon.map((s) => (
-                  <ListRow key={s.id} to={`/solutions/${s.id}`} title={s.name ?? "Untitled"} subtitle={s.customer_name} right={formatDate(s.date)} />
-                ))
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title="Solutions Lost"
-              value={data.pipeline.solutions.lostThisPeriod}
-              accent={data.pipeline.solutions.lostThisPeriod > 0 ? "#d13438" : undefined}
-              expandKey="solutionsLost"
-              expanded={expandedKeys.has("solutionsLost")}
-              onToggle={toggleExpand}
-            >
-              {data.pipeline.solutions.recentLost.length === 0 ? (
-                <EmptyNote>No solutions lost in this period.</EmptyNote>
-              ) : (
-                data.pipeline.solutions.recentLost.map((s) => (
-                  <ListRow key={s.id} to={`/solutions/${s.id}`} title={s.name ?? "Untitled"} subtitle={s.customer_name} right={formatDate(s.date)} />
-                ))
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title="Active Solutions"
-              value={data.pipeline.solutions.byStatus.reduce((sum, s) => sum + s.n, 0)}
-              expandKey="activeSolutions"
-              expanded={expandedKeys.has("activeSolutions")}
-              onToggle={toggleExpand}
-            >
-              <StatusFunnel byStatus={data.pipeline.solutions.byStatus} />
-            </MetricCard>
-
-            <MetricCard
-              title="Cloud Support Proposals"
-              value={data.pipeline.cloudSupport.proposalsThisPeriod}
-              expandKey="csProposals"
-              expanded={expandedKeys.has("csProposals")}
-              onToggle={toggleExpand}
-            >
-              {data.pipeline.cloudSupport.recent.length === 0 ? (
-                <EmptyNote>No proposals created in this period.</EmptyNote>
-              ) : (
-                data.pipeline.cloudSupport.recent.map((p) => (
-                  <ListRow
-                    key={p.id}
-                    to={`/solutions/cloudsupport/${p.id}`}
-                    title={p.name ?? "Untitled"}
-                    subtitle={p.customer_name ?? p.creator_name}
-                    right={formatDate(p.date)}
-                  />
-                ))
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title="Optimizations Graduated"
-              value={data.optimizations.graduatedThisPeriod}
-              accent={data.optimizations.graduatedThisPeriod > 0 ? "#107c10" : undefined}
-              expandKey="optimizeGraduated"
-              expanded={expandedKeys.has("optimizeGraduated")}
-              onToggle={toggleExpand}
-            >
-              {data.optimizations.graduated.length === 0 ? (
-                <EmptyNote>No graduations in this period.</EmptyNote>
-              ) : (
-                data.optimizations.graduated.map((o) => (
-                  <ListRow key={o.id} to={`/optimize/${o.id}`} title={o.name ?? "Untitled"} subtitle={o.customer_name} right={formatDate(o.date)} />
-                ))
-              )}
-            </MetricCard>
-          </div>
-          )}
         </>
       ) : null}
-    </div>
-  );
-}
-
-function StatusFunnel({ byStatus }: { byStatus: { status: string; n: number }[] }) {
-  const counts = new Map(byStatus.map((s) => [s.status, s.n]));
-  const max = Math.max(...PIPELINE_STATUS_ORDER.map((s) => counts.get(s) ?? 0), 1);
-  return (
-    <div>
-      {PIPELINE_STATUS_ORDER.map((status) => {
-        const n = counts.get(status) ?? 0;
-        return (
-          <div key={status} style={{ marginBottom: 10 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-              <span style={{ fontSize: 13, color: "#334155" }}>{PIPELINE_STATUS_LABELS[status]}</span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b" }}>{n}</span>
-            </div>
-            <div style={{ height: 6, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${(n / max) * 100}%`, background: "#8764b8", borderRadius: 4 }} />
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
