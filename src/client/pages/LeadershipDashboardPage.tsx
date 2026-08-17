@@ -408,7 +408,7 @@ export default function LeadershipDashboardPage() {
 
           {/* ── Capacity ─────────────────────────────────────────────────── */}
           <div className="ms-section-title" style={{ marginBottom: 12 }}>Capacity</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
             <TotalHoursCard total={data.time.totalHours} prev={data.time.prevTotalHours} entries={data.time.entries} />
 
             <div className="ms-section-card">
@@ -422,22 +422,6 @@ export default function LeadershipDashboardPage() {
                     label: e.name ?? e.email ?? "Unassigned",
                     hours: e.hours,
                   }))}
-                />
-              )}
-            </div>
-
-            <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Project Assignments</div>
-              {data.projects.projectAssignments.length === 0 ? (
-                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No active project assignments.</div>
-              ) : (
-                <HoursLeaderboard
-                  rows={data.projects.projectAssignments.map((r) => ({
-                    key: r.user_id ?? "unassigned",
-                    label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
-                    hours: r.n,
-                  }))}
-                  unit=""
                 />
               )}
             </div>
@@ -474,6 +458,40 @@ export default function LeadershipDashboardPage() {
                 </div>
               )}
             </MetricCard>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Project Assignment (PM's)</div>
+              {data.projects.projectsByPM.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No active project assignments.</div>
+              ) : (
+                <HoursLeaderboard
+                  rows={data.projects.projectsByPM.map((r) => ({
+                    key: r.user_id ?? "unassigned",
+                    label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
+                    hours: r.n,
+                  }))}
+                  unit=""
+                />
+              )}
+            </div>
+
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Project Assignment (IE's, SA's)</div>
+              {data.projects.projectAssignmentsIESA.length === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No active project assignments.</div>
+              ) : (
+                <HoursLeaderboard
+                  rows={data.projects.projectAssignmentsIESA.map((r) => ({
+                    key: r.user_id ?? "unassigned",
+                    label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
+                    hours: r.n,
+                  }))}
+                  unit=""
+                />
+              )}
+            </div>
           </div>
         </>
       ) : null}

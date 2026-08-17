@@ -364,7 +364,7 @@ export type LeadershipDashboardResponse = {
       name: string | null;
       n: number;
     }[];
-    projectAssignments: {
+    projectAssignmentsIESA: {
       user_id: string | null;
       name: string | null;
       n: number;
