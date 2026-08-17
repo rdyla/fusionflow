@@ -364,6 +364,11 @@ export type LeadershipDashboardResponse = {
       name: string | null;
       n: number;
     }[];
+    projectAssignments: {
+      user_id: string | null;
+      name: string | null;
+      n: number;
+    }[];
     goLives: {
       id: string;
       name: string | null;
@@ -410,46 +415,6 @@ export type LeadershipDashboardResponse = {
       severity: string | null;
       project_id: string;
       project_name: string | null;
-    }[];
-  };
-  pipeline: {
-    solutions: {
-      byStatus: { status: string; n: number }[];
-      wonThisPeriod: number;
-      lostThisPeriod: number;
-      recentWon: {
-        id: string;
-        name: string | null;
-        customer_name: string | null;
-        vendor: string | null;
-        date: string | null;
-      }[];
-      recentLost: {
-        id: string;
-        name: string | null;
-        customer_name: string | null;
-        vendor: string | null;
-        date: string | null;
-      }[];
-    };
-    cloudSupport: {
-      proposalsThisPeriod: number;
-      recent: {
-        id: string;
-        name: string | null;
-        customer_name: string | null;
-        creator_name: string | null;
-        date: string | null;
-      }[];
-    };
-  };
-  optimizations: {
-    graduatedThisPeriod: number;
-    graduated: {
-      id: string;
-      name: string | null;
-      customer_name: string | null;
-      date: string | null;
     }[];
   };
   hoursRisk: {

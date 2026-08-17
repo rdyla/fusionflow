@@ -328,6 +328,7 @@ app.get("/leadership", async (c) => {
     byEngineer,
     tasksByEngineer,
     projectsByPM,
+    projectAssignments,
     goLives,
     upcomingGoLives,
     wentLiveStillOpen,
@@ -335,18 +336,10 @@ app.get("/leadership", async (c) => {
     atRisk,
     blocked,
     openBlockers,
-    solutionsByStatus,
-    solutionsWon,
-    solutionsLost,
-    recentWonSolutions,
-    csProposalsCount,
-    csProposalsRecent,
-    optimizeGraduated,
     activeProjectsList,
     atRiskProjectsList,
     blockedProjectsList,
     openRisksList,
-    recentLostSolutions,
     hoursRiskCandidates,
     slippedStages,
   ] = await Promise.all([
@@ -397,6 +390,27 @@ app.get("/leadership", async (c) => {
        ORDER BY n DESC`
     ).all<{ pm_user_id: string | null; name: string | null; n: number }>(),
 
+    // Active-project count per person across EVERY staffing role, not just PM —
+    // PM assignment lives on projects.pm_user_id, everything else (ae/sa/csm/
+    // engineer) lives in project_staff. UNION dedupes a person who's somehow
+    // both for the same project.
+    db.prepare(
+      `SELECT x.user_id, u.name, COUNT(DISTINCT x.project_id) AS n
+       FROM (
+         SELECT p.pm_user_id AS user_id, p.id AS project_id
+         FROM projects p
+         WHERE p.pm_user_id IS NOT NULL AND (p.archived = 0 OR p.archived IS NULL)
+         UNION
+         SELECT ps.user_id AS user_id, ps.project_id AS project_id
+         FROM project_staff ps
+         JOIN projects p ON p.id = ps.project_id
+         WHERE (p.archived = 0 OR p.archived IS NULL)
+       ) x
+       LEFT JOIN users u ON u.id = x.user_id
+       GROUP BY x.user_id
+       ORDER BY n DESC`
+    ).all<{ user_id: string | null; name: string | null; n: number }>(),
+
     db.prepare(
       `SELECT id, name, customer_name, actual_go_live_date
        FROM projects
@@ -443,57 +457,6 @@ app.get("/leadership", async (c) => {
       `SELECT COUNT(*) AS n FROM risks WHERE status = 'open'`
     ).first<{ n: number }>(),
 
-    // ── Solutions pipeline (pre-sales) ──────────────────────────────────────
-    // Current-state funnel snapshot — excludes won/lost, which are outcomes
-    // reported separately (time-boxed to the window, like go-lives).
-    db.prepare(
-      `SELECT status, COUNT(*) AS n FROM solutions
-       WHERE status NOT IN ('won', 'lost')
-       GROUP BY status`
-    ).all<{ status: string; n: number }>(),
-
-    db.prepare(
-      `SELECT COUNT(*) AS n FROM solutions WHERE status = 'won' AND updated_at >= ? AND updated_at < ?`
-    ).bind(start, end).first<{ n: number }>(),
-
-    db.prepare(
-      `SELECT COUNT(*) AS n FROM solutions WHERE status = 'lost' AND updated_at >= ? AND updated_at < ?`
-    ).bind(start, end).first<{ n: number }>(),
-
-    db.prepare(
-      `SELECT id, name, customer_name, vendor, updated_at
-       FROM solutions
-       WHERE status = 'won' AND updated_at >= ? AND updated_at < ?
-       ORDER BY updated_at DESC
-       LIMIT 10`
-    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
-
-    // ── Cloud Support Calculator proposals ──────────────────────────────────
-    db.prepare(
-      `SELECT COUNT(*) AS n FROM cs_proposals WHERE created_at >= ? AND created_at < ?`
-    ).bind(start, end).first<{ n: number }>(),
-
-    db.prepare(
-      `SELECT cp.id, cp.name, cp.customer_name, u.name AS creator_name, cp.created_at
-       FROM cs_proposals cp
-       LEFT JOIN users u ON u.id = cp.creator_id
-       WHERE cp.created_at >= ? AND cp.created_at < ?
-       ORDER BY cp.created_at DESC
-       LIMIT 10`
-    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; creator_name: string | null; created_at: string }>(),
-
-    // ── Optimize graduations ────────────────────────────────────────────────
-    // Projects that completed implementation and moved to Optimize this window.
-    db.prepare(
-      `SELECT p.id AS project_id, p.name, COALESCE(cu.name, p.customer_name) AS customer_name, oa.graduated_at
-       FROM optimize_accounts oa
-       JOIN projects p ON p.id = oa.project_id
-       LEFT JOIN customers cu ON cu.id = oa.customer_id
-       WHERE oa.graduated_at >= ? AND oa.graduated_at < ?
-       ORDER BY oa.graduated_at DESC
-       LIMIT 10`
-    ).bind(start, end).all<{ project_id: string; name: string; customer_name: string | null; graduated_at: string }>(),
-
     // ── Click-to-expand detail lists — each backs a metric tile's drill-down ──
     db.prepare(
       `SELECT id, name, customer_name, health, status
@@ -530,14 +493,6 @@ app.get("/leadership", async (c) => {
        END ASC
        LIMIT 15`
     ).all<{ id: string; title: string; severity: string | null; project_id: string; project_name: string }>(),
-
-    db.prepare(
-      `SELECT id, name, customer_name, vendor, updated_at
-       FROM solutions
-       WHERE status = 'lost' AND updated_at >= ? AND updated_at < ?
-       ORDER BY updated_at DESC
-       LIMIT 10`
-    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; vendor: string | null; updated_at: string }>(),
 
     // Lifetime (not window-scoped) hours logged per active project that has a
     // linked CRM opportunity — candidate pool for the hours-vs-SOW-quote check
@@ -646,6 +601,11 @@ app.get("/leadership", async (c) => {
         name: r.name,
         n: r.n,
       })),
+      projectAssignments: (projectAssignments.results ?? []).map((r) => ({
+        user_id: r.user_id,
+        name: r.name,
+        n: r.n,
+      })),
       goLives: (goLives.results ?? []).map((r) => ({
         id: r.id,
         name: r.name,
@@ -692,46 +652,6 @@ app.get("/leadership", async (c) => {
         severity: r.severity,
         project_id: r.project_id,
         project_name: r.project_name,
-      })),
-    },
-    pipeline: {
-      solutions: {
-        byStatus: (solutionsByStatus.results ?? []).map((r) => ({ status: r.status, n: r.n })),
-        wonThisPeriod: solutionsWon?.n ?? 0,
-        lostThisPeriod: solutionsLost?.n ?? 0,
-        recentWon: (recentWonSolutions.results ?? []).map((r) => ({
-          id: r.id,
-          name: r.name,
-          customer_name: r.customer_name,
-          vendor: r.vendor,
-          date: r.updated_at,
-        })),
-        recentLost: (recentLostSolutions.results ?? []).map((r) => ({
-          id: r.id,
-          name: r.name,
-          customer_name: r.customer_name,
-          vendor: r.vendor,
-          date: r.updated_at,
-        })),
-      },
-      cloudSupport: {
-        proposalsThisPeriod: csProposalsCount?.n ?? 0,
-        recent: (csProposalsRecent.results ?? []).map((r) => ({
-          id: r.id,
-          name: r.name,
-          customer_name: r.customer_name,
-          creator_name: r.creator_name,
-          date: r.created_at,
-        })),
-      },
-    },
-    optimizations: {
-      graduatedThisPeriod: optimizeGraduated.results?.length ?? 0,
-      graduated: (optimizeGraduated.results ?? []).map((r) => ({
-        id: r.project_id,
-        name: r.name,
-        customer_name: r.customer_name,
-        date: r.graduated_at,
       })),
     },
     hoursRisk: {
