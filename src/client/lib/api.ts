@@ -442,6 +442,14 @@ export type LeadershipDashboardResponse = {
       daysOverdue: number;
     }[];
   };
+  noTimeLastWeek: {
+    count: number;
+    people: {
+      user_id: string | null;
+      name: string | null;
+      projectCount: number;
+    }[];
+  };
 };
 
 export type Project = {
