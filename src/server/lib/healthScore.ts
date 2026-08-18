@@ -72,7 +72,7 @@ export async function computeProjectHealth(
          SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical_cnt,
          SUM(CASE WHEN severity = 'high'     THEN 1 ELSE 0 END) AS high_cnt
        FROM risks
-       WHERE project_id = ? AND (status IS NULL OR status != 'resolved')`
+       WHERE project_id = ? AND (status IS NULL OR status != 'closed')`
     )
     .bind(projectId)
     .first<{ critical_cnt: number; high_cnt: number }>();
