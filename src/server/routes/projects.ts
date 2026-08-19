@@ -11,7 +11,7 @@ import { maybeSendEmail, sendEmail } from "../services/emailService";
 import { projectAtRisk, contactProjectInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
-import { ensureSharePointChildFolder, grantFolderEdit } from "../services/graphService";
+import { ensureSharePointChildFolder, grantFolderEdit, lookupMailGroup } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { refreshAccountTeamIfStale } from "../lib/accountTeamSync";
@@ -498,6 +498,12 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
   // loop above, so this is notify-only; see notifyZoomEmailAliasForProject.
   if (updates.zoom_email_alias !== undefined
       && (updates.zoom_email_alias?.trim() || null) !== (before?.zoom_email_alias ?? null)) {
+    // Drop any cached "active" status for BOTH addresses: the old one is no
+    // longer this project's concern, and the new one has never been checked.
+    for (const a of [before?.zoom_email_alias, updates.zoom_email_alias]) {
+      const t = a?.trim();
+      if (t) await c.env.KV.delete(`alias-status:${t.toLowerCase()}`);
+    }
     await notifyZoomEmailAliasForProject(c.env, {
       projectId,
       alias: updates.zoom_email_alias?.trim() || null,
@@ -807,6 +813,55 @@ app.post("/:id/sharepoint-folder", async (c) => {
 });
 
 // ── Project Contacts ──────────────────────────────────────────────────────────
+
+// ── Customer distribution list status ────────────────────────────────────────
+// Is the alias the helpdesk was asked to create actually live in the directory?
+//
+// Checked on project load and then cached in KV until the alias is changed or
+// cleared — the answer moves at most a couple of times in a project's life, so
+// paying a Microsoft round-trip on every Overview render would be waste.
+//
+// Only the POSITIVE result is cached. A "not created yet" is the state that's
+// expected to flip once helpdesk acts, so caching it until someone edits the
+// field would leave the card stuck on "awaiting creation" forever — the exact
+// transition the PMs asked to see. So: one Graph call per load while it's still
+// pending (a short window, only for projects with an alias outstanding), then
+// zero calls for the rest of the project's life once it exists.
+//
+// The cache is invalidated on change/clear in the PATCH handler above.
+const aliasStatusKey = (address: string) => `alias-status:${address.trim().toLowerCase()}`;
+
+app.get("/:id/alias-status", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+  // Internal only — the distribution list and its provisioning state aren't
+  // customer-facing detail.
+  if (auth.role === "client" || auth.role === "partner_ae") throw new HTTPException(403, { message: "Forbidden" });
+  if (!(await canViewProject(db, auth.user, projectId))) throw new HTTPException(403, { message: "Forbidden" });
+
+  const row = await db
+    .prepare("SELECT zoom_email_alias FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ zoom_email_alias: string | null }>();
+  const alias = row?.zoom_email_alias?.trim() || null;
+  if (!alias) return c.json({ alias: null, status: "not_set" });
+
+  const key = aliasStatusKey(alias);
+  if (c.req.query("refresh") !== "1") {
+    const cached = await c.env.KV.get<{ status: string; displayName: string | null; checkedAt: string }>(key, "json");
+    if (cached) return c.json({ alias, ...cached, cached: true });
+  }
+
+  const result = await lookupMailGroup(c.env, alias);
+  const payload = { status: result.status, displayName: result.displayName ?? null, checkedAt: new Date().toISOString() };
+  // Cache the confirmed-existing answer only (no TTL — invalidated on edit).
+  if (result.status === "active") {
+    await c.env.KV.put(key, JSON.stringify(payload));
+  }
+  // `reason` is diagnostic for internal users and is never cached.
+  return c.json({ alias, ...payload, cached: false, reason: result.reason });
+});
 
 app.get("/:id/contacts", async (c) => {
   const auth = c.get("auth");
