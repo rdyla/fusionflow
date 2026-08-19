@@ -614,15 +614,15 @@ app.post("/run-health-scoring", requireRole("admin"), async (c) => {
 
   const rows = await db
     .prepare(
-      `SELECT id FROM projects
+      `SELECT id, target_go_live_date, updated_at FROM projects
        WHERE (archived = 0 OR archived IS NULL) AND health_override IS NULL`
     )
-    .all<{ id: string }>();
+    .all<{ id: string; target_go_live_date: string | null; updated_at: string | null }>();
 
   let scored = 0;
   for (const project of rows.results ?? []) {
     try {
-      const health = await computeProjectHealth(db, project.id);
+      const health = await computeProjectHealth(db, project.id, project);
       await db.prepare("UPDATE projects SET health = ? WHERE id = ?").bind(health, project.id).run();
       scored++;
     } catch {

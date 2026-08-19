@@ -256,7 +256,7 @@ app.get("/:id/stakeholder-summary", async (c) => {
       )
       .bind(projectId)
       .all<{ id: string; name: string; created_at: string; uploaded_by: string | null }>(),
-    computeProjectHealth(db, projectId),
+    computeProjectHealth(db, projectId, { target_go_live_date: project.target_go_live_date, updated_at: project.updated_at }),
     // Per-stage task counts for the stage-progress panel. Stages with
     // phase_id IS NULL are project-shared (Initiate, on multi-phase projects).
     db
