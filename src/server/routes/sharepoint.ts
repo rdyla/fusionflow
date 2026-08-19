@@ -15,7 +15,7 @@ import {
   type SPFile,
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
-import { canEditProject } from "../services/accessService";
+import { canManageProjectDocuments } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -25,7 +25,7 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 // workflow (discovery workbooks, phone bills, CSRs). Everything else non-GET
 // (delete, create/manage folders, set audience, manage grants, and the
 // admin/debug endpoints) is internal-only. Individual endpoints keep their own
-// canEditProject / isExternalRole checks on top of this allow-list.
+// canManageProjectDocuments / isExternalRole checks on top of this allow-list.
 //
 // (This replaces the July-2026 blanket partner_ae deny: partners are no longer
 // shut out entirely — they now see only folders explicitly tagged partner-
@@ -626,7 +626,7 @@ app.get("/grants", async (c) => {
   const auth = c.get("auth");
   const projectId = c.req.query("projectId");
   if (!projectId) return c.json({ error: "projectId required" }, 400);
-  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) {
+  if (!auth?.user || !(await canManageProjectDocuments(c.env.DB, auth.user, projectId))) {
     return c.json({ error: "Forbidden" }, 403);
   }
   const rows = await c.env.DB
@@ -651,7 +651,7 @@ app.post("/grant-edit", async (c) => {
   const email = (body.email ?? "").trim();
   const projectId = (body.projectId ?? "").trim();
   if (!webUrl || !email || !projectId) return c.json({ error: "webUrl, email and projectId required" }, 400);
-  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) {
+  if (!auth?.user || !(await canManageProjectDocuments(c.env.DB, auth.user, projectId))) {
     return c.json({ error: "Forbidden" }, 403);
   }
 
@@ -693,7 +693,7 @@ app.post("/folder/allow-editing", async (c) => {
   const projectId = (body.project_id ?? "").trim();
   const enabled = !!body.enabled;
   if (!spItemId || !webUrl || !projectId) return c.json({ error: "sp_item_id, web_url, project_id required" }, 400);
-  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
+  if (!auth?.user || !(await canManageProjectDocuments(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
 
   // Editing is audience-driven: you can only edit what you can see. Enabling on
   // an untagged folder defaults it to customer-visible (back-compat); on a
@@ -774,7 +774,7 @@ app.post("/revoke-edit", async (c) => {
   const email = (body.email ?? "").trim();
   const projectId = (body.project_id ?? "").trim();
   if (!webUrl || !email || !projectId) return c.json({ error: "web_url, email, project_id required" }, 400);
-  if (!auth?.user || !(await canEditProject(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
+  if (!auth?.user || !(await canManageProjectDocuments(c.env.DB, auth.user, projectId))) return c.json({ error: "Forbidden" }, 403);
 
   try {
     await revokeFolderEdit(c.env, webUrl, email);

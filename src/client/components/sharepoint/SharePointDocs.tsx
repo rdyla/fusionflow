@@ -273,24 +273,46 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     setManualEmail("");
     setPickerEditingOn(folder.clientEditing === true);
     setPickerLoading(true);
-    try {
-      const [contacts, staff, { grants }] = await Promise.all([
-        api.projectContacts(projectId),
-        api.projectStaff(projectId),
-        api.spEditGrants(projectId),
-      ]);
-      setPickerContacts(contacts.filter((c) => !!c.email));
+    // Clear the previous folder's results so a failed load can't leave stale
+    // rows looking like they belong to this folder.
+    setPickerContacts([]);
+    setPickerPartners([]);
+    setGrantedEmails(new Set());
+    // allSettled, NOT all: these three calls are independent, but Promise.all
+    // discarded all of them if any one rejected. A 403 on the grants call
+    // therefore rendered "No project contacts or partner AEs with an email yet"
+    // on a project with plenty of both, and surfaced a bare "Forbidden" toast
+    // that named nothing. Each result now lands on its own, and the message says
+    // which part failed.
+    const [contactsRes, staffRes, grantsRes] = await Promise.allSettled([
+      api.projectContacts(projectId),
+      api.projectStaff(projectId),
+      api.spEditGrants(projectId),
+    ]);
+    if (contactsRes.status === "fulfilled") {
+      setPickerContacts(contactsRes.value.filter((c) => !!c.email));
+    }
+    if (staffRes.status === "fulfilled") {
       setPickerPartners(
-        staff
+        staffRes.value
           .filter((s) => s.staff_role === "partner_ae" && !!s.email)
           .map((s) => ({ id: s.id, name: s.name ?? s.email, email: s.email }))
       );
-      setGrantedEmails(new Set(grants.map((g) => g.grantee_email.toLowerCase())));
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Failed to load contacts", "error");
-    } finally {
-      setPickerLoading(false);
     }
+    if (grantsRes.status === "fulfilled") {
+      setGrantedEmails(new Set(grantsRes.value.grants.map((g) => g.grantee_email.toLowerCase())));
+    }
+    const failedParts: string[] = [];
+    if (contactsRes.status === "rejected") failedParts.push("project contacts");
+    if (staffRes.status === "rejected") failedParts.push("partner AEs");
+    if (grantsRes.status === "rejected") failedParts.push("who already has access");
+    if (failedParts.length > 0) {
+      showToast(
+        "Couldn't load " + failedParts.join(" or ") + ". You may not have permission to manage sharing on this project — ask the project's PM.",
+        "error",
+      );
+    }
+    setPickerLoading(false);
   }
 
   async function toggleClientEditing(next: boolean) {
