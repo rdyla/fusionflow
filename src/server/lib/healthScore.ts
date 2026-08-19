@@ -6,20 +6,12 @@
  * 3-level so existing consumers (email digests, executive view) keep
  * working unchanged.
  *
- * Score = baseline 50 ± four weighted factors:
- *
- *   Factor                          Weight  Max ± pts
- *   ─────────────────────────────  ──────  ─────────
- *   Schedule (go-live date)          35%     ±25
- *   Open high/critical risks         30%     ±20
- *   Task completion rate             25%     ±15
- *   Recency (last update)            10%      ±5
- *
- *   Thresholds: ≥65 = on_track, ≥38 = at_risk, <38 = off_track.
- *
- * Critical risks weigh 2× as much as high (one critical alone is enough
- * to push the risk factor to its worst tier — matches PM intuition that
- * a critical blocker is a different beast from a high-severity concern).
+ * Deliberately simple, by request: a project is "at_risk" if and only if
+ * it has at least one active (non-closed) risk/blocker; otherwise
+ * "on_track". The auto-computation never emits "off_track" — schedule
+ * proximity, task-completion rate, and recency were dropped as scoring
+ * inputs because the weighted version was too opaque for the org (a
+ * project could read "at risk" with zero active blockers).
  */
 
 export type HealthValue = "on_track" | "at_risk" | "off_track";
@@ -56,51 +48,15 @@ function label(score: number): HealthValue {
 
 export async function computeProjectHealth(
   db: D1Database,
-  projectId: string,
-  project: { target_go_live_date: string | null; updated_at: string | null }
+  projectId: string
 ): Promise<HealthValue> {
-  const today = new Date();
-  let score = 50;
-
-  // 1. Schedule (±25)
-  score += scheduleDelta(project.target_go_live_date, today);
-
-  // 2. Open risks — critical weighed 2× high (±20)
-  const riskRow = await db
+  const openRisk = await db
     .prepare(
-      `SELECT
-         SUM(CASE WHEN severity = 'critical' THEN 1 ELSE 0 END) AS critical_cnt,
-         SUM(CASE WHEN severity = 'high'     THEN 1 ELSE 0 END) AS high_cnt
-       FROM risks
-       WHERE project_id = ? AND (status IS NULL OR status != 'closed')`
+      `SELECT 1 FROM risks WHERE project_id = ? AND (status IS NULL OR status != 'closed') LIMIT 1`
     )
     .bind(projectId)
-    .first<{ critical_cnt: number; high_cnt: number }>();
-  const effective = (riskRow?.high_cnt ?? 0) + 2 * (riskRow?.critical_cnt ?? 0);
-  if (effective === 0)      score += 20;
-  else if (effective === 1) score -= 5;
-  else                      score -= 20;
-
-  // 3. Task completion (±15)
-  const taskRow = await db
-    .prepare(
-      `SELECT
-         COUNT(*) AS total,
-         SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS done
-       FROM tasks WHERE project_id = ?`
-    )
-    .bind(projectId)
-    .first<{ total: number; done: number }>();
-  score += completionDelta(taskRow?.total ?? 0, taskRow?.done ?? 0);
-
-  // 4. Recency (±5)
-  if (project.updated_at) {
-    const daysSince = daysBetween(new Date(project.updated_at), today);
-    if (daysSince < 7)       score += 5;
-    else if (daysSince > 30) score -= 5;
-  }
-
-  return label(score);
+    .first();
+  return openRisk ? "at_risk" : "on_track";
 }
 
 /**
