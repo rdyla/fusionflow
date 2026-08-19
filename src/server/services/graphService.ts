@@ -848,3 +848,63 @@ export async function deleteSharePointFile(
     throw new Error(`Graph DELETE ${res.status}: ${await res.text().catch(() => "")}`);
   }
 }
+
+// ── Distribution list / group lookup ─────────────────────────────────────────
+
+export type MailGroupLookup = {
+  /** "active" = a mail-enabled object with this address exists in the directory.
+   *  "not_found" = the query succeeded and matched nothing.
+   *  "unknown" = we couldn't ask (no creds, Graph error, missing permission) —
+   *  deliberately distinct from "not_found" so the UI never claims a mailbox is
+   *  missing when we simply failed to look. */
+  status: "active" | "not_found" | "unknown";
+  displayName?: string | null;
+  /** Present on "unknown" — surfaced to internal users for diagnosis. */
+  reason?: string;
+};
+
+/**
+ * Does a mail-enabled group exist at this address?
+ *
+ * Used to show PMs whether the helpdesk has actually created the customer
+ * distribution list they requested. Requires the app registration to hold
+ * Group.Read.All (or ReadWrite) — without it Graph answers 403 and we report
+ * "unknown" rather than "not_found".
+ *
+ * IMPORTANT LIMITATION: Graph /groups covers Microsoft 365 groups, security
+ * groups and mail-enabled security groups. A CLASSIC EXCHANGE DISTRIBUTION
+ * GROUP may not appear here — those are Exchange-managed and authoritatively
+ * checked with Get-DistributionGroup in Exchange Online PowerShell, which a
+ * Worker can't run. So "not_found" means "not visible to Graph", NOT "does not
+ * exist", and the UI must word it that way.
+ *
+ * Never throws: every failure path collapses to "unknown" so a Graph hiccup
+ * can't break the page that renders it.
+ */
+export async function lookupMailGroup(env: GraphEnv, mail: string): Promise<MailGroupLookup> {
+  const address = mail.trim().toLowerCase();
+  if (!address) return { status: "unknown", reason: "No address supplied" };
+  if (!env.DYNAMICS_TENANT_ID || !env.DYNAMICS_CLIENT_ID || !env.DYNAMICS_CLIENT_SECRET) {
+    return { status: "unknown", reason: "Graph credentials not configured" };
+  }
+  // Single-quote escaping for OData: a literal quote is doubled. Guards against
+  // a malformed alias breaking the filter (or worse, altering it).
+  const odata = address.replace(/'/g, "''");
+  try {
+    const token = await getGraphToken(env);
+    const res = await fetch(
+      `${GRAPH_API_BASE}/groups?$filter=mail eq '${encodeURIComponent(odata)}'&$select=id,displayName,mail,mailEnabled&$top=1`,
+      { headers: { Authorization: `Bearer ${token}`, ConsistencyLevel: "eventual" } }
+    );
+    if (!res.ok) {
+      const body = await res.text();
+      return { status: "unknown", reason: `Graph ${res.status}: ${body.slice(0, 200)}` };
+    }
+    const data = await res.json() as { value?: Array<{ displayName?: string; mailEnabled?: boolean }> };
+    const hit = (data.value ?? [])[0];
+    if (!hit) return { status: "not_found" };
+    return { status: "active", displayName: hit.displayName ?? null };
+  } catch (err) {
+    return { status: "unknown", reason: err instanceof Error ? err.message : "Graph lookup failed" };
+  }
+}
