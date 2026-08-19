@@ -189,14 +189,14 @@ async function runHealthScoring(env: Bindings): Promise<void> {
   // Only score projects without a manual override
   const rows = await env.DB
     .prepare(
-      `SELECT id, target_go_live_date, updated_at FROM projects
+      `SELECT id FROM projects
        WHERE (archived = 0 OR archived IS NULL) AND health_override IS NULL`
     )
-    .all<{ id: string; target_go_live_date: string | null; updated_at: string | null }>();
+    .all<{ id: string }>();
 
   for (const project of rows.results ?? []) {
     try {
-      const health = await computeProjectHealth(env.DB, project.id, project);
+      const health = await computeProjectHealth(env.DB, project.id);
       await env.DB
         .prepare("UPDATE projects SET health = ? WHERE id = ?")
         .bind(health, project.id)

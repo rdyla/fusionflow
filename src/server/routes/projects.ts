@@ -438,11 +438,11 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
   // Handle "reset to auto" — clear override and compute health immediately
   if (clear_health_override) {
     const projectRow = await db
-      .prepare("SELECT target_go_live_date, updated_at FROM projects WHERE id = ? LIMIT 1")
+      .prepare("SELECT id FROM projects WHERE id = ? LIMIT 1")
       .bind(projectId)
-      .first<{ target_go_live_date: string | null; updated_at: string | null }>();
+      .first();
     const autoHealth = projectRow
-      ? await computeProjectHealth(db, projectId, projectRow)
+      ? await computeProjectHealth(db, projectId)
       : "on_track";
     await db
       .prepare("UPDATE projects SET health = ?, health_override = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
