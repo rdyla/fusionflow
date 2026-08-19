@@ -21,6 +21,7 @@ import { SOLUTION_TYPES, serializeSolutionTypes, normalizeSolutionTypesField, bu
 import { syncStageStatus, syncProjectStatus, syncProjectGoLiveDate } from "../lib/teamUtils";
 import { canonicalizeVendor } from "../../shared/vendors";
 import { getDemoVendor } from "../lib/appSettings";
+import { notifyZoomEmailAliasForProject } from "../lib/notifications";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -378,9 +379,9 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
 
   // Capture current health before update so we can detect at_risk transitions
   const before = await db
-    .prepare("SELECT health, name, customer_name, pm_user_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT health, name, customer_name, pm_user_id, zoom_email_alias FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null }>();
+    .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null; zoom_email_alias: string | null }>();
 
   const {
     clear_health_override, cleanup_solution_types,
@@ -490,6 +491,22 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
     )
     .bind(...values, projectId)
     .run();
+
+  // Alias changed by direct edit (the Meeting Prep card's Customer Distribution
+  // List field) — prompt the helpdesk to create the mailbox, same as the
+  // welcome-email send does. The write already happened in the generic field
+  // loop above, so this is notify-only; see notifyZoomEmailAliasForProject.
+  if (updates.zoom_email_alias !== undefined
+      && (updates.zoom_email_alias?.trim() || null) !== (before?.zoom_email_alias ?? null)) {
+    await notifyZoomEmailAliasForProject(c.env, {
+      projectId,
+      alias: updates.zoom_email_alias?.trim() || null,
+      projectName: before?.name ?? "",
+      customerName: before?.customer_name ?? null,
+      actorName: auth.user.name ?? auth.user.email,
+      waitUntil: (p) => c.executionCtx.waitUntil(p),
+    });
+  }
 
   // Solution-type cleanup — runs after the project UPDATE so the project's
   // canonical solution_types is already what the PM picked. Tasks whose

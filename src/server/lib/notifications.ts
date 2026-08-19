@@ -1,4 +1,5 @@
 import type { D1Database } from "@cloudflare/workers-types";
+import type { Bindings } from "../types";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -195,4 +196,81 @@ export async function createNotification(
       opts.senderUserId ?? null
     )
     .run();
+}
+
+/**
+ * Prompt the helpdesk channel to create the mailbox for a project's Zoom email
+ * alias (distribution list). NOTIFY ONLY — the caller owns the write.
+ *
+ * Split from the write deliberately: PATCH /projects/:id already persists the
+ * field through its generic column loop, so a combined write-and-notify helper
+ * would write twice there. Callers that DO need the write use
+ * persistZoomEmailAliasAndNotify below.
+ *
+ * Best-effort and non-blocking: scheduled via the caller's waitUntil, and a
+ * missing webhook config is a silent no-op rather than an error.
+ */
+export async function notifyZoomEmailAliasForProject(
+  env: Bindings,
+  opts: {
+    projectId: string;
+    /** The new alias. Clearing the field (null) is a correction, not a mailbox request. */
+    alias: string | null;
+    projectName: string;
+    customerName: string | null;
+    actorName: string;
+    waitUntil: (p: Promise<unknown>) => void;
+  }
+): Promise<boolean> {
+  if (!opts.alias) return false;
+  if (!env.ZOOM_HELPDESK_WEBHOOK_URL || !env.ZOOM_HELPDESK_WEBHOOK_TOKEN) return false;
+
+  // PM(s) to add to the new distro: the lead PM + any additional PM staff.
+  const pmRows = await env.DB
+    .prepare(`SELECT DISTINCT u.name, u.email FROM users u
+              WHERE u.id = (SELECT pm_user_id FROM projects WHERE id = ?)
+                 OR u.id IN (SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'pm')`)
+    .bind(opts.projectId, opts.projectId)
+    .all<{ name: string | null; email: string }>();
+  const pmNames = (pmRows.results ?? []).map((r) => r.name ?? r.email).filter(Boolean) as string[];
+
+  opts.waitUntil(notifyZoomEmailAlias(env.ZOOM_HELPDESK_WEBHOOK_URL, env.APP_URL ?? "", {
+    projectId: opts.projectId,
+    projectName: opts.projectName,
+    customerName: opts.customerName,
+    alias: opts.alias,
+    actorName: opts.actorName,
+    pmNames,
+    token: env.ZOOM_HELPDESK_WEBHOOK_TOKEN,
+  }));
+  return true;
+}
+
+/**
+ * Write a project's Zoom email alias AND notify the helpdesk when it changes.
+ * For callers that own the write themselves (the meeting-prep send). No-ops when
+ * the value is unchanged, so re-sending the welcome email doesn't spam the channel.
+ */
+export async function persistZoomEmailAliasAndNotify(
+  env: Bindings,
+  opts: {
+    projectId: string;
+    nextAlias: string | null;
+    currentAlias: string | null;
+    projectName: string;
+    customerName: string | null;
+    actorName: string;
+    waitUntil: (p: Promise<unknown>) => void;
+  }
+): Promise<{ changed: boolean; notified: boolean }> {
+  const next = opts.nextAlias?.trim() || null;
+  if (next === (opts.currentAlias ?? null)) return { changed: false, notified: false };
+
+  await env.DB
+    .prepare("UPDATE projects SET zoom_email_alias = ?, updated_at = ? WHERE id = ?")
+    .bind(next, new Date().toISOString(), opts.projectId)
+    .run();
+
+  const notified = await notifyZoomEmailAliasForProject(env, { ...opts, alias: next });
+  return { changed: true, notified };
 }
