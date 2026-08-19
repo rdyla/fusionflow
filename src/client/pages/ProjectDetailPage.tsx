@@ -28,6 +28,7 @@ import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
+import ProjectAliasField from "../components/project/ProjectAliasField";
 import PhasesPanel from "../components/project/PhasesPanel";
 import TaskExportMenu from "../components/project/TaskExports";
 import SaveAsTemplateModal from "../components/project/SaveAsTemplateModal";
@@ -367,7 +368,6 @@ export default function ProjectDetailPage() {
   const [metaName, setMetaName] = useState("");
   const [metaOnHold, setMetaOnHold] = useState(false);
   const [metaCustomPlan, setMetaCustomPlan] = useState(false); // one-off Asana-plan mode
-  const [metaZoomAlias, setMetaZoomAlias] = useState(""); // Zoom email alias / DL
   const [metaCrmQuery, setMetaCrmQuery] = useState("");
   const [metaCrmResults, setMetaCrmResults] = useState<{ id: string; name: string }[]>([]);
   const [metaCrmSearching, setMetaCrmSearching] = useState(false);
@@ -753,7 +753,6 @@ export default function ProjectDetailPage() {
     setMetaName(project.name ?? "");
     setMetaOnHold(project.on_hold === 1);
     setMetaCustomPlan(project.uses_custom_plan === 1);
-    setMetaZoomAlias(project.zoom_email_alias ?? "");
     setMetaCrmQuery(project.customer_name ?? "");
     setMetaCrmResults([]);
     setMetaPickedAccount(null);
@@ -782,8 +781,6 @@ export default function ProjectDetailPage() {
     if (trimmedName && trimmedName !== project.name) payload.name = trimmedName;
     if (metaOnHold !== (project.on_hold === 1)) payload.on_hold = metaOnHold ? 1 : 0;
     if (metaCustomPlan !== (project.uses_custom_plan === 1)) payload.uses_custom_plan = metaCustomPlan ? 1 : 0;
-    const trimmedAlias = metaZoomAlias.trim();
-    if (trimmedAlias !== (project.zoom_email_alias ?? "")) payload.zoom_email_alias = trimmedAlias || null;
     if (metaPickedAccount && metaPickedAccount.id !== project.dynamics_account_id) {
       payload.dynamics_account_id = metaPickedAccount.id;
       payload.customer_name = metaPickedAccount.name;
@@ -1652,7 +1649,21 @@ export default function ProjectDetailPage() {
             {/* ── Meeting Prep (internal only) ─────────────────────────────── */}
             {!isExternal && (
               <div className="ms-section-card" style={{ padding: "12px 16px" }}>
-                <div className="ms-section-title" style={{ marginBottom: 6 }}>Meeting Prep</div>
+                {/* Heading row carries the customer distribution list alias. It
+                    lives here rather than in the project-meta modal because this
+                    is the flow that uses it — the welcome email sends to it, and
+                    the PM sets it while working through kickoff prep. Saving a
+                    change here prompts the helpdesk channel to create the
+                    mailbox, exactly as sending the welcome email does. */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 6 }}>
+                  <div className="ms-section-title" style={{ margin: 0, border: "none", padding: 0 }}>Meeting Prep</div>
+                  <ProjectAliasField
+                    projectId={project.id}
+                    value={project.zoom_email_alias}
+                    canEdit={canEdit}
+                    onSaved={(next) => setProject((prev) => (prev ? { ...prev, zoom_email_alias: next } : prev))}
+                  />
+                </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                   {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
                     <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
@@ -3824,18 +3835,6 @@ export default function ProjectDetailPage() {
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>
                     Replaces this project's <strong>Timeline</strong> & <strong>Tasks</strong> tabs with the imported Asana plan (sections, nested tasks, module tags). Then open the Tasks tab to import.
                   </div>
-                </div>
-              </label>
-              <label className="ms-label">
-                <span>Zoom email alias</span>
-                <input
-                  className="ms-input"
-                  value={metaZoomAlias}
-                  onChange={(e) => setMetaZoomAlias(e.target.value)}
-                  placeholder="zm-customer@packetfusion.com"
-                />
-                <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>
-                  The project's distribution list, shown in the project header. Usually set from the welcome email — edit here to record it without re-sending. Saving here doesn't notify the helpdesk channel.
                 </div>
               </label>
               <div>
