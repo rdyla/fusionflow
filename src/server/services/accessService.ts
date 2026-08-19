@@ -169,6 +169,52 @@ export async function canLogTimeOnProject(
   return canEditProject(db, user, projectId);
 }
 
+/**
+ * Is the caller a pf_engineer staffed on this project (any staff_role)?
+ *
+ * There is no staff_role='engineer'-only convention worth relying on here — an IE
+ * may be attached under any role — so membership is the test. Mirrors the
+ * client's `isStaffedEngineer` on ProjectDetailPage, which is what decides
+ * whether the SharePoint tab renders its edit affordances at all.
+ */
+export async function isStaffedEngineer(
+  db: D1Database,
+  user: AppUser,
+  projectId: string
+): Promise<boolean> {
+  if (user.role !== "pf_engineer") return false;
+  const row = await db
+    .prepare("SELECT 1 FROM project_staff WHERE project_id = ? AND user_id = ? LIMIT 1")
+    .bind(projectId, user.id)
+    .first();
+  return !!row;
+}
+
+/**
+ * May this user manage the project's SharePoint documents and edit grants?
+ *
+ * canEditProject PLUS an IE staffed on the project. The SharePoint tab already
+ * renders its edit controls for a staffed IE (canEdit={canEdit || isStaffedEngineer}
+ * on ProjectDetailPage), but the four grant endpoints checked canEditProject
+ * alone — so a staffed IE saw the "Client Editing" button, opened the panel, and
+ * got a bare "Forbidden" with no contacts loaded. This closes that gap from the
+ * server side, matching the affordances the UI already offers.
+ *
+ * Scope note: granting edit access INVITES AN EXTERNAL B2B GUEST into the
+ * tenant. That is a heavier action than editing a task, and it is why this is a
+ * distinct predicate rather than a reuse of the task-management rule — narrowing
+ * it later (e.g. to project editors only) means changing this function and the
+ * client gate together, in one place each.
+ */
+export async function canManageProjectDocuments(
+  db: D1Database,
+  user: AppUser,
+  projectId: string
+): Promise<boolean> {
+  if (await canEditProject(db, user, projectId)) return true;
+  return isStaffedEngineer(db, user, projectId);
+}
+
 export function canManageUsers(role: AppRole): boolean {
   return role === "admin";
 }
