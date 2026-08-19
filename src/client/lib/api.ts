@@ -2198,6 +2198,20 @@ export const api = {
     }),
 
   // Project Contacts
+  /** Is the project's customer distribution list live in the directory?
+   *  Checked on load and cached server-side in KV until the alias changes, so
+   *  this is cheap to call. Pass refresh to force a fresh Graph lookup.
+   *  status: "active" | "not_found" | "unknown" | "not_set" */
+  projectAliasStatus: (projectId: string, refresh = false) =>
+    request<{
+      alias: string | null;
+      status: "active" | "not_found" | "unknown" | "not_set";
+      displayName?: string | null;
+      checkedAt?: string;
+      cached?: boolean;
+      reason?: string;
+    }>(`/projects/${projectId}/alias-status${refresh ? "?refresh=1" : ""}`),
+
   projectContacts: (projectId: string) =>
     request<ProjectContact[]>(`/projects/${projectId}/contacts`),
 
