@@ -20,7 +20,7 @@ import { canEditProject, canViewProject } from "../services/accessService";
 import { sendEmail } from "../services/emailService";
 import { getStaffPhotos } from "../services/zoomService";
 import { listSharePointFiles, downloadSharePointFile } from "../services/graphService";
-import { notifyZoomEmailAlias } from "../lib/notifications";
+import { persistZoomEmailAliasAndNotify } from "../lib/notifications";
 import { parseSolutionTypes, joinSolutionTypeLabels, type SolutionType } from "../../shared/solutionTypes";
 import {
   applyMeetingPrepSectionDefaults,
@@ -621,36 +621,21 @@ app.post("/:projectId/meeting-prep/:meetingType/send", async (c) => {
       .run();
   }
 
-  // Persist the PM's chosen Zoom email alias (only when they actually typed one
-  // — the field is the welcome/kickoff DL). When it's first set or changed,
-  // prompt the helpdesk team to create the mailbox. Reused by future sends.
-  const typedAlias = parsed.data.distributionListEmail?.trim() || null;
-  if (meetingType === "kickoff" && typedAlias && typedAlias !== project.zoom_email_alias) {
-    await c.env.DB
-      .prepare("UPDATE projects SET zoom_email_alias = ?, updated_at = ? WHERE id = ?")
-      .bind(typedAlias, now, projectId)
-      .run();
-    if (c.env.ZOOM_HELPDESK_WEBHOOK_URL && c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN) {
-      const helpdeskUrl = c.env.ZOOM_HELPDESK_WEBHOOK_URL;
-      const helpdeskToken = c.env.ZOOM_HELPDESK_WEBHOOK_TOKEN;
-      // PM(s) to add to the new distro: the lead PM + any additional PM staff.
-      const pmRows = await c.env.DB
-        .prepare(`SELECT DISTINCT u.name, u.email FROM users u
-                  WHERE u.id = (SELECT pm_user_id FROM projects WHERE id = ?)
-                     OR u.id IN (SELECT user_id FROM project_staff WHERE project_id = ? AND staff_role = 'pm')`)
-        .bind(projectId, projectId)
-        .all<{ name: string | null; email: string }>();
-      const pmNames = (pmRows.results ?? []).map((r) => r.name ?? r.email).filter(Boolean) as string[];
-      c.executionCtx.waitUntil(notifyZoomEmailAlias(helpdeskUrl, c.env.APP_URL ?? "", {
-        projectId,
-        projectName: project.name,
-        customerName: project.customer_name,
-        alias: typedAlias,
-        actorName: auth.user.name ?? auth.user.email,
-        pmNames,
-        token: helpdeskToken,
-      }));
-    }
+  // Persist the PM's chosen Zoom email alias (the welcome/kickoff DL) and prompt
+  // the helpdesk team to create the mailbox when it's first set or changed.
+  // Shared with the direct-edit path on the Meeting Prep card (PATCH
+  // /projects/:id) so both surfaces notify identically — see
+  // persistZoomEmailAliasAndNotify.
+  if (meetingType === "kickoff") {
+    await persistZoomEmailAliasAndNotify(c.env, {
+      projectId,
+      nextAlias: parsed.data.distributionListEmail ?? null,
+      currentAlias: project.zoom_email_alias,
+      projectName: project.name,
+      customerName: project.customer_name,
+      actorName: auth.user.name ?? auth.user.email,
+      waitUntil: (p) => c.executionCtx.waitUntil(p),
+    });
   }
 
   return c.json({ ok: true, sentTo: recipientEmails, sentAt: now, sendId });
