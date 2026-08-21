@@ -260,7 +260,7 @@ export type SPFile = {
   /** Folders only: the folder's audience delineation. Set by the server overlay. */
   audience?: SPAudience;
   /** Files, external viewers only: this viewer has been granted edit access, so
-   *  the UI can offer an "Edit online" link. Set by the server overlay. */
+   *  the UI links the file name straight into SharePoint. Set by the server overlay. */
   canEditOnline?: boolean;
   /** Folders only: "Allow client editing" is on (project contacts auto-granted
    *  edit here). Set by the server overlay. */
