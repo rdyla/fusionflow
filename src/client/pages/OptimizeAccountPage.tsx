@@ -1034,12 +1034,17 @@ export default function OptimizeAccountPage() {
 
           {/* Adoption dashboard — top users + key rates (Zoom-only data) */}
           {platform === "zoom" && utilization.length > 0 && (() => {
+            /** `meeting_minutes` here is participant-minutes for the meetings that
+             *  host ran — attendees' time summed, not the host's own time. */
             type MeetingUser = { name: string; email: string | null; meetings: number; meeting_minutes: number };
             type PhoneCaller  = { name: string; calls: number; minutes: number };
             type RawData = {
               top_meeting_users?: MeetingUser[];
               top_phone_callers?: PhoneCaller[];
               meeting_minutes_30d?: number | null;
+              /** Participant sessions in the window. Absent on snapshots written
+               *  before 2026-08-24 — see the fallback below. */
+              participants_30d?: number | null;
             };
             const latest = utilization[0];
             let raw: RawData = {};
@@ -1055,8 +1060,18 @@ export default function OptimizeAccountPage() {
             const inactiveUsers = (latest.licenses_assigned != null && latest.active_users_30d != null)
               ? latest.licenses_assigned - latest.active_users_30d
               : null;
-            const avgMtgMins = (latest.active_users_30d != null && latest.active_users_30d > 0 && raw.meeting_minutes_30d != null)
-              ? Math.round(raw.meeting_minutes_30d / latest.active_users_30d)
+            // `meeting_minutes_30d` is PARTICIPANT-minutes (every attendee's time
+            // summed), not wall-clock. Dividing it by a host count produced
+            // implausible per-person figures — 14,593 min/user, i.e. 243 h a
+            // month. Divide by participant sessions instead, which is the same
+            // "avg session length" the Zoom status tab shows.
+            //
+            // Snapshots written before 2026-08-24 stored participant sessions in
+            // `total_meetings`, so fall back to it when `participants_30d` is
+            // missing — that keeps historical rows accurate rather than blank.
+            const participantSessions = raw.participants_30d ?? latest.total_meetings;
+            const avgSessionMins = (participantSessions != null && participantSessions > 0 && raw.meeting_minutes_30d != null)
+              ? Math.round(raw.meeting_minutes_30d / participantSessions)
               : null;
 
             return (
@@ -1070,7 +1085,9 @@ export default function OptimizeAccountPage() {
                     {[
                       { label: "Adoption Rate",           value: adoptionRate != null ? `${adoptionRate}%` : null, color: adoptionRate != null ? (adoptionRate >= 80 ? "#22c55e" : adoptionRate >= 60 ? "#f59e0b" : "#d13438") : undefined },
                       { label: "Inactive Licensed Users",  value: inactiveUsers, color: inactiveUsers != null && inactiveUsers > 0 ? "#f59e0b" : "#22c55e" },
-                      { label: "Avg Mtg Min / Active User", value: avgMtgMins != null ? `${avgMtgMins} min` : null, color: undefined },
+                      { label: "Avg Session Length",       value: avgSessionMins != null ? `${avgSessionMins} min` : null, color: undefined },
+                      { label: "Participant Sessions (30d)", value: participantSessions != null ? participantSessions.toLocaleString() : null, color: undefined },
+                      { label: "Total Participant-Minutes (30d)", value: raw.meeting_minutes_30d != null ? raw.meeting_minutes_30d.toLocaleString() : null, color: undefined },
                     ].map(({ label, value, color }) => (
                       <div key={label} style={{ textAlign: "center" }}>
                         <div style={{ fontSize: 22, fontWeight: 700, color: value != null ? (color ?? "#1e293b") : "#cbd5e1" }}>
@@ -1094,7 +1111,7 @@ export default function OptimizeAccountPage() {
                           <tr>
                             <th style={{ width: "55%" }}>User</th>
                             <th>Meetings</th>
-                            <th>Minutes</th>
+                            <th title="Sum of all attendees' time in meetings this user hosted — not the host's own meeting time">Participant-min</th>
                           </tr>
                         </thead>
                         <tbody>
