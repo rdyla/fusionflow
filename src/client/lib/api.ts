@@ -2271,10 +2271,10 @@ export const api = {
 
   // Zoom
   zoomConfigured: (projectId: string) =>
-    request<{ configured: boolean }>(`/projects/${projectId}/zoom/configured`),
+    request<{ configured: boolean; is_gov?: boolean }>(`/projects/${projectId}/zoom/configured`),
   zoomStatus: (projectId: string) =>
     request<ZoomStatus>(`/projects/${projectId}/zoom/status`),
-  zoomSaveCredentials: (projectId: string, creds: { account_id: string; client_id: string; client_secret: string }) =>
+  zoomSaveCredentials: (projectId: string, creds: { account_id: string; client_id: string; client_secret: string; is_gov?: boolean }) =>
     request<{ ok: boolean }>(`/projects/${projectId}/zoom/credentials`, {
       method: "PUT",
       body: JSON.stringify(creds),

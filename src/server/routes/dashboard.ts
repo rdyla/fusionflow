@@ -400,9 +400,13 @@ app.get("/leadership", async (c) => {
     // Falls back to a project_staff 'pm' row when projects.pm_user_id is
     // null — same fallback projects.ts uses for "my projects" — since a PM
     // can be attached to a project either way and pm_user_id isn't always
-    // backfilled (e.g. solution→project handoff never sets it). Keeps the
-    // "no PM assigned" bucket visible while still filtering out a PM who
-    // somehow isn't PF staff.
+    // backfilled (e.g. solution→project handoff never sets it). Excludes
+    // projects already graduated to Optimize — including direct-enrolled
+    // shells (POST /accounts/direct), which stand in for a standalone
+    // Optimize engagement and never run an implementation, so they never
+    // get a PM. Same exclusion wentLiveStillOpen below already uses. Keeps
+    // the "no PM assigned" bucket visible while still filtering out a PM
+    // who somehow isn't PF staff.
     db.prepare(
       `SELECT x.pm_user_id, u.name, COUNT(*) AS n
        FROM (
@@ -413,6 +417,7 @@ app.get("/leadership", async (c) => {
                 ) AS pm_user_id
          FROM projects p
          WHERE (p.archived = 0 OR p.archived IS NULL)
+           AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
        ) x
        LEFT JOIN users u ON u.id = x.pm_user_id
        WHERE (x.pm_user_id IS NULL OR u.role IN (${PF_ROLES_SQL}))
@@ -422,13 +427,15 @@ app.get("/leadership", async (c) => {
 
     // Active-project count per person, scoped to IE (engineer) + SA staffing
     // roles only — the PM breakdown is projectsByPM above (pm_user_id lives on
-    // projects directly, not project_staff).
+    // projects directly, not project_staff). Excludes Optimize-graduated
+    // projects for the same reason as projectsByPM above.
     db.prepare(
       `SELECT ps.user_id, u.name, COUNT(DISTINCT ps.project_id) AS n
        FROM project_staff ps
        JOIN projects p ON p.id = ps.project_id
        JOIN users u ON u.id = ps.user_id
        WHERE (p.archived = 0 OR p.archived IS NULL)
+         AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
          AND ps.staff_role IN ('engineer', 'sa')
          AND u.role IN (${PF_ROLES_SQL})
        GROUP BY ps.user_id
@@ -465,16 +472,20 @@ app.get("/leadership", async (c) => {
        LIMIT 10`
     ).all<{ id: string; name: string; customer_name: string | null; actual_go_live_date: string | null; status: string | null }>(),
 
+    // Excludes Optimize-graduated projects (including direct-enrolled
+    // standalone shells) — same reasoning as projectsByPM above: a shell
+    // never runs an implementation, so counting it as an "active project"
+    // misrepresents an already-live, staffed Optimize account as neglected.
     db.prepare(
-      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL)`
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND id NOT IN (SELECT project_id FROM optimize_accounts)`
     ).first<{ n: number }>(),
 
     db.prepare(
-      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk'`
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk' AND id NOT IN (SELECT project_id FROM optimize_accounts)`
     ).first<{ n: number }>(),
 
     db.prepare(
-      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked'`
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts)`
     ).first<{ n: number }>(),
 
     db.prepare(
@@ -485,7 +496,7 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
-       WHERE (archived = 0 OR archived IS NULL)
+       WHERE (archived = 0 OR archived IS NULL) AND id NOT IN (SELECT project_id FROM optimize_accounts)
        ORDER BY name ASC
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
@@ -493,7 +504,7 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
-       WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk'
+       WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk' AND id NOT IN (SELECT project_id FROM optimize_accounts)
        ORDER BY name ASC
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
@@ -501,7 +512,7 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
-       WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked'
+       WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts)
        ORDER BY name ASC
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
@@ -556,17 +567,22 @@ app.get("/leadership", async (c) => {
     // Everyone staffed on an active project, any role — PM (projects.pm_user_id)
     // union'd with AE/SA/CSM/Engineer (project_staff), PF staff only.
     // Cross-referenced below against who actually logged time last week.
+    // Excludes Optimize-graduated projects: a shell direct-enrolled straight
+    // into Optimize never runs an implementation, so its staff shouldn't be
+    // flagged for not logging implementation hours.
     db.prepare(
       `SELECT x.user_id, u.name, COUNT(DISTINCT x.project_id) AS project_count
        FROM (
          SELECT p.pm_user_id AS user_id, p.id AS project_id
          FROM projects p
          WHERE p.pm_user_id IS NOT NULL AND (p.archived = 0 OR p.archived IS NULL)
+           AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
          UNION
          SELECT ps.user_id AS user_id, ps.project_id AS project_id
          FROM project_staff ps
          JOIN projects p ON p.id = ps.project_id
          WHERE (p.archived = 0 OR p.archived IS NULL)
+           AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
        ) x
        JOIN users u ON u.id = x.user_id
        WHERE u.role IN (${PF_ROLES_SQL})
