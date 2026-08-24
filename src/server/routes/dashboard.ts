@@ -314,6 +314,11 @@ app.get("/leadership", async (c) => {
   const prevEnd = start;                      // current start = previous window's exclusive end
   const prevStart = fmt(addDays(now, -(days - 1) - days));
   const upcomingEnd = fmt(addDays(now, 30));
+  // Forward-looking counterpart to [start, end) above, same day-count — target
+  // go-live dates are inherently future-facing, so "Go-Lives This Week/Month/
+  // Quarter" looks at the NEXT `days` days (unlike actual go-lives, which look
+  // back since they're retrospective).
+  const targetWindowEnd = fmt(addDays(now, days));
   // Fixed trailing 7 days, independent of the week/month/quarter toggle above —
   // "did this person report time last week" should mean the same thing no
   // matter what window is currently selected on screen.
@@ -442,12 +447,22 @@ app.get("/leadership", async (c) => {
        ORDER BY n DESC`
     ).all<{ user_id: string | null; name: string | null; n: number }>(),
 
+    // Targeted (planned) go-lives landing in the next `days` days — a
+    // forward-looking picture of what's coming up, not what already
+    // happened (actual_go_live_date is almost always unset on active
+    // projects — they either haven't hit it yet or have already moved on
+    // to Optimize/wentLiveStillOpen). Excludes projects that already have
+    // an actual go-live date (already happened) and Optimize-graduated
+    // shells, same as the other implementation-scoped tiles above.
     db.prepare(
-      `SELECT id, name, customer_name, actual_go_live_date
+      `SELECT id, name, customer_name, target_go_live_date
        FROM projects
-       WHERE actual_go_live_date >= ? AND actual_go_live_date < ?
-       ORDER BY actual_go_live_date DESC`
-    ).bind(start, end).all<{ id: string; name: string; customer_name: string | null; actual_go_live_date: string | null }>(),
+       WHERE target_go_live_date >= ? AND target_go_live_date < ?
+         AND actual_go_live_date IS NULL
+         AND (archived = 0 OR archived IS NULL)
+         AND id NOT IN (SELECT project_id FROM optimize_accounts)
+       ORDER BY target_go_live_date ASC`
+    ).bind(today, targetWindowEnd).all<{ id: string; name: string; customer_name: string | null; target_go_live_date: string | null }>(),
 
     db.prepare(
       `SELECT id, name, customer_name, target_go_live_date
@@ -681,7 +696,7 @@ app.get("/leadership", async (c) => {
         id: r.id,
         name: r.name,
         customer_name: r.customer_name,
-        date: r.actual_go_live_date,
+        date: r.target_go_live_date,
       })),
       upcomingGoLives: (upcomingGoLives.results ?? []).map((r) => ({
         id: r.id,
