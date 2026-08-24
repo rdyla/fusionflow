@@ -119,7 +119,7 @@ function ZoomCredsForm({
   onUpdated: () => Promise<void> | void;
   showToast: (msg: string, kind: "success" | "error") => void;
 }) {
-  const [form, setForm] = useState({ account_id: "", client_id: "", client_secret: "" });
+  const [form, setForm] = useState({ account_id: "", client_id: "", client_secret: "", is_gov: false });
   const [saving, setSaving] = useState(false);
 
   async function save(e: React.FormEvent) {
@@ -189,6 +189,21 @@ function ZoomCredsForm({
             onChange={(e) => setForm({ ...form, client_secret: e.target.value.trim() })}
             placeholder="••••••••••••••••" autoComplete="new-password"
           />
+        </label>
+        {/* See ZoomTab's ConnectForm — gov is a separate cloud with its own
+            marketplace, so the credentials must match the selected cloud. */}
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13 }}>
+          <input
+            type="checkbox" checked={form.is_gov} style={{ marginTop: 3 }}
+            onChange={(e) => setForm({ ...form, is_gov: e.target.checked })}
+          />
+          <span>
+            <strong>Zoom for Government tenant</strong>
+            <span style={{ display: "block", opacity: 0.7, marginTop: 2 }}>
+              Routes API calls to <span style={codeChip}>api.zoomgov.com</span>. Credentials must be
+              issued by the ZoomGov marketplace.
+            </span>
+          </span>
         </label>
         <div style={{ display: "flex", gap: 10 }}>
           <button
