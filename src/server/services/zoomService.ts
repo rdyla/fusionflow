@@ -275,8 +275,28 @@ type ZoomReportUsersResponse = {
   users?: ZoomActiveUser[];
 };
 
+/** /report/daily, per calendar day, account-wide.
+ *
+ *  `meeting_minutes` is PARTICIPANT-minutes — the sum of every attendee's time,
+ *  not wall-clock meeting length. Verified 2026-08-24 against
+ *  /report/users/{id}/meetings, where Zoom exposes the two separately:
+ *  `duration` (wall-clock) vs `total_minutes` ("the sum of meeting minutes from
+ *  all meeting participants"). A host's rollup `meeting_minutes` matched the sum
+ *  of `total_minutes` exactly (13605), not the sum of `duration` (4612).
+ *
+ *  So dividing `meeting_minutes` by a user count does NOT give time-per-person;
+ *  divide by `participants` to get average session length instead.
+ *
+ *  The meetings-per-day field name has varied (`meetings` / `new_meeting`), so
+ *  both are accepted and absence is preserved as null rather than coerced to 0. */
 type ZoomDailyReportResponse = {
-  dates?: Array<{ date: string; new_meeting: number; participants: number; meeting_minutes: number }>;
+  dates?: Array<{
+    date: string;
+    meetings?: number;
+    new_meeting?: number;
+    participants: number;
+    meeting_minutes: number;
+  }>;
 };
 
 type ZoomPhoneCallLogsResponse = {
@@ -374,7 +394,18 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   const currDates = getResult<ZoomDailyReportResponse>("daily_curr")?.dates ?? [];
   const prevDates = needsPrevMonth ? (getResult<ZoomDailyReportResponse>("daily_prev")?.dates ?? []) : [];
   const windowDates = [...prevDates, ...currDates].filter((d) => d.date >= from30 && d.date <= to);
-  const total_meetings = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.participants ?? 0), 0) : null;
+  // `total_meetings` previously summed `participants`, so the column held
+  // participant sessions under a name that said meetings. It now counts actual
+  // meetings; `participants_30d` carries what the column used to hold. Rows
+  // written before 2026-08-24 still have participants in `total_meetings` —
+  // the UI falls back to it when `participants_30d` is absent.
+  const perDayMeetings = windowDates.map((d) => d.meetings ?? d.new_meeting);
+  const total_meetings = perDayMeetings.some((v) => v != null)
+    ? perDayMeetings.reduce((sum: number, v) => sum + (v ?? 0), 0)
+    : null;
+
+  const participants_30d = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.participants ?? 0), 0) : null;
+  // Participant-minutes, not wall-clock. See ZoomDailyReportResponse.
   const meeting_minutes_30d = windowDates.length > 0 ? windowDates.reduce((sum, d) => sum + (d.meeting_minutes ?? 0), 0) : null;
 
   // Zoom Phone — owner.id identifies the internal user on each call (inbound or outbound)
@@ -417,7 +448,11 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     raw_data: {
       plans,
       api_calls,
+      // Kept under its original key so historical snapshots keep rendering.
+      // The value is participant-minutes — divide by participants_30d, never by
+      // a user count, to get an average session length.
       meeting_minutes_30d,
+      participants_30d,
       top_meeting_users,
       phone: { users_total: phoneUsersTotal, total_calls_30d: phoneTotalCalls30d, active_users_30d: phoneActiveUsers30d, call_minutes_30d: phoneCallMinutes30d },
       top_phone_callers,

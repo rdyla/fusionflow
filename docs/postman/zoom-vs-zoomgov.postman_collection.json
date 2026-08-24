@@ -1,0 +1,468 @@
+{
+  "info": {
+    "name": "Zoom vs ZoomGov — CloudConnect diagnostics",
+    "description": "Two jobs:\n\n1. **Settle the `meeting_minutes` semantic.** Folder 1 determines whether Zoom's reported minutes are wall-clock duration or summed participant-minutes. The `Meeting participants` request does the arithmetic for you and prints a verdict.\n\n2. **Compare gov vs commercial parity.** Folders 2 and 3 mirror exactly the endpoints CloudConnect calls. Run a folder with the Collection Runner against each environment; every request asserts a 200, so the run summary is a pass/fail matrix per cloud.\n\nSwitch clouds by selecting the Zoom Commercial or ZoomGov environment — nothing in the collection is cloud-specific.\n\nCredentials are Server-to-Server OAuth (account_id + client_id + client_secret). Gov credentials MUST come from the ZoomGov marketplace; a commercial app id fails against gov with an invalid-client error.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://api.zoom.us/v2", "description": "Set by the environment. Commercial: https://api.zoom.us/v2 · Gov: https://api.zoomgov.com/v2" },
+    { "key": "oauthUrl", "value": "https://zoom.us/oauth/token", "description": "Set by the environment. Commercial: https://zoom.us/oauth/token · Gov: https://zoomgov.com/oauth/token" },
+    { "key": "accountId", "value": "", "description": "S2S app Account ID" },
+    { "key": "clientId", "value": "", "description": "S2S app Client ID" },
+    { "key": "clientSecret", "value": "", "description": "S2S app Client Secret — keep in the environment as a secret, not here" },
+    { "key": "accessToken", "value": "", "description": "Populated by 0 — Auth / Get S2S Token" },
+    { "key": "from", "value": "", "description": "YYYY-MM-DD, start of the 30-day window. Auto-filled if left blank." },
+    { "key": "to", "value": "", "description": "YYYY-MM-DD, end of window. Auto-filled if left blank." },
+    { "key": "year", "value": "", "description": "Report year. Auto-filled if left blank." },
+    { "key": "month", "value": "", "description": "Report month. Auto-filled if left blank." },
+    { "key": "userId", "value": "", "description": "REQUIRED for folder 1. The host to analyse — accepts a userId or an email address. Pick a heavy user from the Top Meeting Users table (e.g. melissa.perry@lake.courts.ca.gov)." },
+    { "key": "meetingId", "value": "", "description": "Populated by 1a (the longest meeting in the window)" },
+    { "key": "meetingWallClock", "value": "", "description": "Populated by 1a — that meeting's `duration` in minutes" },
+    { "key": "meetingTotalMinutes", "value": "", "description": "Populated by 1a — that meeting's `total_minutes` (participant-summed)" },
+    { "key": "sumDuration", "value": "", "description": "Populated by 1a — sum of `duration` across the host's meetings" },
+    { "key": "sumTotalMinutes", "value": "", "description": "Populated by 1a — sum of `total_minutes` across the host's meetings" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fill the date window automatically unless it was set by hand.",
+          "function ymd(d) { return d.toISOString().slice(0, 10); }",
+          "const today = new Date();",
+          "if (!pm.collectionVariables.get('to'))    pm.collectionVariables.set('to', ymd(today));",
+          "if (!pm.collectionVariables.get('from')) {",
+          "  const from = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);",
+          "  pm.collectionVariables.set('from', ymd(from));",
+          "}",
+          "if (!pm.collectionVariables.get('year'))  pm.collectionVariables.set('year', String(today.getUTCFullYear()));",
+          "if (!pm.collectionVariables.get('month')) pm.collectionVariables.set('month', String(today.getUTCMonth() + 1));"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0 — Auth",
+      "item": [
+        {
+          "name": "Get S2S Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('token request succeeded', () => pm.response.to.have.status(200));",
+                  "",
+                  "if (pm.response.code !== 200) {",
+                  "  console.error('Token failed against ' + pm.variables.get('oauthUrl'));",
+                  "  console.error('If this is gov, confirm the S2S app was created in the ZoomGov marketplace —');",
+                  "  console.error('a commercial client_id is rejected here.');",
+                  "  return;",
+                  "}",
+                  "",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken', body.access_token);",
+                  "console.log('Token stored. Scopes: ' + (body.scope || '(none reported)'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "basic",
+              "basic": [
+                { "key": "username", "value": "{{clientId}}", "type": "string" },
+                { "key": "password", "value": "{{clientSecret}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+            "url": {
+              "raw": "{{oauthUrl}}?grant_type=account_credentials&account_id={{accountId}}",
+              "host": ["{{oauthUrl}}"],
+              "query": [
+                { "key": "grant_type", "value": "account_credentials" },
+                { "key": "account_id", "value": "{{accountId}}" }
+              ]
+            },
+            "description": "Server-to-Server OAuth. Run this first — everything else uses the token it stores.\n\nThe response `scope` list is worth reading: a missing report:read:admin scope produces 400s downstream that look like missing endpoints."
+          }
+        }
+      ]
+    },
+    {
+      "name": "1 — Minutes semantics (the actual question)",
+      "description": "Determines whether the `meeting_minutes` field behind CloudConnect's utilization tiles is wall-clock duration or summed participant-minutes.\n\nSet `userId` first (a userId or email — pick a heavy host from the Top Meeting Users table), then run 1a and 1b in order. 1b prints the definitive answer.\n\nZoom's own schema for 1a already distinguishes the two concepts:\n- `duration` — \"The meeting's duration.\"\n- `total_minutes` — \"The sum of meeting minutes from all meeting participants in the meeting.\"\n\nSo the only open question is which of those the rollup fields aggregate. 1b settles it by arithmetic.",
+      "item": [
+        {
+          "name": "1a — Host's past meetings (duration vs total_minutes)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) {",
+                  "  console.error('Failed. If 404, check that {{userId}} is a valid userId or email on this account.');",
+                  "  return;",
+                  "}",
+                  "",
+                  "const meetings = pm.response.json().meetings || [];",
+                  "if (!meetings.length) {",
+                  "  console.warn('No past meetings for this host in the window — widen from/to, or pick a busier host.');",
+                  "  return;",
+                  "}",
+                  "",
+                  "let sumDur = 0, sumTot = 0;",
+                  "meetings.forEach((m) => { sumDur += (m.duration || 0); sumTot += (m.total_minutes || 0); });",
+                  "",
+                  "// Longest by wall-clock: clearest per-meeting illustration.",
+                  "const m = meetings.slice().sort((a, b) => (b.duration || 0) - (a.duration || 0))[0];",
+                  "// Recurring instances need the UUID; a UUID containing '/' must be",
+                  "// double-encoded to survive the path segment.",
+                  "const id = m.uuid ? encodeURIComponent(encodeURIComponent(m.uuid)) : String(m.id);",
+                  "",
+                  "pm.collectionVariables.set('meetingId', id);",
+                  "pm.collectionVariables.set('meetingWallClock', String(m.duration || 0));",
+                  "pm.collectionVariables.set('meetingTotalMinutes', String(m.total_minutes || 0));",
+                  "pm.collectionVariables.set('sumDuration', String(sumDur));",
+                  "pm.collectionVariables.set('sumTotalMinutes', String(sumTot));",
+                  "",
+                  "console.log('Host: ' + pm.variables.get('userId') + ' — ' + meetings.length + ' meetings in window');",
+                  "console.log('');",
+                  "console.log('Longest meeting: \"' + m.topic + '\"');",
+                  "console.log('  duration (wall-clock) : ' + m.duration + ' min');",
+                  "console.log('  total_minutes         : ' + m.total_minutes + ' min');",
+                  "console.log('  participants_count    : ' + m.participants_count);",
+                  "const r = m.duration ? (m.total_minutes / m.duration) : 0;",
+                  "console.log('  total/duration ratio  : ' + r.toFixed(2) + 'x  (expect ≈ participants_count)');",
+                  "console.log('');",
+                  "console.log('Window totals for this host:');",
+                  "console.log('  sum of duration       : ' + sumDur + ' min');",
+                  "console.log('  sum of total_minutes  : ' + sumTot + ' min');",
+                  "console.log('');",
+                  "console.log('Now run 1b — it compares these against the rollup field.');",
+                  "",
+                  "pm.test('response carries both duration and total_minutes', () =>",
+                  "  pm.expect(m).to.have.property('total_minutes'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/report/users/{{userId}}/meetings?from={{from}}&to={{to}}&type=past&page_size=300",
+              "host": ["{{baseUrl}}"],
+              "path": ["report", "users", "{{userId}}", "meetings"],
+              "query": [
+                { "key": "from", "value": "{{from}}" },
+                { "key": "to", "value": "{{to}}" },
+                { "key": "type", "value": "past" },
+                { "key": "page_size", "value": "300" }
+              ]
+            },
+            "description": "Per-meeting detail for one host. Returns BOTH fields, which is what makes this decisive:\n\n- `duration` — the meeting's wall-clock length\n- `total_minutes` — \"the sum of meeting minutes from all meeting participants\"\n- `participants_count` — how many people were in it\n\nIf `total_minutes ÷ duration` ≈ `participants_count`, the two concepts are confirmed distinct and we know exactly what each means. 1b then determines which one the rollups use."
+          }
+        },
+        {
+          "name": "1b — Rollup comparison (prints the verdict)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "",
+                  "const target = String(pm.variables.get('userId') || '').toLowerCase();",
+                  "const users = pm.response.json().users || [];",
+                  "const u = users.find((x) =>",
+                  "  String(x.email || '').toLowerCase() === target || String(x.id || '') === pm.variables.get('userId'));",
+                  "",
+                  "if (!u) {",
+                  "  console.warn('Host not present in the active-users report for this window.');",
+                  "  console.warn('That itself is informative: the host had meetings (1a) but is not counted');",
+                  "  console.warn('as active here, so active_users_30d may undercount.');",
+                  "  return;",
+                  "}",
+                  "",
+                  "const rollup  = u.meeting_minutes || 0;",
+                  "const sumDur  = Number(pm.collectionVariables.get('sumDuration') || 0);",
+                  "const sumTot  = Number(pm.collectionVariables.get('sumTotalMinutes') || 0);",
+                  "",
+                  "console.log('Host: ' + (u.email || u.id));",
+                  "console.log('  meeting_minutes (rollup)   : ' + rollup);",
+                  "console.log('  sum of duration      (1a)  : ' + sumDur);",
+                  "console.log('  sum of total_minutes (1a)  : ' + sumTot);",
+                  "console.log('');",
+                  "",
+                  "function near(a, b) { return b > 0 && Math.abs(a - b) / b < 0.1; }",
+                  "",
+                  "if (near(rollup, sumTot) && !near(rollup, sumDur)) {",
+                  "  console.log('VERDICT: meeting_minutes IS participant-minutes.');",
+                  "  console.log('It matches the sum of total_minutes, not wall-clock duration.');",
+                  "  console.log('');",
+                  "  console.log('Consequence: CloudConnect\\'s \"Avg Mtg Min / Active User\" divides');",
+                  "  console.log('participant-minutes by host count, overstating per-person usage by');",
+                  "  console.log('roughly the average participant count. The label needs changing,');",
+                  "  console.log('and it affects commercial customers identically — not a gov issue.');",
+                  "} else if (near(rollup, sumDur) && !near(rollup, sumTot)) {",
+                  "  console.log('VERDICT: meeting_minutes IS wall-clock duration.');",
+                  "  console.log('The CloudConnect label is defensible as-is; the large numbers are');",
+                  "  console.log('genuinely long sessions (plausible for persistent virtual courtrooms).');",
+                  "} else if (near(rollup, sumTot) && near(rollup, sumDur)) {",
+                  "  console.log('INCONCLUSIVE: the two sums are too close to tell apart.');",
+                  "  console.log('Pick a host with multi-participant meetings and re-run.');",
+                  "} else {",
+                  "  console.log('INCONCLUSIVE: rollup matches neither sum.');",
+                  "  console.log('Likely causes: the report window differs from the meeting list window,');",
+                  "  console.log('paginated results were truncated (raise page_size / follow');",
+                  "  console.log('next_page_token), or webinars are counted separately.');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/report/users?type=active&from={{from}}&to={{to}}&page_size=300",
+              "host": ["{{baseUrl}}"],
+              "path": ["report", "users"],
+              "query": [
+                { "key": "type", "value": "active" },
+                { "key": "from", "value": "{{from}}" },
+                { "key": "to", "value": "{{to}}" },
+                { "key": "page_size", "value": "300" }
+              ]
+            },
+            "description": "The rollup CloudConnect actually reads. Finds {{userId}} in the response and compares its `meeting_minutes` against both sums from 1a — whichever it matches is the answer."
+          }
+        },
+        {
+          "name": "1c — Meeting participants (optional cross-check)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "",
+                  "const parts = pm.response.json().participants || [];",
+                  "const sum  = parts.reduce((s, p) => s + (p.duration || 0), 0);",
+                  "const wall = Number(pm.collectionVariables.get('meetingWallClock') || 0);",
+                  "const tot  = Number(pm.collectionVariables.get('meetingTotalMinutes') || 0);",
+                  "",
+                  "console.log('participants counted    : ' + parts.length);",
+                  "console.log('sum of their durations  : ' + sum + ' min');",
+                  "console.log('meeting duration    (1a): ' + wall + ' min');",
+                  "console.log('meeting total_minutes(1a): ' + tot + ' min');",
+                  "console.log('');",
+                  "",
+                  "// Independent confirmation of Zoom's own field definitions: the",
+                  "// participant durations should add up to total_minutes, not duration.",
+                  "function near(a, b) { return b > 0 && Math.abs(a - b) / b < 0.15; }",
+                  "if (near(sum, tot)) {",
+                  "  console.log('CONFIRMED: total_minutes = sum of participant durations, as documented.');",
+                  "} else if (near(sum, wall)) {",
+                  "  console.log('UNEXPECTED: participant sum matches wall-clock instead of total_minutes.');",
+                  "  console.log('Worth a second meeting before trusting 1b.');",
+                  "} else {",
+                  "  console.log('Participant sum matches neither — expected for a RECURRING meeting.');",
+                  "  console.log('This endpoint aggregates participants across every instance of a');",
+                  "  console.log('recurring meeting id, so a daily standing link returns cumulative');",
+                  "  console.log('lifetime totals per person, not one session. Confirmed 2026-08-24');",
+                  "  console.log('on a daily courtroom link: 4 participant records, 93,557 min.');",
+                  "  console.log('1b does not depend on this request — its verdict still stands.');",
+                  "}",
+                  "",
+                  "pm.test('participant durations were returned', () => pm.expect(parts.length).to.be.above(0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/report/meetings/{{meetingId}}/participants?page_size=300",
+              "host": ["{{baseUrl}}"],
+              "path": ["report", "meetings", "{{meetingId}}", "participants"],
+              "query": [{ "key": "page_size", "value": "300" }]
+            },
+            "description": "Per-participant `duration` in minutes. Summing these and comparing to the meeting's own duration is what settles the semantic.\n\nIf this 404s, the meeting was recurring and the UUID needs double-encoding — the previous request handles that, but a UUID starting with '/' occasionally still needs manual escaping."
+          }
+        },
+        {
+          "name": "1d — Daily report (account rollup)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "",
+                  "const dates = pm.response.json().dates || [];",
+                  "const mins = dates.reduce((s, d) => s + (d.meeting_minutes || 0), 0);",
+                  "const parts = dates.reduce((s, d) => s + (d.participants || 0), 0);",
+                  "console.log('month-to-date meeting_minutes : ' + mins);",
+                  "console.log('month-to-date participants    : ' + parts);",
+                  "console.log('implied min/participant       : ' + (parts ? (mins / parts).toFixed(1) : 'n/a'));",
+                  "console.log('');",
+                  "console.log('This is the field CloudConnect divides by active_users_30d to produce');",
+                  "console.log('\"Avg Mtg Min / Active User\". If min/participant above looks like a');",
+                  "console.log('sane meeting length, the field is participant-minutes.');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/report/daily?year={{year}}&month={{month}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["report", "daily"],
+              "query": [
+                { "key": "year", "value": "{{year}}" },
+                { "key": "month", "value": "{{month}}" }
+              ]
+            },
+            "description": "Account-wide per-day totals. `meeting_minutes` here is the exact field behind the Avg Mtg Min tile."
+          }
+        },
+        {
+          "name": "1e — Host survey (run FIRST to pick a userId)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "if (pm.response.code !== 200) return;",
+                  "",
+                  "const users = (pm.response.json().users || [])",
+                  "  .slice().sort((a, b) => (b.meeting_minutes || 0) - (a.meeting_minutes || 0)).slice(0, 10);",
+                  "",
+                  "console.log('Top hosts — minutes per meeting is the tell:');",
+                  "users.forEach((u) => {",
+                  "  const mtgs = u.meetings || 0;",
+                  "  const mins = u.meeting_minutes || 0;",
+                  "  const per  = mtgs ? (mins / mtgs).toFixed(0) : 'n/a';",
+                  "  const hrs  = mtgs ? (mins / mtgs / 60).toFixed(1) : 'n/a';",
+                  "  console.log('  ' + (u.email || u.id) + ' — ' + mtgs + ' mtgs, ' + mins + ' min, ' + per + ' min/mtg (' + hrs + ' h)');",
+                  "});",
+                  "console.log('');",
+                  "console.log('Any host above ~8 h/meeting already suggests participant-minutes,');",
+                  "console.log('since one meeting instance cannot exceed 24 h.');",
+                  "console.log('');",
+                  "console.log('Copy one of these emails into the `userId` collection variable,');",
+                  "console.log('then run 1a and 1b. Prefer a host with many meetings.');",
+                  "",
+                  "// Convenience: pre-seed userId with the top host if it is still blank.",
+                  "if (!pm.collectionVariables.get('userId') && users.length) {",
+                  "  const top = users[0].email || users[0].id;",
+                  "  pm.collectionVariables.set('userId', top);",
+                  "  console.log('');",
+                  "  console.log('userId was blank — seeded it with: ' + top);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/report/users?type=active&from={{from}}&to={{to}}&page_size=300",
+              "host": ["{{baseUrl}}"],
+              "path": ["report", "users"],
+              "query": [
+                { "key": "type", "value": "active" },
+                { "key": "from", "value": "{{from}}" },
+                { "key": "to", "value": "{{to}}" },
+                { "key": "page_size", "value": "300" }
+              ]
+            },
+            "description": "Same endpoint as 1b, but this script surveys the top 10 hosts with minutes-per-meeting so you can pick a good subject. Seeds `userId` with the busiest host if you haven't set one.\n\nThis is the query behind the Top Meeting Users table in CloudConnect."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 — Utilization parity (CloudConnect's snapshot calls)",
+      "description": "Exactly the eight calls fetchZoomUtilizationSnapshot makes. Run this folder against each environment and compare the pass/fail summary.",
+      "item": [
+        { "name": "plans", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/accounts/me/plans", "host": ["{{baseUrl}}"], "path": ["accounts", "me", "plans"] } } },
+        { "name": "users (count)", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/users?page_size=1", "host": ["{{baseUrl}}"], "path": ["users"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "active30", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/report/users?type=active&from={{from}}&to={{to}}&page_size=300", "host": ["{{baseUrl}}"], "path": ["report", "users"], "query": [{ "key": "type", "value": "active" }, { "key": "from", "value": "{{from}}" }, { "key": "to", "value": "{{to}}" }, { "key": "page_size", "value": "300" }] } } },
+        { "name": "daily_curr", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/report/daily?year={{year}}&month={{month}}", "host": ["{{baseUrl}}"], "path": ["report", "daily"], "query": [{ "key": "year", "value": "{{year}}" }, { "key": "month", "value": "{{month}}" }] } } },
+        { "name": "phone_users", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/users?page_size=1", "host": ["{{baseUrl}}"], "path": ["phone", "users"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "phone_call_logs", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/call_logs?from={{from}}&to={{to}}&type=all&page_size=1000", "host": ["{{baseUrl}}"], "path": ["phone", "call_logs"], "query": [{ "key": "from", "value": "{{from}}" }, { "key": "to", "value": "{{to}}" }, { "key": "type", "value": "all" }, { "key": "page_size", "value": "1000" }] } } }
+      ],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(pm.info.requestName + ' → 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) {",
+              "  console.error(pm.info.requestName + ' failed ' + pm.response.code + ': ' + pm.response.text().slice(0, 300));",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 — Status panel parity (Phone + Contact Center)",
+      "description": "The remaining calls behind the Zoom status dashboard. These are the likeliest gov gaps — and note a 404 here is indistinguishable from an unlicensed feature, so read the response body, not just the code.",
+      "item": [
+        { "name": "account", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/accounts/me", "host": ["{{baseUrl}}"], "path": ["accounts", "me"] } } },
+        { "name": "phone devices", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/devices?page_size=100", "host": ["{{baseUrl}}"], "path": ["phone", "devices"], "query": [{ "key": "page_size", "value": "100" }] } } },
+        { "name": "phone call_queues", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/call_queues?page_size=1", "host": ["{{baseUrl}}"], "path": ["phone", "call_queues"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "phone auto_receptionists", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/auto_receptionists?page_size=1", "host": ["{{baseUrl}}"], "path": ["phone", "auto_receptionists"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "phone calling_plans", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/calling_plans", "host": ["{{baseUrl}}"], "path": ["phone", "calling_plans"] } } },
+        { "name": "phone numbers assigned", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/numbers?type=assigned&page_size=1", "host": ["{{baseUrl}}"], "path": ["phone", "numbers"], "query": [{ "key": "type", "value": "assigned" }, { "key": "page_size", "value": "1" }] } } },
+        { "name": "phone numbers unassigned", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/phone/numbers?type=unassigned&page_size=1", "host": ["{{baseUrl}}"], "path": ["phone", "numbers"], "query": [{ "key": "type", "value": "unassigned" }, { "key": "page_size", "value": "1" }] } } },
+        { "name": "cc users", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/contact_center/users?page_size=1", "host": ["{{baseUrl}}"], "path": ["contact_center", "users"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "cc queues", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/contact_center/queues?page_size=1", "host": ["{{baseUrl}}"], "path": ["contact_center", "queues"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "cc flows", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/contact_center/flows?page_size=1", "host": ["{{baseUrl}}"], "path": ["contact_center", "flows"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "cc campaigns", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/contact_center/outbound_campaign/campaigns?page_size=1", "host": ["{{baseUrl}}"], "path": ["contact_center", "outbound_campaign", "campaigns"], "query": [{ "key": "page_size", "value": "1" }] } } },
+        { "name": "cc phone_numbers", "request": { "method": "GET", "header": [], "url": { "raw": "{{baseUrl}}/contact_center/phone_numbers?page_size=1", "host": ["{{baseUrl}}"], "path": ["contact_center", "phone_numbers"], "query": [{ "key": "page_size", "value": "1" }] } } }
+      ],
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(pm.info.requestName + ' → 200', () => pm.response.to.have.status(200));",
+              "if (pm.response.code !== 200) {",
+              "  console.error(pm.info.requestName + ' failed ' + pm.response.code + ': ' + pm.response.text().slice(0, 300));",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
