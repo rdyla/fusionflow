@@ -238,12 +238,13 @@ export default function LeadershipDashboardPage() {
               title={`Go-Lives This ${windowLabel}`}
               value={data.projects.goLives.length}
               accent={data.projects.goLives.length > 0 ? "#107c10" : undefined}
+              sub={`targeted, next ${windowLabel.toLowerCase()}`}
               expandKey="goLives"
               expanded={expandedKeys.has("goLives")}
               onToggle={toggleExpand}
             >
               {data.projects.goLives.length === 0 ? (
-                <EmptyNote>No go-lives in this period.</EmptyNote>
+                <EmptyNote>No targeted go-lives in this period.</EmptyNote>
               ) : (
                 data.projects.goLives.map((g) => (
                   <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
