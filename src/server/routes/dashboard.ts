@@ -397,15 +397,26 @@ app.get("/leadership", async (c) => {
 
     // Active-project headcount per PM — current snapshot, not time-boxed.
     // Surfaces who's carrying the most projects right now (workload signal).
-    // Keeps the "no PM assigned" bucket (pm_user_id IS NULL) visible while
-    // still filtering out a PM who somehow isn't PF staff.
+    // Falls back to a project_staff 'pm' row when projects.pm_user_id is
+    // null — same fallback projects.ts uses for "my projects" — since a PM
+    // can be attached to a project either way and pm_user_id isn't always
+    // backfilled (e.g. solution→project handoff never sets it). Keeps the
+    // "no PM assigned" bucket visible while still filtering out a PM who
+    // somehow isn't PF staff.
     db.prepare(
-      `SELECT p.pm_user_id, u.name, COUNT(*) AS n
-       FROM projects p
-       LEFT JOIN users u ON u.id = p.pm_user_id
-       WHERE (p.archived = 0 OR p.archived IS NULL)
-         AND (p.pm_user_id IS NULL OR u.role IN (${PF_ROLES_SQL}))
-       GROUP BY p.pm_user_id
+      `SELECT x.pm_user_id, u.name, COUNT(*) AS n
+       FROM (
+         SELECT p.id,
+                COALESCE(
+                  p.pm_user_id,
+                  (SELECT ps.user_id FROM project_staff ps WHERE ps.project_id = p.id AND ps.staff_role = 'pm' LIMIT 1)
+                ) AS pm_user_id
+         FROM projects p
+         WHERE (p.archived = 0 OR p.archived IS NULL)
+       ) x
+       LEFT JOIN users u ON u.id = x.pm_user_id
+       WHERE (x.pm_user_id IS NULL OR u.role IN (${PF_ROLES_SQL}))
+       GROUP BY x.pm_user_id
        ORDER BY n DESC`
     ).all<{ pm_user_id: string | null; name: string | null; n: number }>(),
 
