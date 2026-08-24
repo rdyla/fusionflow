@@ -262,7 +262,7 @@ function DeviceStatusDot({ status }: { status: string | null }) {
 // ── Connect Form ──────────────────────────────────────────────────────────────
 
 function ConnectForm({ projectId, onConnected }: { projectId: string; onConnected: () => void }) {
-  const [form, setForm] = useState({ account_id: "", client_id: "", client_secret: "" });
+  const [form, setForm] = useState({ account_id: "", client_id: "", client_secret: "", is_gov: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -320,6 +320,20 @@ function ConnectForm({ projectId, onConnected }: { projectId: string; onConnecte
           <input required type="password" className="ms-input" value={form.client_secret}
             onChange={(e) => setForm({ ...form, client_secret: e.target.value.trim() })}
             placeholder="••••••••••••••••" autoComplete="new-password" />
+        </label>
+        {/* ZoomGov is a physically separate cloud with its own marketplace, so
+            this isn't just a URL switch — the credentials above have to be
+            issued by the gov marketplace or the token request fails. */}
+        <label style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13 }}>
+          <input type="checkbox" checked={form.is_gov} style={{ marginTop: 3 }}
+            onChange={(e) => setForm({ ...form, is_gov: e.target.checked })} />
+          <span>
+            <strong>Zoom for Government tenant</strong>
+            <span style={{ display: "block", color: "#64748b", marginTop: 2 }}>
+              Routes API calls to <code>api.zoomgov.com</code>. The credentials above must come from
+              the ZoomGov marketplace — a commercial Server-to-Server app will be rejected.
+            </span>
+          </span>
         </label>
         {error && <div style={{ color: "#d13438", fontSize: 13 }}>{error}</div>}
         <div>

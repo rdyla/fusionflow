@@ -1,10 +1,36 @@
-const ZOOM_API_BASE = "https://api.zoom.us/v2";
-const ZOOM_OAUTH_URL = "https://zoom.us/oauth/token";
+/** Zoom runs two entirely separate clouds. ZoomGov (FedRAMP/GovCloud) mirrors
+ *  the commercial REST API — same /v2 paths, same shapes — but on different
+ *  hosts, and crucially with credentials from a *different* marketplace: an S2S
+ *  app created in the commercial marketplace returns "Invalid client_id"
+ *  against gov, and vice versa. So `is_gov` on a project's creds selects the
+ *  host pair; the credential values themselves must already be gov-issued. */
+type ZoomHosts = { api: string; oauth: string };
+
+const COMMERCIAL_HOSTS: ZoomHosts = {
+  api: "https://api.zoom.us/v2",
+  oauth: "https://zoom.us/oauth/token",
+};
+
+const GOV_HOSTS: ZoomHosts = {
+  api: "https://api.zoomgov.com/v2",
+  oauth: "https://zoomgov.com/oauth/token",
+};
+
+function hostsFor(creds: Pick<ZoomCreds, "is_gov">): ZoomHosts {
+  return creds.is_gov ? GOV_HOSTS : COMMERCIAL_HOSTS;
+}
+
+/** A resolved bearer token plus the cloud it's valid for. Bundled so the two
+ *  can't drift apart — a commercial token sent to api.zoomgov.com 401s in a way
+ *  that looks like bad credentials. */
+type ZoomSession = { token: string; hosts: ZoomHosts };
 
 export type ZoomCreds = {
   account_id: string;
   client_id: string;
   client_secret: string;
+  /** True for a Zoom for Government tenant. Absent/false = commercial. */
+  is_gov?: boolean;
 };
 
 type TokenCache = {
@@ -61,6 +87,9 @@ function credsKey(projectId: string) { return `zoom:creds:${projectId}`; }
 function tokenKey(projectId: string) { return `zoom:token:${projectId}`; }
 
 // ── Org-level (S2S) token ─────────────────────────────────────────────────────
+// Packet Fusion's own Zoom account, used for staff photos. PF is a commercial
+// tenant, so this side is pinned to the commercial cloud and never consults
+// `is_gov` — that flag describes a *customer's* tenant, not ours.
 
 const ORG_TOKEN_KEY = "zoom:org:token";
 const PHOTO_CACHE_TTL = 86_400; // 24 hours
@@ -77,7 +106,7 @@ export async function getOrgToken(kv: KVNamespace, env: OrgEnv): Promise<string>
   }
 
   const res = await fetch(
-    `${ZOOM_OAUTH_URL}?grant_type=account_credentials&account_id=${encodeURIComponent(ZOOM_ORG_ACCOUNT_ID)}`,
+    `${COMMERCIAL_HOSTS.oauth}?grant_type=account_credentials&account_id=${encodeURIComponent(ZOOM_ORG_ACCOUNT_ID)}`,
     {
       method: "POST",
       headers: {
@@ -127,7 +156,7 @@ export async function getStaffPhotos(
   await Promise.all(
     toFetch.map(async (email) => {
       try {
-        const res = await fetch(`${ZOOM_API_BASE}/users/${encodeURIComponent(email)}`, {
+        const res = await fetch(`${COMMERCIAL_HOSTS.api}/users/${encodeURIComponent(email)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok) {
@@ -149,27 +178,45 @@ export async function getStaffPhotos(
 }
 
 export async function saveCreds(kv: KVNamespace, projectId: string, creds: ZoomCreds): Promise<void> {
-  await kv.put(credsKey(projectId), JSON.stringify(creds));
+  // Drop any cached token alongside the write. The cached token belongs to the
+  // *previous* credentials — and if `is_gov` just changed, to the previous
+  // cloud, where it would 401 against the new host and read as bad creds.
+  await Promise.all([
+    kv.put(credsKey(projectId), JSON.stringify(creds)),
+    kv.delete(tokenKey(projectId)),
+  ]);
 }
 
 export async function deleteCreds(kv: KVNamespace, projectId: string): Promise<void> {
   await Promise.all([kv.delete(credsKey(projectId)), kv.delete(tokenKey(projectId))]);
 }
 
-export async function getCredsConfigured(kv: KVNamespace, projectId: string): Promise<boolean> {
-  return (await kv.get(credsKey(projectId))) !== null;
+/** Whether creds exist for a project, and which cloud they point at. The UI
+ *  needs the cloud so the "Is Gov" toggle survives a reload instead of
+ *  silently defaulting back to commercial on the next save. */
+export async function getCredsInfo(
+  kv: KVNamespace,
+  projectId: string
+): Promise<{ configured: boolean; is_gov: boolean }> {
+  const creds = await getCreds(kv, projectId);
+  return { configured: creds !== null, is_gov: creds?.is_gov === true };
 }
 
 async function getCreds(kv: KVNamespace, projectId: string): Promise<ZoomCreds | null> {
   return kv.get<ZoomCreds>(credsKey(projectId), "json");
 }
 
-async function getToken(kv: KVNamespace, creds: ZoomCreds, projectId: string): Promise<string> {
+/** Resolve a bearer token for a project's tenant, paired with the cloud it's
+ *  valid for. Callers pass the returned session to `zoomGet` rather than a bare
+ *  token, so the host can never disagree with the token. */
+async function getSession(kv: KVNamespace, creds: ZoomCreds, projectId: string): Promise<ZoomSession> {
+  const hosts = hostsFor(creds);
+
   const cached = await kv.get<TokenCache>(tokenKey(projectId), "json");
-  if (cached && cached.expires_at > Date.now() + 60_000) return cached.access_token;
+  if (cached && cached.expires_at > Date.now() + 60_000) return { token: cached.access_token, hosts };
 
   const res = await fetch(
-    `${ZOOM_OAUTH_URL}?grant_type=account_credentials&account_id=${encodeURIComponent(creds.account_id)}`,
+    `${hosts.oauth}?grant_type=account_credentials&account_id=${encodeURIComponent(creds.account_id)}`,
     {
       method: "POST",
       headers: {
@@ -179,7 +226,14 @@ async function getToken(kv: KVNamespace, creds: ZoomCreds, projectId: string): P
     }
   );
 
-  if (!res.ok) throw new Error(`Zoom token fetch failed: ${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    const body = await res.text();
+    // A commercial app id used against gov (or the reverse) fails here with an
+    // invalid-client error. Name the cloud so it's obvious which marketplace
+    // the credentials need to come from.
+    const cloud = creds.is_gov ? "ZoomGov" : "Zoom commercial";
+    throw new Error(`Zoom token fetch failed against ${cloud} (${hosts.oauth}): ${res.status} ${body}`);
+  }
 
   const data = await res.json() as { access_token: string; expires_in: number };
   await kv.put(
@@ -187,12 +241,12 @@ async function getToken(kv: KVNamespace, creds: ZoomCreds, projectId: string): P
     JSON.stringify({ access_token: data.access_token, expires_at: Date.now() + data.expires_in * 1000 }),
     { expirationTtl: data.expires_in - 60 }
   );
-  return data.access_token;
+  return { token: data.access_token, hosts };
 }
 
-async function zoomGet<T>(token: string, path: string): Promise<T> {
-  const res = await fetch(`${ZOOM_API_BASE}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+async function zoomGet<T>(session: ZoomSession, path: string): Promise<T> {
+  const res = await fetch(`${session.hosts.api}${path}`, {
+    headers: { Authorization: `Bearer ${session.token}`, "Content-Type": "application/json" },
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -244,7 +298,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
   const creds = await getCreds(kv, projectId);
   if (!creds) throw new Error("No Zoom credentials configured for this project");
 
-  const token = await getToken(kv, creds, projectId);
+  const session = await getSession(kv, creds, projectId);
 
   const today = new Date();
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
@@ -274,7 +328,7 @@ export async function fetchZoomUtilizationSnapshot(kv: KVNamespace, projectId: s
     { name: "phone_call_logs", path: `/phone/call_logs?from=${from30}&to=${to}&type=all&page_size=1000` },
   ];
 
-  const responses = await Promise.allSettled(callDefs.map((c) => zoomGet<unknown>(token, c.path)));
+  const responses = await Promise.allSettled(callDefs.map((c) => zoomGet<unknown>(session, c.path)));
 
   function getResult<T>(name: string): T | null {
     const idx = callDefs.findIndex((c) => c.name === name);
@@ -407,13 +461,13 @@ type ZoomUsersPage = {
 };
 
 /** Fetch all active users in the account (paginated). */
-async function getAllUsers(token: string): Promise<Array<{ id: string; email: string }>> {
+async function getAllUsers(session: ZoomSession): Promise<Array<{ id: string; email: string }>> {
   const users: Array<{ id: string; email: string }> = [];
   let nextPageToken = "";
   do {
     const qs = new URLSearchParams({ status: "active", page_size: "300" });
     if (nextPageToken) qs.set("next_page_token", nextPageToken);
-    const page = await zoomGet<ZoomUsersPage>(token, `/users?${qs}`);
+    const page = await zoomGet<ZoomUsersPage>(session, `/users?${qs}`);
     users.push(...(page.users ?? []));
     nextPageToken = page.next_page_token ?? "";
   } while (nextPageToken);
@@ -423,7 +477,7 @@ async function getAllUsers(token: string): Promise<Array<{ id: string; email: st
 type PmInfo = { zoom_user_id: string | null; email: string | null };
 
 /** Zoom recordings API allows a maximum 30-day window per request — chunk accordingly. */
-async function fetchUserRecordings(token: string, userId: string, from: string, to: string): Promise<ZoomMeeting[]> {
+async function fetchUserRecordings(session: ZoomSession, userId: string, from: string, to: string): Promise<ZoomMeeting[]> {
   // Build list of 30-day chunks covering [from, to]
   const chunks: Array<{ from: string; to: string }> = [];
   let chunkStart = new Date(from);
@@ -445,7 +499,7 @@ async function fetchUserRecordings(token: string, userId: string, from: string, 
     do {
       const qs = new URLSearchParams({ from: chunk.from, to: chunk.to, page_size: "300", mc: "false", trash: "false" });
       if (nextPageToken) qs.set("next_page_token", nextPageToken);
-      const page = await zoomGet<ZoomRecordingsPage>(token, `/users/${encodeURIComponent(userId)}/recordings?${qs}`);
+      const page = await zoomGet<ZoomRecordingsPage>(session, `/users/${encodeURIComponent(userId)}/recordings?${qs}`);
       for (const m of page.meetings ?? []) {
         if (!seen.has(String(m.id))) {
           seen.add(String(m.id));
@@ -471,7 +525,11 @@ export async function getZoomRecordings(
   pmInfo?: PmInfo,
 ): Promise<ZoomMeeting[]> {
   if (!env) throw new Error("Org environment not available");
-  const token = await getOrgToken(kv, env);
+  // Recordings come from Packet Fusion's OWN Zoom account (the PM hosts the
+  // meeting), not the customer's tenant — so this is always the commercial
+  // cloud and `is_gov` doesn't apply. If PF ever hosts gov-customer meetings
+  // from a separate gov account, this is the call site that has to change.
+  const session: ZoomSession = { token: await getOrgToken(kv, env), hosts: COMMERCIAL_HOSTS };
   void projectId; // retained for signature compatibility
 
   const today = new Date();
@@ -483,26 +541,26 @@ export async function getZoomRecordings(
     // Try zoom_user_id first; if it fails (stale/wrong ID), fall back to email lookup
     if (pmInfo.zoom_user_id) {
       try {
-        return await fetchUserRecordings(token, pmInfo.zoom_user_id, from, to);
+        return await fetchUserRecordings(session, pmInfo.zoom_user_id, from, to);
       } catch {
         console.warn(`Zoom user ID ${pmInfo.zoom_user_id} failed, falling back to email lookup`);
       }
     }
     if (pmInfo.email) {
-      const users = await getAllUsers(token);
+      const users = await getAllUsers(session);
       const match = users.find((u) => u.email.toLowerCase() === pmInfo.email!.toLowerCase());
-      if (match) return fetchUserRecordings(token, match.id, from, to);
+      if (match) return fetchUserRecordings(session, match.id, from, to);
     }
     throw new Error("PM's Zoom account could not be found — verify their Zoom User ID or email in user settings");
   }
 
   // No PM — fetch all users
-  const users = await getAllUsers(token);
+  const users = await getAllUsers(session);
   const allMeetings: ZoomMeeting[] = [];
   const BATCH = 10;
   for (let i = 0; i < users.length; i += BATCH) {
     const batch = users.slice(i, i + BATCH);
-    const results = await Promise.allSettled(batch.map((u) => fetchUserRecordings(token, u.id, from, to)));
+    const results = await Promise.allSettled(batch.map((u) => fetchUserRecordings(session, u.id, from, to)));
     for (const result of results) {
       if (result.status === "fulfilled") allMeetings.push(...result.value);
     }
@@ -609,7 +667,7 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
   const creds = await getCreds(kv, projectId);
   if (!creds) return null;
 
-  const token = await getToken(kv, creds, projectId);
+  const session = await getSession(kv, creds, projectId);
 
   // Date ranges for 30-day activity window
   const today = new Date();
@@ -644,27 +702,27 @@ export async function getZoomStatus(kv: KVNamespace, projectId: string): Promise
     ccCampaignsRes,
     ccNumbersRes,
   ] = await Promise.allSettled([
-    zoomGet<{ id: string; account_name: string; account_type: number }>(token, "/accounts/me"),
-    zoomGet<Record<string, unknown>>(token, "/accounts/me/plans"),
-    zoomGet<{ total_records: number }>(token, "/users?page_size=1"),
-    zoomGet<{ devices?: ZoomDevice[]; total_records: number }>(token, "/phone/devices?page_size=100"),
-    zoomGet<{ total_records: number }>(token, "/phone/users?page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/phone/call_queues?page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/phone/auto_receptionists?page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/contact_center/users?page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/contact_center/queues?page_size=1"),
-    zoomGet<{ calling_plans?: ZoomCallingPlan[] }>(token, "/phone/calling_plans"),
-    zoomGet<{ total_records: number }>(token, `/report/users?type=active&from=${from30}&to=${to}&page_size=1`),
-    zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(token, `/report/daily?year=${currYear}&month=${currMonth}`),
+    zoomGet<{ id: string; account_name: string; account_type: number }>(session, "/accounts/me"),
+    zoomGet<Record<string, unknown>>(session, "/accounts/me/plans"),
+    zoomGet<{ total_records: number }>(session, "/users?page_size=1"),
+    zoomGet<{ devices?: ZoomDevice[]; total_records: number }>(session, "/phone/devices?page_size=100"),
+    zoomGet<{ total_records: number }>(session, "/phone/users?page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/phone/call_queues?page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/phone/auto_receptionists?page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/contact_center/users?page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/contact_center/queues?page_size=1"),
+    zoomGet<{ calling_plans?: ZoomCallingPlan[] }>(session, "/phone/calling_plans"),
+    zoomGet<{ total_records: number }>(session, `/report/users?type=active&from=${from30}&to=${to}&page_size=1`),
+    zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(session, `/report/daily?year=${currYear}&month=${currMonth}`),
     needsPrevMonth
-      ? zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(token, `/report/daily?year=${prevYear}&month=${prevMonth}`)
+      ? zoomGet<{ dates?: Array<{ date: string; participants: number; meeting_minutes: number }> }>(session, `/report/daily?year=${prevYear}&month=${prevMonth}`)
       : Promise.resolve(null),
-    zoomGet<{ total_records: number }>(token, `/phone/call_logs?from=${from30}&to=${to}&type=all&page_size=1`),
-    zoomGet<{ total_records: number }>(token, "/phone/numbers?type=assigned&page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/phone/numbers?type=unassigned&page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/contact_center/flows?page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/contact_center/outbound_campaign/campaigns?page_size=1"),
-    zoomGet<{ total_records: number }>(token, "/contact_center/phone_numbers?page_size=1"),
+    zoomGet<{ total_records: number }>(session, `/phone/call_logs?from=${from30}&to=${to}&type=all&page_size=1`),
+    zoomGet<{ total_records: number }>(session, "/phone/numbers?type=assigned&page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/phone/numbers?type=unassigned&page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/contact_center/flows?page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/contact_center/outbound_campaign/campaigns?page_size=1"),
+    zoomGet<{ total_records: number }>(session, "/contact_center/phone_numbers?page_size=1"),
   ]);
 
   if (accountRes.status === "rejected") {

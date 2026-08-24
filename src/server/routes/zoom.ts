@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { z } from "zod";
 import type { Bindings, Variables } from "../types";
-import { saveCreds, deleteCreds, getCredsConfigured, getZoomStatus, getZoomRecordings, matchRecordingsToStages } from "../services/zoomService";
+import { saveCreds, deleteCreds, getCredsInfo, getZoomStatus, getZoomRecordings, matchRecordingsToStages } from "../services/zoomService";
 import { canEditProject, canViewProject } from "../services/accessService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -18,13 +18,17 @@ const credsSchema = z.object({
   account_id: z.string().min(1),
   client_id: z.string().min(1),
   client_secret: z.string().min(1),
+  // Selects the ZoomGov cloud (api.zoomgov.com) instead of commercial. The
+  // credentials themselves must come from the matching marketplace — a
+  // commercial app id fails against gov with an invalid-client error.
+  is_gov: z.boolean().optional().default(false),
 });
 
 // GET /api/projects/:projectId/zoom/configured
 app.get("/:projectId/zoom/configured", async (c) => {
   const projectId = c.req.param("projectId");
-  const configured = await getCredsConfigured(c.env.KV, projectId);
-  return c.json({ configured });
+  const { configured, is_gov } = await getCredsInfo(c.env.KV, projectId);
+  return c.json({ configured, is_gov });
 });
 
 // PUT /api/projects/:projectId/zoom/credentials
