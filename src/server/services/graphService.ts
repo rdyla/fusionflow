@@ -51,7 +51,7 @@ export type SPFile = {
   audience?: string;
   /** App-side overlay (files, external viewers only): the current external user
    *  has been granted edit access covering this file, so the UI can offer an
-   *  opens in SharePoint on click. Set by the /files route from sharepoint_edit_grants. */
+   *  "Edit online" link. Set by the /files route from sharepoint_edit_grants. */
   canEditOnline?: boolean;
   /** App-side overlay (folders only): "Allow client editing" is on — the
    *  project's customer contacts are auto-granted edit here. Set by /files from
@@ -630,7 +630,7 @@ export async function ensurePhaseSharePointFolder(
  *     requireSignIn=true (so edits are attributed to their guest identity).
  *     sendInvitation=false — we deliberately do NOT send SharePoint's
  *     (spam-prone) sharing email: the customer reaches the doc via the in-portal
- *     portal file link, and Microsoft handles first-time guest sign-in (email
+ *     "Edit online" link, and Microsoft handles first-time guest sign-in (email
  *     one-time-passcode) inline when they open it.
  *
  * Granting on a FOLDER cascades to its children, so a single folder grant lets
@@ -651,7 +651,7 @@ export async function inviteGuestAndGrantWrite(
       invitedUserEmailAddress: email,
       ...(displayName ? { invitedUserDisplayName: displayName } : {}),
       inviteRedirectUrl: env.APP_URL || "https://cloudconnect.packetfusion.com",
-      sendInvitationMessage: false, // no email — customer uses the in-portal file link (OTP sign-in handled inline)
+      sendInvitationMessage: false, // no email — customer uses the in-portal "Edit online" link (OTP sign-in handled inline)
     });
     invited = true;
   } catch (err) {

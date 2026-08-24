@@ -36,11 +36,10 @@ type Props = {
   canEdit?: boolean;
   /** External roles (client / partner_ae) authenticate to native SharePoint
    *  URLs with their own Microsoft identity, which Entra rejects unless they're
-   *  a guest in the Packet Fusion tenant. When true, the "Open SharePoint"
-   *  shortcut is suppressed and file names link to SharePoint Online only for
-   *  files the viewer has been granted edit on (`canEditOnline` — the grant is
-   *  what makes them a guest); everything else falls back to the
-   *  pre-authenticated download URL and the app's app-only access model. */
+   *  a guest in the Packet Fusion tenant. When true, the browser never links to
+   *  SharePoint Online: file names use the pre-authenticated download URL and
+   *  the "Open SharePoint" shortcut is suppressed, so everything stays inside
+   *  the app's app-only access model. */
   isExternal?: boolean;
   /** Called when the retrofit endpoint successfully creates/adopts a folder
    *  — parent should refresh the record so the URL is persisted on subsequent
@@ -369,7 +368,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       await api.spGrantEditAccess(editPickerFolder.webUrl, clean, projectId, name ?? null);
       setGrantedEmails((prev) => new Set(prev).add(clean.toLowerCase()));
       setManualEmail("");
-      showToast(`${clean} can now edit this folder online — clicking a file name in the portal will open it in SharePoint.`, "success");
+      showToast(`${clean} can now edit this folder online — they'll see an "Edit online" link on its files in the portal.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
     } finally {
@@ -862,25 +861,11 @@ function FileRow({
             {file.name}
           </button>
         ) : isExternal ? (
-          /* Externals who've been granted edit are guests in the PF tenant, so
-             the native SharePoint URL resolves for them — and for Office docs
-             Graph's webUrl IS the Office-for-the-web viewer form
-             (…/_layouts/15/Doc.aspx?sourcedoc=…). Open that, so the title click
-             lands in SharePoint instead of downloading.
-             Without a grant, Entra rejects the native URL for a non-guest
-             account, so fall back to the pre-authenticated download URL — and to
-             plain text on the rare file with neither. */
-          file.canEditOnline ? (
-            <a
-              href={file.webUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ color: "#1e293b", fontWeight: 600, fontSize: 14, textDecoration: "none" }}
-              title="Open in SharePoint"
-            >
-              {file.name}
-            </a>
-          ) : file.downloadUrl ? (
+          /* External roles can't open the native SharePoint URL (Entra rejects
+             non-guest accounts). Use the pre-authenticated download URL so the
+             file opens/downloads without a Packet Fusion tenant sign-in. Fall
+             back to plain text on the rare file with no download URL. */
+          file.downloadUrl ? (
             <a
               href={file.downloadUrl}
               download={file.name}
@@ -1051,9 +1036,20 @@ function FileRow({
             </button>
           </>
         )}
-        {/* No separate "Edit online" button: opening in SharePoint is now the
-            default action on the file title for anyone with a grant. Download
-            stays as the explicit opt-out. */}
+        {/* External viewers granted edit access get an in-portal "Edit online"
+            link (opens the file in Office-for-the-web; they sign in as a guest). */}
+        {!file.isFolder && isExternal && file.canEditOnline && (
+          <a
+            href={file.webUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ms-btn-ghost"
+            style={{ textDecoration: "none", color: "#0b9aad", borderColor: "rgba(11,154,173,0.35)" }}
+            title="Edit this document online in Office for the web"
+          >
+            ✎ Edit online
+          </a>
+        )}
         {!file.isFolder && file.downloadUrl && (
           <a
             href={file.downloadUrl}

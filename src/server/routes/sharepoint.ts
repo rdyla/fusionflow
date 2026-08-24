@@ -202,7 +202,7 @@ app.get("/files", async (c) => {
       files = files.filter((f) => (f.isFolder ? viewerSeesAudience(auth?.role, f.audience) : currentFolderVisible));
     }
 
-    // Overlay open-in-SharePoint for external viewers granted edit on this
+    // Overlay in-portal "Edit online" for external viewers granted edit on this
     // folder (or an ancestor — grants cascade, so match by URL prefix).
     if (isExternalRole(auth?.role) && auth?.user?.email) {
       const grantRows = await c.env.DB
@@ -642,7 +642,7 @@ app.get("/grants", async (c) => {
 // Invites an external person as a B2B guest and grants them WRITE access to the
 // folder at webUrl, so they can edit its documents in Office-for-the-web as
 // themselves (attributed). Gated to project editors; records the grant so the
-// customer opens the doc in SharePoint from the portal and PMs can see/revoke access.
+// customer gets an in-portal "Edit online" link and PMs can see/revoke access.
 app.post("/grant-edit", async (c) => {
   const auth = c.get("auth");
   let body: { webUrl?: string; email?: string; name?: string | null; projectId?: string };
