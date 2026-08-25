@@ -578,3 +578,89 @@ export function supportDigestEmail(data: DigestEmailData): { subject: string; ht
     html,
   };
 }
+
+// ── Leadership Weekly Summary ──────────────────────────────────────────────
+
+function leadershipProjectRow(p: { name: string | null; customerName: string | null; meta?: string }): string {
+  return `
+    <tr>
+      <td style="padding:6px 10px;border-top:1px solid #e2e8f0;vertical-align:top;">
+        <div style="font-size:13px;color:#0b5394;line-height:1.4;">${escapeHtml(p.name ?? "Untitled")}</div>
+        ${p.customerName ? `<div style="font-size:11px;color:#5f7fa6;margin-top:1px;">${escapeHtml(p.customerName)}</div>` : ""}
+      </td>
+      ${p.meta ? `<td style="padding:6px 10px;border-top:1px solid #e2e8f0;text-align:right;vertical-align:top;font-size:12px;color:#5f7fa6;white-space:nowrap;">${escapeHtml(p.meta)}</td>` : ""}
+    </tr>`;
+}
+
+function leadershipProjectTable(rows: string[], emptyText: string): string {
+  const body = rows.length
+    ? rows.join("")
+    : `<tr><td style="padding:12px;font-size:13px;color:#5f7fa6;text-align:center;font-style:italic;">${emptyText}</td></tr>`;
+  return `<table style="border-collapse:collapse;width:100%;background:#f4f6f9;border:1px solid #e2e8f0;border-radius:6px;">${body}</table>`;
+}
+
+export type LeadershipSummaryData = {
+  weekOf: string; // e.g. "Aug 25, 2026" — the Thursday this went out
+  activeProjects: number;
+  atRiskProjects: number;
+  atRiskList: { name: string | null; customerName: string | null }[];
+  blockedProjects: number;
+  blockedList: { name: string | null; customerName: string | null }[];
+  wentLiveStillOpen: number;
+  wentLiveStillOpenList: { name: string | null; customerName: string | null }[];
+  pmCount: number;
+  busiestPM: { name: string | null; n: number } | null;
+  hoursAtRiskCount: number;
+  hoursAtRiskList: { name: string | null; customerName: string | null; pct: number | null }[];
+  appUrl: string;
+};
+
+export function leadershipWeeklySummary(data: LeadershipSummaryData): { subject: string; html: string } {
+  const atRiskRows = data.atRiskList.slice(0, 5).map((p) => leadershipProjectRow({ name: p.name, customerName: p.customerName }));
+  const blockedRows = data.blockedList.slice(0, 5).map((p) => leadershipProjectRow({ name: p.name, customerName: p.customerName }));
+  const wentLiveRows = data.wentLiveStillOpenList.slice(0, 5).map((p) => leadershipProjectRow({ name: p.name, customerName: p.customerName }));
+  const hoursRows = data.hoursAtRiskList.slice(0, 5).map((p) =>
+    leadershipProjectRow({ name: p.name, customerName: p.customerName, meta: p.pct != null ? `${p.pct}% of quote` : undefined })
+  );
+
+  const html = base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">Leadership Weekly Summary</h2>
+    <p style="margin:0 0 18px;font-size:14px;color:#0b5394;line-height:1.6;">
+      Portfolio snapshot for the week of <strong style="color:#0b5394;">${escapeHtml(data.weekOf)}</strong>.
+    </p>
+
+    <table cellpadding="0" cellspacing="6" style="border-collapse:separate;width:100%;margin-bottom:18px;">
+      <tr>
+        ${digestKpiCell("Active Projects", data.activeProjects, null)}
+        ${digestKpiCell("At Risk", data.atRiskProjects, data.atRiskProjects > 0 ? "#ff8c00" : null)}
+        ${digestKpiCell("Blocked", data.blockedProjects, data.blockedProjects > 0 ? "#d13438" : null)}
+        ${digestKpiCell("Went Live · Open", data.wentLiveStillOpen, data.wentLiveStillOpen > 0 ? "#ff8c00" : null)}
+      </tr>
+    </table>
+
+    <p style="margin:0 0 18px;font-size:13px;color:#5f7fa6;">
+      ${data.pmCount} PM${data.pmCount === 1 ? "" : "s"} carrying active projects${
+        data.busiestPM ? ` — busiest: <strong style="color:#0b5394;">${escapeHtml(data.busiestPM.name ?? "Unknown")}</strong> (${data.busiestPM.n})` : ""
+      }.
+    </p>
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin:20px 0 6px;">At Risk</div>
+    ${leadershipProjectTable(atRiskRows, "No at-risk projects.")}
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin:20px 0 6px;">Blocked</div>
+    ${leadershipProjectTable(blockedRows, "No blocked projects.")}
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin:20px 0 6px;">Went Live · Still Open</div>
+    ${leadershipProjectTable(wentLiveRows, "Nothing lingering — go-lives are wrapped up or in Optimize.")}
+
+    <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#5f7fa6;margin:20px 0 6px;">Hours vs. SOW Quote (≥ 80%)</div>
+    ${leadershipProjectTable(hoursRows, "No projects logging hours close to or over their quoted SOW.")}
+
+    ${ctaButton("Open Leadership Dashboard", `${data.appUrl}/leadership`)}
+  `, data.appUrl);
+
+  return {
+    subject: `Leadership Weekly Summary — ${data.weekOf}`,
+    html,
+  };
+}

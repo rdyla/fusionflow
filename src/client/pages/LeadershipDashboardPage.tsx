@@ -135,6 +135,18 @@ export default function LeadershipDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const [summaryPreview, setSummaryPreview] = useState<{ subject: string; html: string } | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+
+  function openSummaryPreview() {
+    setSummaryError(null);
+    setSummaryLoading(true);
+    api.leadershipSummaryPreview()
+      .then((res) => setSummaryPreview(res))
+      .catch((e) => setSummaryError(e?.message ?? "Failed to load preview"))
+      .finally(() => setSummaryLoading(false));
+  }
 
   function toggleExpand(key: string) {
     setExpandedKeys((prev) => {
@@ -166,8 +178,36 @@ export default function LeadershipDashboardPage() {
           <h1 className="ms-page-title">Leadership</h1>
           <p className="ms-page-subtitle">Outcomes and capacity over the current {windowLabel.toLowerCase()}</p>
         </div>
-        <WindowToggle value={window} onChange={setWindow} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button type="button" className="ms-btn-secondary" onClick={openSummaryPreview} disabled={summaryLoading}>
+            {summaryLoading ? "Loading…" : "Preview Weekly Summary"}
+          </button>
+          <WindowToggle value={window} onChange={setWindow} />
+        </div>
       </div>
+
+      {summaryError && (
+        <div className="ms-section-card" style={{ color: "#d13438", marginBottom: 20 }}>{summaryError}</div>
+      )}
+
+      {summaryPreview && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSummaryPreview(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 680, width: "100%", padding: 0, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #e2e8f0" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>Weekly Summary Preview</div>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>{summaryPreview.subject}</div>
+              </div>
+              <button type="button" className="ms-btn-ghost" onClick={() => setSummaryPreview(null)}>Close</button>
+            </div>
+            <iframe
+              title="Leadership weekly summary preview"
+              srcDoc={summaryPreview.html}
+              style={{ width: "100%", height: "70vh", border: "none", display: "block" }}
+            />
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="ms-section-card" style={{ color: "#d13438", marginBottom: 20 }}>{error}</div>
