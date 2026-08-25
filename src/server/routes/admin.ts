@@ -7,7 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
-import { getDemoVendor, setDemoVendor } from "../lib/appSettings";
+import { getDemoVendor, setDemoVendor, getLeadershipSummarySchedule, setLeadershipSummarySchedule } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -653,6 +653,40 @@ app.put("/settings/demo-mode", requireRole("admin"), async (c) => {
   }
   await setDemoVendor(c.env.DB, parsed.data.vendor, auth.user.id);
   return c.json({ vendor: parsed.data.vendor });
+});
+
+// ── Settings: leadership weekly summary email schedule ───────────────────────
+
+app.get("/settings/leadership-summary", requireRole("admin"), async (c) => {
+  const schedule = await getLeadershipSummarySchedule(c.env.DB);
+  const candidates = await c.env.DB
+    .prepare("SELECT id, name, email, role FROM users WHERE role IN ('admin','executive') AND is_active = 1 ORDER BY name ASC")
+    .all<{ id: string; name: string | null; email: string; role: string }>();
+  return c.json({ schedule, candidates: candidates.results ?? [] });
+});
+
+const leadershipSummaryScheduleSchema = z.object({
+  enabled: z.boolean(),
+  dayOfWeek: z.number().int().min(0).max(6),
+  hourLocal: z.number().int().min(0).max(23),
+  recipientEmails: z.array(z.string().email()).max(50),
+});
+
+app.put("/settings/leadership-summary", requireRole("admin"), async (c) => {
+  const auth = c.get("auth");
+  const parsed = leadershipSummaryScheduleSchema.safeParse(await c.req.json());
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "Invalid schedule — check enabled/dayOfWeek/hourLocal/recipientEmails" });
+  }
+  // lastSentAt is cron-owned, not settable from the UI — preserve whatever's there.
+  const current = await getLeadershipSummarySchedule(c.env.DB);
+  const next = {
+    ...parsed.data,
+    recipientEmails: parsed.data.recipientEmails.map((e) => e.toLowerCase().trim()),
+    lastSentAt: current.lastSentAt,
+  };
+  await setLeadershipSummarySchedule(c.env.DB, next, auth.user.id);
+  return c.json({ schedule: next });
 });
 
 export default app;
