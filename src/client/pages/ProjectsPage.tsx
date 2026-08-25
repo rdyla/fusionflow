@@ -139,6 +139,8 @@ export default function ProjectsPage() {
   const pfAeIdFilter = searchParams.get("pf_ae_id");
   const partnerAeIdFilter = searchParams.get("partner_ae_id");
   const aeNameFilter = searchParams.get("ae_name");
+  const pmIdFilter = searchParams.get("pm_id");
+  const pmNameFilter = searchParams.get("pm_name");
   const searchQuery = search.trim().toLowerCase();
   const filteredProjects = projects.filter((p) => {
     if (healthFilter && p.health !== healthFilter) return false;
@@ -164,6 +166,7 @@ export default function ProjectsPage() {
     const next = new URLSearchParams(searchParams);
     next.delete(key);
     if (key === "pf_ae_id" || key === "partner_ae_id") next.delete("ae_name");
+    if (key === "pm_id") next.delete("pm_name");
     setSearchParams(next, { replace: true });
   };
 
@@ -185,12 +188,17 @@ export default function ProjectsPage() {
     api.projects({
       pf_ae_id: pfAeIdFilter ?? undefined,
       partner_ae_id: partnerAeIdFilter ?? undefined,
-      scope,
+      pm_id: pmIdFilter ?? undefined,
+      // A pm_id drill-down (e.g. from the Leadership dashboard) means "show
+      // this PM's projects" regardless of the viewer's own saved mine/all
+      // preference — an admin whose default is "mine" would otherwise have
+      // their own scope intersected with the PM filter and see the wrong list.
+      scope: pmIdFilter ? "all" : scope,
     })
       .then((p) => { setProjects(p); setError(null); })
       .catch((err) => setError(err.message || "Failed to load projects"))
       .finally(() => setLoading(false));
-  }, [pfAeIdFilter, partnerAeIdFilter, scope]);
+  }, [pfAeIdFilter, partnerAeIdFilter, pmIdFilter, scope]);
 
   // Zero-tie users (an admin who is never assigned to projects) would otherwise
   // land on an empty "My Projects" and have to click "All" on every fresh
@@ -347,7 +355,7 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {(healthFilter || pfAeIdFilter || partnerAeIdFilter) && (
+      {(healthFilter || pfAeIdFilter || partnerAeIdFilter || pmIdFilter) && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
           <span style={{ fontSize: 13, color: "#64748b" }}>Filter:</span>
           {healthFilter && (
@@ -362,6 +370,13 @@ export default function ProjectsPage() {
               label={`AE: ${aeNameFilter ?? (pfAeIdFilter === "none" || partnerAeIdFilter === "none" ? "Unassigned" : "selected")}`}
               color="#0891b2"
               onClear={() => clearFilter(pfAeIdFilter ? "pf_ae_id" : "partner_ae_id")}
+            />
+          )}
+          {pmIdFilter && (
+            <FilterPill
+              label={`PM: ${pmNameFilter ?? (pmIdFilter === "none" ? "Unassigned" : "selected")}`}
+              color="#0891b2"
+              onClear={() => clearFilter("pm_id")}
             />
           )}
           <span style={{ fontSize: 12, color: "#94a3b8" }}>

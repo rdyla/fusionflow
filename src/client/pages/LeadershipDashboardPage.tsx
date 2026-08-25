@@ -201,6 +201,7 @@ export default function LeadershipDashboardPage() {
                     key: r.user_id ?? "unassigned",
                     label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
                     hours: r.n,
+                    to: `/projects?pm_id=${encodeURIComponent(r.user_id ?? "none")}&pm_name=${encodeURIComponent(r.user_id ? r.name ?? "Unknown" : "Unassigned")}`,
                   }))}
                   unit=""
                 />
@@ -346,6 +347,7 @@ export default function LeadershipDashboardPage() {
                     key: r.user_id ?? "unassigned",
                     label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
                     hours: r.n,
+                    to: `/projects?pm_id=${encodeURIComponent(r.user_id ?? "none")}&pm_name=${encodeURIComponent(r.user_id ? r.name ?? "Unknown" : "Unassigned")}`,
                   }))}
                   unit=""
                 />
@@ -421,14 +423,23 @@ function TotalHoursCard({ total, prev, entries }: { total: number; prev: number;
   );
 }
 
-function HoursLeaderboard({ rows, unit = "h" }: { rows: { key: string; label: string; hours: number }[]; unit?: string }) {
+function HoursLeaderboard({ rows, unit = "h" }: { rows: { key: string; label: string; hours: number; to?: string }[]; unit?: string }) {
   const max = rows.reduce((m, r) => Math.max(m, r.hours), 0) || 1;
   return (
     <div>
       {rows.map((r) => (
         <div key={r.key} style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-            <span style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+            {r.to ? (
+              <Link
+                to={r.to}
+                style={{ fontSize: 13, color: "#0b9aad", fontWeight: 600, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {r.label}
+              </Link>
+            ) : (
+              <span style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+            )}
             <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", flexShrink: 0, marginLeft: 8 }}>
               {unit === "h" ? `${r.hours.toFixed(1)} h` : `${r.hours}${unit ? ` ${unit}` : ""}`}
             </span>
