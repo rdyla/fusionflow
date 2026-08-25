@@ -353,7 +353,6 @@ export type LeadershipDashboardResponse = {
     activeProjects: number;
     atRiskProjects: number;
     blockedProjects: number;
-    openBlockers: number;
     tasksByEngineer: {
       user_id: string | null;
       name: string | null;
@@ -368,18 +367,6 @@ export type LeadershipDashboardResponse = {
       user_id: string | null;
       name: string | null;
       n: number;
-    }[];
-    goLives: {
-      id: string;
-      name: string | null;
-      customer_name: string | null;
-      date: string | null;
-    }[];
-    upcomingGoLives: {
-      id: string;
-      name: string | null;
-      customer_name: string | null;
-      date: string | null;
     }[];
     wentLiveStillOpen: {
       id: string;
@@ -409,13 +396,6 @@ export type LeadershipDashboardResponse = {
       health: string | null;
       status: string | null;
     }[];
-    openRisksList: {
-      id: string;
-      title: string | null;
-      severity: string | null;
-      project_id: string;
-      project_name: string | null;
-    }[];
   };
   hoursRisk: {
     atRiskCount: number;
@@ -429,18 +409,6 @@ export type LeadershipDashboardResponse = {
     }[];
     noQuoteCount: number;
     candidatesChecked: number;
-  };
-  slippedTimelines: {
-    projectCount: number;
-    stages: {
-      id: string;
-      stageName: string | null;
-      projectId: string;
-      projectName: string | null;
-      customerName: string | null;
-      plannedEnd: string | null;
-      daysOverdue: number;
-    }[];
   };
   noTimeLastWeek: {
     count: number;
