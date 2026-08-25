@@ -136,6 +136,21 @@ app.get("/", async (c) => {
       bindings.push(partnerAeId);
     }
   }
+  // Drill-down from the Leadership dashboard's "Projects by PM" tile — same
+  // pm_user_id-or-project_staff fallback used there and in the "mine" clause
+  // above, plus the same Optimize-graduated exclusion, so the list this opens
+  // matches the count that was clicked exactly.
+  const pmId = c.req.query("pm_id");
+  if (pmId) {
+    if (pmId === "none") {
+      sql += ` AND pm_user_id IS NULL AND id NOT IN (SELECT project_id FROM project_staff WHERE staff_role = 'pm')
+                AND id NOT IN (SELECT project_id FROM optimize_accounts)`;
+    } else {
+      sql += ` AND (pm_user_id = ? OR id IN (SELECT project_id FROM project_staff WHERE user_id = ? AND staff_role = 'pm'))
+                AND id NOT IN (SELECT project_id FROM optimize_accounts)`;
+      bindings.push(pmId, pmId);
+    }
+  }
 
   sql += " ORDER BY updated_at DESC";
 
