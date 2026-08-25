@@ -409,6 +409,14 @@ export type LeadershipDashboardResponse = {
     }[];
     noQuoteCount: number;
     candidatesChecked: number;
+    byProject: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      hoursLogged: number;
+      quotedHours: number | null;
+      pct: number | null;
+    }[];
   };
   noTimeLastWeek: {
     count: number;

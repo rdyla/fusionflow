@@ -568,6 +568,14 @@ app.get("/leadership", async (c) => {
     .filter((r) => r.pct !== null && r.pct >= HOURS_RISK_PCT)
     .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
   const hoursRiskNoQuote = hoursRiskChecked.filter((r) => r.pct === null);
+  // Full hours-burn view (not just the >= 80% subset) — projects with a quote
+  // sorted heaviest-utilized first, no-quote projects (can't compute a %)
+  // pushed to the end rather than dropped, so it's visible they were checked
+  // but have nothing to compare against.
+  const hoursByProject = [
+    ...hoursRiskChecked.filter((r) => r.pct !== null).sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0)),
+    ...hoursRiskNoQuote,
+  ];
 
   const loggedUserIds = new Set((loggedLastWeek.results ?? []).map((r) => r.user_id));
   const noTimeLastWeek = (assignedPeople.results ?? [])
@@ -642,6 +650,7 @@ app.get("/leadership", async (c) => {
       atRisk: hoursRiskAtRisk,
       noQuoteCount: hoursRiskNoQuote.length,
       candidatesChecked: hoursRiskChecked.length,
+      byProject: hoursByProject,
     },
     noTimeLastWeek: {
       count: noTimeLastWeek.length,
