@@ -308,17 +308,10 @@ app.get("/leadership", async (c) => {
   };
 
   const now = new Date();
-  const today = fmt(now);
   const end = fmt(addDays(now, 1));          // exclusive upper bound (today + 1)
   const start = fmt(addDays(now, -(days - 1)));
   const prevEnd = start;                      // current start = previous window's exclusive end
   const prevStart = fmt(addDays(now, -(days - 1) - days));
-  const upcomingEnd = fmt(addDays(now, 30));
-  // Forward-looking counterpart to [start, end) above, same day-count — target
-  // go-live dates are inherently future-facing, so "Go-Lives This Week/Month/
-  // Quarter" looks at the NEXT `days` days (unlike actual go-lives, which look
-  // back since they're retrospective).
-  const targetWindowEnd = fmt(addDays(now, days));
   // Fixed trailing 7 days, independent of the week/month/quarter toggle above —
   // "did this person report time last week" should mean the same thing no
   // matter what window is currently selected on screen.
@@ -343,19 +336,14 @@ app.get("/leadership", async (c) => {
     tasksByEngineer,
     projectsByPM,
     projectAssignmentsIESA,
-    goLives,
-    upcomingGoLives,
     wentLiveStillOpen,
     activeProjects,
     atRisk,
     blocked,
-    openBlockers,
     activeProjectsList,
     atRiskProjectsList,
     blockedProjectsList,
-    openRisksList,
     hoursRiskCandidates,
-    slippedStages,
     assignedPeople,
     loggedLastWeek,
   ] = await Promise.all([
@@ -447,33 +435,6 @@ app.get("/leadership", async (c) => {
        ORDER BY n DESC`
     ).all<{ user_id: string | null; name: string | null; n: number }>(),
 
-    // Targeted (planned) go-lives landing in the next `days` days — a
-    // forward-looking picture of what's coming up, not what already
-    // happened (actual_go_live_date is almost always unset on active
-    // projects — they either haven't hit it yet or have already moved on
-    // to Optimize/wentLiveStillOpen). Excludes projects that already have
-    // an actual go-live date (already happened) and Optimize-graduated
-    // shells, same as the other implementation-scoped tiles above.
-    db.prepare(
-      `SELECT id, name, customer_name, target_go_live_date
-       FROM projects
-       WHERE target_go_live_date >= ? AND target_go_live_date < ?
-         AND actual_go_live_date IS NULL
-         AND (archived = 0 OR archived IS NULL)
-         AND id NOT IN (SELECT project_id FROM optimize_accounts)
-       ORDER BY target_go_live_date ASC`
-    ).bind(today, targetWindowEnd).all<{ id: string; name: string; customer_name: string | null; target_go_live_date: string | null }>(),
-
-    db.prepare(
-      `SELECT id, name, customer_name, target_go_live_date
-       FROM projects
-       WHERE target_go_live_date >= ? AND target_go_live_date <= ?
-         AND (actual_go_live_date IS NULL)
-         AND (archived = 0 OR archived IS NULL)
-       ORDER BY target_go_live_date ASC
-       LIMIT 10`
-    ).bind(today, upcomingEnd).all<{ id: string; name: string; customer_name: string | null; target_go_live_date: string | null }>(),
-
     // Went live (actual_go_live_date set) but the project is still open —
     // not archived and not yet graduated to Optimize. Surfaces projects that
     // hit go-live but haven't been wrapped up or moved on. Oldest first.
@@ -503,10 +464,6 @@ app.get("/leadership", async (c) => {
       `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts)`
     ).first<{ n: number }>(),
 
-    db.prepare(
-      `SELECT COUNT(*) AS n FROM risks WHERE status = 'open'`
-    ).first<{ n: number }>(),
-
     // ── Click-to-expand detail lists — each backs a metric tile's drill-down ──
     db.prepare(
       `SELECT id, name, customer_name, health, status
@@ -532,18 +489,6 @@ app.get("/leadership", async (c) => {
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
 
-    // Open risks, worst severity first (critical > high > medium > low > unset).
-    db.prepare(
-      `SELECT r.id, r.title, r.severity, r.project_id, p.name AS project_name
-       FROM risks r
-       JOIN projects p ON p.id = r.project_id
-       WHERE r.status = 'open'
-       ORDER BY CASE r.severity
-         WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4
-       END ASC
-       LIMIT 15`
-    ).all<{ id: string; title: string; severity: string | null; project_id: string; project_name: string }>(),
-
     // Lifetime (not window-scoped) hours logged per active project that has a
     // linked CRM opportunity — candidate pool for the hours-vs-SOW-quote check
     // below. Capped so the live Dynamics fan-out stays bounded regardless of
@@ -561,23 +506,6 @@ app.get("/leadership", async (c) => {
        ORDER BY hours_logged DESC
        LIMIT 20`
     ).all<{ id: string; name: string; customer_name: string | null; crm_opportunity_id: string; hours_logged: number }>(),
-
-    // Slipped timelines: a stage whose planned end has already passed with
-    // ZERO time logged against it — the strongest available "nothing actually
-    // happened here" signal (as opposed to at_risk/blocked, which are PM
-    // judgment calls). Not scoped to the current window; this is a standing
-    // portfolio check, not a period metric.
-    db.prepare(
-      `SELECT s.id, s.name AS stage_name, s.planned_end, s.project_id, p.name AS project_name, p.customer_name
-       FROM stages s
-       JOIN projects p ON p.id = s.project_id
-       WHERE (p.archived = 0 OR p.archived IS NULL)
-         AND s.planned_end IS NOT NULL
-         AND s.planned_end < ?
-         AND NOT EXISTS (SELECT 1 FROM stage_time_entries ste WHERE ste.stage_id = s.id)
-       ORDER BY s.planned_end ASC
-       LIMIT 20`
-    ).bind(today).all<{ id: string; stage_name: string; planned_end: string; project_id: string; project_name: string; customer_name: string | null }>(),
 
     // Everyone staffed on an active project, any role — PM (projects.pm_user_id)
     // union'd with AE/SA/CSM/Engineer (project_staff), PF staff only.
@@ -641,17 +569,6 @@ app.get("/leadership", async (c) => {
     .sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0));
   const hoursRiskNoQuote = hoursRiskChecked.filter((r) => r.pct === null);
 
-  const slippedTimelines = (slippedStages.results ?? []).map((r) => ({
-    id: r.id,
-    stageName: r.stage_name,
-    projectId: r.project_id,
-    projectName: r.project_name,
-    customerName: r.customer_name,
-    plannedEnd: r.planned_end,
-    daysOverdue: Math.round((Date.parse(today) - Date.parse(r.planned_end)) / 86_400_000),
-  }));
-  const slippedTimelinesProjectCount = new Set(slippedTimelines.map((s) => s.projectId)).size;
-
   const loggedUserIds = new Set((loggedLastWeek.results ?? []).map((r) => r.user_id));
   const noTimeLastWeek = (assignedPeople.results ?? [])
     .filter((r) => r.user_id && !loggedUserIds.has(r.user_id))
@@ -676,7 +593,6 @@ app.get("/leadership", async (c) => {
       activeProjects: activeProjects?.n ?? 0,
       atRiskProjects: atRisk?.n ?? 0,
       blockedProjects: blocked?.n ?? 0,
-      openBlockers: openBlockers?.n ?? 0,
       tasksByEngineer: (tasksByEngineer.results ?? []).map((r) => ({
         user_id: r.assignee_user_id,
         name: r.name,
@@ -691,18 +607,6 @@ app.get("/leadership", async (c) => {
         user_id: r.user_id,
         name: r.name,
         n: r.n,
-      })),
-      goLives: (goLives.results ?? []).map((r) => ({
-        id: r.id,
-        name: r.name,
-        customer_name: r.customer_name,
-        date: r.target_go_live_date,
-      })),
-      upcomingGoLives: (upcomingGoLives.results ?? []).map((r) => ({
-        id: r.id,
-        name: r.name,
-        customer_name: r.customer_name,
-        date: r.target_go_live_date,
       })),
       wentLiveStillOpen: (wentLiveStillOpen.results ?? []).map((r) => ({
         id: r.id,
@@ -732,23 +636,12 @@ app.get("/leadership", async (c) => {
         health: r.health,
         status: r.status,
       })),
-      openRisksList: (openRisksList.results ?? []).map((r) => ({
-        id: r.id,
-        title: r.title,
-        severity: r.severity,
-        project_id: r.project_id,
-        project_name: r.project_name,
-      })),
     },
     hoursRisk: {
       atRiskCount: hoursRiskAtRisk.length,
       atRisk: hoursRiskAtRisk,
       noQuoteCount: hoursRiskNoQuote.length,
       candidatesChecked: hoursRiskChecked.length,
-    },
-    slippedTimelines: {
-      projectCount: slippedTimelinesProjectCount,
-      stages: slippedTimelines,
     },
     noTimeLastWeek: {
       count: noTimeLastWeek.length,
