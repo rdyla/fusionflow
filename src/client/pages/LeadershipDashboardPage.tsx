@@ -135,6 +135,82 @@ export default function LeadershipDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  const [summaryPreview, setSummaryPreview] = useState<{ subject: string; html: string } | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [currentRole, setCurrentRole] = useState("");
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+  const [scheduleSaving, setScheduleSaving] = useState(false);
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [scheduleDayOfWeek, setScheduleDayOfWeek] = useState(4);
+  const [scheduleHourLocal, setScheduleHourLocal] = useState(7);
+  const [scheduleRecipients, setScheduleRecipients] = useState<Set<string>>(new Set());
+  const [scheduleCandidates, setScheduleCandidates] = useState<{ id: string; name: string | null; email: string; role: string }[]>([]);
+  const [scheduleLastSentAt, setScheduleLastSentAt] = useState<string | null>(null);
+  const [customEmailInput, setCustomEmailInput] = useState("");
+
+  useEffect(() => {
+    api.me().then((me) => setCurrentRole(me.role)).catch(() => {});
+  }, []);
+
+  function openSummaryPreview() {
+    setSummaryError(null);
+    setSummaryLoading(true);
+    api.leadershipSummaryPreview()
+      .then((res) => setSummaryPreview(res))
+      .catch((e) => setSummaryError(e?.message ?? "Failed to load preview"))
+      .finally(() => setSummaryLoading(false));
+  }
+
+  function openScheduleModal() {
+    setScheduleError(null);
+    setScheduleLoading(true);
+    setShowScheduleModal(true);
+    api.adminGetLeadershipSummarySchedule()
+      .then((res) => {
+        setScheduleEnabled(res.schedule.enabled);
+        setScheduleDayOfWeek(res.schedule.dayOfWeek);
+        setScheduleHourLocal(res.schedule.hourLocal);
+        setScheduleRecipients(new Set(res.schedule.recipientEmails));
+        setScheduleLastSentAt(res.schedule.lastSentAt);
+        setScheduleCandidates(res.candidates);
+      })
+      .catch((e) => setScheduleError(e?.message ?? "Failed to load schedule"))
+      .finally(() => setScheduleLoading(false));
+  }
+
+  function toggleRecipient(email: string) {
+    setScheduleRecipients((prev) => {
+      const next = new Set(prev);
+      const key = email.toLowerCase();
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function addCustomEmail() {
+    const email = customEmailInput.trim().toLowerCase();
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+    setScheduleRecipients((prev) => new Set(prev).add(email));
+    setCustomEmailInput("");
+  }
+
+  function saveSchedule() {
+    setScheduleError(null);
+    setScheduleSaving(true);
+    api.adminSetLeadershipSummarySchedule({
+      enabled: scheduleEnabled,
+      dayOfWeek: scheduleDayOfWeek,
+      hourLocal: scheduleHourLocal,
+      recipientEmails: [...scheduleRecipients],
+    })
+      .then((res) => { setScheduleLastSentAt(res.schedule.lastSentAt); setShowScheduleModal(false); })
+      .catch((e) => setScheduleError(e?.message ?? "Failed to save schedule"))
+      .finally(() => setScheduleSaving(false));
+  }
 
   function toggleExpand(key: string) {
     setExpandedKeys((prev) => {
@@ -166,8 +242,134 @@ export default function LeadershipDashboardPage() {
           <h1 className="ms-page-title">Leadership</h1>
           <p className="ms-page-subtitle">Outcomes and capacity over the current {windowLabel.toLowerCase()}</p>
         </div>
-        <WindowToggle value={window} onChange={setWindow} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button type="button" className="ms-btn-secondary" onClick={openSummaryPreview} disabled={summaryLoading}>
+            {summaryLoading ? "Loading…" : "Preview Weekly Summary"}
+          </button>
+          {currentRole === "admin" && (
+            <button type="button" className="ms-btn-secondary" onClick={openScheduleModal}>
+              Schedule Weekly Summary
+            </button>
+          )}
+          <WindowToggle value={window} onChange={setWindow} />
+        </div>
       </div>
+
+      {summaryError && (
+        <div className="ms-section-card" style={{ color: "#d13438", marginBottom: 20 }}>{summaryError}</div>
+      )}
+
+      {summaryPreview && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setSummaryPreview(null); }}>
+          <div className="ms-modal" style={{ maxWidth: 680, width: "100%", padding: 0, overflow: "hidden" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 20px", borderBottom: "1px solid #e2e8f0" }}>
+              <div>
+                <div style={{ fontSize: 15, fontWeight: 700, color: "#1e293b" }}>Weekly Summary Preview</div>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>{summaryPreview.subject}</div>
+              </div>
+              <button type="button" className="ms-btn-ghost" onClick={() => setSummaryPreview(null)}>Close</button>
+            </div>
+            <iframe
+              title="Leadership weekly summary preview"
+              srcDoc={summaryPreview.html}
+              style={{ width: "100%", height: "70vh", border: "none", display: "block" }}
+            />
+          </div>
+        </div>
+      )}
+
+      {showScheduleModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowScheduleModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 480, width: "100%" }}>
+            <h2>Schedule Weekly Summary</h2>
+            {scheduleLoading ? (
+              <div style={{ padding: 20, color: "#64748b" }}>Loading…</div>
+            ) : (
+              <div style={{ display: "grid", gap: 16 }}>
+                {scheduleError && <div style={{ color: "#d13438", fontSize: 13 }}>{scheduleError}</div>}
+
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 14, fontWeight: 600 }}>
+                  <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} />
+                  Send automatically
+                </label>
+
+                <div style={{ display: "flex", gap: 12 }}>
+                  <label className="ms-label" style={{ flex: 1 }}>
+                    <span>Day</span>
+                    <select className="ms-input" value={scheduleDayOfWeek} onChange={(e) => setScheduleDayOfWeek(Number(e.target.value))}>
+                      {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((label, i) => (
+                        <option key={i} value={i}>{label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="ms-label" style={{ flex: 1 }}>
+                    <span>Time (Pacific)</span>
+                    <select className="ms-input" value={scheduleHourLocal} onChange={(e) => setScheduleHourLocal(Number(e.target.value))}>
+                      {Array.from({ length: 24 }, (_, h) => (
+                        <option key={h} value={h}>
+                          {h === 0 ? "12:00 AM" : h < 12 ? `${h}:00 AM` : h === 12 ? "12:00 PM" : `${h - 12}:00 PM`}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#334155", marginBottom: 6 }}>Recipients</div>
+                  {scheduleCandidates.length === 0 ? (
+                    <div style={{ fontSize: 12, color: "#94a3b8", fontStyle: "italic" }}>No admin/executive users found.</div>
+                  ) : (
+                    <div style={{ display: "grid", gap: 6, maxHeight: 160, overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: 6, padding: 10 }}>
+                      {scheduleCandidates.map((u) => (
+                        <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                          <input
+                            type="checkbox"
+                            checked={scheduleRecipients.has(u.email.toLowerCase())}
+                            onChange={() => toggleRecipient(u.email)}
+                          />
+                          {u.name ?? u.email} <span style={{ color: "#94a3b8" }}>({u.email})</span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {[...scheduleRecipients].filter((e) => !scheduleCandidates.some((c) => c.email.toLowerCase() === e)).length > 0 && (
+                    <div style={{ marginTop: 8, display: "grid", gap: 4 }}>
+                      {[...scheduleRecipients].filter((e) => !scheduleCandidates.some((c) => c.email.toLowerCase() === e)).map((e) => (
+                        <div key={e} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13 }}>
+                          <span>{e} <span style={{ color: "#94a3b8" }}>(custom)</span></span>
+                          <button type="button" className="ms-btn-ghost" style={{ fontSize: 11, padding: "2px 8px" }} onClick={() => toggleRecipient(e)}>Remove</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                    <input
+                      className="ms-input"
+                      style={{ flex: 1 }}
+                      placeholder="Add another email"
+                      value={customEmailInput}
+                      onChange={(e) => setCustomEmailInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCustomEmail(); } }}
+                    />
+                    <button type="button" className="ms-btn-secondary" onClick={addCustomEmail}>Add</button>
+                  </div>
+                </div>
+
+                {scheduleLastSentAt && (
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>Last sent: {scheduleLastSentAt}</div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+                  <button type="button" className="ms-btn-ghost" onClick={() => setShowScheduleModal(false)}>Cancel</button>
+                  <button type="button" className="ms-btn-primary" onClick={saveSchedule} disabled={scheduleSaving}>
+                    {scheduleSaving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="ms-section-card" style={{ color: "#d13438", marginBottom: 20 }}>{error}</div>

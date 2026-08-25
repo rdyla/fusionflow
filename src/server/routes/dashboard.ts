@@ -6,6 +6,8 @@ import { clientAccountIds } from "../lib/permissions";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
 import { getOpportunityQuotes } from "../services/dynamicsService";
+import { leadershipWeeklySummary } from "../lib/emailTemplates";
+import { buildLeadershipSummaryData } from "../lib/leadershipSummary";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -657,6 +659,19 @@ app.get("/leadership", async (c) => {
       people: noTimeLastWeek,
     },
   });
+});
+
+// GET /api/dashboard/leadership/summary-preview
+// Renders the leadership weekly-summary email against LIVE data, for review
+// independent of the send schedule. Shares buildLeadershipSummaryData with
+// the weekly-summary cron job so preview and actual sends never drift.
+app.get("/leadership/summary-preview", async (c) => {
+  const auth = c.get("auth");
+  if (auth.role !== "admin" && auth.role !== "executive") {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  const data = await buildLeadershipSummaryData(c.env);
+  return c.json(leadershipWeeklySummary(data));
 });
 
 export default app;

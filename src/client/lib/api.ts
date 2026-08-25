@@ -1755,6 +1755,8 @@ export const api = {
   dashboardSummary: () => request<DashboardSummaryResponse>("/dashboard/summary"),
   leadershipDashboard: (window: "week" | "month" | "quarter" = "week") =>
     request<LeadershipDashboardResponse>(`/dashboard/leadership?window=${window}`),
+  leadershipSummaryPreview: () =>
+    request<{ subject: string; html: string }>(`/dashboard/leadership/summary-preview`),
   myTasks: (params: { status?: string; priority?: string; search?: string; page?: number }) => {
     const q = new URLSearchParams();
     if (params.status)   q.set("status",   params.status);
@@ -3104,6 +3106,16 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ vendor }),
     }),
+  adminGetLeadershipSummarySchedule: () =>
+    request<{
+      schedule: { enabled: boolean; dayOfWeek: number; hourLocal: number; recipientEmails: string[]; lastSentAt: string | null };
+      candidates: { id: string; name: string | null; email: string; role: string }[];
+    }>("/admin/settings/leadership-summary"),
+  adminSetLeadershipSummarySchedule: (body: { enabled: boolean; dayOfWeek: number; hourLocal: number; recipientEmails: string[] }) =>
+    request<{ schedule: { enabled: boolean; dayOfWeek: number; hourLocal: number; recipientEmails: string[]; lastSentAt: string | null } }>(
+      "/admin/settings/leadership-summary",
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
 
   // ── Self-service profile ─────────────────────────────────────────────────────
   getMyProfile: () => request<MyProfile>("/me/profile"),

@@ -44,10 +44,12 @@ import meRoutes from "./routes/me";
 import salesToolsRoutes from "./routes/salesTools";
 import customPlanRoutes from "./routes/customPlan"; // one-off MedVet custom plan (throwaway)
 import { sendEmail } from "./services/emailService";
-import { goLiveReminder } from "./lib/emailTemplates";
+import { goLiveReminder, leadershipWeeklySummary } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
 import { computeProjectHealth } from "./lib/healthScore";
 import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
+import { getLeadershipSummarySchedule, setLeadershipSummarySchedule } from "./lib/appSettings";
+import { buildLeadershipSummaryData } from "./lib/leadershipSummary";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -237,9 +239,44 @@ async function runUtilizationSnapshots(env: Bindings): Promise<void> {
   }
 }
 
+// Checked every hour (see the "0 * * * *" cron below) against the
+// admin-configured schedule (src/server/routes/admin.ts PUT
+// /settings/leadership-summary) — fires the leadership weekly-summary email
+// once its target Pacific weekday+hour is reached. Resolves the current
+// Pacific weekday/hour via Intl with an IANA zone rather than a fixed UTC
+// offset, so it lands on the configured local hour through PST/PDT without
+// needing two separate cron entries. lastSentAt (Pacific-local YYYY-MM-DD)
+// guards against sending twice if this check fires more than once within
+// the target hour.
+async function runLeadershipWeeklySummaryCheck(env: Bindings): Promise<void> {
+  const schedule = await getLeadershipSummarySchedule(env.DB);
+  if (!schedule.enabled || schedule.recipientEmails.length === 0) return;
+
+  const now = new Date();
+  const PACIFIC_TZ = "America/Los_Angeles";
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: PACIFIC_TZ, weekday: "short", hour: "numeric", hourCycle: "h23" }).formatToParts(now);
+  const WEEKDAY_MAP: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  const currentDow = WEEKDAY_MAP[parts.find((p) => p.type === "weekday")?.value ?? ""];
+  const currentHour = Number(parts.find((p) => p.type === "hour")?.value ?? "-1");
+
+  if (currentDow !== schedule.dayOfWeek || currentHour !== schedule.hourLocal) return;
+
+  const pacificDateStr = new Intl.DateTimeFormat("en-CA", { timeZone: PACIFIC_TZ }).format(now); // YYYY-MM-DD
+  if (schedule.lastSentAt === pacificDateStr) return; // already sent this week
+
+  const data = await buildLeadershipSummaryData(env);
+  const rendered = leadershipWeeklySummary(data);
+  await sendEmail(env, { to: schedule.recipientEmails, subject: rendered.subject, html: rendered.html });
+  await setLeadershipSummarySchedule(env.DB, { ...schedule, lastSentAt: pacificDateStr }, null);
+}
+
 export default {
   fetch: app.fetch.bind(app),
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
+    if (event.cron === "0 * * * *") {
+      ctx.waitUntil(runLeadershipWeeklySummaryCheck(env));
+      return;
+    }
     // Shipment tracking runs on its own 6-hour cron so it doesn't make the daily
     // email/health jobs fire 4× a day. Everything else is the daily 14:00 cron.
     if (event.cron === "0 */6 * * *") {

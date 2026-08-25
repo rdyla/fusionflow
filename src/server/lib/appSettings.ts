@@ -34,3 +34,58 @@ export async function setDemoVendor(
     .bind(value, updatedByUserId)
     .run();
 }
+
+// ── Leadership weekly summary email schedule ─────────────────────────────────
+// Stored as a single JSON blob under key 'leadership_summary_schedule' — the
+// generic app_settings table already stores JSON elsewhere in this app
+// (solutions.add_ons etc.), and a schedule this small doesn't warrant its own
+// table. hourLocal/dayOfWeek are interpreted in America/Los_Angeles (Pacific)
+// by the cron check, which resolves current Pacific weekday/hour via Intl —
+// that handles PST/PDT automatically, unlike a fixed-UTC cron string.
+
+export type LeadershipSummarySchedule = {
+  enabled: boolean;
+  dayOfWeek: number; // 0=Sun .. 6=Sat
+  hourLocal: number; // 0-23, Pacific local hour
+  recipientEmails: string[];
+  lastSentAt: string | null; // Pacific-local YYYY-MM-DD of the last successful send — guards against double-sends if the hourly cron check fires more than once in the target hour
+};
+
+const DEFAULT_LEADERSHIP_SUMMARY_SCHEDULE: LeadershipSummarySchedule = {
+  enabled: false,
+  dayOfWeek: 4, // Thursday
+  hourLocal: 7,
+  recipientEmails: [],
+  lastSentAt: null,
+};
+
+export async function getLeadershipSummarySchedule(db: D1Database): Promise<LeadershipSummarySchedule> {
+  const row = await db
+    .prepare("SELECT value FROM app_settings WHERE key = 'leadership_summary_schedule' LIMIT 1")
+    .first<{ value: string | null }>();
+  if (!row?.value) return DEFAULT_LEADERSHIP_SUMMARY_SCHEDULE;
+  try {
+    const parsed = JSON.parse(row.value);
+    return { ...DEFAULT_LEADERSHIP_SUMMARY_SCHEDULE, ...parsed };
+  } catch {
+    return DEFAULT_LEADERSHIP_SUMMARY_SCHEDULE;
+  }
+}
+
+export async function setLeadershipSummarySchedule(
+  db: D1Database,
+  schedule: LeadershipSummarySchedule,
+  updatedByUserId: string | null,
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO app_settings (key, value, updated_at, updated_by_user_id)
+       VALUES ('leadership_summary_schedule', ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value = excluded.value,
+         updated_at = CURRENT_TIMESTAMP,
+         updated_by_user_id = excluded.updated_by_user_id`,
+    )
+    .bind(JSON.stringify(schedule), updatedByUserId)
+    .run();
+}
