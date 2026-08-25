@@ -336,6 +336,52 @@ export default function LeadershipDashboardPage() {
             </MetricCard>
           </div>
 
+          {/* Hours-burn view: logged hours vs. the CRM SOW quote, every checked
+              project (not just the >= 80% subset above). Not a cost/profitability
+              figure — this app has no internal labor cost rate to compute margin
+              from, only quoted-vs-actual hours. */}
+          <div className="ms-card" style={{ overflow: "hidden", marginBottom: 16 }}>
+            <div className="ms-section-title" style={{ margin: "16px 16px 4px" }}>Hours Utilization by Project</div>
+            <p style={{ fontSize: 12, color: "#94a3b8", margin: "0 16px 12px" }}>
+              Hours logged vs. quoted SOW hours — not a cost or margin figure, just hours burn.
+            </p>
+            {data.hoursRisk.byProject.length === 0 ? (
+              <div style={{ padding: "0 16px 16px", fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>
+                No projects with logged hours and a linked CRM opportunity to check.
+              </div>
+            ) : (
+              <table className="ms-table">
+                <thead>
+                  <tr>
+                    <th>Project</th>
+                    <th>Customer</th>
+                    <th>Hours Logged</th>
+                    <th>Hours Quoted</th>
+                    <th>% Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.hoursRisk.byProject.map((p) => {
+                    const pctColor = p.pct === null ? "#94a3b8" : p.pct >= 100 ? "#d13438" : p.pct >= 80 ? "#ff8c00" : "#107c10";
+                    return (
+                      <tr key={p.id}>
+                        <td>
+                          <Link to={`/projects/${p.id}`} style={{ color: "#0b9aad", fontWeight: 600, textDecoration: "none" }}>
+                            {p.name ?? "Untitled"}
+                          </Link>
+                        </td>
+                        <td>{p.customer_name ?? "—"}</td>
+                        <td>{p.hoursLogged.toFixed(1)}</td>
+                        <td>{p.quotedHours != null ? p.quotedHours.toFixed(0) : "—"}</td>
+                        <td style={{ color: pctColor, fontWeight: 700 }}>{p.pct != null ? `${p.pct}%` : "no quote"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div className="ms-section-card">
               <div className="ms-section-title" style={{ marginBottom: 12 }}>Project Assignment (PM's)</div>
