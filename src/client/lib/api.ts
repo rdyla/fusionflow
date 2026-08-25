@@ -353,7 +353,6 @@ export type LeadershipDashboardResponse = {
     activeProjects: number;
     atRiskProjects: number;
     blockedProjects: number;
-    openBlockers: number;
     tasksByEngineer: {
       user_id: string | null;
       name: string | null;
@@ -368,18 +367,6 @@ export type LeadershipDashboardResponse = {
       user_id: string | null;
       name: string | null;
       n: number;
-    }[];
-    goLives: {
-      id: string;
-      name: string | null;
-      customer_name: string | null;
-      date: string | null;
-    }[];
-    upcomingGoLives: {
-      id: string;
-      name: string | null;
-      customer_name: string | null;
-      date: string | null;
     }[];
     wentLiveStillOpen: {
       id: string;
@@ -409,13 +396,6 @@ export type LeadershipDashboardResponse = {
       health: string | null;
       status: string | null;
     }[];
-    openRisksList: {
-      id: string;
-      title: string | null;
-      severity: string | null;
-      project_id: string;
-      project_name: string | null;
-    }[];
   };
   hoursRisk: {
     atRiskCount: number;
@@ -429,18 +409,6 @@ export type LeadershipDashboardResponse = {
     }[];
     noQuoteCount: number;
     candidatesChecked: number;
-  };
-  slippedTimelines: {
-    projectCount: number;
-    stages: {
-      id: string;
-      stageName: string | null;
-      projectId: string;
-      projectName: string | null;
-      customerName: string | null;
-      plannedEnd: string | null;
-      daysOverdue: number;
-    }[];
   };
   noTimeLastWeek: {
     count: number;
@@ -1787,10 +1755,11 @@ export const api = {
     if (params.page)     q.set("page",     String(params.page));
     return request<{ items: (Task & { project_name: string; stage_name: string | null; assignee_name: string | null })[]; total: number; page: number; hasMore: boolean }>(`/my-tasks?${q.toString()}`);
   },
-  projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string; scope?: "mine" | "all" }) => {
+  projects: (filters?: { pf_ae_id?: string; partner_ae_id?: string; pm_id?: string; scope?: "mine" | "all" }) => {
     const qs = new URLSearchParams();
     if (filters?.pf_ae_id) qs.set("pf_ae_id", filters.pf_ae_id);
     if (filters?.partner_ae_id) qs.set("partner_ae_id", filters.partner_ae_id);
+    if (filters?.pm_id) qs.set("pm_id", filters.pm_id);
     if (filters?.scope) qs.set("scope", filters.scope);
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return request<Project[]>(`/projects${suffix}`);

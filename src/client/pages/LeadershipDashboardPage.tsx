@@ -10,38 +10,11 @@ function formatDate(d: string | null) {
   return new Date(normalized).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-// Leadership sees projects, not individual stages — a project with several
-// slipped stages should be one row, not several. Sorted worst-overdue first.
-function slippedTimelinesByProject(
-  stages: LeadershipDashboardResponse["slippedTimelines"]["stages"]
-): { projectId: string; projectName: string | null; customerName: string | null; stageCount: number; maxDaysOverdue: number }[] {
-  const byProject = new Map<string, { projectName: string | null; customerName: string | null; stageCount: number; maxDaysOverdue: number }>();
-  for (const s of stages) {
-    const existing = byProject.get(s.projectId);
-    if (existing) {
-      existing.stageCount += 1;
-      existing.maxDaysOverdue = Math.max(existing.maxDaysOverdue, s.daysOverdue);
-    } else {
-      byProject.set(s.projectId, { projectName: s.projectName, customerName: s.customerName, stageCount: 1, maxDaysOverdue: s.daysOverdue });
-    }
-  }
-  return [...byProject.entries()]
-    .map(([projectId, p]) => ({ projectId, ...p }))
-    .sort((a, b) => b.maxDaysOverdue - a.maxDaysOverdue);
-}
-
 const WINDOW_OPTIONS: { value: "week" | "month" | "quarter"; label: string }[] = [
   { value: "week", label: "Week" },
   { value: "month", label: "Month" },
   { value: "quarter", label: "Quarter" },
 ];
-
-const SEVERITY_COLOR: Record<string, string> = {
-  critical: "#d13438",
-  high: "#ff8c00",
-  medium: "#eab308",
-  low: "#94a3b8",
-};
 
 function EmptyNote({ children }: { children: React.ReactNode }) {
   return <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>{children}</div>;
@@ -228,59 +201,10 @@ export default function LeadershipDashboardPage() {
                     key: r.user_id ?? "unassigned",
                     label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
                     hours: r.n,
+                    to: `/projects?pm_id=${encodeURIComponent(r.user_id ?? "none")}&pm_name=${encodeURIComponent(r.user_id ? r.name ?? "Unknown" : "Unassigned")}`,
                   }))}
                   unit=""
                 />
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title={`Go-Lives This ${windowLabel}`}
-              value={data.projects.goLives.length}
-              accent={data.projects.goLives.length > 0 ? "#107c10" : undefined}
-              sub={`targeted, next ${windowLabel.toLowerCase()}`}
-              expandKey="goLives"
-              expanded={expandedKeys.has("goLives")}
-              onToggle={toggleExpand}
-            >
-              {data.projects.goLives.length === 0 ? (
-                <EmptyNote>No targeted go-lives in this period.</EmptyNote>
-              ) : (
-                data.projects.goLives.map((g) => (
-                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
-                ))
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title="Upcoming Go-Lives"
-              value={data.projects.upcomingGoLives.length}
-              expandKey="upcomingGoLives"
-              expanded={expandedKeys.has("upcomingGoLives")}
-              onToggle={toggleExpand}
-            >
-              {data.projects.upcomingGoLives.length === 0 ? (
-                <EmptyNote>No upcoming go-lives in the next 30 days.</EmptyNote>
-              ) : (
-                data.projects.upcomingGoLives.map((g) => (
-                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
-                ))
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title="Went Live · Still Open"
-              value={data.projects.wentLiveStillOpen.length}
-              expandKey="wentLiveStillOpen"
-              expanded={expandedKeys.has("wentLiveStillOpen")}
-              onToggle={toggleExpand}
-            >
-              {data.projects.wentLiveStillOpen.length === 0 ? (
-                <EmptyNote>Nothing lingering — go-lives are wrapped up or in Optimize.</EmptyNote>
-              ) : (
-                data.projects.wentLiveStillOpen.map((g) => (
-                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
-                ))
               )}
             </MetricCard>
 
@@ -342,66 +266,17 @@ export default function LeadershipDashboardPage() {
             </MetricCard>
 
             <MetricCard
-              title="Open Blockers"
-              value={data.projects.openBlockers}
-              accent={data.projects.openBlockers > 0 ? "#d13438" : undefined}
-              expandKey="openBlockers"
-              expanded={expandedKeys.has("openBlockers")}
+              title="Went Live · Still Open"
+              value={data.projects.wentLiveStillOpen.length}
+              expandKey="wentLiveStillOpen"
+              expanded={expandedKeys.has("wentLiveStillOpen")}
               onToggle={toggleExpand}
             >
-              {data.projects.openRisksList.length === 0 ? (
-                <EmptyNote>No open blockers.</EmptyNote>
+              {data.projects.wentLiveStillOpen.length === 0 ? (
+                <EmptyNote>Nothing lingering — go-lives are wrapped up or in Optimize.</EmptyNote>
               ) : (
-                <>
-                  {data.projects.openRisksList.map((r) => (
-                    <ListRow
-                      key={r.id}
-                      to={`/projects/${r.project_id}?tab=risks`}
-                      title={r.title ?? "Untitled"}
-                      subtitle={r.project_name}
-                      right={
-                        r.severity ? (
-                          <span style={{ color: SEVERITY_COLOR[r.severity] ?? "#64748b", fontWeight: 700, textTransform: "uppercase", fontSize: 11 }}>
-                            {r.severity}
-                          </span>
-                        ) : undefined
-                      }
-                    />
-                  ))}
-                  {data.projects.openBlockers > data.projects.openRisksList.length && (
-                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
-                      Showing {data.projects.openRisksList.length} of {data.projects.openBlockers}.
-                    </div>
-                  )}
-                </>
-              )}
-            </MetricCard>
-
-            <MetricCard
-              title="Slipped Timelines"
-              value={data.slippedTimelines.projectCount}
-              accent={data.slippedTimelines.projectCount > 0 ? "#d13438" : undefined}
-              sub="stage past due, 0 hours logged"
-              expandKey="slippedTimelines"
-              expanded={expandedKeys.has("slippedTimelines")}
-              onToggle={toggleExpand}
-            >
-              {data.slippedTimelines.stages.length === 0 ? (
-                <EmptyNote>No overdue stages with zero logged hours.</EmptyNote>
-              ) : (
-                slippedTimelinesByProject(data.slippedTimelines.stages).map((p) => (
-                  <ListRow
-                    key={p.projectId}
-                    to={`/projects/${p.projectId}`}
-                    title={p.projectName ?? "Untitled"}
-                    subtitle={p.customerName}
-                    right={
-                      <span style={{ color: "#d13438", fontWeight: 700 }}>
-                        {p.stageCount > 1 ? `${p.stageCount} stages · ` : ""}
-                        {p.maxDaysOverdue}d overdue
-                      </span>
-                    }
-                  />
+                data.projects.wentLiveStillOpen.map((g) => (
+                  <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
                 ))
               )}
             </MetricCard>
@@ -472,6 +347,7 @@ export default function LeadershipDashboardPage() {
                     key: r.user_id ?? "unassigned",
                     label: r.user_id ? r.name ?? "Unknown" : "Unassigned",
                     hours: r.n,
+                    to: `/projects?pm_id=${encodeURIComponent(r.user_id ?? "none")}&pm_name=${encodeURIComponent(r.user_id ? r.name ?? "Unknown" : "Unassigned")}`,
                   }))}
                   unit=""
                 />
@@ -547,14 +423,23 @@ function TotalHoursCard({ total, prev, entries }: { total: number; prev: number;
   );
 }
 
-function HoursLeaderboard({ rows, unit = "h" }: { rows: { key: string; label: string; hours: number }[]; unit?: string }) {
+function HoursLeaderboard({ rows, unit = "h" }: { rows: { key: string; label: string; hours: number; to?: string }[]; unit?: string }) {
   const max = rows.reduce((m, r) => Math.max(m, r.hours), 0) || 1;
   return (
     <div>
       {rows.map((r) => (
         <div key={r.key} style={{ marginBottom: 10 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
-            <span style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+            {r.to ? (
+              <Link
+                to={r.to}
+                style={{ fontSize: 13, color: "#0b9aad", fontWeight: 600, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+              >
+                {r.label}
+              </Link>
+            ) : (
+              <span style={{ fontSize: 13, color: "#334155", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.label}</span>
+            )}
             <span style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", flexShrink: 0, marginLeft: 8 }}>
               {unit === "h" ? `${r.hours.toFixed(1)} h` : `${r.hours}${unit ? ` ${unit}` : ""}`}
             </span>
