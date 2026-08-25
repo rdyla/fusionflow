@@ -3106,6 +3106,16 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ vendor }),
     }),
+  adminGetLeadershipSummarySchedule: () =>
+    request<{
+      schedule: { enabled: boolean; dayOfWeek: number; hourLocal: number; recipientEmails: string[]; lastSentAt: string | null };
+      candidates: { id: string; name: string | null; email: string; role: string }[];
+    }>("/admin/settings/leadership-summary"),
+  adminSetLeadershipSummarySchedule: (body: { enabled: boolean; dayOfWeek: number; hourLocal: number; recipientEmails: string[] }) =>
+    request<{ schedule: { enabled: boolean; dayOfWeek: number; hourLocal: number; recipientEmails: string[]; lastSentAt: string | null } }>(
+      "/admin/settings/leadership-summary",
+      { method: "PUT", body: JSON.stringify(body) }
+    ),
 
   // ── Self-service profile ─────────────────────────────────────────────────────
   getMyProfile: () => request<MyProfile>("/me/profile"),
