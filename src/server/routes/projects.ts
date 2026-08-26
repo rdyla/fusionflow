@@ -10,7 +10,7 @@ import { clientAccountIds } from "../lib/permissions";
 import { maybeSendEmail, sendEmail } from "../services/emailService";
 import { projectAtRisk, contactProjectInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
-import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
+import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes, closeCase } from "../services/dynamicsService";
 import { ensureSharePointChildFolder, grantFolderEdit, lookupMailGroup, revokeAllProjectEditGrants } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
@@ -232,9 +232,9 @@ app.post("/:id/close", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await db
-    .prepare("SELECT id, status, closed_at FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT id, status, closed_at, crm_case_id FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ id: string; status: string | null; closed_at: string | null }>();
+    .first<{ id: string; status: string | null; closed_at: string | null; crm_case_id: string | null }>();
   if (!project) throw new HTTPException(404, { message: "Project not found" });
   if (project.closed_at) throw new HTTPException(409, { message: "Project is already closed" });
 
@@ -272,6 +272,37 @@ app.post("/:id/close", async (c) => {
       console.warn(`[projects.close] SharePoint grant revoke failed for ${projectId}:`, err instanceof Error ? err.message : err)
     )
   );
+
+  // Close the linked CRM case (if any) to match — same on an early close, using
+  // the typed reason as the resolution description. Best-effort: a failure here
+  // (case already closed, D365 down, etc.) shouldn't block the project close, but
+  // it also shouldn't go unnoticed — leave an internal note so the PM sees it and
+  // can close the case manually in D365.
+  if (project.crm_case_id) {
+    const caseId = project.crm_case_id;
+    c.executionCtx.waitUntil(
+      closeCase(c.env, caseId, {
+        subject: "Project closed via CloudConnect",
+        description: parsed.data.reason ?? "",
+      }).catch(async (err) => {
+        console.warn(`[projects.close] CRM case close failed for ${projectId} (case ${caseId}):`, err instanceof Error ? err.message : err);
+        await db
+          .prepare(
+            "INSERT INTO notes (id, project_id, author_user_id, body, visibility, author_name, author_org) VALUES (?, ?, ?, ?, ?, ?, ?)"
+          )
+          .bind(
+            crypto.randomUUID(),
+            projectId,
+            null,
+            `Closing this project didn't close its linked CRM case automatically — it needs to be closed manually in Dynamics 365. (${err instanceof Error ? err.message : "unknown error"})`,
+            "internal",
+            "CloudConnect",
+            null
+          )
+          .run();
+      })
+    );
+  }
 
   const updated = await db
     .prepare(
