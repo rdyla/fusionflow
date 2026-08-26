@@ -1995,7 +1995,7 @@ export const api = {
     }),
 
   closeProject: (id: string, reason?: string) =>
-    request<{ closed_at: string; closed_reason: string | null; closed_by_user_id: string; closed_by_name: string | null }>(
+    request<{ status: string; health: string; closed_at: string; closed_reason: string | null; closed_by_user_id: string; closed_by_name: string | null }>(
       `/projects/${id}/close`,
       { method: "POST", body: JSON.stringify({ reason }) }
     ),
