@@ -45,14 +45,24 @@ export async function syncProjectStatus(db: D1Database, projectId: string): Prom
   const row = await db
     .prepare(
       `SELECT
+         p.closed_at AS closed_at,
+         p.status AS current_status,
          (SELECT COUNT(*) FROM tasks WHERE project_id = ? AND status = 'blocked') AS blocked_tasks,
          (SELECT COUNT(*) FROM risks WHERE project_id = ? AND status = 'open')    AS open_risks,
          (SELECT COUNT(*) FROM stages WHERE project_id = ?)                       AS total_stages,
          (SELECT COUNT(*) FROM stages WHERE project_id = ? AND status = 'completed')   AS done_stages,
-         (SELECT COUNT(*) FROM stages WHERE project_id = ? AND status = 'in_progress') AS active_stages`
+         (SELECT COUNT(*) FROM stages WHERE project_id = ? AND status = 'in_progress') AS active_stages
+       FROM projects p WHERE p.id = ?`
     )
-    .bind(projectId, projectId, projectId, projectId, projectId)
-    .first<{ blocked_tasks: number; open_risks: number; total_stages: number; done_stages: number; active_stages: number }>();
+    .bind(projectId, projectId, projectId, projectId, projectId, projectId)
+    .first<{ closed_at: string | null; current_status: string | null; blocked_tasks: number; open_risks: number; total_stages: number; done_stages: number; active_stages: number }>();
+
+  // A PM-closed project (POST /:id/close) is frozen at 'complete' regardless
+  // of what a later task/risk write would otherwise derive — closing is a
+  // deliberate action and shouldn't get silently reverted by routine work
+  // logged after the fact (e.g. someone finishing a stray task on a
+  // cancelled/wound-down project).
+  if (row?.closed_at) return row.current_status ?? "complete";
 
   const blockedTasks  = row?.blocked_tasks  ?? 0;
   const openRisks     = row?.open_risks     ?? 0;

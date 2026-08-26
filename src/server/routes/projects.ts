@@ -246,8 +246,22 @@ app.post("/:id/close", async (c) => {
     throw new HTTPException(400, { message: "A reason is required to close a project before all stages are finished." });
   }
 
+  // status and health both freeze here: status='complete' reuses the existing
+  // terminal value everything else already understands (SharePoint revocation,
+  // etc.), and health_override='completed' pins health the same way a PM's
+  // manual health edit does (see the PATCH /:id handler below) — the daily
+  // health-scoring cron already skips any project with health_override set,
+  // so it never gets recomputed back to on_track/at_risk/off_track. Neither
+  // gets silently reverted afterward: syncProjectStatus (teamUtils.ts)
+  // short-circuits once closed_at is set, and health_override blocks the cron.
   await db
-    .prepare("UPDATE projects SET closed_at = CURRENT_TIMESTAMP, closed_reason = ?, closed_by_user_id = ? WHERE id = ?")
+    .prepare(
+      `UPDATE projects
+       SET closed_at = CURRENT_TIMESTAMP, closed_reason = ?, closed_by_user_id = ?,
+           status = 'complete', health = 'completed', health_override = 'completed',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = ?`
+    )
     .bind(parsed.data.reason ?? null, auth.user.id, projectId)
     .run();
 
@@ -261,7 +275,7 @@ app.post("/:id/close", async (c) => {
 
   const updated = await db
     .prepare(
-      `SELECT p.closed_at, p.closed_reason, p.closed_by_user_id, u.name AS closed_by_name
+      `SELECT p.status, p.health, p.closed_at, p.closed_reason, p.closed_by_user_id, u.name AS closed_by_name
        FROM projects p LEFT JOIN users u ON u.id = p.closed_by_user_id
        WHERE p.id = ? LIMIT 1`
     )
