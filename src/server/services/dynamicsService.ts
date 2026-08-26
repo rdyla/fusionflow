@@ -861,6 +861,24 @@ export async function updateCase(env: Env, caseId: string, payload: {
   await dynamicsPatch(env, `/incidents(${caseId})`, payload);
 }
 
+// Resolves an incident via the CloseIncident action, same approach the
+// support portal uses (support.ts) — a plain PATCH to statecode=1 is
+// unreliable across D365 configs, CloseIncident is the documented way to
+// transition a case to Resolved.
+export async function closeCase(env: Env, caseId: string, opts: {
+  subject: string;
+  description?: string;
+}): Promise<void> {
+  await dynamicsPost(env, "/CloseIncident", {
+    IncidentResolution: {
+      "incidentid@odata.bind": `/incidents(${caseId})`,
+      subject: opts.subject,
+      description: opts.description ?? "",
+    },
+    Status: -1,
+  });
+}
+
 export async function getCaseNotes(env: Env, caseId: string): Promise<CaseNote[]> {
   if (!isConfigured(env)) return [];
   const select = "annotationid,subject,notetext,filename,mimetype,isdocument,createdon,_createdby_value";
