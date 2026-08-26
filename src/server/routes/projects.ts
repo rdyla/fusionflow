@@ -11,7 +11,7 @@ import { maybeSendEmail, sendEmail } from "../services/emailService";
 import { projectAtRisk, contactProjectInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes } from "../services/dynamicsService";
-import { ensureSharePointChildFolder, grantFolderEdit, lookupMailGroup } from "../services/graphService";
+import { ensureSharePointChildFolder, grantFolderEdit, lookupMailGroup, revokeAllProjectEditGrants } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
 import { refreshAccountTeamIfStale } from "../lib/accountTeamSync";
@@ -177,6 +177,7 @@ app.get("/:id", async (c) => {
              p.kickoff_date, p.target_go_live_date, p.actual_go_live_date,
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.sharepoint_folder_url, p.uses_custom_plan, p.zoom_email_alias,
+             p.closed_at, p.closed_reason, p.closed_by_user_id, closer.name AS closed_by_name,
              p.created_at, p.updated_at,
              pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,
@@ -191,6 +192,7 @@ app.get("/:id", async (c) => {
       LEFT JOIN users cpu1 ON cpu1.id = c.pf_ae_user_id
       LEFT JOIN users cpu2 ON cpu2.id = c.pf_sa_user_id
       LEFT JOIN users cpu3 ON cpu3.id = c.pf_csm_user_id
+      LEFT JOIN users closer ON closer.id = p.closed_by_user_id
       WHERE p.id = ?
       LIMIT 1
       `
@@ -206,6 +208,66 @@ app.get("/:id", async (c) => {
   const prow = project as { dynamics_account_id?: string | null; customer_id?: string | null };
   refreshAccountTeamIfStale(c.env, c.executionCtx, prow.dynamics_account_id, prow.customer_id);
   return c.json(normalizeSolutionTypesField(project));
+});
+
+// POST /api/projects/:id/close
+// Deliberate PM "close out" action — independent of `status`, which is fully
+// auto-derived (syncProjectStatus) and gets recomputed on every task/risk
+// write, so it can't durably hold a manual value. closed_at is the standalone
+// signal of an official close. Closing before status is naturally 'complete'
+// (i.e. before all stages are actually finished) requires a reason — this is
+// the "early/forced close" path for cancelled or wound-down engagements.
+// Deliberately does NOT touch status or Optimize graduation — those stay
+// exactly as auto-derived today; this only marks the engagement closed.
+const closeProjectSchema = z.object({
+  reason: z.string().trim().min(1).max(2000).optional(),
+});
+
+app.post("/:id/close", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = await canEditProject(db, auth.user, projectId);
+  if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
+
+  const project = await db
+    .prepare("SELECT id, status, closed_at FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ id: string; status: string | null; closed_at: string | null }>();
+  if (!project) throw new HTTPException(404, { message: "Project not found" });
+  if (project.closed_at) throw new HTTPException(409, { message: "Project is already closed" });
+
+  const parsed = closeProjectSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) throw new HTTPException(400, { message: "Invalid request" });
+
+  const isEarlyClose = project.status !== "complete";
+  if (isEarlyClose && !parsed.data.reason) {
+    throw new HTTPException(400, { message: "A reason is required to close a project before all stages are finished." });
+  }
+
+  await db
+    .prepare("UPDATE projects SET closed_at = CURRENT_TIMESTAMP, closed_reason = ?, closed_by_user_id = ? WHERE id = ?")
+    .bind(parsed.data.reason ?? null, auth.user.id, projectId)
+    .run();
+
+  // Immediate SharePoint cleanup, same as the daily completion sweep does for
+  // naturally-completed projects — doesn't block the response.
+  c.executionCtx.waitUntil(
+    revokeAllProjectEditGrants(c.env, db, projectId).catch((err) =>
+      console.warn(`[projects.close] SharePoint grant revoke failed for ${projectId}:`, err instanceof Error ? err.message : err)
+    )
+  );
+
+  const updated = await db
+    .prepare(
+      `SELECT p.closed_at, p.closed_reason, p.closed_by_user_id, u.name AS closed_by_name
+       FROM projects p LEFT JOIN users u ON u.id = p.closed_by_user_id
+       WHERE p.id = ? LIMIT 1`
+    )
+    .bind(projectId)
+    .first();
+  return c.json(updated);
 });
 
 const createProjectSchema = z.object({

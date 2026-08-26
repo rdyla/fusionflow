@@ -348,6 +348,8 @@ app.get("/leadership", async (c) => {
     hoursRiskCandidates,
     assignedPeople,
     loggedLastWeek,
+    closed,
+    closedProjectsList,
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExprAlias}),0) AS hours
@@ -399,7 +401,9 @@ app.get("/leadership", async (c) => {
     // projects already graduated to Optimize — including direct-enrolled
     // shells (POST /accounts/direct), which stand in for a standalone
     // Optimize engagement and never run an implementation, so they never
-    // get a PM. Same exclusion wentLiveStillOpen below already uses. Keeps
+    // get a PM — and projects a PM has deliberately closed out (closed_at,
+    // POST /:id/close), which should read as Closed, not carry any other
+    // status. Same exclusions wentLiveStillOpen below already uses. Keeps
     // the "no PM assigned" bucket visible while still filtering out a PM
     // who somehow isn't PF staff.
     db.prepare(
@@ -413,6 +417,7 @@ app.get("/leadership", async (c) => {
          FROM projects p
          WHERE (p.archived = 0 OR p.archived IS NULL)
            AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+           AND p.closed_at IS NULL
        ) x
        LEFT JOIN users u ON u.id = x.pm_user_id
        WHERE (x.pm_user_id IS NULL OR u.role IN (${PF_ROLES_SQL}))
@@ -422,8 +427,8 @@ app.get("/leadership", async (c) => {
 
     // Active-project count per person, scoped to IE (engineer) + SA staffing
     // roles only — the PM breakdown is projectsByPM above (pm_user_id lives on
-    // projects directly, not project_staff). Excludes Optimize-graduated
-    // projects for the same reason as projectsByPM above.
+    // projects directly, not project_staff). Excludes Optimize-graduated and
+    // closed-out projects for the same reason as projectsByPM above.
     db.prepare(
       `SELECT ps.user_id, u.name, COUNT(DISTINCT ps.project_id) AS n
        FROM project_staff ps
@@ -431,6 +436,7 @@ app.get("/leadership", async (c) => {
        JOIN users u ON u.id = ps.user_id
        WHERE (p.archived = 0 OR p.archived IS NULL)
          AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+         AND p.closed_at IS NULL
          AND ps.staff_role IN ('engineer', 'sa')
          AND u.role IN (${PF_ROLES_SQL})
        GROUP BY ps.user_id
@@ -438,14 +444,16 @@ app.get("/leadership", async (c) => {
     ).all<{ user_id: string | null; name: string | null; n: number }>(),
 
     // Went live (actual_go_live_date set) but the project is still open —
-    // not archived and not yet graduated to Optimize. Surfaces projects that
-    // hit go-live but haven't been wrapped up or moved on. Oldest first.
+    // not archived, not closed out, and not yet graduated to Optimize.
+    // Surfaces projects that hit go-live but haven't been wrapped up or moved
+    // on. Oldest first.
     db.prepare(
       `SELECT id, name, customer_name, actual_go_live_date, status
        FROM projects p
        WHERE p.actual_go_live_date IS NOT NULL
          AND (p.archived = 0 OR p.archived IS NULL)
          AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+         AND p.closed_at IS NULL
        ORDER BY p.actual_go_live_date ASC
        LIMIT 10`
     ).all<{ id: string; name: string; customer_name: string | null; actual_go_live_date: string | null; status: string | null }>(),
@@ -453,24 +461,26 @@ app.get("/leadership", async (c) => {
     // Excludes Optimize-graduated projects (including direct-enrolled
     // standalone shells) — same reasoning as projectsByPM above: a shell
     // never runs an implementation, so counting it as an "active project"
-    // misrepresents an already-live, staffed Optimize account as neglected.
+    // misrepresents an already-live, staffed Optimize account as neglected —
+    // and excludes closed-out projects, which read purely as Closed below
+    // regardless of whatever status/health they carried when closed.
     db.prepare(
-      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND id NOT IN (SELECT project_id FROM optimize_accounts)`
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL`
     ).first<{ n: number }>(),
 
     db.prepare(
-      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk' AND id NOT IN (SELECT project_id FROM optimize_accounts)`
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk' AND id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL`
     ).first<{ n: number }>(),
 
     db.prepare(
-      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts)`
+      `SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL`
     ).first<{ n: number }>(),
 
     // ── Click-to-expand detail lists — each backs a metric tile's drill-down ──
     db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
-       WHERE (archived = 0 OR archived IS NULL) AND id NOT IN (SELECT project_id FROM optimize_accounts)
+       WHERE (archived = 0 OR archived IS NULL) AND id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL
        ORDER BY name ASC
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
@@ -478,7 +488,7 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
-       WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk' AND id NOT IN (SELECT project_id FROM optimize_accounts)
+       WHERE (archived = 0 OR archived IS NULL) AND health = 'at_risk' AND id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL
        ORDER BY name ASC
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
@@ -486,7 +496,7 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT id, name, customer_name, health, status
        FROM projects
-       WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts)
+       WHERE (archived = 0 OR archived IS NULL) AND status = 'blocked' AND id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL
        ORDER BY name ASC
        LIMIT 15`
     ).all<{ id: string; name: string; customer_name: string | null; health: string | null; status: string | null }>(),
@@ -495,7 +505,8 @@ app.get("/leadership", async (c) => {
     // linked CRM opportunity — candidate pool for the hours-vs-SOW-quote check
     // below. Capped so the live Dynamics fan-out stays bounded regardless of
     // portfolio size; ranked by hours so the projects most likely to matter
-    // (heaviest logged time) are the ones we bother checking.
+    // (heaviest logged time) are the ones we bother checking. Excludes closed
+    // projects — their hours burn is historical, not a forward-looking signal.
     db.prepare(
       `SELECT p.id, p.name, p.customer_name, p.crm_opportunity_id,
               COALESCE(SUM(${hoursExprAlias}),0) AS hours_logged
@@ -503,6 +514,7 @@ app.get("/leadership", async (c) => {
        JOIN stage_time_entries ste ON ste.project_id = p.id
        WHERE (p.archived = 0 OR p.archived IS NULL)
          AND p.crm_opportunity_id IS NOT NULL
+         AND p.closed_at IS NULL
          AND ste.scheduled_end IS NOT NULL
        GROUP BY p.id
        ORDER BY hours_logged DESC
@@ -512,9 +524,9 @@ app.get("/leadership", async (c) => {
     // Everyone staffed on an active project, any role — PM (projects.pm_user_id)
     // union'd with AE/SA/CSM/Engineer (project_staff), PF staff only.
     // Cross-referenced below against who actually logged time last week.
-    // Excludes Optimize-graduated projects: a shell direct-enrolled straight
-    // into Optimize never runs an implementation, so its staff shouldn't be
-    // flagged for not logging implementation hours.
+    // Excludes Optimize-graduated and closed-out projects: neither runs an
+    // active implementation, so staff on them shouldn't be flagged for not
+    // logging implementation hours.
     db.prepare(
       `SELECT x.user_id, u.name, COUNT(DISTINCT x.project_id) AS project_count
        FROM (
@@ -522,12 +534,14 @@ app.get("/leadership", async (c) => {
          FROM projects p
          WHERE p.pm_user_id IS NOT NULL AND (p.archived = 0 OR p.archived IS NULL)
            AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+           AND p.closed_at IS NULL
          UNION
          SELECT ps.user_id AS user_id, ps.project_id AS project_id
          FROM project_staff ps
          JOIN projects p ON p.id = ps.project_id
          WHERE (p.archived = 0 OR p.archived IS NULL)
            AND p.id NOT IN (SELECT project_id FROM optimize_accounts)
+           AND p.closed_at IS NULL
        ) x
        JOIN users u ON u.id = x.user_id
        WHERE u.role IN (${PF_ROLES_SQL})
@@ -538,6 +552,23 @@ app.get("/leadership", async (c) => {
       `SELECT DISTINCT user_id FROM stage_time_entries
        WHERE scheduled_start >= ? AND scheduled_start < ? AND scheduled_end IS NOT NULL AND user_id IS NOT NULL`
     ).bind(lastWeekStart, lastWeekEnd).all<{ user_id: string }>(),
+
+    // Closed projects — the new "Closed" headline tile. A PM's deliberate
+    // close-out (closed_at, POST /:id/close), independent of status/health/
+    // Optimize. Not archived-scoped: a closed project stays visible here even
+    // if an admin later archives it too, since archiving is a separate,
+    // unrelated housekeeping action.
+    db.prepare(`SELECT COUNT(*) AS n FROM projects WHERE closed_at IS NOT NULL`).first<{ n: number }>(),
+
+    // Drill-down list, most-recently-closed first — capped, same pattern as
+    // the other tiles' *List queries above.
+    db.prepare(
+      `SELECT id, name, customer_name, closed_at, closed_reason
+       FROM projects
+       WHERE closed_at IS NOT NULL
+       ORDER BY closed_at DESC
+       LIMIT 15`
+    ).all<{ id: string; name: string; customer_name: string | null; closed_at: string; closed_reason: string | null }>(),
   ]);
 
   // ── Hours vs. quoted SOW (live Dynamics) ──────────────────────────────────
@@ -645,6 +676,14 @@ app.get("/leadership", async (c) => {
         customer_name: r.customer_name,
         health: r.health,
         status: r.status,
+      })),
+      closedProjects: closed?.n ?? 0,
+      closedProjectsList: (closedProjectsList.results ?? []).map((r) => ({
+        id: r.id,
+        name: r.name,
+        customer_name: r.customer_name,
+        closed_at: r.closed_at,
+        closed_reason: r.closed_reason,
       })),
     },
     hoursRisk: {
