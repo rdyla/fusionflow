@@ -363,6 +363,13 @@ export default function ProjectDetailPage() {
   const [newPartnerEmail, setNewPartnerEmail] = useState("");
   const [newPartnerOrg, setNewPartnerOrg] = useState("");
 
+  // Close out project — deliberate PM action, independent of the
+  // auto-derived `status`. See POST /projects/:id/close.
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [closing, setClosing] = useState(false);
+  const [closeError, setCloseError] = useState<string | null>(null);
+
   // Edit project meta — rename + (re)link a CRM customer. Staff-only.
   const [showEditMeta, setShowEditMeta] = useState(false);
   const [metaName, setMetaName] = useState("");
@@ -745,6 +752,28 @@ export default function ProjectDetailPage() {
       showToast(err instanceof Error ? err.message : "Failed to update project details", "error");
     } finally {
       setSavingTech(false);
+    }
+  }
+
+  async function handleCloseProject() {
+    if (!project) return;
+    const isEarlyClose = project.status !== "complete";
+    if (isEarlyClose && !closeReason.trim()) {
+      setCloseError("A reason is required to close a project before all stages are finished.");
+      return;
+    }
+    setClosing(true);
+    setCloseError(null);
+    try {
+      await api.closeProject(project.id, closeReason.trim() || undefined);
+      showToast("Project closed.", "success");
+      setShowCloseModal(false);
+      setCloseReason("");
+      await refreshAll();
+    } catch (err) {
+      setCloseError(err instanceof Error ? err.message : "Failed to close project");
+    } finally {
+      setClosing(false);
     }
   }
 
@@ -1171,6 +1200,9 @@ export default function ProjectDetailPage() {
               {project.on_hold === 1 && (
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", borderRadius: 10, padding: "2px 10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>On Hold</span>
               )}
+              {project.closed_at && (
+                <span style={{ fontSize: 11, fontWeight: 700, color: "#334155", background: "#f1f5f9", border: "1px solid #cbd5e1", borderRadius: 10, padding: "2px 10px", textTransform: "uppercase", letterSpacing: "0.04em" }}>Closed</span>
+              )}
             </h1>
             {project.customer_id ? (
               <Link to={`/customers/${project.customer_id}`} style={{ fontSize: 13, color: "#0b9aad", textDecoration: "none", fontWeight: 600 }}>
@@ -1182,6 +1214,12 @@ export default function ProjectDetailPage() {
               </button>
             ) : (
               <span style={{ fontSize: 13, color: "#94a3b8" }}>No CRM customer linked</span>
+            )}
+            {project.closed_at && (
+              <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>
+                Closed {formatDate(project.closed_at)}{project.closed_by_name ? ` by ${project.closed_by_name}` : ""}
+                {project.closed_reason && <span> — {project.closed_reason}</span>}
+              </div>
             )}
             {project.zoom_email_alias && (
               <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }} title="Zoom email alias / distribution list set from the welcome email">
@@ -1217,9 +1255,53 @@ export default function ProjectDetailPage() {
                 Edit
               </button>
             )}
+            {canEdit && !project.closed_at && (
+              <button onClick={() => setShowCloseModal(true)} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}>
+                Close Out Project
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {showCloseModal && (
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && !closing) setShowCloseModal(false); }}>
+          <div className="ms-modal" style={{ maxWidth: 440, width: "100%" }}>
+            <h2>Close Out Project</h2>
+            {project.status === "complete" ? (
+              <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
+                All stages are finished. This marks the engagement officially closed and revokes any customer SharePoint edit access.
+              </p>
+            ) : (
+              <>
+                <p style={{ fontSize: 14, color: "#475569", lineHeight: 1.6 }}>
+                  Not all stages are finished yet. Closing now is an early/forced close — please explain why (e.g. cancelled, wound down early).
+                </p>
+                <label className="ms-label">
+                  <span>Reason *</span>
+                  <textarea
+                    className="ms-input"
+                    rows={3}
+                    value={closeReason}
+                    onChange={(e) => setCloseReason(e.target.value)}
+                    placeholder="Why is this project closing before all stages are done?"
+                    autoFocus
+                  />
+                </label>
+              </>
+            )}
+            {closeError && <div style={{ color: "#d13438", fontSize: 13, marginTop: 8 }}>{closeError}</div>}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 16 }}>
+              <button type="button" className="ms-btn-ghost" onClick={() => { setShowCloseModal(false); setCloseReason(""); setCloseError(null); }} disabled={closing}>
+                Cancel
+              </button>
+              <button type="button" className="ms-btn-primary" onClick={handleCloseProject} disabled={closing}>
+                {closing ? "Closing…" : "Close Project"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tab navigation */}
       {(() => {

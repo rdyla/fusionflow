@@ -396,6 +396,14 @@ export type LeadershipDashboardResponse = {
       health: string | null;
       status: string | null;
     }[];
+    closedProjects: number;
+    closedProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      closed_at: string;
+      closed_reason: string | null;
+    }[];
   };
   hoursRisk: {
     atRiskCount: number;
@@ -488,6 +496,13 @@ export type Project = {
   /** Zoom email alias / distribution list (e.g. zm-sanford@packetfusion.com),
    *  set by the PM in the welcome/kickoff flow. Null until first set. */
   zoom_email_alias: string | null;
+  /** Deliberate PM "close out" action (POST /projects/:id/close) — independent
+   *  of `status`, which is auto-derived and gets recomputed on every task/risk
+   *  write. Null until a PM closes the project. */
+  closed_at: string | null;
+  closed_reason: string | null;
+  closed_by_user_id: string | null;
+  closed_by_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -1978,6 +1993,12 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+
+  closeProject: (id: string, reason?: string) =>
+    request<{ status: string; health: string; closed_at: string; closed_reason: string | null; closed_by_user_id: string; closed_by_name: string | null }>(
+      `/projects/${id}/close`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
 
   createRisk: (
     projectId: string,

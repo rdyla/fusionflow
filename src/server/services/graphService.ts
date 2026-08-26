@@ -807,15 +807,19 @@ export async function revokeAllProjectEditGrants(
 /**
  * Scheduled sweep: revoke external edit grants for any project whose status is
  * 'complete' (the derived project-complete value — note: NOT 'completed', which
- * is the task/stage value). Runs on cron because project status is auto-derived
- * deep in syncProjectStatus, which has no Graph access to revoke inline. Idempotent
- * — once a project's grants are cleared it drops out of the query.
+ * is the task/stage value) OR that a PM has deliberately closed out
+ * (projects.closed_at, via POST /projects/:id/close). The close endpoint
+ * already revokes inline on close; this is the backstop if that best-effort
+ * call failed (e.g. a transient Graph error). Runs on cron because project
+ * status is auto-derived deep in syncProjectStatus, which has no Graph access
+ * to revoke inline. Idempotent — once a project's grants are cleared it drops
+ * out of the query.
  */
 export async function revokeCompletedProjectGrants(env: GraphEnv, db: D1Database): Promise<void> {
   const rows = await db
     .prepare(
       `SELECT DISTINCT project_id FROM sharepoint_edit_grants
-       WHERE project_id IN (SELECT id FROM projects WHERE status = 'complete')`
+       WHERE project_id IN (SELECT id FROM projects WHERE status = 'complete' OR closed_at IS NOT NULL)`
     )
     .all<{ project_id: string }>();
   for (const r of rows.results ?? []) {
