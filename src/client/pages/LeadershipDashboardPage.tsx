@@ -475,11 +475,41 @@ export default function LeadershipDashboardPage() {
               onToggle={toggleExpand}
             >
               {data.projects.wentLiveStillOpen.length === 0 ? (
-                <EmptyNote>Nothing lingering — go-lives are wrapped up or in Optimize.</EmptyNote>
+                <EmptyNote>Nothing lingering — go-lives are wrapped up, closed, or in Optimize.</EmptyNote>
               ) : (
                 data.projects.wentLiveStillOpen.map((g) => (
                   <ListRow key={g.id} to={`/projects/${g.id}`} title={g.name ?? "Untitled"} subtitle={g.customer_name} right={formatDate(g.date)} />
                 ))
+              )}
+            </MetricCard>
+
+            <MetricCard
+              title="Closed"
+              value={data.projects.closedProjects}
+              sub="deliberately closed out by a PM"
+              expandKey="closedProjects"
+              expanded={expandedKeys.has("closedProjects")}
+              onToggle={toggleExpand}
+            >
+              {data.projects.closedProjectsList.length === 0 ? (
+                <EmptyNote>No projects closed out yet.</EmptyNote>
+              ) : (
+                <>
+                  {data.projects.closedProjectsList.map((p) => (
+                    <ListRow
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      title={p.name ?? "Untitled"}
+                      subtitle={p.customer_name}
+                      right={<span title={p.closed_reason ?? undefined}>{formatDate(p.closed_at)}</span>}
+                    />
+                  ))}
+                  {data.projects.closedProjects > data.projects.closedProjectsList.length && (
+                    <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 6 }}>
+                      Showing {data.projects.closedProjectsList.length} of {data.projects.closedProjects}.
+                    </div>
+                  )}
+                </>
               )}
             </MetricCard>
           </div>

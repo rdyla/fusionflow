@@ -396,6 +396,14 @@ export type LeadershipDashboardResponse = {
       health: string | null;
       status: string | null;
     }[];
+    closedProjects: number;
+    closedProjectsList: {
+      id: string;
+      name: string | null;
+      customer_name: string | null;
+      closed_at: string;
+      closed_reason: string | null;
+    }[];
   };
   hoursRisk: {
     atRiskCount: number;

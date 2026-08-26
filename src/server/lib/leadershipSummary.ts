@@ -9,7 +9,10 @@ import type { LeadershipSummaryData } from "./emailTemplates";
 // none of the window/capacity data.
 export async function buildLeadershipSummaryData(env: Bindings): Promise<LeadershipSummaryData> {
   const db = env.DB;
-  const NOT_OPTIMIZE = "id NOT IN (SELECT project_id FROM optimize_accounts)";
+  // Excludes Optimize-graduated projects and projects a PM has deliberately
+  // closed out (closed_at, POST /:id/close) — neither should read as
+  // active/at-risk/blocked; a closed project is just Closed.
+  const NOT_OPTIMIZE = "id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL";
 
   const [activeProjects, atRiskList, blockedList, wentLiveStillOpenList, projectsByPM, hoursCandidates] = await Promise.all([
     db.prepare(`SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND ${NOT_OPTIMIZE}`).first<{ n: number }>(),
@@ -54,7 +57,7 @@ export async function buildLeadershipSummaryData(env: Bindings): Promise<Leaders
               COALESCE(SUM((julianday(ste.scheduled_end) - julianday(ste.scheduled_start)) * 24),0) AS hours_logged
        FROM projects p
        JOIN stage_time_entries ste ON ste.project_id = p.id
-       WHERE (p.archived = 0 OR p.archived IS NULL) AND p.crm_opportunity_id IS NOT NULL AND ste.scheduled_end IS NOT NULL
+       WHERE (p.archived = 0 OR p.archived IS NULL) AND p.crm_opportunity_id IS NOT NULL AND p.closed_at IS NULL AND ste.scheduled_end IS NOT NULL
        GROUP BY p.id
        ORDER BY hours_logged DESC
        LIMIT 10`
