@@ -18,8 +18,15 @@ function otpKey(email: string) { return `otp:${email.toLowerCase()}`; }
 function otpRateKey(email: string) { return `otp_rate:${email.toLowerCase()}`; }
 function sessionKey(id: string) { return `session:${id}`; }
 
-function sessionCookie(id: string, maxAge: number) {
-  return `ff_session=${id}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+// The Secure attribute makes browsers refuse to store/send the cookie over
+// plain HTTP — correct (required) for production/staging, but local dev
+// (npm run dev) serves over http://localhost, so a hardcoded Secure flag
+// silently drops the session cookie: login succeeds, the page renders once,
+// then the next auth check finds no cookie and bounces back to /login.
+// APP_URL is the one signal we already have for which environment this is.
+function sessionCookie(id: string, maxAge: number, appUrl: string | undefined) {
+  const secure = appUrl?.startsWith("https://") ? " Secure;" : "";
+  return `ff_session=${id}; HttpOnly;${secure} SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 function otpEmailHtml(code: string): string {
@@ -115,7 +122,7 @@ app.post("/verify", async (c) => {
   return new Response(JSON.stringify({ ok: true }), {
     headers: {
       "Content-Type": "application/json",
-      "Set-Cookie": sessionCookie(sessionId, SESSION_TTL),
+      "Set-Cookie": sessionCookie(sessionId, SESSION_TTL, c.env.APP_URL),
     },
   });
 });
@@ -132,7 +139,7 @@ app.get("/logout", async (c) => {
     status: 302,
     headers: {
       Location: "/login",
-      "Set-Cookie": sessionCookie("", 0),
+      "Set-Cookie": sessionCookie("", 0, c.env.APP_URL),
     },
   });
 });
@@ -219,7 +226,7 @@ app.get("/sso/callback", async (c) => {
     status: 302,
     headers: {
       Location: "/",
-      "Set-Cookie": sessionCookie(sessionId, SESSION_TTL),
+      "Set-Cookie": sessionCookie(sessionId, SESSION_TTL, c.env.APP_URL),
     },
   });
 });
