@@ -129,6 +129,7 @@ export default function ProjectsPage() {
   };
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
+  const [tab, setTab] = useState<"active" | "closed">("active");
   const [sort, setSort] = useState<ProjectSort>(null);
   const toggleSort = (key: ProjectSortKey) => setSort((prev) => nextSort(prev, key));
   const { showToast } = useToast();
@@ -142,7 +143,10 @@ export default function ProjectsPage() {
   const pmIdFilter = searchParams.get("pm_id");
   const pmNameFilter = searchParams.get("pm_name");
   const searchQuery = search.trim().toLowerCase();
-  const filteredProjects = projects.filter((p) => {
+  const activeCount = projects.filter((p) => !p.closed_at).length;
+  const closedCount = projects.filter((p) => p.closed_at).length;
+  const tabProjects = projects.filter((p) => (tab === "closed" ? !!p.closed_at : !p.closed_at));
+  const filteredProjects = tabProjects.filter((p) => {
     if (healthFilter && p.health !== healthFilter) return false;
     if (statusFilter && p.status !== statusFilter) return false;
     if (searchQuery) {
@@ -325,6 +329,18 @@ export default function ProjectsPage() {
         )}
       </div>
 
+      <div className="ms-tabs">
+        {(["active", "closed"] as const).map((t) => (
+          <button
+            key={t}
+            className={`ms-tab-btn${tab === t ? " active" : ""}`}
+            onClick={() => setTab(t)}
+          >
+            {t === "active" ? `Active (${activeCount})` : `Closed (${closedCount})`}
+          </button>
+        ))}
+      </div>
+
       {/* Free-text search across project, customer, and provider/tech + status filter. */}
       <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
         <input
@@ -334,7 +350,7 @@ export default function ProjectsPage() {
           onChange={(e) => setSearch(e.target.value)}
           style={{ width: 280 }}
         />
-        <StatusFilter value={statusFilter} onChange={setStatusFilter} options={statusOptions(projects)} />
+        <StatusFilter value={statusFilter} onChange={setStatusFilter} options={statusOptions(tabProjects)} />
       </div>
 
       {/* PMs, IEs, SAs and admins: default to their own projects, zoom out to the
@@ -413,6 +429,8 @@ export default function ProjectsPage() {
                     ? "No projects match your search."
                     : healthFilter
                     ? `No projects with health "${healthFilter.replace("_", " ")}".`
+                    : tab === "closed"
+                    ? "No closed projects."
                     : scope === "mine" && SCOPE_TOGGLE_ROLES.includes(currentRole)
                     ? (
                       // An empty "My Projects" is a normal state — nobody is on
