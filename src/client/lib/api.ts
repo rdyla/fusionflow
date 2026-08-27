@@ -1772,6 +1772,8 @@ export const api = {
     request<LeadershipDashboardResponse>(`/dashboard/leadership?window=${window}`),
   leadershipSummaryPreview: () =>
     request<{ subject: string; html: string }>(`/dashboard/leadership/summary-preview`),
+  leadershipSummaryTestSend: () =>
+    request<{ ok: true; sentTo: string }>(`/dashboard/leadership/summary-test-send`, { method: "POST" }),
   myTasks: (params: { status?: string; priority?: string; search?: string; page?: number }) => {
     const q = new URLSearchParams();
     if (params.status)   q.set("status",   params.status);

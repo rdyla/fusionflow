@@ -8,6 +8,7 @@ import { getDemoVendor } from "../lib/appSettings";
 import { getOpportunityQuotes } from "../services/dynamicsService";
 import { leadershipWeeklySummary } from "../lib/emailTemplates";
 import { buildLeadershipSummaryData } from "../lib/leadershipSummary";
+import { sendEmail } from "../services/emailService";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -711,6 +712,24 @@ app.get("/leadership/summary-preview", async (c) => {
   }
   const data = await buildLeadershipSummaryData(c.env);
   return c.json(leadershipWeeklySummary(data));
+});
+
+// POST /api/dashboard/leadership/summary-test-send
+// Sends a real copy of the weekly summary to the requesting admin's own
+// inbox — for verifying how it actually renders in their mail client (the
+// in-app preview only shows how the HTML renders in a browser iframe, which
+// doesn't catch client-specific issues like Outlook's Word rendering engine).
+app.post("/leadership/summary-test-send", async (c) => {
+  const auth = c.get("auth");
+  if (auth.role !== "admin" && auth.role !== "executive") {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+  if (!auth.user.email) throw new HTTPException(400, { message: "No email on your account" });
+
+  const data = await buildLeadershipSummaryData(c.env);
+  const rendered = leadershipWeeklySummary(data);
+  await sendEmail(c.env, { to: auth.user.email, subject: `[Test] ${rendered.subject}`, html: rendered.html });
+  return c.json({ ok: true, sentTo: auth.user.email });
 });
 
 export default app;
