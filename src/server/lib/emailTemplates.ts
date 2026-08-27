@@ -9,27 +9,49 @@ export function escapeHtml(s: string | null | undefined): string {
     .replace(/'/g, "&#39;");
 }
 
+// Outlook desktop renders HTML email through Word's engine, not a browser
+// engine: it ignores max-width/margin:auto on a <div> (so a plain div-based
+// card renders full-bleed instead of centered at 600px) and can fail to
+// parse font stacks that lead with non-Word tokens like -apple-system /
+// BlinkMacSystemFont, dropping the whole declaration and falling back to
+// Word's bare default font. A table-based layout with an explicit width
+// attribute is what Outlook actually respects for width/centering, and
+// leading the font stack with fonts Word recognizes avoids the fallback.
+const EMAIL_FONT_FAMILY = "'Segoe UI',Arial,Helvetica,sans-serif";
+
 export function base(body: string, _appUrl = ""): string {
   return `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${APP_NAME}</title></head>
-<body style="margin:0;padding:0;background:#eef1f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <div style="max-width:600px;margin:40px auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
-    <div style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e2e8f0;">
-      <div style="font-size:20px;font-weight:800;color:#22c55e;letter-spacing:-0.02em;line-height:1.1;">
-        Cloud<span style="color:#0b5394;">Connect</span>
-      </div>
-      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#94a3b8;margin-top:2px;">
-        Intelligence Platform
-      </div>
-    </div>
-    <div style="padding:28px 28px 24px;">
-      ${body}
-    </div>
-    <div style="padding:14px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
-      CloudConnect by Packet Fusion &middot; This is an automated notification.
-    </div>
-  </div>
+<body style="margin:0;padding:0;background:#eef1f5;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#eef1f5;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#ffffff;border:1px solid #e2e8f0;border-radius:8px;">
+          <tr>
+            <td style="background:#ffffff;padding:20px 28px;border-bottom:1px solid #e2e8f0;font-family:${EMAIL_FONT_FAMILY};">
+              <div style="font-size:20px;font-weight:800;color:#22c55e;letter-spacing:-0.02em;line-height:1.1;">
+                Cloud<span style="color:#0b5394;">Connect</span>
+              </div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.12em;color:#94a3b8;margin-top:2px;">
+                Intelligence Platform
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px 28px 24px;font-family:${EMAIL_FONT_FAMILY};">
+              ${body}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:14px 28px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;font-family:${EMAIL_FONT_FAMILY};">
+              CloudConnect by Packet Fusion &middot; This is an automated notification.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`;
 }

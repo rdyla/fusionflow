@@ -138,6 +138,8 @@ export default function LeadershipDashboardPage() {
   const [summaryPreview, setSummaryPreview] = useState<{ subject: string; html: string } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [testSendLoading, setTestSendLoading] = useState(false);
+  const [testSendMessage, setTestSendMessage] = useState<string | null>(null);
   const [currentRole, setCurrentRole] = useState("");
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleLoading, setScheduleLoading] = useState(false);
@@ -162,6 +164,15 @@ export default function LeadershipDashboardPage() {
       .then((res) => setSummaryPreview(res))
       .catch((e) => setSummaryError(e?.message ?? "Failed to load preview"))
       .finally(() => setSummaryLoading(false));
+  }
+
+  function sendTestSummary() {
+    setTestSendMessage(null);
+    setTestSendLoading(true);
+    api.leadershipSummaryTestSend()
+      .then((res) => setTestSendMessage(`Sent to ${res.sentTo}`))
+      .catch((e) => setTestSendMessage(e?.message ?? "Failed to send"))
+      .finally(() => setTestSendLoading(false));
   }
 
   function openScheduleModal() {
@@ -246,6 +257,11 @@ export default function LeadershipDashboardPage() {
           <button type="button" className="ms-btn-secondary" onClick={openSummaryPreview} disabled={summaryLoading}>
             {summaryLoading ? "Loading…" : "Preview Weekly Summary"}
           </button>
+          {(currentRole === "admin" || currentRole === "executive") && (
+            <button type="button" className="ms-btn-secondary" onClick={sendTestSummary} disabled={testSendLoading}>
+              {testSendLoading ? "Sending…" : testSendMessage ?? "Send Test Copy to Me"}
+            </button>
+          )}
           {currentRole === "admin" && (
             <button type="button" className="ms-btn-secondary" onClick={openScheduleModal}>
               Schedule Weekly Summary
