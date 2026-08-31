@@ -644,7 +644,18 @@ export async function inviteGuestAndGrantWrite(
 ): Promise<{ invited: boolean; granted: boolean }> {
   const token = await getGraphToken(env);
 
-  // 1. Provision the guest (idempotent-ish — ignore "already exists").
+  // Entra rejects plus-addressed emails ("name+tag@…") from B2B invitations
+  // ("The Primary SMTP Address is an invalid value"), so the guest is never
+  // created and the share can't succeed. Fail fast + clearly rather than burning
+  // the retry window on a doomed share.
+  const localPart = email.split("@")[0] ?? "";
+  if (localPart.includes("+")) {
+    throw new Error(`Microsoft can't invite the plus-addressed email ${email} as a guest. Use the person's primary address (no "+tag").`);
+  }
+
+  // 1. Provision the guest. A re-invite of an existing guest is a no-op (201),
+  //    so a genuine failure here (e.g. an invalid address) means the guest won't
+  //    exist — surface it instead of proceeding to a share that can't work.
   let invited = false;
   try {
     await graphPostJson(token, "/invitations", {
@@ -655,7 +666,11 @@ export async function inviteGuestAndGrantWrite(
     });
     invited = true;
   } catch (err) {
-    console.warn(`[graph] guest invite for ${email} failed (likely already a guest):`, err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/invalid|BadRequest/i.test(msg)) {
+      throw new Error(`Microsoft rejected ${email} as an invalid guest address — use the person's primary email (plus-addressed aliases aren't accepted).`);
+    }
+    console.warn(`[graph] guest invite for ${email} failed (likely already a guest):`, msg);
   }
 
   // 2. Grant write on the item (+ email them a direct link).
