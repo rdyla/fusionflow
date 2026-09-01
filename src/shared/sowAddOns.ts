@@ -30,7 +30,16 @@ export type AddOn = {
   note?: string;
 };
 
+// Legacy fallback only — resolves the rate for solutions created before the
+// 2026-08-27 rate change, whose `blended_rate` column is still NULL. Never
+// change this value: doing so would retroactively reprice every solution
+// still relying on the fallback, including ones already quoted to a
+// customer. New solutions get NEW_SOLUTION_BLENDED_RATE written explicitly
+// at creation instead of relying on this fallback — see solutions.ts POST /.
 export const DEFAULT_BLENDED_RATE = 165;
+
+/** Blended rate stamped onto every solution created from 2026-08-27 forward. */
+export const NEW_SOLUTION_BLENDED_RATE = 200;
 
 /** SOW totals get rounded UP to a multiple of this for clean customer-facing
  *  pricing. Applied only to the final total in calcSowTotal / calcBasicSowTotal;

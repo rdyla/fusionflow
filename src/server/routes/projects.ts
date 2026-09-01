@@ -34,6 +34,7 @@ app.get("/", async (c) => {
            phase_scoped_visibility,
            kickoff_date, target_go_live_date, actual_go_live_date,
            pm_user_id, managed_in_asana, asana_project_id, crm_case_id, crm_opportunity_id, created_at, updated_at,
+           closed_at,
            CASE WHEN EXISTS(SELECT 1 FROM optimize_accounts oa WHERE oa.project_id = projects.id) THEN 1 ELSE 0 END AS has_optimization
     FROM projects
     WHERE (archived = 0 OR archived IS NULL)
