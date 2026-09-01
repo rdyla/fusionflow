@@ -22,7 +22,7 @@ import {
   type SolutionType,
   type OtherTechnology,
 } from "../../shared/solutionTypes";
-import { ADD_ON_KINDS, serializeAddOns } from "../../shared/sowAddOns";
+import { ADD_ON_KINDS, serializeAddOns, NEW_SOLUTION_BLENDED_RATE } from "../../shared/sowAddOns";
 import { recomputeSowTotal } from "../lib/sowTotal";
 import { recomputeExistingEstimates } from "./laborEstimates";
 import { getDemoVendor } from "../lib/appSettings";
@@ -277,14 +277,14 @@ app.post("/", async (c) => {
     .prepare(
       `INSERT INTO solutions
          (id, name, customer_name, customer_id, dynamics_account_id, crm_opportunity_id, vendor, solution_types, other_technologies, journeys,
-          partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo, revenue_source, estimated_close_date, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+          partner_ae_user_id, partner_ae_name, partner_ae_email, is_new_logo, revenue_source, estimated_close_date, created_by, blended_rate)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       id, name, customer_name, resolvedCustomerId, dynamics_account_id, crm_opportunity_id, vendor,
       serializeSolutionTypes(solution_types), serializeOtherTechnologies(other_technologies), journeysJson,
       resolvedPartnerAeUserId, partner_ae_name ?? null, partner_ae_email ?? null, is_new_logo ? 1 : 0,
-      revenue_source ?? null, estimated_close_date ?? null, auth.user.id
+      revenue_source ?? null, estimated_close_date ?? null, auth.user.id, NEW_SOLUTION_BLENDED_RATE
     )
     .run();
 
