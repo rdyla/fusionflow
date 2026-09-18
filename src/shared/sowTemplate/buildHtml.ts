@@ -24,6 +24,12 @@ const NAVY  = "#003B5C";
 const GREEN = "#17C662";
 const GREY  = "#D9E1E2";
 
+// The printed page margin. @page itself is zero (see styles()), so this is
+// applied by the .doc-sheet thead/tbody/tfoot bands and by the cover, which
+// keeps every sheet's geometry identical — the thing the running footer
+// depends on.
+const PAGE_MARGIN = "0.75in";
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function esc(s: string | number | null | undefined): string {
@@ -656,11 +662,22 @@ function section12Signature(ctx: SowBuildContext): string {
 
 function styles(): string {
   return `
-    @page { size: letter; margin: 0.75in; }
-    /* The hero cover page wants zero @page margin so the illustration prints
-       edge-to-edge. Named-page selector targets only the first sheet so the
-       rest of the doc keeps its normal margins. */
-    @page :first { margin: 0; }
+    /* ONE uniform page box for every sheet, and it is ZERO — the page margins
+       are reproduced by .doc-sheet's thead/tfoot bands instead (see below).
+       Two constraints force this:
+         1. Chrome sizes the print containing block from the FIRST sheet's
+            geometry and reuses it for every later sheet. The old
+            "@page :first { margin: 0 }" override therefore anchored the
+            running footer (and the budgetary watermark) against an 11in-tall
+            box on sheets whose real content area was only 9.5in: the footer
+            printed ~2.2in from the top of every sheet after the first, straight
+            through body text, with its right-hand half off the paper.
+         2. Chrome clips printed content to the page area, so a full-bleed hero
+            cover is only possible when that area is the whole sheet. Negative
+            margins cannot escape the clip.
+       A zero page box satisfies both: every sheet is identical, and the cover
+       can bleed. */
+    @page { size: letter; margin: 0; }
     body { font-family: Georgia, "Times New Roman", serif; color: #1a1a1a; font-size: 11pt; line-height: 1.45; margin: 0; }
     h1 { font-size: 18pt; color: ${NAVY}; border-bottom: 2px solid ${GREEN}; padding-bottom: 4px; margin-top: 32px; margin-bottom: 12px; }
     h2 { font-size: 15pt; color: ${NAVY}; margin-top: 24px; margin-bottom: 10px; }
@@ -677,7 +694,11 @@ function styles(): string {
     .pricing-summary .total-row td { border-top: 2px solid ${NAVY}; background: rgba(0,59,92,0.04); }
     .page-section { page-break-inside: auto; margin-bottom: 14px; }
     /* Cover */
-    .cover { padding: 0; min-height: 9.6in; position: relative; page-break-after: always; }
+    /* The cover is rendered outside .doc-sheet (so the running footer never
+       lands on it) and therefore gets no thead/tbody band — with a zero @page
+       box it has to carry the page inset itself. The hero variant overrides
+       this padding away so its illustration can reach the paper edge. */
+    .cover { padding: ${PAGE_MARGIN}; box-sizing: border-box; height: 11in; position: relative; page-break-after: always; }
     .cover-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 3px solid ${GREEN}; margin-bottom: 38px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .cover-logo { height: 42px; }
     .cover-confidential { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.22em; color: ${GREEN}; text-transform: uppercase; }
@@ -697,14 +718,20 @@ function styles(): string {
       background-position: center;
       background-repeat: no-repeat;
       color: #ffffff;
+      /* Overrides .cover's page inset: the illustration fills the whole sheet.
+         Possible only because @page has no margin — Chrome clips printed
+         content to the page area, so nothing can bleed past it. */
       padding: 0;
       margin: 0;
-      min-height: 10in; /* fills a letter page top-to-bottom */
+      width: 8.5in;
+      height: 11in;
+      overflow: hidden;
       -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }
     .cover--hero .cover-inner {
       padding: 0.5in 0.6in 0.5in;
-      min-height: 10in;
+      height: 11in;
+      box-sizing: border-box;
       display: flex;
       flex-direction: column;
     }
@@ -746,19 +773,34 @@ function styles(): string {
     .stub-banner { background: #fef3c7; border: 1px solid #fde68a; color: #854d0e; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; font-size: 10pt; font-weight: 700; }
     /* Confidentiality */
     .confidentiality { font-size: 9pt; color: #555; border-top: 1px solid #ccc; padding-top: 10px; margin-top: 14px; }
-    /* Running footer. Chrome repeats position:fixed elements on every printed
-       sheet — the same mechanism the budgetary watermark relies on. Page
-       numbers are NOT possible here: counter(page) only resolves inside @page
-       margin boxes, which browsers don't implement. That would need a real
-       paged-media engine (server-side PDF), so the footer carries identity and
-       confidentiality only. Hidden on screen so it doesn't float over the
-       preview window. */
-    .doc-footer { display: none; }
+    /* .doc-sheet wraps everything after the cover in a single-cell table, and
+       that table is what reproduces the page margins @page no longer carries:
+       Chrome repeats a thead at the top and a tfoot at the bottom of every
+       sheet the table spans, and the tbody cell's horizontal padding applies
+       to every line on every sheet. The empty thead is the top margin band. */
+    .doc-sheet { width: 100%; border-collapse: collapse; }
+    .doc-sheet > thead > tr > td { height: ${PAGE_MARGIN}; padding: 0; }
+    .doc-sheet > tbody > tr > td { padding: 0 ${PAGE_MARGIN}; }
+    .doc-sheet > tfoot > tr > td { padding: 0; }
+    /* Running footer — a repeated <tfoot>, NOT a position:fixed element.
+       A table-footer-group is the only thing Chrome both repeats per sheet AND
+       reserves flow space for, so body text stops above the footer instead of
+       running underneath it. position:fixed reserves nothing: even once
+       anchored correctly it printed over the last line of every full page.
+       The cover renders outside this table, which keeps the footer off it.
+       Page numbers are still NOT possible: counter(page) only resolves inside
+       @page margin boxes, which browsers don't implement. That would need a
+       real paged-media engine (server-side PDF), so the footer carries
+       identity and confidentiality only.
+       Hidden on screen (and in the Word export, which takes screen styles) so
+       it doesn't sit in the middle of the preview window. */
+    .doc-footer-row { display: none; }
     @media print {
+      .doc-footer-row { display: table-footer-group; }
       .doc-footer {
-        display: block; position: fixed; bottom: 0; left: 0; right: 0;
         font-size: 7.5pt; color: #5b6b75; letter-spacing: 0.02em;
-        padding-top: 4px; border-top: 0.5pt solid ${GREY};
+        margin: 0 ${PAGE_MARGIN}; padding: 5px 0 ${PAGE_MARGIN};
+        border-top: 0.5pt solid ${GREY};
       }
       .doc-footer .df-right { float: right; }
     }
@@ -803,8 +845,8 @@ export function buildSowHtml(args: {
   const watermark = ctx.isBudgetary
     ? `<div class="budgetary-watermark">BUDGETARY</div>`
     : "";
+  const cover = coverPage(variant, ctx, logoUrl, heroImageUrl, forWord);
   const body = [
-    coverPage(variant, ctx, logoUrl, heroImageUrl, forWord),
     documentControlPage(variant, ctx),
     revisionHistory(ctx),
     executiveSummary(variant, ctx),
@@ -835,5 +877,15 @@ export function buildSowHtml(args: {
   // there's no page number.
   const runningFooter = `<div class="doc-footer">Packet Fusion  ·  Confidential<span class="df-right">SOW — ${esc(ctx.customerName)}  ·  ${esc(ctx.sowNumber)}</span></div>`;
 
-  return `<!doctype html><html><head><meta charset="utf-8"><title>SOW — ${esc(ctx.customerName)}</title><style>${styles()}</style></head><body>${watermark}${runningFooter}${body}</body></html>`;
+  // The cover sits outside .doc-sheet so the running footer never prints on the
+  // hero sheet; everything after it lives in the single-cell table whose
+  // repeated <tfoot> carries the footer onto each following sheet.
+  const sheet =
+    `<table class="doc-sheet">` +
+    `<thead><tr><td></td></tr></thead>` +
+    `<tfoot class="doc-footer-row"><tr><td>${runningFooter}</td></tr></tfoot>` +
+    `<tbody><tr><td>${body}</td></tr></tbody>` +
+    `</table>`;
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>SOW — ${esc(ctx.customerName)}</title><style>${styles()}</style></head><body>${watermark}${cover}${sheet}</body></html>`;
 }
