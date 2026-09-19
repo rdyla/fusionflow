@@ -2,6 +2,7 @@ import type { MiddlewareHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { AppUser, AuthContext, Bindings, Variables } from "../types";
 import { getPortalContact } from "../services/dynamicsService";
+import { writeAuditLog } from "../lib/auditLog";
 
 type AppMiddleware = MiddlewareHandler<{ Bindings: Bindings; Variables: Variables }>;
 
@@ -234,6 +235,23 @@ export const authMiddleware: AppMiddleware = async (c, next) => {
       const target = await findUserByEmail(c.env.DB, impersonateEmail.trim().toLowerCase());
       if (target && target.is_active) {
         console.log(`[AUDIT] Impersonation: admin=${auth.user.email} target=${target.email} path=${c.req.path} at=${new Date().toISOString()}`);
+        // Persist it as well. The console line above lives only in Worker logs,
+        // which is what security-audit P1 #4 flagged: an admin could act as
+        // anyone with nothing queryable left behind. Off the response path —
+        // an audit write must never delay or fail the request.
+        c.executionCtx.waitUntil(writeAuditLog(c.env.DB, {
+          entityType: "user",
+          entityId: target.id,
+          action: "impersonate",
+          method: c.req.method,
+          path: c.req.path,
+          status: null,
+          actor: { id: target.id, name: target.name, email: target.email },
+          onBehalfOfEmail: auth.user.email,
+        }));
+        // Carried so every mutation made while impersonating records the real
+        // admin behind it, not just the user being impersonated.
+        c.set("impersonatedBy", auth.user.email);
         c.set("auth", { user: target, role: target.role, organization: target.organization_name });
         await next();
         return;

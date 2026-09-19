@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import type { Bindings, Variables } from "./types";
 import { authMiddleware } from "./middleware/auth";
+import { auditMiddleware } from "./middleware/audit";
 import { runShipmentTracking } from "./lib/shipmentTracking";
 import { runAccountTeamSync } from "./lib/accountTeamSync";
 import { revokeCompletedProjectGrants } from "./services/graphService";
@@ -50,6 +51,7 @@ import { computeProjectHealth } from "./lib/healthScore";
 import { fetchZoomUtilizationSnapshot } from "./services/zoomService";
 import { getLeadershipSummarySchedule, setLeadershipSummarySchedule } from "./lib/appSettings";
 import { buildLeadershipSummaryData } from "./lib/leadershipSummary";
+import { pruneAuditLog } from "./lib/auditLog";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -69,6 +71,9 @@ app.get("/api/health", (c) => c.json({ ok: true }));
 app.route("/api/auth", authPublicRoutes);
 
 app.use("/api/*", authMiddleware);
+// Records successful mutations in audit_log. Must come AFTER authMiddleware so
+// c.get("auth") is populated, and it wraps every /api route below.
+app.use("/api/*", auditMiddleware);
 
 app.route("/api", authRoutes);
 app.route("/api/dashboard", dashboardRoutes);
@@ -293,6 +298,8 @@ export default {
       revokeCompletedProjectGrants(env, env.DB).catch((err) =>
         console.warn("[cron] SharePoint completion revoke sweep failed:", err instanceof Error ? err.message : err)
       ),
+      // Audit-log retention: 365 days. Keeps the highest-volume table bounded.
+      pruneAuditLog(env.DB),
     ]));
   },
 };

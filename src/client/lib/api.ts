@@ -442,6 +442,23 @@ export type LeadershipDashboardResponse = {
   };
 };
 
+export type AuditLogEntry = {
+  id: string;
+  /** 'create' | 'update' | 'delete' | 'impersonate' */
+  action: string;
+  method: string | null;
+  path: string | null;
+  status: number | null;
+  actor_user_id: string | null;
+  /** Captured at write time, so the row still names the actor after the user
+   *  is deleted. */
+  actor_name: string | null;
+  actor_email: string | null;
+  /** Set only when an admin performed this while impersonating someone. */
+  on_behalf_of_email: string | null;
+  created_at: string;
+};
+
 export type Project = {
   id: string;
   name: string;
@@ -2238,6 +2255,11 @@ export const api = {
       method: "POST",
       body: JSON.stringify(contact),
     }),
+
+  /** Change history for a project — admins and the project's PM(s) only.
+   *  Reads aren't recorded, so every entry is a mutation. */
+  projectAuditLog: (projectId: string, limit = 100) =>
+    request<{ entries: AuditLogEntry[] }>(`/projects/${projectId}/audit-log?limit=${limit}`),
 
   removeProjectContact: (projectId: string, contactId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/contacts/${contactId}`, {

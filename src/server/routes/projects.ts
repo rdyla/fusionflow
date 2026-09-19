@@ -1520,4 +1520,38 @@ app.delete("/:id/meetings/:mid", requireRole("admin", "pm", "pf_sa", "pf_csm", "
   return c.json({ ok: true });
 });
 
+// GET /:id/audit-log — who changed what on this project, newest first.
+//
+// Gated on canEditProject: admins and the project's PM(s). Gary asked for this
+// on his own projects, and that check is exactly "can manage this project",
+// so it delivers the ask without exposing everyone's activity to everyone.
+//
+// Reads are NOT recorded (see migration 0143), so this is a change history.
+app.get("/:id/audit-log", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  if (!auth?.user || !(await canEditProject(db, auth.user, projectId))) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const limitRaw = Number(c.req.query("limit") ?? 100);
+  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 500) : 100;
+
+  const rows = await db
+    .prepare(
+      `SELECT id, action, method, path, status, actor_user_id, actor_name, actor_email,
+              on_behalf_of_email, created_at
+         FROM audit_log
+        WHERE entity_type = 'project' AND entity_id = ?
+        ORDER BY created_at DESC
+        LIMIT ?`
+    )
+    .bind(projectId, limit)
+    .all();
+
+  return c.json({ entries: rows.results ?? [] });
+});
+
 export default app;
