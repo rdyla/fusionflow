@@ -282,6 +282,12 @@ export default function ProjectDetailPage() {
   const [contactModalTab, setContactModalTab] = useState<"crm" | "manual">("crm");
   const [contactSide, setContactSide] = useState<"customer" | "partner">("customer");
   const [contactRole, setContactRole] = useState("");
+  // Adding a contact with an email normally sends them a portal invite. Not
+  // every contact is meant to get access (MedVet prompted this), so the PM can
+  // opt out per add. Defaults to false — the send-by-default behaviour is
+  // unchanged for anyone who doesn't tick it, and it resets with the modal so
+  // one silent add can't quietly silence the next one.
+  const [suppressContactInvite, setSuppressContactInvite] = useState(false);
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
   const [savingContact, setSavingContact] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -2101,6 +2107,7 @@ export default function ProjectDetailPage() {
                                                 setAssignNewContactToTaskId(task.id);
                                                 setContactSide("customer");
                                                 setContactRole("");
+                                                setSuppressContactInvite(false);
                                                 setManualContact({ name: "", email: "", phone: "", job_title: "" });
                                                 const useCrm = !!project?.dynamics_account_id;
                                                 setContactModalTab(useCrm ? "crm" : "manual");
@@ -4131,6 +4138,20 @@ export default function ProjectDetailPage() {
                   ))}
                 </select>
               </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={suppressContactInvite}
+                  onChange={(e) => setSuppressContactInvite(e.target.checked)}
+                  style={{ marginTop: 2, cursor: "pointer" }}
+                />
+                <span style={{ fontSize: 12, color: "#475569", lineHeight: 1.45 }}>
+                  Don't email this contact a portal invite
+                  <span style={{ display: "block", color: "#94a3b8" }}>
+                    Adds them to the project silently. Use for contacts who shouldn't get access.
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* Tab toggle — only customer + CRM-linked projects offer the CRM lookup tab. */}
@@ -4193,9 +4214,11 @@ export default function ProjectDetailPage() {
                                       phone: c.telephone1,
                                       job_title: c.jobtitle,
                                       contact_role: contactRole || null,
+                                      suppress_invite: suppressContactInvite,
                                     });
                                     setContacts((prev) => [...prev, added]);
                                     setContactRole("");
+                                    setSuppressContactInvite(false);
                                     if (assignNewContactToTaskId) {
                                       patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
                                       setAssignNewContactToTaskId(null);
@@ -4258,10 +4281,12 @@ export default function ProjectDetailPage() {
                         phone: manualContact.phone || null,
                         job_title: manualContact.job_title || null,
                         contact_role: contactRole || null,
+                        suppress_invite: suppressContactInvite,
                       });
                       setContacts((prev) => [...prev, added]);
                       setManualContact({ name: "", email: "", phone: "", job_title: "" });
                       setContactRole("");
+                      setSuppressContactInvite(false);
                       if (assignNewContactToTaskId) {
                         patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
                         setAssignNewContactToTaskId(null);
