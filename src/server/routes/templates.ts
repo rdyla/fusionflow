@@ -514,7 +514,7 @@ app.post("/:projectId/apply-template", requireRole("admin", "pm", "pf_sa", "pf_c
 
   // When the caller supplied a go-live, anchor the GO-LIVE STAGE's end on
   // that date (not the total chain end). Stages after the go-live stage
-  // — Closing, Hypercare — extend forward past the date. Mirrors the
+  // — Hypercare, then Closing — extend forward past the date. Mirrors the
   // Timeline Builder's `workdaysThroughGoLive` (see shared/workdayMath.ts
   // and TimelineBuilder.tsx). Falls back to total-chain anchoring when
   // the template has no flagged go-live task (legacy templates).

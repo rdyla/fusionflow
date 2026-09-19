@@ -673,7 +673,11 @@ app.get("/cases/:id", async (c) => {
     }
   }
 
-  notes.sort((a, b) => a.createdOn.localeCompare(b.createdOn));
+  // Newest first. The three sources (case notes, attachments, emails) are each
+  // fetched ascending, then merged and re-sorted descending here so the most
+  // recent activity is at the top of the case — engineers read the latest
+  // update first rather than scrolling past months of history.
+  notes.sort((a, b) => b.createdOn.localeCompare(a.createdOn));
   return c.json({ ...caseData, notes });
 });
 

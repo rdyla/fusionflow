@@ -282,6 +282,12 @@ export default function ProjectDetailPage() {
   const [contactModalTab, setContactModalTab] = useState<"crm" | "manual">("crm");
   const [contactSide, setContactSide] = useState<"customer" | "partner">("customer");
   const [contactRole, setContactRole] = useState("");
+  // Adding a contact with an email normally sends them a portal invite. Not
+  // every contact is meant to get access (MedVet prompted this), so the PM can
+  // opt out per add. Defaults to false — the send-by-default behaviour is
+  // unchanged for anyone who doesn't tick it, and it resets with the modal so
+  // one silent add can't quietly silence the next one.
+  const [suppressContactInvite, setSuppressContactInvite] = useState(false);
   const [manualContact, setManualContact] = useState({ name: "", email: "", phone: "", job_title: "" });
   const [savingContact, setSavingContact] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -481,6 +487,7 @@ export default function ProjectDetailPage() {
   // Drops the global users list so PMs aren't paging through every account.
   const ASSIGNEE_ROLE_LABEL: Record<string, string> = {
     pm: "PM", ae: "AE", sa: "SA", csm: "CSM", ie: "IE", engineer: "IE", partner_ae: "Partner AE",
+    trainer: "Trainer", integrations: "Integrations", specialist: "Specialist",
   };
   const projectStaffUnique = useMemo(() => {
     // Same user can appear under multiple staff_roles — keep the first seen.
@@ -1541,7 +1548,10 @@ export default function ProjectDetailPage() {
             photo: (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null,
           };
         })();
-        const roleLabel: Record<string, string> = { engineer: "Engineer", pm: "PM" };
+        const roleLabel: Record<string, string> = {
+          engineer: "Engineer", pm: "PM",
+          trainer: "Trainer", integrations: "Integrations", specialist: "Specialist",
+        };
         const internalStaffRows: PersonRow[] = projectStaff
           .filter((s) => s.staff_role !== "partner_ae"
             && !["ae", "sa", "csm"].includes(s.staff_role)
@@ -1854,6 +1864,23 @@ export default function ProjectDetailPage() {
               const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
               const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
               const cellInputStyle: React.CSSProperties = canManageTasks ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
+              // Freeze the first two columns (Blocked + Title) so the task a row
+              // refers to stays readable while scrolling right through Assignee /
+              // Due / Status / Priority / Done. Widths mirror the <colgroup>: the
+              // Blocked column is 56px, so Title pins at left: 56.
+              //
+              // Sticky cells need an opaque background or the scrolled columns
+              // show through; the table sits on a white .ms-card. The boundary
+              // gets a right border on the Title column so the freeze is visible
+              // rather than looking like a rendering glitch.
+              const FROZEN_COL0_WIDTH = 56;
+              const stickyBlockedCell: React.CSSProperties = {
+                position: "sticky", left: 0, zIndex: 1, background: "#fff",
+              };
+              const stickyTitleCell: React.CSSProperties = {
+                position: "sticky", left: FROZEN_COL0_WIDTH, zIndex: 1, background: "#fff",
+                borderRight: "1px solid #e2e8f0",
+              };
               return (
               <div key={stage.id}>
                 {/* Stage header with inline editing — unchanged */}
@@ -1995,8 +2022,8 @@ export default function ProjectDetailPage() {
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
-                              <th style={{ textAlign: "center", padding: "6px 8px" }}>Blocked</th>
-                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Title</th>
+                              <th style={{ ...stickyBlockedCell, zIndex: 2, textAlign: "center", padding: "6px 8px" }}>Blocked</th>
+                              <th style={{ ...stickyTitleCell, zIndex: 2, textAlign: "left", padding: "6px 8px" }}>Title</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Assignee</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Due</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Status</th>
@@ -2025,7 +2052,7 @@ export default function ProjectDetailPage() {
                                   <tr data-task-row={task.id}>
                                     {/* Blocked — its own column. Glyph shows only when the task has an
                                         active blocker; hover lists the blocker(s), click opens the first. */}
-                                    <td style={{ ...cellStyle, textAlign: "center" }}>
+                                    <td style={{ ...cellStyle, ...stickyBlockedCell, textAlign: "center" }}>
                                       {taskBlockers.length > 0 && (
                                         <button
                                           type="button"
@@ -2038,7 +2065,7 @@ export default function ProjectDetailPage() {
                                         </button>
                                       )}
                                     </td>
-                                    <td style={cellStyle}>
+                                    <td style={{ ...cellStyle, ...stickyTitleCell }}>
                                       <input
                                         type="text"
                                         defaultValue={taskDisplayTitle(task)}
@@ -2080,6 +2107,7 @@ export default function ProjectDetailPage() {
                                                 setAssignNewContactToTaskId(task.id);
                                                 setContactSide("customer");
                                                 setContactRole("");
+                                                setSuppressContactInvite(false);
                                                 setManualContact({ name: "", email: "", phone: "", job_title: "" });
                                                 const useCrm = !!project?.dynamics_account_id;
                                                 setContactModalTab(useCrm ? "crm" : "manual");
@@ -3972,7 +4000,10 @@ export default function ProjectDetailPage() {
                   <option value="">— Select role —</option>
                   <option value="ae">Account Executive (Account Team)</option>
                   <option value="engineer">Implementation Engineer</option>
+                  <option value="integrations">Integrations</option>
                   <option value="pm">Project Manager</option>
+                  <option value="specialist">Specialist</option>
+                  <option value="trainer">Trainer</option>
                 </select>
               </label>
               <label className="ms-label">
@@ -3985,6 +4016,12 @@ export default function ProjectDetailPage() {
                     if (addStaffRole === "ae")  return u.role === "pf_ae";
                     if (addStaffRole === "sa")  return u.role === "pf_sa";
                     if (addStaffRole === "csm") return u.role === "pf_csm";
+                    // Per-role flags, not is_project_resource: reusing that would
+                    // have dropped every Implementation Engineer into these three
+                    // pickers. Admin-managed on the user record.
+                    if (addStaffRole === "trainer")      return u.is_trainer === 1;
+                    if (addStaffRole === "integrations") return u.is_integrations === 1;
+                    if (addStaffRole === "specialist")   return u.is_specialist === 1;
                     return true;
                   }).map((u) => (
                     <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
@@ -4101,6 +4138,20 @@ export default function ProjectDetailPage() {
                   ))}
                 </select>
               </label>
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 10, cursor: "pointer" }}>
+                <input
+                  type="checkbox"
+                  checked={suppressContactInvite}
+                  onChange={(e) => setSuppressContactInvite(e.target.checked)}
+                  style={{ marginTop: 2, cursor: "pointer" }}
+                />
+                <span style={{ fontSize: 12, color: "#475569", lineHeight: 1.45 }}>
+                  Don't email this contact a portal invite
+                  <span style={{ display: "block", color: "#94a3b8" }}>
+                    Adds them to the project silently. Use for contacts who shouldn't get access.
+                  </span>
+                </span>
+              </label>
             </div>
 
             {/* Tab toggle — only customer + CRM-linked projects offer the CRM lookup tab. */}
@@ -4163,9 +4214,11 @@ export default function ProjectDetailPage() {
                                       phone: c.telephone1,
                                       job_title: c.jobtitle,
                                       contact_role: contactRole || null,
+                                      suppress_invite: suppressContactInvite,
                                     });
                                     setContacts((prev) => [...prev, added]);
                                     setContactRole("");
+                                    setSuppressContactInvite(false);
                                     if (assignNewContactToTaskId) {
                                       patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
                                       setAssignNewContactToTaskId(null);
@@ -4228,10 +4281,12 @@ export default function ProjectDetailPage() {
                         phone: manualContact.phone || null,
                         job_title: manualContact.job_title || null,
                         contact_role: contactRole || null,
+                        suppress_invite: suppressContactInvite,
                       });
                       setContacts((prev) => [...prev, added]);
                       setManualContact({ name: "", email: "", phone: "", job_title: "" });
                       setContactRole("");
+                      setSuppressContactInvite(false);
                       if (assignNewContactToTaskId) {
                         patchTask(assignNewContactToTaskId, { assignee_contact_id: added.id, assignee_user_id: null });
                         setAssignNewContactToTaskId(null);

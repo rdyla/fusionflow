@@ -82,6 +82,12 @@ export type User = {
   is_support_supervisor?: number;
   is_project_resource?: number;
   is_pm_eligible?: number;
+  /** Per-role staffing eligibility — see migration 0142. Separate from
+   *  is_project_resource so an Implementation Engineer doesn't automatically
+   *  appear in the Trainer / Specialist pickers. */
+  is_trainer?: number;
+  is_integrations?: number;
+  is_specialist?: number;
   is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
@@ -2224,6 +2230,9 @@ export const api = {
     phone?: string | null;
     job_title?: string | null;
     contact_role?: string | null;
+    /** Add the contact without emailing them the portal link. Omitted/false
+     *  keeps the default invite. */
+    suppress_invite?: boolean;
   }) =>
     request<ProjectContact>(`/projects/${projectId}/contacts`, {
       method: "POST",
@@ -2389,6 +2398,16 @@ export const api = {
       { method: "POST", body: JSON.stringify({ name }) }
     ),
 
+  /** Delete an EMPTY folder. Rejects with 409 if it still has children — the
+   *  guard that keeps a mis-click from taking a folder of customer documents
+   *  with it, since SharePoint deletes are recursive. `folderUrl` is the
+   *  folder's OWN url; `spItemId` its driveItem id from the listing. */
+  spDeleteFolder: (folderUrl: string, spItemId: string, projectId: string) =>
+    request<{ ok: boolean }>(
+      `/sharepoint/folder?url=${encodeURIComponent(folderUrl)}&spItemId=${encodeURIComponent(spItemId)}&projectId=${encodeURIComponent(projectId)}`,
+      { method: "DELETE" }
+    ),
+
   /** Set a folder's audience (internal / internal_customer / internal_partner /
    *  internal_customer_partner). Editor-only. Pass project_id OR solution_id
    *  depending on which side owns the folder. */
@@ -2515,6 +2534,9 @@ export const api = {
       is_support_supervisor?: number;
       is_project_resource?: number;
       is_pm_eligible?: number;
+      is_trainer?: number;
+      is_integrations?: number;
+      is_specialist?: number;
       is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;

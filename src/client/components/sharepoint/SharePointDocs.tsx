@@ -417,6 +417,26 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     }
   }
 
+  // Folders are deleted by their OWN url (a real library path), unlike files,
+  // which are deleted via the parent folder's url because an Office doc's webUrl
+  // can be the viewer form. The server refuses a non-empty folder with a 409 —
+  // we surface that message as-is rather than pre-checking here, so the decision
+  // is made against live Graph state instead of a possibly-stale listing.
+  async function handleDeleteFolder(folder: SPFile) {
+    if (!projectId) return;
+    if (!window.confirm(`Delete the empty folder "${folder.name}" from SharePoint?`)) return;
+    setDeletingId(folder.id);
+    try {
+      await api.spDeleteFolder(folder.webUrl, folder.id, projectId);
+      setFiles((prev) => prev.filter((f) => f.id !== folder.id));
+      showToast(`Folder "${folder.name}" deleted.`, "success");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Delete failed", "error");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   if (loadingLocations) {
@@ -618,6 +638,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
                   onDelete={() => handleDelete(file)}
                   onUploadNewVersion={(picked) => handleUploadNewVersion(file, picked)}
                   onEnableOnlineEditing={projectId ? () => openEditPicker(file) : null}
+                  onDeleteFolder={projectId ? () => handleDeleteFolder(file) : null}
                   onDescriptionSaved={(updated) =>
                     setFiles((prev) => prev.map((f) => (f.id === updated.id ? updated : f)))
                   }
@@ -753,6 +774,7 @@ function FileRow({
   onDelete,
   onUploadNewVersion,
   onEnableOnlineEditing,
+  onDeleteFolder,
   onDescriptionSaved,
   onVisibilityChanged,
 }: {
@@ -765,6 +787,9 @@ function FileRow({
   onDelete: () => void;
   onUploadNewVersion: (picked: File) => Promise<void>;
   onEnableOnlineEditing: (() => void) | null;
+  /** null for solution-owned folders — the delete endpoint authorises against a
+   *  project, so the action is offered only where that check can be made. */
+  onDeleteFolder: (() => void) | null;
   onDescriptionSaved: (updated: SPFile) => void;
   onVisibilityChanged: (audience: SPAudience) => void;
 }) {
@@ -1065,6 +1090,17 @@ function FileRow({
             className="ms-btn-ghost"
             onClick={onDelete}
             disabled={isDeleting}
+            style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
+          >
+            {isDeleting ? "Deleting…" : "Delete"}
+          </button>
+        )}
+        {file.isFolder && canEdit && !isExternal && onDeleteFolder && (
+          <button
+            className="ms-btn-ghost"
+            onClick={onDeleteFolder}
+            disabled={isDeleting}
+            title="Only empty folders can be deleted"
             style={{ color: "#d13438", borderColor: "rgba(209,52,56,0.35)" }}
           >
             {isDeleting ? "Deleting…" : "Delete"}

@@ -312,10 +312,13 @@ export default function ScopeOfWorkDocument({
     revisions: (sowMetadata?.revisions ?? []).map((r) => ({
       version: r.version, saved_at: r.saved_at, saved_by_name: r.saved_by_name, note: r.note,
     })),
-    // Customer-facing pricing: a base "Professional Services" line, each add-on
-    // itemized (charge or discount), then the rounded-up Project Total. The base
-    // line is derived as projectTotal − Σ add-ons so the summary always foots to
-    // clean numbers and the raw pre-round subtotal is never shown.
+    // Customer-facing pricing: a base "Professional Services" line (the subtotal
+    // rounded UP to the next $250), each add-on itemized (charge or discount),
+    // then the Project Total = base + Σ add-ons. Taking the base straight from
+    // roundedSubtotal — rather than back-solving it as total − Σ add-ons —
+    // is what keeps a discount honest: the old derivation absorbed the
+    // round-up delta into the base, so a $100 discount could print against a
+    // base silently inflated by $100 and net the customer nothing.
     ...(() => {
       const effects = feeBreakdown.addOnEffects ?? [];
       const addOnLines = (addOns as AddOn[])
@@ -324,9 +327,8 @@ export default function ScopeOfWorkDocument({
           amount: effects[i]?.dollar ?? 0,
         }))
         .filter((l) => l.amount !== 0);
-      const addOnNet = addOnLines.reduce((s, l) => s + l.amount, 0);
       return {
-        feeTotal: feeBreakdown.total - addOnNet,
+        feeTotal: feeBreakdown.roundedSubtotal,
         addOnLines,
         projectTotal: feeBreakdown.total,
       };

@@ -52,7 +52,8 @@ app.get("/users", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const rows = await db
     .prepare(
-      `SELECT id, email, name, organization_name, role, is_active, is_support_supervisor, is_project_resource, is_pm_eligible, is_sales_tools, manager_id, zoom_user_id, cs_permission, created_at, updated_at
+      `SELECT id, email, name, organization_name, role, is_active, is_support_supervisor, is_project_resource, is_pm_eligible, is_sales_tools,
+              is_trainer, is_integrations, is_specialist, manager_id, zoom_user_id, cs_permission, created_at, updated_at
        FROM users
        ORDER BY name ASC`
     )
@@ -122,6 +123,9 @@ const updateUserSchema = z.object({
   is_support_supervisor: z.number().int().min(0).max(1).optional(),
   is_project_resource: z.number().int().min(0).max(1).optional(),
   is_pm_eligible: z.number().int().min(0).max(1).optional(),
+  is_trainer: z.number().int().min(0).max(1).optional(),
+  is_integrations: z.number().int().min(0).max(1).optional(),
+  is_specialist: z.number().int().min(0).max(1).optional(),
   is_sales_tools: z.number().int().min(0).max(1).optional(),
   dynamics_account_id: z.string().nullable().optional(),
   manager_id: z.string().nullable().optional(),
