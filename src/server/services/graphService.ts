@@ -644,6 +644,15 @@ export async function inviteGuestAndGrantWrite(
 ): Promise<{ invited: boolean; granted: boolean }> {
   const token = await getGraphToken(env);
 
+  // Entra rejects plus-addressed emails ("name+tag@…") from B2B invitations
+  // ("The Primary SMTP Address is an invalid value"), so the guest is never
+  // created and the share can't succeed. Fail fast + clearly rather than burning
+  // the retry window on a doomed share.
+  const localPart = email.split("@")[0] ?? "";
+  if (localPart.includes("+")) {
+    throw new Error(`Microsoft can't invite the plus-addressed email ${email} as a guest. Use the person's primary address (no "+tag").`);
+  }
+
   // 1. Provision the guest (idempotent-ish — ignore "already exists").
   let invited = false;
   try {
