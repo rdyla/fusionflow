@@ -1858,6 +1858,23 @@ export default function ProjectDetailPage() {
               const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
               const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
               const cellInputStyle: React.CSSProperties = canManageTasks ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
+              // Freeze the first two columns (Blocked + Title) so the task a row
+              // refers to stays readable while scrolling right through Assignee /
+              // Due / Status / Priority / Done. Widths mirror the <colgroup>: the
+              // Blocked column is 56px, so Title pins at left: 56.
+              //
+              // Sticky cells need an opaque background or the scrolled columns
+              // show through; the table sits on a white .ms-card. The boundary
+              // gets a right border on the Title column so the freeze is visible
+              // rather than looking like a rendering glitch.
+              const FROZEN_COL0_WIDTH = 56;
+              const stickyBlockedCell: React.CSSProperties = {
+                position: "sticky", left: 0, zIndex: 1, background: "#fff",
+              };
+              const stickyTitleCell: React.CSSProperties = {
+                position: "sticky", left: FROZEN_COL0_WIDTH, zIndex: 1, background: "#fff",
+                borderRight: "1px solid #e2e8f0",
+              };
               return (
               <div key={stage.id}>
                 {/* Stage header with inline editing — unchanged */}
@@ -1999,8 +2016,8 @@ export default function ProjectDetailPage() {
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
-                              <th style={{ textAlign: "center", padding: "6px 8px" }}>Blocked</th>
-                              <th style={{ textAlign: "left", padding: "6px 8px" }}>Title</th>
+                              <th style={{ ...stickyBlockedCell, zIndex: 2, textAlign: "center", padding: "6px 8px" }}>Blocked</th>
+                              <th style={{ ...stickyTitleCell, zIndex: 2, textAlign: "left", padding: "6px 8px" }}>Title</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Assignee</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Due</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Status</th>
@@ -2029,7 +2046,7 @@ export default function ProjectDetailPage() {
                                   <tr data-task-row={task.id}>
                                     {/* Blocked — its own column. Glyph shows only when the task has an
                                         active blocker; hover lists the blocker(s), click opens the first. */}
-                                    <td style={{ ...cellStyle, textAlign: "center" }}>
+                                    <td style={{ ...cellStyle, ...stickyBlockedCell, textAlign: "center" }}>
                                       {taskBlockers.length > 0 && (
                                         <button
                                           type="button"
@@ -2042,7 +2059,7 @@ export default function ProjectDetailPage() {
                                         </button>
                                       )}
                                     </td>
-                                    <td style={cellStyle}>
+                                    <td style={{ ...cellStyle, ...stickyTitleCell }}>
                                       <input
                                         type="text"
                                         defaultValue={taskDisplayTitle(task)}
