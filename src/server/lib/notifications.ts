@@ -1,5 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { Bindings } from "../types";
+import { crmRecordUrl } from "../../shared/crmLinks";
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Draft",
@@ -131,7 +132,9 @@ export async function notifyZoomNewCase(
   }
 ): Promise<void> {
   try {
-    const crmLink = `https://packetfusioncrm.crm.dynamics.com/main.aspx?etn=incident&id=${opts.caseId}&pagetype=entityrecord`;
+    // Shared builder so the in-app "Open in CRM" links and this notification
+    // can't drift apart if the org url ever changes.
+    const crmLink = crmRecordUrl("case", opts.caseId) ?? "";
     const customer = opts.accountName ?? opts.submittedBy;
     const message = `New support case opened — ${opts.ticketNumber}: ${opts.title}\nCustomer: ${customer} | Submitted by: ${opts.submittedBy}\n${crmLink}`;
     const timestamp = Date.now().toString();

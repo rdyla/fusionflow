@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api, ApiError, type Solution, type SolutionStatus, type SolutionType, type OtherTechnology, type SolutionVendor, type User, type DynamicsContact, type SolutionContact, type NeedsAssessment, type LaborEstimate, type SolutionStaffMember } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
+import CrmResourceLinks from "../components/crm/CrmResourceLinks";
 import PersonAvatar from "../components/ui/PersonAvatar";
 import NeedsAssessmentWizard from "../components/solutioning/NeedsAssessmentWizard";
 import LaborEstimateView from "../components/solutioning/LaborEstimateView";
@@ -457,6 +458,11 @@ export default function SolutionDetailPage() {
                 {solution.customer_name} <span style={{ fontSize: 11 }}>↗</span>
               </Link>
             )}
+            <CrmResourceLinks
+              role={currentRole}
+              opportunityId={solution.crm_opportunity_id}
+              accountId={solution.dynamics_account_id}
+            />
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <button onClick={refreshAll} disabled={refreshing} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }} title="Refresh this solution's data from the server">

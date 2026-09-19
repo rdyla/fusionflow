@@ -26,6 +26,7 @@ import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import PersonAvatar from "../components/ui/PersonAvatar";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
+import CrmResourceLinks from "../components/crm/CrmResourceLinks";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import ProjectAliasField from "../components/project/ProjectAliasField";
@@ -1215,6 +1216,12 @@ export default function ProjectDetailPage() {
             ) : (
               <span style={{ fontSize: 13, color: "#94a3b8" }}>No CRM customer linked</span>
             )}
+            <CrmResourceLinks
+              role={currentUserRole}
+              caseId={project.crm_case_id}
+              opportunityId={project.crm_opportunity_id}
+              accountId={project.dynamics_account_id}
+            />
             {project.closed_at && (
               <div style={{ fontSize: 12, color: "#64748b", marginTop: 3 }}>
                 Closed {formatDate(project.closed_at)}{project.closed_by_name ? ` by ${project.closed_by_name}` : ""}
