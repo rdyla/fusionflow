@@ -653,9 +653,7 @@ export async function inviteGuestAndGrantWrite(
     throw new Error(`Microsoft can't invite the plus-addressed email ${email} as a guest. Use the person's primary address (no "+tag").`);
   }
 
-  // 1. Provision the guest. A re-invite of an existing guest is a no-op (201),
-  //    so a genuine failure here (e.g. an invalid address) means the guest won't
-  //    exist — surface it instead of proceeding to a share that can't work.
+  // 1. Provision the guest (idempotent-ish — ignore "already exists").
   let invited = false;
   try {
     await graphPostJson(token, "/invitations", {
@@ -666,11 +664,7 @@ export async function inviteGuestAndGrantWrite(
     });
     invited = true;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/invalid|BadRequest/i.test(msg)) {
-      throw new Error(`Microsoft rejected ${email} as an invalid guest address — use the person's primary email (plus-addressed aliases aren't accepted).`);
-    }
-    console.warn(`[graph] guest invite for ${email} failed (likely already a guest):`, msg);
+    console.warn(`[graph] guest invite for ${email} failed (likely already a guest):`, err instanceof Error ? err.message : err);
   }
 
   // 2. Grant write on the item (+ email them a direct link).
