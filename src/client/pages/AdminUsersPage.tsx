@@ -745,6 +745,35 @@ export default function AdminUsersPage() {
                 </label>
               )}
 
+              {/* Per-role staffing eligibility (migration 0142) — internal only.
+                  Narrower than the Project Resource flag above: each one adds the
+                  user to exactly one staff picker, so an IE doesn't land in the
+                  Trainer and Specialist lists by default. */}
+              {editForm.role !== "client" && ([
+                { key: "is_trainer" as const, label: "Available as Trainer", hint: "Lets this user be staffed on a project as Trainer." },
+                { key: "is_integrations" as const, label: "Available as Integrations", hint: "Lets this user be staffed on a project as Integrations." },
+                { key: "is_specialist" as const, label: "Available as Specialist", hint: "Lets this user be staffed on a project as Specialist." },
+              ].map(({ key, label, hint }) => (
+                <label
+                  key={key}
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer",
+                    border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", background: "#f8fafc",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={(editForm[key] ?? 0) === 1}
+                    onChange={(e) => setEditForm({ ...editForm, [key]: e.target.checked ? 1 : 0 })}
+                    style={{ marginTop: 3, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>{hint}</div>
+                  </div>
+                </label>
+              )))}
+
               {/* Sales Tools flag — internal only */}
               {editForm.role !== "client" && (
                 <label

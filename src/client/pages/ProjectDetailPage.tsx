@@ -481,6 +481,7 @@ export default function ProjectDetailPage() {
   // Drops the global users list so PMs aren't paging through every account.
   const ASSIGNEE_ROLE_LABEL: Record<string, string> = {
     pm: "PM", ae: "AE", sa: "SA", csm: "CSM", ie: "IE", engineer: "IE", partner_ae: "Partner AE",
+    trainer: "Trainer", integrations: "Integrations", specialist: "Specialist",
   };
   const projectStaffUnique = useMemo(() => {
     // Same user can appear under multiple staff_roles — keep the first seen.
@@ -1541,7 +1542,10 @@ export default function ProjectDetailPage() {
             photo: (pmEmail ? staffPhotoMap[pmEmail] : null) ?? pmFromMap?.avatar_url ?? null,
           };
         })();
-        const roleLabel: Record<string, string> = { engineer: "Engineer", pm: "PM" };
+        const roleLabel: Record<string, string> = {
+          engineer: "Engineer", pm: "PM",
+          trainer: "Trainer", integrations: "Integrations", specialist: "Specialist",
+        };
         const internalStaffRows: PersonRow[] = projectStaff
           .filter((s) => s.staff_role !== "partner_ae"
             && !["ae", "sa", "csm"].includes(s.staff_role)
@@ -3972,7 +3976,10 @@ export default function ProjectDetailPage() {
                   <option value="">— Select role —</option>
                   <option value="ae">Account Executive (Account Team)</option>
                   <option value="engineer">Implementation Engineer</option>
+                  <option value="integrations">Integrations</option>
                   <option value="pm">Project Manager</option>
+                  <option value="specialist">Specialist</option>
+                  <option value="trainer">Trainer</option>
                 </select>
               </label>
               <label className="ms-label">
@@ -3985,6 +3992,12 @@ export default function ProjectDetailPage() {
                     if (addStaffRole === "ae")  return u.role === "pf_ae";
                     if (addStaffRole === "sa")  return u.role === "pf_sa";
                     if (addStaffRole === "csm") return u.role === "pf_csm";
+                    // Per-role flags, not is_project_resource: reusing that would
+                    // have dropped every Implementation Engineer into these three
+                    // pickers. Admin-managed on the user record.
+                    if (addStaffRole === "trainer")      return u.is_trainer === 1;
+                    if (addStaffRole === "integrations") return u.is_integrations === 1;
+                    if (addStaffRole === "specialist")   return u.is_specialist === 1;
                     return true;
                   }).map((u) => (
                     <option key={u.id} value={u.id}>{u.name ?? u.email}</option>
