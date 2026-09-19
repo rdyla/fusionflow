@@ -41,10 +41,15 @@ export const DEFAULT_BLENDED_RATE = 165;
 /** Blended rate stamped onto every solution created from 2026-08-27 forward. */
 export const NEW_SOLUTION_BLENDED_RATE = 200;
 
-/** SOW totals get rounded UP to a multiple of this for clean customer-facing
- *  pricing. Applied only to the final total in calcSowTotal / calcBasicSowTotal;
- *  intermediate values (labor subtotal, add-on effects) stay unrounded so PMs
- *  see the raw math and the customer just sees a single clean final number. */
+/** The customer-facing BASE FEE is rounded UP to a multiple of this for clean
+ *  pricing. Applied to the base in calcSowTotal / calcBasicSowTotal, BEFORE
+ *  add-ons — never to the post-add-on total.
+ *
+ *  Rounding the final total instead (the behaviour before 2026-09) silently
+ *  quantized every discount to a $250 step: a $100 discount moved the total by
+ *  $0 while the printed base fee was inflated by $100 to keep the summary
+ *  footed, so the customer paid full price against a SOW that showed a
+ *  discount line. Round the base, then discount at face value. */
 export const MROUND_INCREMENT = 250;
 
 export function mround(value: number, increment: number = MROUND_INCREMENT): number {
@@ -93,8 +98,12 @@ export function serializeAddOns(addOns: readonly AddOn[]): string {
   return JSON.stringify(addOns);
 }
 
-/** Per-add-on dollar effect against a pre-add-on labor subtotal at the given rate.
- *  Charges/hours are positive; discounts are negative. */
+/** Per-add-on dollar effect against the ROUNDED base fee at the given rate.
+ *  Charges/hours are positive; discounts are negative.
+ *
+ *  The basis is the rounded base (not the raw subtotal) so a percentage
+ *  discount foots against the "Professional Services" figure the customer
+ *  actually sees on the SOW. */
 export function addOnDollar(addOn: AddOn, laborSubtotal: number, rate: number): number {
   const v = Number(addOn.value) || 0;
   switch (addOn.kind) {
@@ -107,7 +116,12 @@ export function addOnDollar(addOn: AddOn, laborSubtotal: number, rate: number): 
 
 export interface SowTotalBreakdown {
   laborHours: number;
+  /** Raw pre-round basis (hours x rate, or the flat-mode subtotal). Internal
+   *  display only — add-ons are NOT computed against this. */
   laborSubtotal: number;
+  /** `laborSubtotal` rounded UP to the next $250. This is the customer-facing
+   *  "Professional Services" base fee and the basis every add-on is applied to. */
+  roundedSubtotal: number;
   addOnEffects: { id: string; dollar: number }[];
   addOnNet: number;
   total: number;
@@ -124,15 +138,19 @@ export function calcSowTotal(
   const safeHours = Number(laborHours) || 0;
   const safeRate  = Number(rate) || DEFAULT_BLENDED_RATE;
   const laborSubtotal = safeHours * safeRate;
-  const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, laborSubtotal, safeRate) }));
+  // Round the BASE first, then apply add-ons at face value — see the note on
+  // roundUpBase below. Rounding the post-discount total instead would quantize
+  // every discount to a $250 step.
+  const roundedSubtotal = mroundUp(laborSubtotal);
+  const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, roundedSubtotal, safeRate) }));
   const addOnNet = addOnEffects.reduce((sum, e) => sum + e.dollar, 0);
-  // Round UP only the final customer-facing total; breakdown values stay raw.
   return {
     laborHours: safeHours,
     laborSubtotal,
+    roundedSubtotal,
     addOnEffects,
     addOnNet,
-    total: mroundUp(laborSubtotal + addOnNet),
+    total: Math.max(0, roundedSubtotal + addOnNet),
   };
 }
 
@@ -153,14 +171,15 @@ export function calcBasicSowTotal(
 ): SowTotalBreakdown {
   const safePrice = Number(basicSubtotal) || 0;
   const safeRate  = Number(rate) || DEFAULT_BLENDED_RATE;
-  const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, safePrice, safeRate) }));
+  const roundedSubtotal = mroundUp(safePrice);
+  const addOnEffects = addOns.map((a) => ({ id: a.id, dollar: addOnDollar(a, roundedSubtotal, safeRate) }));
   const addOnNet = addOnEffects.reduce((sum, e) => sum + e.dollar, 0);
-  // Round UP only the final customer-facing total; breakdown values stay raw.
   return {
     laborHours: 0,
     laborSubtotal: safePrice,
+    roundedSubtotal,
     addOnEffects,
     addOnNet,
-    total: mroundUp(safePrice + addOnNet),
+    total: Math.max(0, roundedSubtotal + addOnNet),
   };
 }

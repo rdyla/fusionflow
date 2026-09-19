@@ -84,10 +84,10 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
   if (basicBreakdown) flatSubtotal = basicBreakdown.total;
   if (comboBreakdown) flatSubtotal = comboBreakdown.finalSowPrice;
 
-  // All flat modes (tiered / basic / combo) stack external add-ons on the
-  // subtotal and round the total UP; advanced uses labor hours. Combo's own
-  // bundle/PM/final-discount math is baked into finalSowPrice above; add-ons
-  // (e.g. extra dialing campaigns) bill on top of it.
+  // All flat modes (tiered / basic / combo) round the subtotal UP to the next
+  // $250 and stack external add-ons on that rounded base; advanced uses labor
+  // hours. Combo's own bundle/PM/final-discount math is baked into
+  // finalSowPrice above; add-ons (e.g. extra dialing campaigns) bill on top.
   const breakdown = isFlat
     ? calcBasicSowTotal(flatSubtotal, addOns, rate)
     : calcSowTotal(laborHoursTotal, addOns, rate);
@@ -338,8 +338,11 @@ export default function SowAddOnsEditor({ solution, laborHoursTotal, canEdit, is
                 <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{breakdown.laborHours}h</div>
               </div>
               <div>
-                <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>Labor Subtotal</div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmtUsd(breakdown.laborSubtotal)}</div>
+                <div
+                  style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}
+                  title={`Labor subtotal ${fmtUsd(breakdown.laborSubtotal)}, rounded up to the next $250. Add-ons apply to this figure.`}
+                >Base Fee</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: accent }}>{fmtUsd(breakdown.roundedSubtotal)}</div>
               </div>
               <div>
                 <div style={{ color: "#94a3b8", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 2 }}>SOW Total</div>
