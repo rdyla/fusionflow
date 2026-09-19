@@ -111,4 +111,8 @@ export type Bindings = {
 
 export type Variables = {
   auth: AuthContext;
+  /** Set only when an admin is impersonating via x-impersonate-email: the REAL
+   *  admin's email. `auth` holds the impersonated (effective) user, so without
+   *  this the audit trail would attribute their actions to the target. */
+  impersonatedBy?: string;
 };
