@@ -490,6 +490,57 @@ app.get("/file/history", async (c) => {
   }
 });
 
+// DELETE /api/sharepoint/folder?url=<folderUrl>&spItemId=<driveItemId>&projectId=<id>
+// Deletes an EMPTY folder. Refuses (409) when the folder still has children, so
+// a mis-click can't take a folder full of customer documents with it — SharePoint
+// deletes are recursive, and the requester asked for exactly this guard.
+//
+// Emptiness is read live from Graph rather than trusted from the client: the
+// listing the user clicked from may be seconds stale. A first page with no
+// children means genuinely empty, so the missing @odata.nextLink paging in
+// listSharePointFiles can't make a full folder look empty here.
+app.delete("/folder", async (c) => {
+  const folderUrl = c.req.query("url");
+  const spItemId = c.req.query("spItemId");
+  const projectId = (c.req.query("projectId") ?? "").trim();
+  if (!folderUrl || !spItemId || !projectId) {
+    return c.json({ error: "url, spItemId and projectId required" }, 400);
+  }
+
+  const auth = c.get("auth");
+  if (!auth?.user || !(await canManageProjectDocuments(c.env.DB, auth.user, projectId))) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+
+  try {
+    const children = await listSharePointFiles(c.env, folderUrl);
+    if (children.length > 0) {
+      return c.json({
+        error: `This folder isn't empty — it still contains ${children.length} item${children.length === 1 ? "" : "s"}. Delete or move them first.`,
+      }, 409);
+    }
+
+    await deleteSharePointFile(c.env, folderUrl, spItemId);
+
+    // Drop the folder's own bookkeeping. Edit grants are keyed by URL prefix,
+    // so clear any that pointed at this folder or anything beneath it.
+    try {
+      await c.env.DB.batch([
+        c.env.DB.prepare("DELETE FROM sharepoint_folder_visibility WHERE sp_item_id = ?").bind(spItemId),
+        c.env.DB.prepare("DELETE FROM sharepoint_edit_grants WHERE web_url = ? OR web_url LIKE ?").bind(folderUrl, `${folderUrl}/%`),
+      ]);
+    } catch (cleanupErr) {
+      console.warn("[sp.delete-folder] cleanup failed:", cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);
+    }
+
+    return c.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to delete SharePoint folder";
+    console.error("SharePoint folder-delete error:", message);
+    return c.json({ error: message }, 500);
+  }
+});
+
 // DELETE /api/sharepoint/file?url=<folderUrl>&spItemId=<driveItemId>
 // Deletes a file by its Graph driveItem id (resolving the drive from the folder
 // URL). Keyed on the item id — not the file's webUrl — because Office docs'

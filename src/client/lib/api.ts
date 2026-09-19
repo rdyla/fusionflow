@@ -2389,6 +2389,16 @@ export const api = {
       { method: "POST", body: JSON.stringify({ name }) }
     ),
 
+  /** Delete an EMPTY folder. Rejects with 409 if it still has children — the
+   *  guard that keeps a mis-click from taking a folder of customer documents
+   *  with it, since SharePoint deletes are recursive. `folderUrl` is the
+   *  folder's OWN url; `spItemId` its driveItem id from the listing. */
+  spDeleteFolder: (folderUrl: string, spItemId: string, projectId: string) =>
+    request<{ ok: boolean }>(
+      `/sharepoint/folder?url=${encodeURIComponent(folderUrl)}&spItemId=${encodeURIComponent(spItemId)}&projectId=${encodeURIComponent(projectId)}`,
+      { method: "DELETE" }
+    ),
+
   /** Set a folder's audience (internal / internal_customer / internal_partner /
    *  internal_customer_partner). Editor-only. Pass project_id OR solution_id
    *  depending on which side owns the folder. */
