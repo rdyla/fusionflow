@@ -1012,6 +1012,11 @@ const addContactSchema = z.object({
   phone: z.string().max(100).nullable().optional(),
   job_title: z.string().max(500).nullable().optional(),
   contact_role: z.string().max(100).nullable().optional(),
+  /** Add the contact WITHOUT emailing them the portal link. Not every contact
+   *  on a project is meant to get access — MedVet being the case that prompted
+   *  it. Defaults to false so the existing send-by-default behaviour is
+   *  unchanged for everyone who doesn't opt out. */
+  suppress_invite: z.boolean().optional(),
 });
 
 app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engineer"), async (c) => {
@@ -1025,7 +1030,7 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engi
   const parsed = addContactSchema.safeParse(await c.req.json());
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request body" });
 
-  const { dynamics_contact_id, name, email, phone, job_title, contact_role } = parsed.data;
+  const { dynamics_contact_id, name, email, phone, job_title, contact_role, suppress_invite } = parsed.data;
   const id = crypto.randomUUID();
 
   await db
@@ -1035,18 +1040,26 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engi
 
   const created = await db.prepare("SELECT * FROM project_contacts WHERE id = ? LIMIT 1").bind(id).first();
 
-  // Send the customer an access invite whenever the added contact has an email.
-  // (Previously gated to two Stanford POC projects during pilot; now enabled for
-  // all projects. Fires on every add — re-adding a contact re-sends.)
+  // Send the customer an access invite whenever the added contact has an email,
+  // unless the PM ticked "don't send". (Previously gated to two Stanford POC
+  // projects during pilot; now enabled for all projects. Fires on every add —
+  // re-adding a contact re-sends.)
+  //
+  // suppress_invite silences the EMAIL only. It deliberately doesn't touch the
+  // SharePoint auto-grant below: that fires solely for folders an editor has
+  // already marked client-editing, and folder access is managed by its own
+  // audience/grant controls rather than as a side effect of this checkbox.
   if (email) {
-    const project = await db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>();
-    if (project) {
-      const appUrl = c.env.APP_URL ?? "https://cloudconnect.packetfusion.com";
-      c.executionCtx.waitUntil(sendEmail(c.env, {
-        to: email,
-        subject: `You've been added to ${project.name}`,
-        html: contactProjectInvite({ recipientName: name, projectName: project.name, appUrl }),
-      }));
+    if (!suppress_invite) {
+      const project = await db.prepare("SELECT name FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string }>();
+      if (project) {
+        const appUrl = c.env.APP_URL ?? "https://cloudconnect.packetfusion.com";
+        c.executionCtx.waitUntil(sendEmail(c.env, {
+          to: email,
+          subject: `You've been added to ${project.name}`,
+          html: contactProjectInvite({ recipientName: name, projectName: project.name, appUrl }),
+        }));
+      }
     }
 
     // Phase 2 auto-grant: if any of this project's folders have "client editing"

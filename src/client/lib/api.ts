@@ -2224,6 +2224,9 @@ export const api = {
     phone?: string | null;
     job_title?: string | null;
     contact_role?: string | null;
+    /** Add the contact without emailing them the portal link. Omitted/false
+     *  keeps the default invite. */
+    suppress_invite?: boolean;
   }) =>
     request<ProjectContact>(`/projects/${projectId}/contacts`, {
       method: "POST",
