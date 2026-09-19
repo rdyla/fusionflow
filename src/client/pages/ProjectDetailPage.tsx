@@ -26,6 +26,7 @@ import ProjectTimeline from "../components/timeline/ProjectTimeline";
 import PersonAvatar from "../components/ui/PersonAvatar";
 import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
+import ProjectAuditLog from "../components/project/ProjectAuditLog";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import ProjectAliasField from "../components/project/ProjectAliasField";
@@ -2983,6 +2984,11 @@ export default function ProjectDetailPage() {
                 </div>
               )}
             </div>
+            {/* Change history sits under the discussion feed: same "what has
+                happened on this project" question, but system-recorded rather
+                than written by people. Gated to project editors, mirroring the
+                server's canEditProject check on the endpoint. */}
+            {canEdit && <ProjectAuditLog projectId={project.id} />}
           </div>
         );
       })()}
