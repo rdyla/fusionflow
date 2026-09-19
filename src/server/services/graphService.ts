@@ -111,6 +111,20 @@ async function graphGet<T>(token: string, path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** GET an ABSOLUTE Graph url. Needed for @odata.nextLink, which Graph returns
+ *  as a fully-qualified url rather than a path, so graphGet (which prefixes
+ *  GRAPH_API_BASE) can't be used to follow it. */
+async function graphGetAbsolute<T>(token: string, url: string): Promise<T> {
+  const res = await fetch(url, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Graph API ${res.status} ${url}: ${body}`);
+  }
+  return res.json() as Promise<T>;
+}
+
 async function graphPut<T>(token: string, path: string, body: ArrayBuffer, contentType: string): Promise<T> {
   const res = await fetch(`${GRAPH_API_BASE}${path}`, {
     method: "PUT",
@@ -357,8 +371,30 @@ export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: stri
     ? `/drives/${driveId}/root:/${encodedPath}:/children?$orderby=name asc`
     : `/drives/${driveId}/root/children?$orderby=name asc`;
 
-  const res = await graphGet<{ value: GraphDriveItem[] }>(token, apiPath);
-  return res.value.map(mapDriveItem);
+  // Graph pages /children (200 per page by default) and signals more with
+  // @odata.nextLink. Reading only the first page silently truncated every
+  // folder with more than 200 items — files and subfolders past the cut simply
+  // never appeared, which looks identical to them not existing.
+  //
+  // MAX_PAGES caps the walk so a pathological library can't spin a Worker past
+  // its CPU budget. 25 pages is ~5,000 items, far beyond any project folder
+  // here; hitting it is logged rather than silently truncating again.
+  const MAX_PAGES = 25;
+  const items: GraphDriveItem[] = [];
+  let page = await graphGet<{ value: GraphDriveItem[]; "@odata.nextLink"?: string }>(token, apiPath);
+  items.push(...(page.value ?? []));
+
+  for (let i = 1; i < MAX_PAGES; i++) {
+    const next = page["@odata.nextLink"];
+    if (!next) return items.map(mapDriveItem);
+    page = await graphGetAbsolute<{ value: GraphDriveItem[]; "@odata.nextLink"?: string }>(token, next);
+    items.push(...(page.value ?? []));
+  }
+
+  if (page["@odata.nextLink"]) {
+    console.warn(`[graph] listSharePointFiles hit the ${MAX_PAGES}-page cap for ${folderAbsoluteUrl}; listing is truncated at ${items.length} items`);
+  }
+  return items.map(mapDriveItem);
 }
 
 async function graphPatchJson<T>(token: string, path: string, body: unknown): Promise<T> {
