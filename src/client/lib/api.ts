@@ -82,6 +82,12 @@ export type User = {
   is_support_supervisor?: number;
   is_project_resource?: number;
   is_pm_eligible?: number;
+  /** Per-role staffing eligibility — see migration 0142. Separate from
+   *  is_project_resource so an Implementation Engineer doesn't automatically
+   *  appear in the Trainer / Specialist pickers. */
+  is_trainer?: number;
+  is_integrations?: number;
+  is_specialist?: number;
   is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
@@ -2515,6 +2521,9 @@ export const api = {
       is_support_supervisor?: number;
       is_project_resource?: number;
       is_pm_eligible?: number;
+      is_trainer?: number;
+      is_integrations?: number;
+      is_specialist?: number;
       is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
