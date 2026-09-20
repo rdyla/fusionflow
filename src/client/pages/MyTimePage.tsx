@@ -24,6 +24,14 @@ const REASON_LABEL: Record<TimeSuggestion["matchReason"], string> = {
  *  failed CRM write must not obscure the rest of the batch. */
 type RowState = { status: "idle" | "working" | "failed"; error?: string };
 
+const STAGE_REASON_LABEL: Record<TimeSuggestion["stageReason"], string> = {
+  keyword_and_active: "the meeting title and the active stage agreeing",
+  only_active_stage: "the project's one active stage",
+  furthest_active_stage: "the furthest-along of several active stages",
+  keyword_only: "the meeting title (no stage is active)",
+  no_stages: "nothing — this project has no stages",
+};
+
 const keyOf = (s: TimeSuggestion) => `${s.source}:${s.eventId}`;
 
 function fmtRange(startIso: string, endIso: string): string {
@@ -51,6 +59,9 @@ export default function MyTimePage() {
   const [checked, setChecked] = useState<Set<string>>(new Set());
   /** Duration in HOURS per row, seeded from the suggestion and editable. */
   const [hours, setHours] = useState<Record<string, number>>({});
+  /** Chosen stage per row — "" means log as project-level admin time. Seeded
+   *  from the server's inference and editable before processing. */
+  const [stageId, setStageId] = useState<Record<string, string>>({});
   const [rowState, setRowState] = useState<Record<string, RowState>>({});
   const [processing, setProcessing] = useState(false);
   const [setupCache, setSetupCache] = useState<Record<string, TimeEntrySetup>>({});
@@ -65,8 +76,13 @@ export default function MyTimePage() {
         // pre-checked: these become closed payroll records, so selecting is
         // deliberate. "Select all" is one click away.
         const seeded: Record<string, number> = {};
-        for (const s of res.suggestions) seeded[keyOf(s)] = Number((s.durationMin / 60).toFixed(2));
+        const seededStage: Record<string, string> = {};
+        for (const s of res.suggestions) {
+          seeded[keyOf(s)] = Number((s.durationMin / 60).toFixed(2));
+          seededStage[keyOf(s)] = s.inferredStageId ?? "";
+        }
         setHours(seeded);
+        setStageId(seededStage);
         setChecked(new Set());
         setRowState({});
       })
@@ -135,10 +151,14 @@ export default function MyTimePage() {
         if (!Number.isFinite(h) || h <= 0) throw new Error("Enter a duration greater than zero.");
         if (h > 24) throw new Error("That's more than 24 hours.");
 
-        let setup = cache[s.projectId];
+        // Pay/cost codes hang off the CRM job and are stage-aware, so cache
+        // per project+stage rather than per project.
+        const chosenStage = stageId[k] || "";
+        const cacheKey = `${s.projectId}:${chosenStage}`;
+        let setup = cache[cacheKey];
         if (!setup) {
-          setup = await api.timeEntrySetup(s.projectId);
-          cache[s.projectId] = setup;
+          setup = await api.timeEntrySetup(s.projectId, chosenStage || undefined);
+          cache[cacheKey] = setup;
         }
         const payCode = setup.pay_codes[0];
         const costCode = setup.cost_codes[0];
@@ -146,13 +166,33 @@ export default function MyTimePage() {
           throw new Error("No pay/cost codes on this project's CRM job — log it from the project page.");
         }
 
-        await api.logProjectTime(s.projectId, {
-          scheduled_start: s.startIso,
-          scheduled_end: endFromHours(s.startIso, h),
-          pay_code_id: payCode.amc_paycodeid,
-          cost_code_id: costCode.amc_costcodeid,
-          note: s.subject || undefined,
-        });
+        const scheduled_end = endFromHours(s.startIso, h);
+        if (chosenStage) {
+          // Stage-level entry — CRM subject becomes "{stage} | {meeting}",
+          // matching how the team already logs time.
+          if (!setup.case_id || !setup.job_id) {
+            throw new Error("This project's CRM case or job is missing — log it from the project page.");
+          }
+          await api.logStageTime(s.projectId, chosenStage, {
+            scheduled_start: s.startIso,
+            scheduled_end,
+            pay_code_id: payCode.amc_paycodeid,
+            cost_code_id: costCode.amc_costcodeid,
+            note: s.subject || undefined,
+            case_id: setup.case_id,
+            job_id: setup.job_id,
+            account_id: setup.account_id,
+          });
+        } else {
+          // No stage chosen (or none exist) — project-level admin time.
+          await api.logProjectTime(s.projectId, {
+            scheduled_start: s.startIso,
+            scheduled_end,
+            pay_code_id: payCode.amc_paycodeid,
+            cost_code_id: costCode.amc_costcodeid,
+            note: s.subject || undefined,
+          });
+        }
         succeeded.push(k);
       } catch (err) {
         failures[k] = { status: "failed", error: err instanceof Error ? err.message : "Failed to log." };
@@ -273,6 +313,12 @@ export default function MyTimePage() {
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>
                       {REASON_LABEL[s.matchReason]} · from {s.source === "zoom" ? "Zoom (actual length)" : "Outlook (scheduled length)"}
                     </div>
+                    {s.inferredStageId && (
+                      <div style={{ fontSize: 12, color: s.stageConfidence === "medium" ? NAVY : MUTED, marginTop: 3, fontWeight: s.stageConfidence === "medium" ? 600 : 400 }}>
+                        Stage guessed from {STAGE_REASON_LABEL[s.stageReason]}
+                        {s.stageConfidence === "medium" && " — worth a check"}
+                      </div>
+                    )}
                     {s.otherProjectIds.length > 0 && (
                       <div style={{ fontSize: 12, color: NAVY, marginTop: 5, fontWeight: 600 }}>
                         Also matched {s.otherProjectIds.length} other project
@@ -284,7 +330,29 @@ export default function MyTimePage() {
                     )}
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: MUTED }}>
+                      Stage
+                      <select
+                        value={stageId[k] ?? ""}
+                        disabled={processing}
+                        onChange={(e) => setStageId((prev) => ({ ...prev, [k]: e.target.value }))}
+                        style={{
+                          padding: "6px 8px", border: `1px solid ${GREY}`, borderRadius: 6,
+                          fontSize: 13, color: BODY, maxWidth: 210, background: "#fff",
+                        }}
+                      >
+                        {/* Falling back to project-admin time stays available —
+                            some projects have no stages, and some work genuinely
+                            isn't phase work. */}
+                        <option value="">Project admin (no stage)</option>
+                        {(data?.stagesByProject[s.projectId] ?? []).map((st) => (
+                          <option key={st.id} value={st.id}>
+                            {st.name}{st.status === "in_progress" ? " ·  active" : ""}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: MUTED }}>
                       <input
                         type="number"
