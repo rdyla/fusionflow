@@ -16,6 +16,7 @@ import {
 } from "../services/graphService";
 import { inPlaceholders } from "../lib/teamUtils";
 import { canManageProjectDocuments } from "../services/accessService";
+import { requireRole } from "../middleware/requireRole";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -573,7 +574,11 @@ app.delete("/file", async (c) => {
 // Uses the app's SharePointTenantSettings.ReadWrite.All Graph permission to
 // enable app-only auth on the SharePoint tenant — equivalent to:
 //   Set-PnPTenant -DisableCustomAppAuthentication $false
-app.post("/enable-app-auth", async (c) => {
+//
+// Admin-only: this writes TENANT-WIDE SharePoint configuration. The router's
+// allow-list only blocks client/partner_ae from non-GET, so without this every
+// internal role (PM, SA, CSM, engineer) could flip a tenant setting.
+app.post("/enable-app-auth", requireRole("admin"), async (c) => {
   try {
     const tokenRes = await fetch(
       `https://login.microsoftonline.com/${c.env.DYNAMICS_TENANT_ID}/oauth2/v2.0/token`,
@@ -618,7 +623,11 @@ app.post("/enable-app-auth", async (c) => {
 // GET /api/sharepoint/debug-token
 // Fetches a fresh Graph token and returns its decoded claims (app ID, roles/permissions).
 // Use this to verify which app is being used and what Graph permissions it has.
-app.get("/debug-token", async (c) => {
+//
+// Admin-only: the response names the app registration and enumerates every
+// Graph permission it holds. As a GET it wasn't covered by the router's
+// non-GET allow-list either, so customers and partner AEs could read it.
+app.get("/debug-token", requireRole("admin"), async (c) => {
   try {
     // Force-fresh token (bypass cache)
     await c.env.KV.delete("graph:token");
@@ -662,7 +671,10 @@ app.get("/debug-token", async (c) => {
 // POST /api/sharepoint/clear-token-cache
 // Clears the cached Graph token so a fresh one is fetched on next request.
 // Useful after changing app registration permissions.
-app.post("/clear-token-cache", async (c) => {
+//
+// Admin-only: operational tooling, and forcing token re-issue on every call is
+// a cheap way to add latency to every Graph-backed page.
+app.post("/clear-token-cache", requireRole("admin"), async (c) => {
   await Promise.all([
     c.env.KV.delete("graph:token"),
     c.env.KV.delete("sp:token:https://packetfusioncrm.sharepoint.com"), // legacy SP REST token
