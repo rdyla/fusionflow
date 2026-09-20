@@ -3,6 +3,7 @@ import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
 import { getCalendarEvents, CalendarAccessError } from "../services/graphService";
 import { getUserRecordingsInRange } from "../services/zoomService";
+import { inferStage, type StageForInference } from "../lib/stageInference";
 import {
   buildSuggestions,
   type CandidateMeeting,
@@ -89,7 +90,7 @@ app.get("/suggestions", async (c) => {
   }
 
   const ph = projectIds.map(() => "?").join(",");
-  const [contactRows, entryRows, dismissRows] = await Promise.all([
+  const [contactRows, entryRows, dismissRows, stageRows] = await Promise.all([
     db.prepare(`SELECT project_id, email FROM project_contacts WHERE project_id IN (${ph}) AND email IS NOT NULL AND TRIM(email) <> ''`)
       .bind(...projectIds).all<{ project_id: string; email: string }>(),
     // Already-logged check, across ALL THREE time tables and scoped to THIS user.
@@ -120,6 +121,10 @@ app.get("/suggestions", async (c) => {
       .all<{ project_id: string; scheduled_start: string; scheduled_end: string }>(),
     db.prepare("SELECT source, source_event_id FROM time_entry_suggestion_dismissals WHERE user_id = ?")
       .bind(auth.user.id).all<{ source: string; source_event_id: string }>(),
+    // Stages power the inferred stage on each suggestion, and the dropdown the
+    // user corrects it with.
+    db.prepare(`SELECT id, project_id, name, status, sort_order FROM stages WHERE project_id IN (${ph}) ORDER BY project_id, sort_order`)
+      .bind(...projectIds).all<{ id: string; project_id: string; name: string; status: string | null; sort_order: number | null }>(),
   ]);
 
   const contactsByProject = new Map<string, string[]>();
@@ -201,8 +206,33 @@ app.get("/suggestions", async (c) => {
     dismissedKeys: new Set((dismissRows.results ?? []).map((d) => `${d.source}:${d.source_event_id}`)),
   });
 
+  const stagesByProject = new Map<string, StageForInference[]>();
+  for (const r of stageRows.results ?? []) {
+    const list = stagesByProject.get(r.project_id) ?? [];
+    list.push({ id: r.id, name: r.name, status: r.status, sortOrder: r.sort_order ?? 0 });
+    stagesByProject.set(r.project_id, list);
+  }
+
+  // Attach an inferred stage to each suggestion. It's a pre-filled default the
+  // user can change — the UI renders it as a dropdown, and a suggestion with no
+  // stage falls back to a project-level ("Project Admin") entry.
+  const withStage = suggestions.map((s) => {
+    const inferred = inferStage(s.subject, stagesByProject.get(s.projectId) ?? []);
+    return {
+      ...s,
+      inferredStageId: inferred.stageId,
+      inferredStageName: inferred.stageName,
+      stageReason: inferred.reason,
+      stageConfidence: inferred.confidence,
+    };
+  });
+
   return c.json({
-    suggestions,
+    suggestions: withStage,
+    // Only the fields the picker needs, keyed by project.
+    stagesByProject: Object.fromEntries(
+      [...stagesByProject].map(([pid, list]) => [pid, list.map((x) => ({ id: x.id, name: x.name, status: x.status }))])
+    ),
     sources,
     projectCount: projects.length,
     window: { from: fromIso, to: toIso },

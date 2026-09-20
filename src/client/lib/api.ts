@@ -991,10 +991,20 @@ export type TimeSuggestion = {
   confidence: "high" | "medium";
   /** Other projects this meeting also matched — non-empty means check before confirming. */
   otherProjectIds: string[];
+  /** Pre-filled stage guess, editable before processing. Null means no stage
+   *  could be inferred and the entry falls back to project-level admin time. */
+  inferredStageId: string | null;
+  inferredStageName: string | null;
+  stageReason: "keyword_and_active" | "only_active_stage" | "furthest_active_stage" | "keyword_only" | "no_stages";
+  stageConfidence: "high" | "medium";
 };
+
+export type MyTimeStage = { id: string; name: string; status: string | null };
 
 export type MyTimeSuggestions = {
   suggestions: TimeSuggestion[];
+  /** Stage options per project, for the editable stage picker. */
+  stagesByProject: Record<string, MyTimeStage[]>;
   /** Per-source status: "ok", or the reason that source returned nothing. */
   sources: { zoom: string; outlook: string };
   projectCount: number;
