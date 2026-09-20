@@ -74,6 +74,15 @@ app.get("/suggestions", async (c) => {
     .bind(auth.user.id, auth.user.id)
     .all<{ id: string; name: string; crm_case_id: string | null; zoom_email_alias: string | null; customer_name: string | null }>();
 
+  // Zoom user id, so the recordings lookup can hit the user directly. Without
+  // it getUserRecordingsInRange falls back to listing every Zoom user in the
+  // org and matching by email — fine for one person, needlessly expensive once
+  // a whole implementation team is calling this.
+  const me = await db
+    .prepare("SELECT zoom_user_id FROM users WHERE id = ? LIMIT 1")
+    .bind(auth.user.id)
+    .first<{ zoom_user_id: string | null }>();
+
   const projectIds = (projectRows.results ?? []).map((p) => p.id);
   if (projectIds.length === 0) {
     return c.json({ suggestions: [], sources: { zoom: "ok", outlook: "ok" }, projectCount: 0 });
@@ -83,8 +92,32 @@ app.get("/suggestions", async (c) => {
   const [contactRows, entryRows, dismissRows] = await Promise.all([
     db.prepare(`SELECT project_id, email FROM project_contacts WHERE project_id IN (${ph}) AND email IS NOT NULL AND TRIM(email) <> ''`)
       .bind(...projectIds).all<{ project_id: string; email: string }>(),
-    db.prepare(`SELECT project_id, scheduled_start, scheduled_end FROM project_time_entries WHERE project_id IN (${ph})`)
-      .bind(...projectIds).all<{ project_id: string; scheduled_start: string; scheduled_end: string }>(),
+    // Already-logged check, across ALL THREE time tables and scoped to THIS user.
+    //
+    // Both details matter once more than one person uses this. Time can be
+    // logged against a task, a stage, or the project, so reading only
+    // project_time_entries would re-suggest a meeting someone already logged
+    // against a task. And two people attend the same call — without the
+    // user_id filter, whoever logs first would suppress everyone else's
+    // suggestion for a meeting they also attended and still need to log.
+    //
+    // scheduled_start/end are nullable on the task and stage tables, so rows
+    // without a window are excluded — they can't overlap anything.
+    db.prepare(
+      `SELECT project_id, scheduled_start, scheduled_end FROM project_time_entries
+        WHERE project_id IN (${ph}) AND user_id = ?
+          AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL
+       UNION ALL
+       SELECT project_id, scheduled_start, scheduled_end FROM stage_time_entries
+        WHERE project_id IN (${ph}) AND user_id = ?
+          AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL
+       UNION ALL
+       SELECT project_id, scheduled_start, scheduled_end FROM task_time_entries
+        WHERE project_id IN (${ph}) AND user_id = ?
+          AND scheduled_start IS NOT NULL AND scheduled_end IS NOT NULL`
+    )
+      .bind(...projectIds, auth.user.id, ...projectIds, auth.user.id, ...projectIds, auth.user.id)
+      .all<{ project_id: string; scheduled_start: string; scheduled_end: string }>(),
     db.prepare("SELECT source, source_event_id FROM time_entry_suggestion_dismissals WHERE user_id = ?")
       .bind(auth.user.id).all<{ source: string; source_event_id: string }>(),
   ]);
@@ -120,7 +153,7 @@ app.get("/suggestions", async (c) => {
   try {
     const meetings = await getUserRecordingsInRange(
       c.env.KV, c.env,
-      { zoom_user_id: null, email: auth.user.email },
+      { zoom_user_id: me?.zoom_user_id ?? null, email: auth.user.email },
       zoomFrom, zoomTo
     );
     for (const m of meetings) {
