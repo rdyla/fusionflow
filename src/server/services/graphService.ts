@@ -362,6 +362,108 @@ export async function getSharePointItemId(env: GraphEnv, absoluteUrl: string): P
   }
 }
 
+/** One calendar event, flattened to what time-entry matching needs. */
+export type CalendarEvent = {
+  id: string;
+  subject: string;
+  /** ISO 8601 UTC. */
+  start: string;
+  end: string;
+  isAllDay: boolean;
+  isCancelled: boolean;
+  organizerEmail: string | null;
+  attendeeEmails: string[];
+};
+
+/** Thrown when Graph refuses the calendar read — almost always the app
+ *  registration missing Calendars.Read rather than a transient failure, so
+ *  callers surface it as "not set up yet" instead of retrying. */
+export class CalendarAccessError extends Error {}
+
+/**
+ * Calendar events for one mailbox in a window.
+ *
+ * Uses /calendarView (not /events) so recurring series are EXPANDED into their
+ * individual occurrences — a weekly status call has to appear once per week to
+ * be logged as time, and /events would return the master series a single time.
+ *
+ * Needs Calendars.Read on the app registration. That is an APPLICATION grant,
+ * so it can read any mailbox in the tenant; it is deliberately only ever called
+ * with the signed-in user's own address.
+ */
+export async function getCalendarEvents(
+  env: GraphEnv,
+  userEmail: string,
+  startIso: string,
+  endIso: string
+): Promise<CalendarEvent[]> {
+  const token = await getGraphToken(env);
+  const path =
+    `/users/${encodeURIComponent(userEmail)}/calendarView` +
+    `?startDateTime=${encodeURIComponent(startIso)}&endDateTime=${encodeURIComponent(endIso)}` +
+    `&$select=id,subject,start,end,isAllDay,isCancelled,organizer,attendees&$top=100`;
+
+  const events: CalendarEvent[] = [];
+  const MAX_CAL_PAGES = 10;
+
+  let page: { value?: RawGraphEvent[]; "@odata.nextLink"?: string };
+  try {
+    page = await graphGet(token, path);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (/\b40[13]\b/.test(msg)) {
+      throw new CalendarAccessError(
+        "Calendar access isn't granted yet — the app registration needs Calendars.Read."
+      );
+    }
+    throw err;
+  }
+  events.push(...(page.value ?? []).map(mapCalendarEvent));
+
+  for (let i = 1; i < MAX_CAL_PAGES; i++) {
+    const next = page["@odata.nextLink"];
+    if (!next) break;
+    page = await graphGetAbsolute(token, next);
+    events.push(...(page.value ?? []).map(mapCalendarEvent));
+  }
+
+  // Cancelled meetings and all-day blocks (OOO, "focus time") aren't billable
+  // customer time; dropping them here keeps the matcher honest.
+  return events.filter((e) => !e.isCancelled && !e.isAllDay);
+}
+
+type RawGraphEvent = {
+  id: string;
+  subject?: string | null;
+  start?: { dateTime?: string; timeZone?: string } | null;
+  end?: { dateTime?: string; timeZone?: string } | null;
+  isAllDay?: boolean;
+  isCancelled?: boolean;
+  organizer?: { emailAddress?: { address?: string } } | null;
+  attendees?: Array<{ emailAddress?: { address?: string } }> | null;
+};
+
+function mapCalendarEvent(raw: RawGraphEvent): CalendarEvent {
+  // calendarView returns UTC without a zone suffix when the request carries no
+  // Prefer header; append Z so Date parses it as UTC rather than local.
+  const toIso = (v?: string) => {
+    if (!v) return "";
+    return /[Zz]|[+-]\d{2}:\d{2}$/.test(v) ? v : `${v}Z`;
+  };
+  return {
+    id: raw.id,
+    subject: (raw.subject ?? "").trim(),
+    start: toIso(raw.start?.dateTime),
+    end: toIso(raw.end?.dateTime),
+    isAllDay: raw.isAllDay === true,
+    isCancelled: raw.isCancelled === true,
+    organizerEmail: raw.organizer?.emailAddress?.address?.toLowerCase() ?? null,
+    attendeeEmails: (raw.attendees ?? [])
+      .map((a) => a.emailAddress?.address?.toLowerCase())
+      .filter((e): e is string => !!e),
+  };
+}
+
 export async function listSharePointFiles(env: GraphEnv, folderAbsoluteUrl: string): Promise<SPFile[]> {
   const token = await getGraphToken(env);
   const { driveId, segments } = await resolveSharePointPath(token, folderAbsoluteUrl);

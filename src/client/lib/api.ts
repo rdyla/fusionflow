@@ -88,6 +88,8 @@ export type User = {
   is_trainer?: number;
   is_integrations?: number;
   is_specialist?: number;
+  /** Personal time-entry suggestions (migration 0144). Off by default. */
+  is_time_assist?: number;
   is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
@@ -974,6 +976,29 @@ export type TaskAssignee = {
   id: string;
   user_id: string | null;
   contact_id: string | null;
+};
+
+export type TimeSuggestion = {
+  source: "zoom" | "outlook";
+  eventId: string;
+  subject: string;
+  startIso: string;
+  endIso: string;
+  durationMin: number;
+  projectId: string;
+  projectName: string;
+  matchReason: "crm_case" | "project_name" | "customer_name" | "zoom_alias" | "contact_attendee";
+  confidence: "high" | "medium";
+  /** Other projects this meeting also matched — non-empty means check before confirming. */
+  otherProjectIds: string[];
+};
+
+export type MyTimeSuggestions = {
+  suggestions: TimeSuggestion[];
+  /** Per-source status: "ok", or the reason that source returned nothing. */
+  sources: { zoom: string; outlook: string };
+  projectCount: number;
+  window?: { from: string; to: string };
 };
 
 export type TimeEntrySetup = {
@@ -2163,6 +2188,23 @@ export const api = {
       { method: "POST", body: JSON.stringify(payload) }
     ),
 
+  /** Suggested time entries for the signed-in user (requires is_time_assist).
+   *  Suggestions only — confirming one calls logProjectTime, which is what
+   *  actually writes to Dynamics. */
+  myTimeSuggestions: (fromIso?: string, toIso?: string) => {
+    const qs = new URLSearchParams();
+    if (fromIso) qs.set("from", fromIso);
+    if (toIso) qs.set("to", toIso);
+    const q = qs.toString();
+    return request<MyTimeSuggestions>(`/my-time/suggestions${q ? `?${q}` : ""}`);
+  },
+
+  dismissTimeSuggestion: (source: "zoom" | "outlook", sourceEventId: string) =>
+    request<{ ok: boolean }>(`/my-time/suggestions/dismiss`, {
+      method: "POST",
+      body: JSON.stringify({ source, source_event_id: sourceEventId }),
+    }),
+
   timeEntrySetup: (projectId: string, stageId?: string) => {
     const qs = stageId ? `?stage_id=${encodeURIComponent(stageId)}` : "";
     return request<TimeEntrySetup>(`/projects/${projectId}/time-entry/setup${qs}`);
@@ -2559,6 +2601,7 @@ export const api = {
       is_trainer?: number;
       is_integrations?: number;
       is_specialist?: number;
+      is_time_assist?: number;
       is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;
