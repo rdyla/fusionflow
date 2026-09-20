@@ -45,6 +45,7 @@ export default function AppShell() {
   const [isPartnerAe, setIsPartnerAe] = useState(false);
   const [canProspect, setCanProspect] = useState(false);
   const [canSalesTools, setCanSalesTools] = useState(false);
+  const [canTimeAssist, setCanTimeAssist] = useState(false);
   const [isLeadership, setIsLeadership] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [impersonating, setImpersonating] = useState<string | null>(null);
@@ -95,6 +96,9 @@ export default function AppShell() {
         setIsPartnerAe(res.role === "partner_ae");
         setCanProspect(["admin", "executive", "pf_ae", "partner_ae"].includes(res.role));
         setCanSalesTools(res.role === "admin" || res.user.is_sales_tools === 1);
+        // Deliberately NOT granted to admins wholesale — this is a personal
+        // convenience, so only the explicit per-user flag opens it.
+        setCanTimeAssist(res.user.is_time_assist === 1);
         setIsLeadership(res.role === "admin" || res.role === "executive");
       })
       .catch(() => {});
@@ -185,6 +189,7 @@ export default function AppShell() {
             <SideLink to="/support/cases" icon={NAV_ICONS.support} onClick={() => setDrawerOpen(false)}>Support</SideLink>
             <SideLink to="/roadmap" icon={NAV_ICONS.roadmap} onClick={() => setDrawerOpen(false)}>Roadmap</SideLink>
             {canSalesTools && <SideLink to="/sales-tools" icon={NAV_ICONS.salesTools} onClick={() => setDrawerOpen(false)}>Sales Tools</SideLink>}
+            {canTimeAssist && <SideLink to="/my-time" icon={NAV_ICONS.salesTools} onClick={() => setDrawerOpen(false)}>My Time</SideLink>}
             {isLeadership && <SideLink to="/leadership" icon={NAV_ICONS.leadership} onClick={() => setDrawerOpen(false)}>Leadership</SideLink>}
           </>
         )}

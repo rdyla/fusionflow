@@ -9,6 +9,7 @@ export interface AppUser {
   is_active: number;
   is_support_supervisor?: number; // additive flag — supervisor-only digest feature
   is_sales_tools?: number; // additive flag — Sales Tools module access (Commissions Calculator, Zoom Resell, Zoom Agency)
+  is_time_assist?: number; // additive flag — My Time page (suggested time entries from Zoom + Outlook)
   dynamics_account_id: string | null;
   /** Every CRM account this session may see. A client who is a contact on more
    *  than one customer (sister agencies sharing staff — e.g. Placer County and

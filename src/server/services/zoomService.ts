@@ -632,6 +632,40 @@ export type RecordingMatch = {
  * When hasPm is false (no PM assigned), only meetings that match via signal 1 or 2
  * are returned — date/keyword matches across all users would produce too much noise.
  */
+/**
+ * Recordings hosted by ONE user in an explicit date window.
+ *
+ * getZoomRecordings always looks back a fixed 365 days, which is wrong for
+ * "what did I do last week" — this takes the window from the caller.
+ *
+ * NOTE: this is the RECORDINGS API, so a meeting that was never recorded does
+ * not appear. That gap is why the time-entry suggester also reads the Outlook
+ * calendar rather than relying on Zoom alone.
+ */
+export async function getUserRecordingsInRange(
+  kv: KVNamespace,
+  env: OrgEnv,
+  pm: PmInfo,
+  from: string,
+  to: string,
+): Promise<ZoomMeeting[]> {
+  const session: ZoomSession = { token: await getOrgToken(kv, env), hosts: COMMERCIAL_HOSTS };
+
+  if (pm.zoom_user_id) {
+    try {
+      return await fetchUserRecordings(session, pm.zoom_user_id, from, to);
+    } catch {
+      console.warn(`[zoom] user id ${pm.zoom_user_id} failed; falling back to email lookup`);
+    }
+  }
+  if (pm.email) {
+    const users = await getAllUsers(session);
+    const match = users.find((u) => u.email.toLowerCase() === pm.email!.toLowerCase());
+    if (match) return fetchUserRecordings(session, match.id, from, to);
+  }
+  throw new Error("Your Zoom account could not be found — check your Zoom User ID or email in user settings.");
+}
+
 export function matchRecordingsToStages(
   meetings: ZoomMeeting[],
   stages: StageRow[],

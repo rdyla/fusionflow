@@ -37,6 +37,7 @@ import AdminRoadmapPage from "../pages/AdminRoadmapPage";
 import AdminStagingPromotePage from "../pages/AdminStagingPromotePage";
 import ProfilePage from "../pages/ProfilePage";
 import SalesToolsPage from "../pages/SalesToolsPage";
+import MyTimePage from "../pages/MyTimePage";
 
 export default function Router() {
   const isStaging = typeof window !== "undefined" && window.location.hostname.includes("staging");
@@ -80,6 +81,7 @@ export default function Router() {
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/roadmap" element={<RoadmapPage />} />
           <Route path="/sales-tools" element={<SalesToolsPage />} />
+          <Route path="/my-time" element={<MyTimePage />} />
           <Route path="/profile" element={<ProfilePage />} />
 <Route path="/admin/users" element={<AdminUsersPage />} />
           <Route path="/admin/help-requests" element={<AdminHelpRequestsPage />} />
