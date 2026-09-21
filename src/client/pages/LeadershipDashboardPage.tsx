@@ -135,6 +135,10 @@ export default function LeadershipDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
+  // Collapsed by default — Capacity is the heaviest section on the page
+  // (two hours cards, two more cards, a full table) and isn't everyone's
+  // first question when they land on Leadership.
+  const [capacityExpanded, setCapacityExpanded] = useState(false);
   const [summaryPreview, setSummaryPreview] = useState<{ subject: string; html: string } | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -531,7 +535,34 @@ export default function LeadershipDashboardPage() {
           </div>
 
           {/* ── Capacity ─────────────────────────────────────────────────── */}
-          <div className="ms-section-title" style={{ marginBottom: 12 }}>Capacity</div>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={capacityExpanded}
+            onClick={() => setCapacityExpanded((v) => !v)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setCapacityExpanded((v) => !v);
+              }
+            }}
+            style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, cursor: "pointer", userSelect: "none" }}
+          >
+            <span
+              style={{
+                fontSize: 11,
+                color: "#94a3b8",
+                display: "inline-block",
+                transform: capacityExpanded ? "rotate(90deg)" : "none",
+                transition: "transform 0.15s",
+              }}
+            >
+              ▶
+            </span>
+            <div className="ms-section-title" style={{ marginBottom: 0 }}>Capacity</div>
+          </div>
+          {capacityExpanded && (
+          <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <WeekHoursCard
               label={`Current ${windowLabel}`}
@@ -641,6 +672,8 @@ export default function LeadershipDashboardPage() {
               </table>
             )}
           </div>
+          </>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             <div className="ms-section-card">
