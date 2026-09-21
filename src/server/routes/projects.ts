@@ -8,7 +8,7 @@ import { canEditProject, canViewProject, visiblePhaseIds } from "../services/acc
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { clientAccountIds } from "../lib/permissions";
 import { maybeSendEmail, sendEmail } from "../services/emailService";
-import { projectAtRisk, contactProjectInvite } from "../lib/emailTemplates";
+import { projectAtRisk, contactProjectInvite, projectReadyToClose } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes, closeCase } from "../services/dynamicsService";
 import { ensureSharePointChildFolder, grantFolderEdit, lookupMailGroup, revokeAllProjectEditGrants } from "../services/graphService";
@@ -524,11 +524,15 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
     throw new HTTPException(403, { message: "Forbidden" });
   }
 
-  // Capture current health before update so we can detect at_risk transitions
+  // Capture current health (+ closeout notes, for the ready-to-close
+  // transition below) before update so we can detect at_risk transitions
   const before = await db
-    .prepare("SELECT health, name, customer_name, pm_user_id, zoom_email_alias FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT health, name, customer_name, customer_id, pm_user_id, zoom_email_alias, closeout_team, closeout_solution, closeout_delivered, closeout_summary FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ health: string | null; name: string; customer_name: string | null; pm_user_id: string | null; zoom_email_alias: string | null }>();
+    .first<{
+      health: string | null; name: string; customer_name: string | null; customer_id: string | null; pm_user_id: string | null; zoom_email_alias: string | null;
+      closeout_team: string | null; closeout_solution: string | null; closeout_delivered: string | null; closeout_summary: string | null;
+    }>();
 
   const {
     clear_health_override, cleanup_solution_types,
@@ -757,6 +761,63 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
         subject: `Project at risk: ${before.name}`,
         html,
       }));
+    }
+  }
+
+  // Notify the PM + the customer's CSM the moment the Closeout Notes go from
+  // incomplete to complete — exactly the transition that unlocks the Close
+  // Out Project button. Fires once, not on every subsequent edit: a save
+  // that touches these fields but was already complete before (or still
+  // isn't complete after) doesn't re-notify.
+  if (CLOSEOUT_NOTE_FIELDS.some((f) => updates[f] !== undefined) && before) {
+    const wasComplete = !!(
+      before.closeout_team?.trim() && before.closeout_solution?.trim()
+      && before.closeout_delivered?.trim() && before.closeout_summary?.trim()
+    );
+    const updatedRow = updated as Record<string, unknown> | null;
+    const asText = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+    const isCompleteNow = !!(
+      asText(updatedRow?.closeout_team) && asText(updatedRow?.closeout_solution)
+      && asText(updatedRow?.closeout_delivered) && asText(updatedRow?.closeout_summary)
+    );
+
+    if (!wasComplete && isCompleteNow) {
+      const appUrl = c.env.APP_URL ?? "";
+      const recipients: { id: string; email: string; name: string }[] = [];
+
+      if (before.pm_user_id) {
+        const pm = await db
+          .prepare("SELECT email, name FROM users WHERE id = ? AND is_active = 1 LIMIT 1")
+          .bind(before.pm_user_id)
+          .first<{ email: string; name: string }>();
+        if (pm) recipients.push({ id: before.pm_user_id, ...pm });
+      }
+      if (before.customer_id) {
+        const csm = await db
+          .prepare(
+            `SELECT u.id, u.email, u.name FROM customers c
+             JOIN users u ON u.id = c.pf_csm_user_id
+             WHERE c.id = ? AND u.is_active = 1 LIMIT 1`
+          )
+          .bind(before.customer_id)
+          .first<{ id: string; email: string; name: string }>();
+        if (csm && !recipients.some((r) => r.id === csm.id)) recipients.push(csm);
+      }
+
+      for (const recipient of recipients) {
+        const html = projectReadyToClose({
+          recipientName: recipient.name ?? recipient.email,
+          projectName: before.name,
+          customerName: before.customer_name,
+          appUrl,
+          projectId,
+        });
+        c.executionCtx.waitUntil(maybeSendEmail(c.env, db, recipient.id, "important", {
+          to: recipient.email,
+          subject: `Ready to close out: ${before.name}`,
+          html,
+        }));
+      }
     }
   }
 
