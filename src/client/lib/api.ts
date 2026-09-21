@@ -357,6 +357,13 @@ export type LeadershipDashboardResponse = {
       hours: number;
       entries: number;
     }[];
+    prevByEngineer: {
+      user_id: string | null;
+      name: string | null;
+      email: string | null;
+      hours: number;
+      entries: number;
+    }[];
   };
   projects: {
     activeProjects: number;

@@ -367,6 +367,7 @@ app.get("/leadership", async (c) => {
     timeCur,
     timePrev,
     byEngineer,
+    byEngineerPrev,
     tasksByEngineer,
     projectsByPM,
     projectAssignmentsIESA,
@@ -412,6 +413,18 @@ app.get("/leadership", async (c) => {
        GROUP BY ste.user_id
        ORDER BY hours DESC`
     ).bind(start, end).all<{ user_id: string | null; name: string | null; email: string | null; entries: number; hours: number }>(),
+
+    db.prepare(
+      `SELECT ste.user_id, u.name, u.email, COUNT(*) AS entries,
+              COALESCE(SUM(${hoursExprAlias}),0) AS hours
+       FROM ${ALL_TIME_ENTRIES_SQL} ste
+       JOIN users u ON u.id = ste.user_id
+       WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
+         AND ste.scheduled_end IS NOT NULL
+         AND u.role IN (${PF_ROLES_SQL})
+       GROUP BY ste.user_id
+       ORDER BY hours DESC`
+    ).bind(prevStart, prevEnd).all<{ user_id: string | null; name: string | null; email: string | null; entries: number; hours: number }>(),
 
     db.prepare(
       `SELECT t.assignee_user_id, u.name, COUNT(*) AS n
@@ -656,6 +669,13 @@ app.get("/leadership", async (c) => {
       entries: timeCur?.entries ?? 0,
       prevEntries: timePrev?.entries ?? 0,
       byEngineer: (byEngineer.results ?? []).map((r) => ({
+        user_id: r.user_id,
+        name: r.name,
+        email: r.email,
+        hours: round1(r.hours),
+        entries: r.entries,
+      })),
+      prevByEngineer: (byEngineerPrev.results ?? []).map((r) => ({
         user_id: r.user_id,
         name: r.name,
         email: r.email,
