@@ -28,6 +28,7 @@ import TimelineBuilder from "../components/timeline/TimelineBuilder";
 import ProjectDashboardTab from "../components/project/ProjectDashboardTab";
 import ProjectAuditLog from "../components/project/ProjectAuditLog";
 import ExternalResourcesTab from "../components/project/ExternalResourcesTab";
+import CloseoutNotesTab from "../components/project/CloseoutNotesTab";
 import ShipmentsPane from "../components/project/ShipmentsPane";
 import ProjectAliasField from "../components/project/ProjectAliasField";
 import PhasesPanel from "../components/project/PhasesPanel";
@@ -51,7 +52,7 @@ import { humanize } from "../lib/format";
 import CascadeModal from "../components/project/CascadeModal";
 import { todayLocalIso } from "../lib/dates";
 
-type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "meetings" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external";
+type DetailTab = "dashboard" | "overview" | "timeline" | "builder" | "tasks" | "blockers" | "meetings" | "documents" | "sharepoint" | "activity" | "zoom" | "case" | "external" | "closeout";
 
 function detectPlatform(vendor: string | null | undefined): "zoom" | "ringcentral" | null {
   const v = vendor?.toLowerCase() ?? "";
@@ -1335,7 +1336,7 @@ export default function ProjectDetailPage() {
           // Timeline Builder is hidden now that phase + kickoff date auto-generate
           // the dated timeline (the builder code is kept, just not surfaced).
           // External Resources is PM/admin only (canEdit === admin || pm).
-          : ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
+          : ["dashboard", "overview", "timeline", "tasks", "blockers", "meetings", ...(hasCrm ? ["sharepoint" as const] : ["documents" as const]), "closeout", "activity", "case", ...(canEdit ? ["external" as const] : []), ...(platform ? ["zoom" as const] : [])];
         return (
           <div className="ms-tabs">
             {visibleTabs.map((t) => (
@@ -1344,7 +1345,7 @@ export default function ProjectDetailPage() {
                 className={`ms-tab-btn${tab === t ? " active" : ""}`}
                 onClick={() => setTab(t)}
               >
-                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t === "external" ? "External Resources" : t === "builder" ? "Timeline Builder" : t.charAt(0).toUpperCase() + t.slice(1)}
+                {t === "zoom" ? platformLabel : t === "sharepoint" ? "SharePoint" : t === "case" ? "CRM Case" : t === "external" ? "External Resources" : t === "builder" ? "Timeline Builder" : t === "closeout" ? "Closeout Notes" : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
@@ -2610,6 +2611,16 @@ export default function ProjectDetailPage() {
           canEdit={canEdit || isStaffedEngineer}
           isExternal={currentUserRole === "client" || currentUserRole === "partner_ae"}
           onFolderCreated={(url) => setProject({ ...project, sharepoint_folder_url: url })}
+        />
+      )}
+
+      {/* ── Closeout Notes ────────────────────────────────────────────────── */}
+      {tab === "closeout" && (
+        <CloseoutNotesTab
+          project={project}
+          staff={projectStaff}
+          canEdit={canEdit}
+          onSave={(updated) => setProject(updated)}
         />
       )}
 
