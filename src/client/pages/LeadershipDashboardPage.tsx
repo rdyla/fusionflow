@@ -577,14 +577,29 @@ export default function LeadershipDashboardPage() {
               entries={data.time.prevEntries}
             />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
             <div className="ms-section-card">
-              <div className="ms-section-title" style={{ marginBottom: 12 }}>Hours by Project Member</div>
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Hours by Project Member — Current {windowLabel}</div>
               {data.time.totalHours === 0 ? (
                 <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No time logged in the app for this period yet.</div>
               ) : (
                 <HoursLeaderboard
                   rows={data.time.byEngineer.map((e) => ({
+                    key: e.user_id ?? e.email ?? e.name ?? "unknown",
+                    label: e.name ?? e.email ?? "Unassigned",
+                    hours: e.hours,
+                  }))}
+                />
+              )}
+            </div>
+
+            <div className="ms-section-card">
+              <div className="ms-section-title" style={{ marginBottom: 12 }}>Hours by Project Member — Prior {windowLabel}</div>
+              {data.time.prevTotalHours === 0 ? (
+                <div style={{ fontSize: 13, color: "#94a3b8", fontStyle: "italic" }}>No time logged in the app for this period.</div>
+              ) : (
+                <HoursLeaderboard
+                  rows={data.time.prevByEngineer.map((e) => ({
                     key: e.user_id ?? e.email ?? e.name ?? "unknown",
                     label: e.name ?? e.email ?? "Unassigned",
                     hours: e.hours,
