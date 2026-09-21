@@ -715,7 +715,7 @@ export default function LeadershipDashboardPage() {
               title="No Time Logged (Last Week)"
               value={data.noTimeLastWeek.count}
               accent={data.noTimeLastWeek.count > 0 ? "#ff8c00" : undefined}
-              sub="assigned to an active project, 0 hours logged in the last 7 days"
+              sub="assigned to an active project, 0 hours logged last week (Mon–Sun)"
               expandKey="noTimeLastWeek"
               expanded={expandedKeys.has("noTimeLastWeek")}
               onToggle={toggleExpand}
