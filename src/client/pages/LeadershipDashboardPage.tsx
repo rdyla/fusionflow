@@ -532,9 +532,21 @@ export default function LeadershipDashboardPage() {
 
           {/* ── Capacity ─────────────────────────────────────────────────── */}
           <div className="ms-section-title" style={{ marginBottom: 12 }}>Capacity</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 16 }}>
-            <TotalHoursCard total={data.time.totalHours} prev={data.time.prevTotalHours} entries={data.time.entries} />
-
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <WeekHoursCard
+              label={`Current ${windowLabel}`}
+              sublabel={window === "week" ? "In progress" : undefined}
+              hours={data.time.totalHours}
+              entries={data.time.entries}
+            />
+            <WeekHoursCard
+              label={`Prior ${windowLabel}`}
+              sublabel={window === "week" ? "Mon–Sun" : undefined}
+              hours={data.time.prevTotalHours}
+              entries={data.time.prevEntries}
+            />
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
             <div className="ms-section-card">
               <div className="ms-section-title" style={{ marginBottom: 12 }}>Hours by Project Member</div>
               {data.time.totalHours === 0 ? (
@@ -694,25 +706,19 @@ export default function LeadershipDashboardPage() {
   );
 }
 
-function TotalHoursCard({ total, prev, entries }: { total: number; prev: number; entries: number }) {
-  const delta = total - prev;
-  const up = delta >= 0;
-  const pct = prev > 0 ? Math.round((delta / prev) * 100) : null;
+function WeekHoursCard({ label, sublabel, hours, entries }: { label: string; sublabel?: string; hours: number; entries: number }) {
   return (
     <div className="ms-section-card">
-      <div className="ms-metric-label">Total Hours</div>
-      <div className="ms-metric-value" style={{ marginTop: 2 }}>{total.toFixed(1)}</div>
-      {total === 0 ? (
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
+        <div className="ms-metric-label">{label}</div>
+        {sublabel && <div style={{ fontSize: 11, color: "#94a3b8" }}>{sublabel}</div>}
+      </div>
+      <div className="ms-metric-value" style={{ marginTop: 2 }}>{hours.toFixed(1)}</div>
+      {hours === 0 ? (
         <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 6 }}>No time logged in the app for this period yet.</div>
       ) : (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 6, fontSize: 12 }}>
-          <span style={{ color: up ? "#107c10" : "#d13438", fontWeight: 700 }}>
-            {up ? "▲" : "▼"} {Math.abs(delta).toFixed(1)} h{pct !== null ? ` (${up ? "+" : ""}${pct}%)` : ""}
-          </span>
-          <span style={{ color: "#94a3b8" }}>vs prior period</span>
-        </div>
+        <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{entries} {entries === 1 ? "entry" : "entries"}</div>
       )}
-      <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{entries} {entries === 1 ? "entry" : "entries"}</div>
     </div>
   );
 }
