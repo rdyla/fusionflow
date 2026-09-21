@@ -676,6 +676,15 @@ export default function ProjectDetailPage() {
     (!!project.pm_user_id && project.pm_user_id === currentUserId) ||
     projectStaff.some((s) => s.user_id === currentUserId && s.staff_role === "pm");
   const canEdit = currentUserRole === "admin" || currentUserRole === "pm" || isAssignedPm;
+  // Gate Close Out Project on the Closeout Notes tab actually being filled
+  // in — CSM/sales need real content to work from, not an empty tab left
+  // behind once the project's closed and no longer top of mind.
+  const closeoutNotesComplete = !!(
+    project.closeout_team?.trim() &&
+    project.closeout_solution?.trim() &&
+    project.closeout_delivered?.trim() &&
+    project.closeout_summary?.trim()
+  );
   // IEs staffed on this project can manage its tasks (assign + complete + edit),
   // mirrored server-side. Scoped to engineers actually on the project_staff list.
   const isStaffedEngineer = currentUserRole === "pf_engineer" && projectStaff.some((s) => s.user_id === currentUserId);
@@ -1265,7 +1274,13 @@ export default function ProjectDetailPage() {
               </button>
             )}
             {canEdit && !project.closed_at && (
-              <button onClick={() => setShowCloseModal(true)} className="ms-btn-secondary" style={{ fontSize: 12, padding: "4px 12px" }}>
+              <button
+                onClick={() => setShowCloseModal(true)}
+                className="ms-btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                disabled={!closeoutNotesComplete}
+                title={closeoutNotesComplete ? undefined : "Fill out all four fields on the Closeout Notes tab before closing this project"}
+              >
                 Close Out Project
               </button>
             )}
