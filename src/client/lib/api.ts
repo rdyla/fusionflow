@@ -536,6 +536,16 @@ export type Project = {
   closed_reason: string | null;
   closed_by_user_id: string | null;
   closed_by_name: string | null;
+  /** Structured closeout notes for customer-facing closeout meetings — a PM
+   *  fills these in (any time, not gated on closing the project) so CSM/sales
+   *  can review and reuse them. Null/empty until first saved. */
+  closeout_team: string | null;
+  closeout_solution: string | null;
+  closeout_delivered: string | null;
+  closeout_summary: string | null;
+  closeout_notes_updated_at: string | null;
+  closeout_notes_updated_by_user_id: string | null;
+  closeout_notes_updated_by_name: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -2055,6 +2065,11 @@ export const api = {
       /** Bundles a solution-type-removal task cleanup with the project
        *  update — see PATCH /:id handler in routes/projects.ts. */
       cleanup_solution_types?: SolutionType[];
+      /** Structured closeout notes — see migration 0145. */
+      closeout_team?: string | null;
+      closeout_solution?: string | null;
+      closeout_delivered?: string | null;
+      closeout_summary?: string | null;
     }
   ) =>
     request<Project>(`/projects/${id}`, {

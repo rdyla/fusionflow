@@ -179,6 +179,8 @@ app.get("/:id", async (c) => {
              p.pm_user_id, p.dynamics_account_id, p.asana_project_id, p.managed_in_asana, p.crm_case_id, p.crm_opportunity_id,
              p.sharepoint_folder_url, p.uses_custom_plan, p.zoom_email_alias,
              p.closed_at, p.closed_reason, p.closed_by_user_id, closer.name AS closed_by_name,
+             p.closeout_team, p.closeout_solution, p.closeout_delivered, p.closeout_summary,
+             p.closeout_notes_updated_at, p.closeout_notes_updated_by_user_id, closeoutUser.name AS closeout_notes_updated_by_name,
              p.created_at, p.updated_at,
              pmu.email AS pm_email, pmu.phone AS pm_phone, pmu.scheduler_url AS pm_scheduler_url,
              c.name AS customer_display_name,
@@ -194,6 +196,7 @@ app.get("/:id", async (c) => {
       LEFT JOIN users cpu2 ON cpu2.id = c.pf_sa_user_id
       LEFT JOIN users cpu3 ON cpu3.id = c.pf_csm_user_id
       LEFT JOIN users closer ON closer.id = p.closed_by_user_id
+      LEFT JOIN users closeoutUser ON closeoutUser.id = p.closeout_notes_updated_by_user_id
       WHERE p.id = ?
       LIMIT 1
       `
@@ -476,6 +479,12 @@ const updateProjectSchema = z.object({
    *  without re-sending. Setting it here does NOT fire the helpdesk chat prompt
    *  (that stays tied to the welcome-email flow). */
   zoom_email_alias: z.string().max(255).nullable().optional(),
+  /** Structured closeout notes for customer-facing closeout meetings —
+   *  CSM/sales review these to prep. See migration 0145. */
+  closeout_team: z.string().max(2000).nullable().optional(),
+  closeout_solution: z.string().max(2000).nullable().optional(),
+  closeout_delivered: z.string().max(4000).nullable().optional(),
+  closeout_summary: z.string().max(4000).nullable().optional(),
   /** When a PM removes one or more solution_types from a combo project,
    *  setting this list also cleans up tasks tagged with those types via
    *  buildTaggedTitle. Tasks whose only types are in the cleanup list get
@@ -598,6 +607,15 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
     values.push(updates.health);
   }
 
+  // Stamp who/when whenever any closeout note field is touched, so CSM/sales
+  // reviewing them can see how current they are without a separate history.
+  const CLOSEOUT_NOTE_FIELDS = ["closeout_team", "closeout_solution", "closeout_delivered", "closeout_summary"] as const;
+  if (CLOSEOUT_NOTE_FIELDS.some((f) => updates[f] !== undefined)) {
+    fields.push("closeout_notes_updated_at = CURRENT_TIMESTAMP");
+    fields.push("closeout_notes_updated_by_user_id = ?");
+    values.push(auth.user.id);
+  }
+
   if (!fields.length) {
     throw new HTTPException(400, { message: "No valid fields to update" });
   }
@@ -669,8 +687,17 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
     await syncProjectStatus(db, projectId);
   }
 
+  // Plain `SELECT *` has no way to also carry closeout_notes_updated_by_name
+  // (join-only, not a projects column) — without it, the Closeout Notes tab's
+  // "Last updated by X" briefly loses the name right after saving until the
+  // next full GET /:id fetch re-adds it.
   const updated = await db
-    .prepare("SELECT * FROM projects WHERE id = ? LIMIT 1")
+    .prepare(
+      `SELECT p.*, closeoutUser.name AS closeout_notes_updated_by_name
+       FROM projects p
+       LEFT JOIN users closeoutUser ON closeoutUser.id = p.closeout_notes_updated_by_user_id
+       WHERE p.id = ? LIMIT 1`
+    )
     .bind(projectId)
     .first();
 
