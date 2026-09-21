@@ -85,8 +85,27 @@ function MetricCard({
       <div className="ms-metric-value" style={accent ? { color: accent } : undefined}>{value}</div>
       {sub && <div style={{ fontSize: 12, color: "#64748b", marginTop: 4 }}>{sub}</div>}
       {expandable && expanded && (
-        <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f1f5f9" }} onClick={(e) => e.stopPropagation()}>
-          {children}
+        // A full modal instead of revealing inline — these tiles run as narrow
+        // as 180px (Outcomes is `repeat(auto-fill, minmax(180px, 1fr))`), so
+        // project/customer names in the list just truncated to ellipsis with
+        // no way to read them. The modal gives the detail room to breathe.
+        <div
+          className="ms-modal-overlay"
+          onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) onToggle!(expandKey!); }}
+        >
+          <div className="ms-modal" style={{ maxWidth: 640, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
+              <div>
+                <div className="ms-metric-label">{title}</div>
+                <div className="ms-metric-value" style={{ marginTop: 2, ...(accent ? { color: accent } : undefined) }}>{value}</div>
+                {sub && <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>{sub}</div>}
+              </div>
+              <button type="button" className="ms-btn-ghost" onClick={() => onToggle!(expandKey!)}>Close</button>
+            </div>
+            <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid #e2e8f0", maxHeight: "60vh", overflowY: "auto" }}>
+              {children}
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -227,13 +246,15 @@ export default function LeadershipDashboardPage() {
       .finally(() => setScheduleSaving(false));
   }
 
+  // Each expansion now opens as a modal (see MetricCard) rather than
+  // revealing inline. Collapsing to a single-entry Set keeps at most one key
+  // "expanded" at a time — in practice the modal's full-viewport backdrop
+  // already blocks clicking a second tile while one is open (you'd close it
+  // first), but this also protects any non-pointer path (e.g. keyboard) that
+  // could otherwise open a second key without closing the first, which would
+  // stack two overlays.
   function toggleExpand(key: string) {
-    setExpandedKeys((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
+    setExpandedKeys((prev) => (prev.has(key) ? new Set() : new Set([key])));
   }
 
   useEffect(() => {
