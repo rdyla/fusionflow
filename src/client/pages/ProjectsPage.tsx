@@ -148,13 +148,6 @@ export default function ProjectsPage() {
   const tabProjects = projects.filter((p) => (tab === "closed" ? !!p.closed_at : !p.closed_at));
   const filteredProjects = tabProjects.filter((p) => {
     if (healthFilter && p.health !== healthFilter) return false;
-    // Active tab default view is "what's actually being worked" — a project
-    // can auto-derive to status='complete' well before anyone formally closes
-    // it out (that's the whole point of Close Out being a deliberate action),
-    // so a project just sitting there finished-but-not-closed shouldn't clutter
-    // the default list. Only excluded when no status is explicitly picked —
-    // selecting "Complete" from the dropdown still shows exactly those.
-    if (tab === "active" && !statusFilter && p.status === "complete") return false;
     if (statusFilter && p.status !== statusFilter) return false;
     if (searchQuery) {
       const haystack = [
