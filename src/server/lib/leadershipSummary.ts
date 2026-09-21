@@ -14,6 +14,17 @@ export async function buildLeadershipSummaryData(env: Bindings): Promise<Leaders
   // active/at-risk/blocked; a closed project is just Closed.
   const NOT_OPTIMIZE = "id NOT IN (SELECT project_id FROM optimize_accounts) AND closed_at IS NULL";
 
+  // Time can be logged against a task, a stage, or the project as a whole
+  // (e.g. general project-admin work) — each lands in its own table. See the
+  // matching note in routes/dashboard.ts.
+  const ALL_TIME_ENTRIES_SQL = `(
+       SELECT project_id, scheduled_start, scheduled_end FROM project_time_entries
+       UNION ALL
+       SELECT project_id, scheduled_start, scheduled_end FROM stage_time_entries
+       UNION ALL
+       SELECT project_id, scheduled_start, scheduled_end FROM task_time_entries
+     )`;
+
   const [activeProjects, atRiskList, blockedList, wentLiveStillOpenList, projectsByPM, hoursCandidates] = await Promise.all([
     db.prepare(`SELECT COUNT(*) AS n FROM projects WHERE (archived = 0 OR archived IS NULL) AND ${NOT_OPTIMIZE}`).first<{ n: number }>(),
 
@@ -56,7 +67,7 @@ export async function buildLeadershipSummaryData(env: Bindings): Promise<Leaders
       `SELECT p.id, p.name, p.customer_name, p.crm_opportunity_id,
               COALESCE(SUM((julianday(ste.scheduled_end) - julianday(ste.scheduled_start)) * 24),0) AS hours_logged
        FROM projects p
-       JOIN stage_time_entries ste ON ste.project_id = p.id
+       JOIN ${ALL_TIME_ENTRIES_SQL} ste ON ste.project_id = p.id
        WHERE (p.archived = 0 OR p.archived IS NULL) AND p.crm_opportunity_id IS NOT NULL AND p.closed_at IS NULL AND ste.scheduled_end IS NOT NULL
        GROUP BY p.id
        ORDER BY hours_logged DESC
