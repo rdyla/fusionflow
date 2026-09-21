@@ -424,6 +424,33 @@ export function projectAtRisk(data: {
   `, data.appUrl);
 }
 
+// ── Project Ready to Close ──────────────────────────────────────────────────
+
+export function projectReadyToClose(data: {
+  recipientName: string;
+  projectName: string;
+  customerName: string | null;
+  appUrl: string;
+  projectId: string;
+}): string {
+  const recipientName = escapeHtml(data.recipientName);
+  const projectName = escapeHtml(data.projectName);
+  const customerName = escapeHtml(data.customerName);
+
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">Project Ready to Close Out</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${recipientName}, the PM has finished the Closeout Notes for <strong style="color:#0b5394;">${projectName}</strong> — it's ready for a customer closeout meeting whenever you'd like to review or schedule one.</p>
+    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <table style="border-collapse:collapse;">
+        ${detail("Project", projectName)}
+        ${customerName ? detail("Customer", customerName) : ""}
+        ${detail("Status", pill("Ready to Close", "#22c55e"))}
+      </table>
+    </div>
+    ${ctaButton("View Closeout Notes", `${data.appUrl}/projects/${data.projectId}?tab=closeout`)}
+  `, data.appUrl);
+}
+
 // ── Partner AE: Note Posted ────────────────────────────────────────────────────
 
 export function partnerNotePosted(data: {
