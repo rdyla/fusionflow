@@ -382,6 +382,14 @@ export default function DashboardPage() {
   const projSearchQ = projSearch.trim().toLowerCase();
   const visibleProjects = sortProjects(
     projects.filter((p) => {
+      // Default view is "what's actually being worked" — a project auto-
+      // derives to status='complete' well before anyone formally closes it
+      // out, so a finished-but-not-yet-closed-out project (or a genuinely
+      // closed one — this widget has no Active/Closed split like the full
+      // Projects page) shouldn't clutter the default list. Only excluded
+      // when no status is explicitly picked; selecting "Complete" still
+      // shows exactly those.
+      if (!projStatus && p.status === "complete") return false;
       if (projStatus && p.status !== projStatus) return false;
       if (projSearchQ) {
         const hay = `${p.name} ${p.customer_name ?? ""}`.toLowerCase();
