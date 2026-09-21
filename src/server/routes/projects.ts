@@ -236,11 +236,26 @@ app.post("/:id/close", async (c) => {
   if (!allowed) throw new HTTPException(403, { message: "Forbidden" });
 
   const project = await db
-    .prepare("SELECT id, status, closed_at, crm_case_id FROM projects WHERE id = ? LIMIT 1")
+    .prepare("SELECT id, status, closed_at, crm_case_id, closeout_team, closeout_solution, closeout_delivered, closeout_summary FROM projects WHERE id = ? LIMIT 1")
     .bind(projectId)
-    .first<{ id: string; status: string | null; closed_at: string | null; crm_case_id: string | null }>();
+    .first<{
+      id: string; status: string | null; closed_at: string | null; crm_case_id: string | null;
+      closeout_team: string | null; closeout_solution: string | null; closeout_delivered: string | null; closeout_summary: string | null;
+    }>();
   if (!project) throw new HTTPException(404, { message: "Project not found" });
   if (project.closed_at) throw new HTTPException(409, { message: "Project is already closed" });
+
+  // Mirrors the client's button-disable check — enforced here too so a
+  // direct API call can't skip it. CSM/sales need real closeout content to
+  // work from, not an empty tab nobody circles back to once the project's
+  // already closed.
+  const closeoutNotesComplete = !!(
+    project.closeout_team?.trim() && project.closeout_solution?.trim()
+    && project.closeout_delivered?.trim() && project.closeout_summary?.trim()
+  );
+  if (!closeoutNotesComplete) {
+    throw new HTTPException(400, { message: "Fill out all four fields on the Closeout Notes tab before closing this project." });
+  }
 
   const parsed = closeProjectSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw new HTTPException(400, { message: "Invalid request" });
