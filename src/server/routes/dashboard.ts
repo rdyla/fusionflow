@@ -326,6 +326,21 @@ app.get("/leadership", async (c) => {
   const hoursExprAlias =
     "(julianday(ste.scheduled_end) - julianday(ste.scheduled_start)) * 24";
 
+  // Time can be logged at three different granularities — against a specific
+  // task, a stage, or (for work like status calls / customer coordination
+  // that isn't tied to either) the project as a whole — each landing in its
+  // own table. Every Capacity query used to read stage_time_entries alone,
+  // which silently dropped every project-level and task-level entry from
+  // leadership's view — a PM logging general project-admin time would show
+  // 0 hours here despite having real, CRM-synced entries. Union all three.
+  const ALL_TIME_ENTRIES_SQL = `(
+       SELECT user_id, project_id, scheduled_start, scheduled_end FROM project_time_entries
+       UNION ALL
+       SELECT user_id, project_id, scheduled_start, scheduled_end FROM stage_time_entries
+       UNION ALL
+       SELECT user_id, project_id, scheduled_start, scheduled_end FROM task_time_entries
+     )`;
+
   // Every Capacity tile is scoped to actual Packet Fusion staff — internal
   // roles only, excluding partner_ae (external partner reps) and client
   // (customer contacts) even though they can't realistically log time or be
@@ -354,7 +369,7 @@ app.get("/leadership", async (c) => {
   ] = await Promise.all([
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExprAlias}),0) AS hours
-       FROM stage_time_entries ste
+       FROM ${ALL_TIME_ENTRIES_SQL} ste
        JOIN users u ON u.id = ste.user_id
        WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
          AND ste.scheduled_start IS NOT NULL AND ste.scheduled_end IS NOT NULL
@@ -363,7 +378,7 @@ app.get("/leadership", async (c) => {
 
     db.prepare(
       `SELECT COUNT(*) AS entries, COALESCE(SUM(${hoursExprAlias}),0) AS hours
-       FROM stage_time_entries ste
+       FROM ${ALL_TIME_ENTRIES_SQL} ste
        JOIN users u ON u.id = ste.user_id
        WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
          AND ste.scheduled_start IS NOT NULL AND ste.scheduled_end IS NOT NULL
@@ -373,7 +388,7 @@ app.get("/leadership", async (c) => {
     db.prepare(
       `SELECT ste.user_id, u.name, u.email, COUNT(*) AS entries,
               COALESCE(SUM(${hoursExprAlias}),0) AS hours
-       FROM stage_time_entries ste
+       FROM ${ALL_TIME_ENTRIES_SQL} ste
        JOIN users u ON u.id = ste.user_id
        WHERE ste.scheduled_start >= ? AND ste.scheduled_start < ?
          AND ste.scheduled_end IS NOT NULL
@@ -512,7 +527,7 @@ app.get("/leadership", async (c) => {
       `SELECT p.id, p.name, p.customer_name, p.crm_opportunity_id,
               COALESCE(SUM(${hoursExprAlias}),0) AS hours_logged
        FROM projects p
-       JOIN stage_time_entries ste ON ste.project_id = p.id
+       JOIN ${ALL_TIME_ENTRIES_SQL} ste ON ste.project_id = p.id
        WHERE (p.archived = 0 OR p.archived IS NULL)
          AND p.crm_opportunity_id IS NOT NULL
          AND p.closed_at IS NULL
@@ -550,7 +565,7 @@ app.get("/leadership", async (c) => {
     ).all<{ user_id: string | null; name: string | null; project_count: number }>(),
 
     db.prepare(
-      `SELECT DISTINCT user_id FROM stage_time_entries
+      `SELECT DISTINCT user_id FROM ${ALL_TIME_ENTRIES_SQL}
        WHERE scheduled_start >= ? AND scheduled_start < ? AND scheduled_end IS NOT NULL AND user_id IS NOT NULL`
     ).bind(lastWeekStart, lastWeekEnd).all<{ user_id: string }>(),
 
@@ -573,9 +588,9 @@ app.get("/leadership", async (c) => {
   ]);
 
   // ── Hours vs. quoted SOW (live Dynamics) ──────────────────────────────────
-  // Actual hours come from the local D1 total above (stage_time_entries already
-  // mirrors CRM time entries 1:1 — every entry logged in-app pushes a linked
-  // msdyn_timeentry). Quoted hours are NOT cached anywhere and only live on the
+  // Actual hours come from the local D1 total above (project/stage/task_time_entries
+  // together already mirror CRM time entries 1:1 — every entry logged in-app,
+  // at any granularity, pushes a linked msdyn_timeentry). Quoted hours are NOT cached anywhere and only live on the
   // opportunity's quote (am_sow), so this is the one live-CRM piece of the
   // leadership dashboard — bounded to the <=20 candidates queried above.
   // getOpportunityQuotes already no-ops to [] when Dynamics isn't configured
