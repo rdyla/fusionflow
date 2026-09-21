@@ -297,11 +297,10 @@ app.get("/leadership", async (c) => {
   const db = c.env.DB;
 
   // ── Window math ──────────────────────────────────────────────────────────
-  // Resolve the requested window into a day-count, then derive an exclusive
-  // [start, end) range plus the immediately-preceding window of equal length.
+  // Resolve the requested window into an exclusive [start, end) range plus
+  // the immediately-preceding window of equal length.
   const rawWindow = c.req.query("window");
   const window = rawWindow === "month" || rawWindow === "quarter" ? rawWindow : "week";
-  const days = window === "quarter" ? 90 : window === "month" ? 30 : 7;
 
   const fmt = (d: Date) => d.toISOString().slice(0, 10);
   const addDays = (d: Date, n: number) => {
@@ -311,10 +310,25 @@ app.get("/leadership", async (c) => {
   };
 
   const now = new Date();
-  const end = fmt(addDays(now, 1));          // exclusive upper bound (today + 1)
-  const start = fmt(addDays(now, -(days - 1)));
-  const prevEnd = start;                      // current start = previous window's exclusive end
-  const prevStart = fmt(addDays(now, -(days - 1) - days));
+  let start: string, end: string, prevStart: string, prevEnd: string;
+  if (window === "week") {
+    // Calendar week, Monday through Sunday — not a rolling trailing 7 days.
+    // "This week" is whatever's logged since the most recent Monday (mostly
+    // empty on a Monday itself); "last week" is always the prior full Mon-Sun,
+    // never a moving 7-day tail.
+    const daysSinceMonday = (now.getDay() + 6) % 7; // Mon=0 ... Sun=6
+    const monday = addDays(now, -daysSinceMonday);
+    start = fmt(monday);
+    end = fmt(addDays(monday, 7));             // exclusive upper bound: next Monday
+    prevEnd = start;
+    prevStart = fmt(addDays(monday, -7));
+  } else {
+    const days = window === "quarter" ? 90 : 30;
+    end = fmt(addDays(now, 1));                // exclusive upper bound (today + 1)
+    start = fmt(addDays(now, -(days - 1)));
+    prevEnd = start;                           // current start = previous window's exclusive end
+    prevStart = fmt(addDays(now, -(days - 1) - days));
+  }
   // Fixed trailing 7 days, independent of the week/month/quarter toggle above —
   // "did this person report time last week" should mean the same thing no
   // matter what window is currently selected on screen.
@@ -638,6 +652,7 @@ app.get("/leadership", async (c) => {
       totalHours: round1(timeCur?.hours),
       prevTotalHours: round1(timePrev?.hours),
       entries: timeCur?.entries ?? 0,
+      prevEntries: timePrev?.entries ?? 0,
       byEngineer: (byEngineer.results ?? []).map((r) => ({
         user_id: r.user_id,
         name: r.name,

@@ -349,6 +349,7 @@ export type LeadershipDashboardResponse = {
     totalHours: number;
     prevTotalHours: number;
     entries: number;
+    prevEntries: number;
     byEngineer: {
       user_id: string | null;
       name: string | null;
