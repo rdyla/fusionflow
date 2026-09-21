@@ -259,33 +259,56 @@ export async function syncSolutionStatus(db: D1Database, solutionId: string): Pr
 }
 
 /**
- * Sync a project's target_go_live_date from the canonical go-live event
- * task(s) (tasks.is_go_live_event = 1). On multi-phase projects there can
- * be multiple flagged tasks (one per rollout phase); the project's target
- * is the MAX of their due_dates — i.e. the FINAL go-live across the project.
+ * Sync a project's target_go_live_date AND actual_go_live_date from the
+ * canonical go-live event task(s) (tasks.is_go_live_event = 1). On
+ * multi-phase projects there can be multiple flagged tasks (one per rollout
+ * phase); each date is the MAX across them — i.e. the FINAL go-live across
+ * the project.
  *
- * If no flagged task exists, target_go_live_date is left untouched (allows
- * brand-new projects to keep whatever was set at create-time until a
- * template-applied task carries the flag forward).
+ *   - target_go_live_date ← MAX(due_date) across all flagged tasks
+ *   - actual_go_live_date ← MAX(completed_at) across flagged tasks that are
+ *     actually completed — this is the one concrete, well-defined trigger
+ *     for "the project went live" the data model has; nothing else marks a
+ *     project as gone-live, which is why the Leadership dashboard's "Went
+ *     Live · Still Open" tile reads empty even for projects with dozens of
+ *     real completed go-lives (completed_at was never being copied up).
+ *     completed_at is a full timestamp; only the date portion is kept.
+ *
+ * Neither field is ever cleared once set (only pushed forward) — a flagged
+ * task being deleted or reopened after a real go-live shouldn't erase the
+ * historical record. If no flagged task exists yet, both are left untouched
+ * (allows brand-new projects to keep whatever was set at create-time until
+ * a template-applied task carries the flag forward).
  *
  * Call after task POST / PATCH / DELETE in routes/tasks.ts.
  */
 export async function syncProjectGoLiveDate(db: D1Database, projectId: string): Promise<void> {
   const row = await db
     .prepare(
-      `SELECT MAX(due_date) AS go_live FROM tasks
-       WHERE project_id = ? AND is_go_live_event = 1 AND due_date IS NOT NULL`
+      `SELECT
+         MAX(due_date) AS target_go_live,
+         MAX(CASE WHEN status = 'completed' THEN substr(completed_at, 1, 10) END) AS actual_go_live
+       FROM tasks
+       WHERE project_id = ? AND is_go_live_event = 1`
     )
     .bind(projectId)
-    .first<{ go_live: string | null }>();
+    .first<{ target_go_live: string | null; actual_go_live: string | null }>();
 
-  const goLive = row?.go_live ?? null;
-  if (!goLive) return;
+  const targetGoLive = row?.target_go_live ?? null;
+  const actualGoLive = row?.actual_go_live ?? null;
 
-  await db
-    .prepare("UPDATE projects SET target_go_live_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (target_go_live_date IS NULL OR target_go_live_date != ?)")
-    .bind(goLive, projectId, goLive)
-    .run();
+  if (targetGoLive) {
+    await db
+      .prepare("UPDATE projects SET target_go_live_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (target_go_live_date IS NULL OR target_go_live_date != ?)")
+      .bind(targetGoLive, projectId, targetGoLive)
+      .run();
+  }
+  if (actualGoLive) {
+    await db
+      .prepare("UPDATE projects SET actual_go_live_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND (actual_go_live_date IS NULL OR actual_go_live_date != ?)")
+      .bind(actualGoLive, projectId, actualGoLive)
+      .run();
+  }
 }
 
 // ── D365 opportunity sync ────────────────────────────────────────────────────
