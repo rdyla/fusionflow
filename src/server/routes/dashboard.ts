@@ -310,18 +310,19 @@ app.get("/leadership", async (c) => {
   };
 
   const now = new Date();
+  const daysSinceMonday = (now.getDay() + 6) % 7; // Mon=0 ... Sun=6
+  const thisMonday = addDays(now, -daysSinceMonday);
+
   let start: string, end: string, prevStart: string, prevEnd: string;
   if (window === "week") {
     // Calendar week, Monday through Sunday — not a rolling trailing 7 days.
     // "This week" is whatever's logged since the most recent Monday (mostly
     // empty on a Monday itself); "last week" is always the prior full Mon-Sun,
     // never a moving 7-day tail.
-    const daysSinceMonday = (now.getDay() + 6) % 7; // Mon=0 ... Sun=6
-    const monday = addDays(now, -daysSinceMonday);
-    start = fmt(monday);
-    end = fmt(addDays(monday, 7));             // exclusive upper bound: next Monday
+    start = fmt(thisMonday);
+    end = fmt(addDays(thisMonday, 7));         // exclusive upper bound: next Monday
     prevEnd = start;
-    prevStart = fmt(addDays(monday, -7));
+    prevStart = fmt(addDays(thisMonday, -7));
   } else {
     const days = window === "quarter" ? 90 : 30;
     end = fmt(addDays(now, 1));                // exclusive upper bound (today + 1)
@@ -329,11 +330,12 @@ app.get("/leadership", async (c) => {
     prevEnd = start;                           // current start = previous window's exclusive end
     prevStart = fmt(addDays(now, -(days - 1) - days));
   }
-  // Fixed trailing 7 days, independent of the week/month/quarter toggle above —
-  // "did this person report time last week" should mean the same thing no
-  // matter what window is currently selected on screen.
-  const lastWeekStart = fmt(addDays(now, -6));
-  const lastWeekEnd = end;
+  // Always the prior full calendar week (Mon-Sun), independent of the
+  // week/month/quarter toggle above — "did this person report time last
+  // week" should mean the same real week no matter what's selected on
+  // screen, not silently follow whatever `end` currently resolves to.
+  const lastWeekStart = fmt(addDays(thisMonday, -7));
+  const lastWeekEnd = fmt(thisMonday);
 
   const round1 = (n: number | null | undefined) => Math.round((n ?? 0) * 10) / 10;
 
