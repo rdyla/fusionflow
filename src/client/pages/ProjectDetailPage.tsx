@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, arrayMove, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import SortableTaskRow from "../components/project/SortableTaskRow";
 import {
   api,
   type CaseComplianceData,
@@ -348,6 +351,16 @@ export default function ProjectDetailPage() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [creatingTask, setCreatingTask] = useState(false);
 
+  // Bulk task select/update + drag reorder state (Tasks tab).
+  const [selectedTaskIds, setSelectedTaskIds] = useState<Set<string>>(new Set());
+  const [bulkDueDateDraft, setBulkDueDateDraft] = useState("");
+  const [bulkUpdating, setBulkUpdating] = useState(false);
+  const taskDragSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+
+  useEffect(() => {
+    setSelectedTaskIds(new Set());
+  }, [id]);
+
   // When the Tasks-page assignee dropdown opens the contact modal via "+ Add new contact",
   // remember which task to auto-assign the newly-created contact to.
   const [assignNewContactToTaskId, setAssignNewContactToTaskId] = useState<string | null>(null);
@@ -556,8 +569,23 @@ export default function ProjectDetailPage() {
     [tasks, multiPhase, visibleStageIds]
   );
 
+  // Sorted (not just filtered) so a stage's tasks always render in the same
+  // due_date -> sort_order order the server uses — local edits update `tasks`
+  // in place without reordering the array, so relying on insertion order
+  // would drift from server truth (and would break the drag-reorder tie-group
+  // contiguity assumption below).
   const groupedTasks = useMemo(
-    () => visibleStages.map((stage) => ({ stage, tasks: filteredTasks.filter((t) => t.stage_id === stage.id) })),
+    () =>
+      visibleStages.map((stage) => ({
+        stage,
+        tasks: filteredTasks
+          .filter((t) => t.stage_id === stage.id)
+          .sort((a, b) => {
+            const dueCmp = (a.due_date ?? "9999-99-99").localeCompare(b.due_date ?? "9999-99-99");
+            if (dueCmp !== 0) return dueCmp;
+            return (a.sort_order ?? 0) - (b.sort_order ?? 0);
+          }),
+      })),
     [visibleStages, filteredTasks]
   );
   const userMap = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
@@ -1026,6 +1054,69 @@ export default function ProjectDetailPage() {
     } catch (err) {
       setTasks((ts) => ts.map((t) => (t.id === taskId ? prev : t)));
       showToast(err instanceof Error ? err.message : "Failed to update task", "error");
+    }
+  }
+
+  function toggleTaskSelected(taskId: string) {
+    setSelectedTaskIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(taskId)) next.delete(taskId);
+      else next.add(taskId);
+      return next;
+    });
+  }
+
+  async function applyBulkDueDate() {
+    if (!project || !bulkDueDateDraft || selectedTaskIds.size === 0) return;
+    const ids = [...selectedTaskIds];
+    const prevTasks = tasks;
+    setBulkUpdating(true);
+    setTasks((ts) => ts.map((t) => (selectedTaskIds.has(t.id) ? { ...t, due_date: bulkDueDateDraft } : t)));
+    try {
+      await api.bulkUpdateTaskDueDate(project.id, ids, bulkDueDateDraft);
+      showToast(`Updated due date for ${ids.length} task${ids.length === 1 ? "" : "s"}.`, "success");
+      setSelectedTaskIds(new Set());
+      setBulkDueDateDraft("");
+      // A moved go-live-event task can shift target_go_live_date — refresh project meta.
+      try {
+        const refreshed = await api.project(project.id);
+        setProject(refreshed);
+      } catch { /* swallow — meta header just stays at the previous value */ }
+    } catch (err) {
+      setTasks(prevTasks);
+      showToast(err instanceof Error ? err.message : "Failed to update due dates", "error");
+    } finally {
+      setBulkUpdating(false);
+    }
+  }
+
+  // Drag-and-drop reorder within a due-date tie group. Guards against a drop
+  // landing on a task with a different due_date (dnd-kit tracks the whole
+  // stage's row order for correct drag math, but only same-date tasks are
+  // actually meant to be reorderable relative to each other) by silently
+  // no-op'ing rather than reordering across the boundary.
+  async function handleTaskDragEnd(stageTasks: Task[], event: DragEndEvent) {
+    const { active, over } = event;
+    if (!project || !over || active.id === over.id) return;
+    const activeTask = stageTasks.find((t) => t.id === active.id);
+    const overTask = stageTasks.find((t) => t.id === over.id);
+    if (!activeTask || !overTask) return;
+    if (!activeTask.due_date || activeTask.due_date !== overTask.due_date) return;
+
+    const groupIds = stageTasks.filter((t) => t.due_date === activeTask.due_date).map((t) => t.id);
+    const oldIndex = groupIds.indexOf(active.id as string);
+    const newIndex = groupIds.indexOf(over.id as string);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const newGroupOrder = arrayMove(groupIds, oldIndex, newIndex);
+
+    const sortOrderById = new Map(newGroupOrder.map((taskId, index) => [taskId, index]));
+    const prevTasks = tasks;
+    setTasks((ts) => ts.map((t) => (sortOrderById.has(t.id) ? { ...t, sort_order: sortOrderById.get(t.id)! } : t)));
+    try {
+      await api.reorderTasks(project.id, newGroupOrder);
+    } catch (err) {
+      setTasks(prevTasks);
+      showToast(err instanceof Error ? err.message : "Failed to reorder tasks", "error");
     }
   }
 
@@ -1862,6 +1953,44 @@ export default function ProjectDetailPage() {
               </button>
             </div>
           )}
+          {selectedTaskIds.size > 0 && (
+            // Sticky so the toolbar stays reachable while scrolled down into a
+            // later stage's tasks — without this, selecting tasks far below the
+            // card header meant scrolling all the way back up just to hit Apply.
+            <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 12, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, boxShadow: "0 2px 8px rgba(30,58,138,0.15)", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#1e3a8a" }}>
+                {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? "" : "s"} selected
+              </span>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#1e3a8a" }}>
+                Set due date
+                <input
+                  type="date"
+                  min={PLAN_DATE_MIN}
+                  max={PLAN_DATE_MAX}
+                  value={bulkDueDateDraft}
+                  onChange={(e) => setBulkDueDateDraft(e.target.value)}
+                  style={{ fontSize: 12, padding: "3px 6px", border: "1px solid #93c5fd", borderRadius: 4 }}
+                />
+              </label>
+              <button
+                type="button"
+                className="ms-btn-primary"
+                disabled={!bulkDueDateDraft || bulkUpdating}
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                onClick={applyBulkDueDate}
+              >
+                {bulkUpdating ? "Applying…" : "Apply to selected"}
+              </button>
+              <button
+                type="button"
+                className="ms-btn-secondary"
+                style={{ fontSize: 12, padding: "4px 12px" }}
+                onClick={() => setSelectedTaskIds(new Set())}
+              >
+                Clear selection
+              </button>
+            </div>
+          )}
           <div style={{ display: "grid", gap: 24 }}>
             {visibleStages.length === 0 && (
               <div style={{ padding: "20px 16px", background: "#f8fafc", border: "1px dashed #cbd5e1", borderRadius: 6, textAlign: "center", color: "#64748b", fontSize: 13 }}>
@@ -1881,23 +2010,41 @@ export default function ProjectDetailPage() {
               const cellStyle: React.CSSProperties = { padding: "5px 8px", borderBottom: "1px solid #f1f5f9", verticalAlign: "middle" };
               const inputBase: React.CSSProperties = { width: "100%", padding: "3px 6px", border: "1px solid transparent", borderRadius: 4, background: "transparent", fontSize: 13, color: "#1e293b", boxSizing: "border-box" };
               const cellInputStyle: React.CSSProperties = canManageTasks ? { ...inputBase, cursor: "text" } : { ...inputBase, cursor: "default" };
-              // Freeze the first two columns (Blocked + Title) so the task a row
-              // refers to stays readable while scrolling right through Assignee /
-              // Due / Status / Priority / Done. Widths mirror the <colgroup>: the
-              // Blocked column is 56px, so Title pins at left: 56.
+              // Freeze the leading columns (Drag + Select + Blocked + Title) so the
+              // task a row refers to stays readable while scrolling right through
+              // Assignee / Due / Status / Priority / Done. Widths mirror the
+              // <colgroup> below.
               //
               // Sticky cells need an opaque background or the scrolled columns
               // show through; the table sits on a white .ms-card. The boundary
               // gets a right border on the Title column so the freeze is visible
               // rather than looking like a rendering glitch.
+              const DRAG_COL_WIDTH = 22;
+              const SELECT_COL_WIDTH = 28;
               const FROZEN_COL0_WIDTH = 56;
+              const stickySelectCell: React.CSSProperties = {
+                position: "sticky", left: DRAG_COL_WIDTH, zIndex: 1, background: "#fff",
+              };
               const stickyBlockedCell: React.CSSProperties = {
-                position: "sticky", left: 0, zIndex: 1, background: "#fff",
+                position: "sticky", left: DRAG_COL_WIDTH + SELECT_COL_WIDTH, zIndex: 1, background: "#fff",
               };
               const stickyTitleCell: React.CSSProperties = {
-                position: "sticky", left: FROZEN_COL0_WIDTH, zIndex: 1, background: "#fff",
+                position: "sticky", left: DRAG_COL_WIDTH + SELECT_COL_WIDTH + FROZEN_COL0_WIDTH, zIndex: 1, background: "#fff",
                 borderRight: "1px solid #e2e8f0",
               };
+              // Tasks are only reorderable relative to other tasks in the same
+              // stage that share their exact due_date — sort_order is a no-op
+              // tiebreaker otherwise. groupedTasks already sorts by
+              // (due_date, sort_order), so a tie group is always a contiguous
+              // run of stageTasks.
+              const dueDateCounts = new Map<string, number>();
+              for (const t of stageTasks) {
+                if (t.due_date) dueDateCounts.set(t.due_date, (dueDateCounts.get(t.due_date) ?? 0) + 1);
+              }
+              const tieGroupTaskIds = new Set(
+                stageTasks.filter((t) => t.due_date && (dueDateCounts.get(t.due_date) ?? 0) > 1).map((t) => t.id)
+              );
+              const allInStageSelected = stageTasks.length > 0 && stageTasks.every((t) => selectedTaskIds.has(t.id));
               return (
               <div key={stage.id}>
                 {/* Stage header with inline editing — unchanged */}
@@ -2026,8 +2173,16 @@ export default function ProjectDetailPage() {
 
                     {(stageTasks.length > 0 || isAddingHere) && (
                       <div style={{ overflowX: "auto" }}>
+                        <DndContext
+                          sensors={taskDragSensors}
+                          collisionDetection={closestCenter}
+                          onDragEnd={(event) => handleTaskDragEnd(stageTasks, event)}
+                        >
+                        <SortableContext items={stageTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
                         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                           <colgroup>
+                            <col style={{ width: DRAG_COL_WIDTH }} />
+                            <col style={{ width: SELECT_COL_WIDTH }} />
                             <col style={{ width: 56 }} />
                             <col />
                             <col style={{ width: 200 }} />
@@ -2039,6 +2194,19 @@ export default function ProjectDetailPage() {
                           </colgroup>
                           <thead>
                             <tr style={{ color: "#64748b", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", borderBottom: "1px solid #e2e8f0" }}>
+                              <th style={{ padding: "6px 2px" }}></th>
+                              <th style={{ ...stickySelectCell, zIndex: 2, textAlign: "center", padding: "6px 4px" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={allInStageSelected}
+                                  onChange={() => setSelectedTaskIds((prev) => {
+                                    const next = new Set(prev);
+                                    stageTasks.forEach((t) => (allInStageSelected ? next.delete(t.id) : next.add(t.id)));
+                                    return next;
+                                  })}
+                                  title="Select all tasks in this stage"
+                                />
+                              </th>
                               <th style={{ ...stickyBlockedCell, zIndex: 2, textAlign: "center", padding: "6px 8px" }}>Blocked</th>
                               <th style={{ ...stickyTitleCell, zIndex: 2, textAlign: "left", padding: "6px 8px" }}>Title</th>
                               <th style={{ textAlign: "left", padding: "6px 8px" }}>Assignee</th>
@@ -2066,7 +2234,15 @@ export default function ProjectDetailPage() {
                               const extraAssignees = task.assignees ?? [];
                               return (
                                 <React.Fragment key={task.id}>
-                                  <tr data-task-row={task.id}>
+                                  <SortableTaskRow id={task.id} dragEnabled={tieGroupTaskIds.has(task.id)}>
+                                    <td style={{ ...cellStyle, ...stickySelectCell, textAlign: "center" }}>
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedTaskIds.has(task.id)}
+                                        onChange={() => toggleTaskSelected(task.id)}
+                                        title="Select for bulk due-date update"
+                                      />
+                                    </td>
                                     {/* Blocked — its own column. Glyph shows only when the task has an
                                         active blocker; hover lists the blocker(s), click opens the first. */}
                                     <td style={{ ...cellStyle, ...stickyBlockedCell, textAlign: "center" }}>
@@ -2346,10 +2522,10 @@ export default function ProjectDetailPage() {
                                         </button>
                                       )}
                                     </td>
-                                  </tr>
+                                  </SortableTaskRow>
                                   {subRowCount > 0 && (
                                     <tr>
-                                      <td colSpan={8} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                      <td colSpan={10} style={{ padding: "0 8px 6px 24px", borderBottom: "1px solid #f1f5f9" }}>
                                         {taskRecordings.map((rec) => (
                                           <div key={rec.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#7c3aed" }}>
                                             <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#7c3aed" }} />
@@ -2364,7 +2540,7 @@ export default function ProjectDetailPage() {
                                   )}
                                   {openNoteTaskId === task.id && (
                                     <tr>
-                                      <td colSpan={8} style={{ padding: "4px 8px 10px 24px", borderBottom: "1px solid #f1f5f9" }}>
+                                      <td colSpan={10} style={{ padding: "4px 8px 10px 24px", borderBottom: "1px solid #f1f5f9" }}>
                                         <textarea
                                           autoFocus
                                           value={noteDraft}
@@ -2404,7 +2580,7 @@ export default function ProjectDetailPage() {
                             })}
                             {isAddingHere && (
                               <tr>
-                                <td colSpan={8} style={{ padding: "6px 8px" }}>
+                                <td colSpan={10} style={{ padding: "6px 8px" }}>
                                   <form
                                     onSubmit={(e) => { e.preventDefault(); commitInlineNewTask(stage.id); }}
                                     style={{ display: "flex", gap: 8, alignItems: "center" }}
@@ -2441,6 +2617,8 @@ export default function ProjectDetailPage() {
                             )}
                           </tbody>
                         </table>
+                        </SortableContext>
+                        </DndContext>
                       </div>
                     )}
 
