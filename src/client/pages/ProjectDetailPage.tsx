@@ -1954,7 +1954,10 @@ export default function ProjectDetailPage() {
             </div>
           )}
           {selectedTaskIds.size > 0 && (
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 12, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, flexWrap: "wrap" }}>
+            // Sticky so the toolbar stays reachable while scrolled down into a
+            // later stage's tasks — without this, selecting tasks far below the
+            // card header meant scrolling all the way back up just to hit Apply.
+            <div style={{ position: "sticky", top: 0, zIndex: 5, display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", marginBottom: 12, background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 6, boxShadow: "0 2px 8px rgba(30,58,138,0.15)", flexWrap: "wrap" }}>
               <span style={{ fontSize: 12, fontWeight: 600, color: "#1e3a8a" }}>
                 {selectedTaskIds.size} task{selectedTaskIds.size === 1 ? "" : "s"} selected
               </span>
