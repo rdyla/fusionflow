@@ -32,7 +32,7 @@ async function isStaffedEngineer(db: D1Database, auth: { user: { id: string }; r
 
 const TASK_SELECT = `
   SELECT id, project_id, stage_id, title, assignee_user_id, assignee_contact_id, due_date,
-         completed_at, status, priority, is_go_live_event, notes,
+         completed_at, status, priority, is_go_live_event, notes, sort_order,
          scheduled_start, scheduled_end, pay_code_id, cost_code_id, crm_time_entry_id
   FROM tasks
 `;
@@ -56,8 +56,11 @@ app.get("/:id/tasks", async (c) => {
     : ` AND (stage_id IS NULL OR stage_id IN (SELECT id FROM stages WHERE project_id = ? AND (phase_id IS NULL OR phase_id IN (${vpIds.map(() => "?").join(",")}))))`;
   const phaseBinds = vp === "ALL" ? [] : [projectId, ...vpIds];
 
+  // sort_order only ever breaks ties within the same due_date — it's never
+  // a primary sort key, so two tasks due on different dates are unaffected
+  // by it either way.
   const rows = await db
-    .prepare(`${TASK_SELECT} WHERE project_id = ?${phaseClause} ORDER BY due_date ASC`)
+    .prepare(`${TASK_SELECT} WHERE project_id = ?${phaseClause} ORDER BY due_date ASC, sort_order ASC`)
     .bind(projectId, ...phaseBinds)
     .all();
 
@@ -113,14 +116,21 @@ app.post("/:id/tasks", async (c) => {
   const { title, stage_id, assignee_user_id, due_date, scheduled_start, scheduled_end, priority, status } = parsed.data;
   const taskId = crypto.randomUUID();
 
+  // New task goes to the end of its stage's order — only matters as a
+  // due_date tiebreaker, so "end" just means "after whatever's already
+  // there" rather than implying anything about the date itself.
+  const nextSortOrder = stage_id
+    ? await db.prepare("SELECT COALESCE(MAX(sort_order) + 1, 0) AS n FROM tasks WHERE stage_id = ?").bind(stage_id).first<{ n: number }>()
+    : null;
+
   await db
     .prepare(
       `
-      INSERT INTO tasks (id, project_id, stage_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (id, project_id, stage_id, title, assignee_user_id, due_date, scheduled_start, scheduled_end, status, priority, sort_order)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `
     )
-    .bind(taskId, projectId, stage_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null)
+    .bind(taskId, projectId, stage_id ?? null, title, assignee_user_id ?? null, due_date ?? null, scheduled_start ?? null, scheduled_end ?? null, status, priority ?? null, nextSortOrder?.n ?? null)
     .run();
 
   // Re-derive the parent stage's status now that a new task lives under it.
@@ -162,6 +172,115 @@ app.post("/:id/tasks", async (c) => {
   return c.json(created, 201);
 });
 
+// Bulk due-date update: lets a PM select several tasks that share a due date
+// (within one stage, in the Tasks tab UI) and move them all to a new date in
+// one action, instead of editing each task individually.
+//
+// Registered ahead of the generic PATCH /:id/tasks/:taskId route below —
+// Hono matches routes in registration order, so if this came after it, a
+// request to .../tasks/bulk-due-date would be captured by :taskId first
+// (taskId = "bulk-due-date") and 404 as "no such task".
+const bulkDueDateSchema = z.object({
+  task_ids: z.array(z.string().min(1)).min(1).max(200),
+  due_date: zPlanDateOrBlank.nullable(),
+});
+
+app.patch("/:id/tasks/bulk-due-date", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = (await canEditProject(db, auth.user, projectId)) || (await isStaffedEngineer(db, auth, projectId));
+  if (!allowed) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const rawBody = await c.req.json();
+  const parsed = bulkDueDateSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const { task_ids, due_date } = parsed.data;
+
+  // Only touch tasks that actually belong to this project — a stray id from
+  // another project (or a stale client) is silently dropped rather than
+  // erroring the whole batch.
+  const existing = await db
+    .prepare(`SELECT id, stage_id FROM tasks WHERE project_id = ? AND id IN (${task_ids.map(() => "?").join(",")})`)
+    .bind(projectId, ...task_ids)
+    .all<{ id: string; stage_id: string | null }>();
+  const rows = existing.results ?? [];
+  if (!rows.length) {
+    throw new HTTPException(404, { message: "No matching tasks found" });
+  }
+
+  await db.batch(
+    rows.map((t) =>
+      db.prepare("UPDATE tasks SET due_date = ? WHERE id = ?").bind(due_date, t.id)
+    )
+  );
+
+  // due_date alone doesn't change task status, but a moved go-live-event task
+  // can shift the project's target date, so re-sync once for the whole batch.
+  await syncProjectGoLiveDate(db, projectId);
+
+  const updated = await db
+    .prepare(`${TASK_SELECT} WHERE project_id = ? AND id IN (${rows.map(() => "?").join(",")})`)
+    .bind(projectId, ...rows.map((t) => t.id))
+    .all();
+
+  return c.json(updated.results ?? []);
+});
+
+// Reorder: PM drags tied (same due_date, same stage) tasks into a new
+// relative order. Body carries the full ordered id list for that tied group;
+// sort_order is rewritten to match array position (0-based). Also registered
+// ahead of the generic :taskId route for the same reason as bulk-due-date above.
+const reorderTasksSchema = z.object({
+  task_ids: z.array(z.string().min(1)).min(1).max(200),
+});
+
+app.patch("/:id/tasks/reorder", async (c) => {
+  const auth = c.get("auth");
+  const db = c.env.DB;
+  const projectId = c.req.param("id");
+
+  const allowed = (await canEditProject(db, auth.user, projectId)) || (await isStaffedEngineer(db, auth, projectId));
+  if (!allowed) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  const rawBody = await c.req.json();
+  const parsed = reorderTasksSchema.safeParse(rawBody);
+  if (!parsed.success) {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const { task_ids } = parsed.data;
+
+  const existing = await db
+    .prepare(`SELECT id FROM tasks WHERE project_id = ? AND id IN (${task_ids.map(() => "?").join(",")})`)
+    .bind(projectId, ...task_ids)
+    .all<{ id: string }>();
+  const validIds = new Set((existing.results ?? []).map((t) => t.id));
+  const orderedIds = task_ids.filter((id) => validIds.has(id));
+  if (!orderedIds.length) {
+    throw new HTTPException(404, { message: "No matching tasks found" });
+  }
+
+  await db.batch(
+    orderedIds.map((id, index) =>
+      db.prepare("UPDATE tasks SET sort_order = ? WHERE id = ?").bind(index, id)
+    )
+  );
+
+  const updated = await db
+    .prepare(`${TASK_SELECT} WHERE project_id = ? AND id IN (${orderedIds.map(() => "?").join(",")})`)
+    .bind(projectId, ...orderedIds)
+    .all();
+
+  return c.json(updated.results ?? []);
+});
+
 const updateTaskSchema = z.object({
   title: z.string().min(1).max(500).optional(),
   stage_id: z.string().nullable().optional(),
@@ -179,6 +298,11 @@ const updateTaskSchema = z.object({
   priority: z.enum(["low", "medium", "high"]).nullable().optional(),
   status: z.enum(["not_started", "in_progress", "completed", "blocked"]).optional(),
   notes: z.string().max(10000).nullable().optional(),
+  /** Tiebreaker among tasks in the same stage sharing a due_date — set via
+   *  drag-and-drop on the Tasks tab (see the /reorder endpoint below, which
+   *  is what the drag handler actually calls). Meaningless (ignored by
+   *  ORDER BY) across a date boundary. */
+  sort_order: z.number().int().min(0).nullable().optional(),
 });
 
 app.patch("/:id/tasks/:taskId", async (c) => {

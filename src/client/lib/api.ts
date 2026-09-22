@@ -986,6 +986,9 @@ export type Task = {
   assignees?: TaskAssignee[];
   /** Free-text note, editable via the note glyph on the Tasks tab (migration 0136). */
   notes: string | null;
+  /** Tiebreaker among same-stage tasks sharing a due_date; set via drag-and-drop
+   *  on the Tasks tab (migration 0146). Meaningless across a date boundary. */
+  sort_order: number | null;
 };
 
 /** One extra resource on a task, from task_assignees. Exactly one of
@@ -2195,6 +2198,22 @@ export const api = {
   deleteTask: (projectId: string, taskId: string) =>
     request<{ success: boolean }>(`/projects/${projectId}/tasks/${taskId}`, {
       method: "DELETE",
+    }),
+
+  // Move several tasks (typically selected because they share a due date) to
+  // a new due date in one action, instead of editing each row individually.
+  bulkUpdateTaskDueDate: (projectId: string, taskIds: string[], dueDate: string | null) =>
+    request<Task[]>(`/projects/${projectId}/tasks/bulk-due-date`, {
+      method: "PATCH",
+      body: JSON.stringify({ task_ids: taskIds, due_date: dueDate }),
+    }),
+
+  // Rewrite sort_order for a tied (same due_date, same stage) group of tasks
+  // to match the given order — the Tasks tab's drag-and-drop handler.
+  reorderTasks: (projectId: string, taskIds: string[]) =>
+    request<Task[]>(`/projects/${projectId}/tasks/reorder`, {
+      method: "PATCH",
+      body: JSON.stringify({ task_ids: taskIds }),
     }),
 
   // Additional task resources (beyond the primary assignee) — see task_assignees.
