@@ -10,11 +10,12 @@ import type { Bindings, Variables } from "../types";
 import { canEditProject, canLogTimeOnProject, canViewProject, visiblePhaseIds } from "../services/accessService";
 import { maybeSendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
-import { createNotification } from "../lib/notifications";
+import { createNotification, notifyGoLive } from "../lib/notifications";
 import {
   getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry, deleteTimeEntry,
 } from "../services/dynamicsService";
 import { syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate, syncProjectStatus } from "../lib/teamUtils";
+import { parseSolutionTypes, joinSolutionTypeLabels } from "../../shared/solutionTypes";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
@@ -314,7 +315,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const existing = await db
     .prepare(`${TASK_SELECT} WHERE id = ? AND project_id = ? LIMIT 1`)
     .bind(taskId, projectId)
-    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; status: string | null; due_date: string | null; priority: string | null; is_go_live_event: number | null; completed_at: string | null }>();
 
   if (!existing) {
     throw new HTTPException(404, { message: "Task not found" });
@@ -383,7 +384,7 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   const updated = await db
     .prepare(`${TASK_SELECT} WHERE id = ? LIMIT 1`)
     .bind(taskId)
-    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; status: string | null; due_date: string | null; priority: string | null }>();
+    .first<{ id: string; title: string; stage_id: string | null; assignee_user_id: string | null; assignee_contact_id: string | null; status: string | null; due_date: string | null; priority: string | null; is_go_live_event: number | null; completed_at: string | null }>();
 
   // Auto-derive stage status from the new task state. Sync both the old and
   // new stage when a task moved between stages.
@@ -398,7 +399,10 @@ app.patch("/:id/tasks/:taskId", async (c) => {
   await syncProjectGoLiveDate(db, projectId);
 
   const appUrl = c.env.APP_URL ?? "";
-  const project = await db.prepare("SELECT name, pm_user_id FROM projects WHERE id = ? LIMIT 1").bind(projectId).first<{ name: string; pm_user_id: string | null }>();
+  const project = await db
+    .prepare("SELECT name, customer_name, pm_user_id, vendor, solution_types, customer_id FROM projects WHERE id = ? LIMIT 1")
+    .bind(projectId)
+    .first<{ name: string; customer_name: string | null; pm_user_id: string | null; vendor: string | null; solution_types: string | null; customer_id: string | null }>();
 
   // Notify new assignee if assignee changed
   const assigneeChanged = updates.assignee_user_id !== undefined && updates.assignee_user_id !== existing.assignee_user_id;
@@ -489,6 +493,47 @@ app.patch("/:id/tasks/:taskId", async (c) => {
         }));
       }
     }
+  }
+
+  // Announce to the Zoom "Complete Go-Lives" channel the moment the project's
+  // canonical go-live task is marked completed — not on any other field
+  // change to it, and not on a non-go-live task completing.
+  const justWentLive = updates.status === "completed" && existing.status !== "completed" && existing.is_go_live_event === 1;
+  if (justWentLive && c.env.ZOOM_GOLIVE_WEBHOOK_URL && project) {
+    const accountTeam = project.customer_id
+      ? await db
+          .prepare(
+            `SELECT ae.name AS ae_name, sa.name AS sa_name, csm.name AS csm_name
+             FROM customers c
+             LEFT JOIN users ae ON ae.id = c.pf_ae_user_id
+             LEFT JOIN users sa ON sa.id = c.pf_sa_user_id
+             LEFT JOIN users csm ON csm.id = c.pf_csm_user_id
+             WHERE c.id = ? LIMIT 1`
+          )
+          .bind(project.customer_id)
+          .first<{ ae_name: string | null; sa_name: string | null; csm_name: string | null }>()
+      : null;
+    const pm = project.pm_user_id
+      ? await db.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ name: string; email: string }>()
+      : null;
+
+    const accountTeamParts = [
+      accountTeam?.ae_name ? `${accountTeam.ae_name} (AE)` : null,
+      accountTeam?.sa_name ? `${accountTeam.sa_name} (SA)` : null,
+      accountTeam?.csm_name ? `${accountTeam.csm_name} (CSM)` : null,
+    ].filter((v): v is string => !!v);
+    const projectTeamParts = [pm ? `${pm.name ?? pm.email} (PM)` : null].filter((v): v is string => !!v);
+
+    c.executionCtx.waitUntil(
+      notifyGoLive(c.env.ZOOM_GOLIVE_WEBHOOK_URL, {
+        customerName: project.customer_name ?? project.name,
+        providerName: project.vendor ?? "—",
+        technologyImplemented: joinSolutionTypeLabels(parseSolutionTypes(project.solution_types), " / ") || "—",
+        goLiveDate: (updated?.completed_at ?? new Date().toISOString()).slice(0, 10),
+        accountTeam: accountTeamParts.length ? accountTeamParts.join(" · ") : "—",
+        projectTeam: projectTeamParts.length ? projectTeamParts.join(" · ") : "—",
+      }).catch((err) => console.warn(`[tasks.patch] Go-live Zoom notification failed for project ${projectId}:`, err instanceof Error ? err.message : err))
+    );
   }
 
   return c.json(updated);
