@@ -129,10 +129,14 @@ export async function notifyZoomChat(
  * whose keys must exactly match the variable names configured on the
  * workflow's "From webhook" trigger step in the Zoom Team Chat admin UI.
  * There's no message formatting here; the workflow itself owns the message
- * text/labels. A key that doesn't match what's configured there is rejected
- * by Zoom with `{"status":false,"errorCode":"-1","errorMessage":"Mismatch
- * variables"}` (confirmed 2026-09-24) rather than failing loudly here, so
- * these six keys must stay in sync with the workflow if it's ever edited.
+ * text/labels — EXCEPT the go_live_date line, which is a bare variable
+ * carrying its own fully pre-built label + suffixes (see goLiveDateLine
+ * below), because the phase/location context only applies to some projects
+ * and the workflow template can't conditionally hide a line. A key that
+ * doesn't match what's configured there is rejected by Zoom with
+ * `{"status":false,"errorCode":"-1","errorMessage":"Mismatch variables"}`
+ * (confirmed 2026-09-24) rather than failing loudly here, so these keys
+ * must stay in sync with the workflow if it's ever edited.
  */
 export async function notifyGoLive(
   webhookUrl: string,
@@ -140,7 +144,12 @@ export async function notifyGoLive(
     customerName: string;
     providerName: string;
     technologyImplemented: string;
-    goLiveDate: string;
+    /** The full "Go-Live Date: 9-24-2026[ · Phase N of M][ · Location: ...]"
+     *  line, pre-built server-side — the workflow's message template has
+     *  this as a bare `{go_live_date}` variable with no static label of its
+     *  own, so a simple project (no phase/location suffix) still reads
+     *  cleanly instead of leaving an empty suffix line behind. */
+    goLiveDateLine: string;
     accountTeam: string;
     projectTeam: string;
   }
@@ -152,7 +161,7 @@ export async function notifyGoLive(
       customer_name: opts.customerName,
       provider_name: opts.providerName,
       technology_implemented: opts.technologyImplemented,
-      go_live_date: opts.goLiveDate,
+      go_live_date: opts.goLiveDateLine,
       account_team: opts.accountTeam,
       project_team: opts.projectTeam,
     }),

@@ -516,20 +516,86 @@ app.patch("/:id/tasks/:taskId", async (c) => {
     const pm = project.pm_user_id
       ? await db.prepare("SELECT name, email FROM users WHERE id = ? LIMIT 1").bind(project.pm_user_id).first<{ name: string; email: string }>()
       : null;
+    // Implementation Engineers staffed on the project — 'engineer' is the
+    // legacy staff_role value, 'ie' the current one (see ASSIGNEE_ROLE_LABEL
+    // on the client, which maps both to "IE"). A project can have several.
+    const ieStaff = await db
+      .prepare(
+        `SELECT u.name, u.email FROM project_staff ps
+         JOIN users u ON u.id = ps.user_id
+         WHERE ps.project_id = ? AND ps.staff_role IN ('ie', 'engineer')
+         ORDER BY u.name`
+      )
+      .bind(projectId)
+      .all<{ name: string | null; email: string }>();
 
     const accountTeamParts = [
       accountTeam?.ae_name ? `${accountTeam.ae_name} (AE)` : null,
       accountTeam?.sa_name ? `${accountTeam.sa_name} (SA)` : null,
       accountTeam?.csm_name ? `${accountTeam.csm_name} (CSM)` : null,
     ].filter((v): v is string => !!v);
-    const projectTeamParts = [pm ? `${pm.name ?? pm.email} (PM)` : null].filter((v): v is string => !!v);
+    const projectTeamParts = [
+      pm ? `${pm.name ?? pm.email} (PM)` : null,
+      ...(ieStaff.results ?? []).map((ie) => `${ie.name ?? ie.email} (IE)`),
+    ].filter((v): v is string => !!v);
+
+    // "Phase N of M" — N/M count EVERY go-live-flagged task on the project
+    // (technology go-lives and per-location go-lives alike, since both use
+    // the same is_go_live_event flag), tracking overall rollout progress
+    // regardless of what's driving the count on a given project. Omitted
+    // entirely (not just blank) when there's only one — nothing to count.
+    const goLiveCounts = await db
+      .prepare(
+        `SELECT COUNT(*) AS total, SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) AS completed
+         FROM tasks WHERE project_id = ? AND is_go_live_event = 1`
+      )
+      .bind(projectId)
+      .first<{ total: number; completed: number }>();
+    const phaseSuffix = goLiveCounts && goLiveCounts.total > 1
+      ? ` · Phase ${goLiveCounts.completed} of ${goLiveCounts.total}`
+      : "";
+
+    // Location suffix — only on genuinely multi-location projects. Rank is
+    // computed rather than trusting display_order to be gap-free.
+    let locationSuffix = "";
+    if (existing.stage_id) {
+      const phaseCount = await db.prepare("SELECT COUNT(*) AS n FROM phases WHERE project_id = ?").bind(projectId).first<{ n: number }>();
+      if (phaseCount && phaseCount.n > 1) {
+        const stagePhase = await db
+          .prepare("SELECT phase_id FROM stages WHERE id = ? LIMIT 1")
+          .bind(existing.stage_id)
+          .first<{ phase_id: string | null }>();
+        if (stagePhase?.phase_id) {
+          const phase = await db
+            .prepare(
+              `SELECT name, display_order,
+                      (SELECT COUNT(*) FROM phases WHERE project_id = ? AND display_order < p.display_order) + 1 AS rank
+               FROM phases p WHERE id = ? LIMIT 1`
+            )
+            .bind(projectId, stagePhase.phase_id)
+            .first<{ name: string; display_order: number; rank: number }>();
+          if (phase) {
+            locationSuffix = ` · Location: ${phase.name} (Campus ${phase.rank} of ${phaseCount.n})`;
+          }
+        }
+      }
+    }
+
+    // M-D-YYYY, no leading zeros (e.g. "9-24-2026") — the whole "Go-Live
+    // Date: ..." line is built here, phase/location suffixes folded in only
+    // when meaningful, so a simple single-tech single-location project (the
+    // common case) gets a plain, un-suffixed line rather than an empty
+    // Phase/Location line left dangling — Zoom's workflow template can't
+    // conditionally hide a line, only substitute a variable's value.
+    const [goLiveYear, goLiveMonth, goLiveDay] = (updated?.completed_at ?? new Date().toISOString()).slice(0, 10).split("-");
+    const goLiveDateLine = `Go-Live Date: ${Number(goLiveMonth)}-${Number(goLiveDay)}-${goLiveYear}${phaseSuffix}${locationSuffix}`;
 
     c.executionCtx.waitUntil(
       notifyGoLive(c.env.ZOOM_GOLIVE_WEBHOOK_URL, {
         customerName: project.customer_name ?? project.name,
         providerName: project.vendor ?? "—",
         technologyImplemented: joinSolutionTypeLabels(parseSolutionTypes(project.solution_types), " / ") || "—",
-        goLiveDate: (updated?.completed_at ?? new Date().toISOString()).slice(0, 10),
+        goLiveDateLine,
         accountTeam: accountTeamParts.length ? accountTeamParts.join(" · ") : "—",
         projectTeam: projectTeamParts.length ? projectTeamParts.join(" · ") : "—",
       }).catch((err) => console.warn(`[tasks.patch] Go-live Zoom notification failed for project ${projectId}:`, err instanceof Error ? err.message : err))
