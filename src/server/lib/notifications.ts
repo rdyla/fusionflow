@@ -119,6 +119,65 @@ export async function notifyZoomChat(
   });
 }
 
+/**
+ * Announce a project go-live to a Zoom Team Chat channel, fired when a PM
+ * marks the project's canonical go-live task (tasks.is_go_live_event = 1)
+ * completed.
+ *
+ * Unlike notifyZoomChat (a classic Zoom incoming-webhook "card" payload),
+ * this posts to a Zoom Workflow Automation trigger — a flat JSON object
+ * whose keys must exactly match the variable names configured on the
+ * workflow's "From webhook" trigger step in the Zoom Team Chat admin UI.
+ * There's no message formatting here; the workflow itself owns the message
+ * text/labels — EXCEPT the go_live_date line, which is a bare variable
+ * carrying its own fully pre-built label + suffixes (see goLiveDateLine
+ * below), because the phase/location context only applies to some projects
+ * and the workflow template can't conditionally hide a line. A key that
+ * doesn't match what's configured there is rejected by Zoom with
+ * `{"status":false,"errorCode":"-1","errorMessage":"Mismatch variables"}`
+ * (confirmed 2026-09-24) rather than failing loudly here, so these keys
+ * must stay in sync with the workflow if it's ever edited.
+ */
+export async function notifyGoLive(
+  webhookUrl: string,
+  opts: {
+    customerName: string;
+    providerName: string;
+    technologyImplemented: string;
+    /** The full "Go-Live Date: 9-24-2026[ · Phase N of M][ · Location: ...]"
+     *  line, pre-built server-side — the workflow's message template has
+     *  this as a bare `{go_live_date}` variable with no static label of its
+     *  own, so a simple project (no phase/location suffix) still reads
+     *  cleanly instead of leaving an empty suffix line behind. */
+    goLiveDateLine: string;
+    accountTeam: string;
+    projectTeam: string;
+  }
+): Promise<void> {
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      customer_name: opts.customerName,
+      provider_name: opts.providerName,
+      technology_implemented: opts.technologyImplemented,
+      go_live_date: opts.goLiveDateLine,
+      account_team: opts.accountTeam,
+      project_team: opts.projectTeam,
+    }),
+  });
+
+  // Zoom's workflow trigger returns HTTP 200 even when it rejects the
+  // payload (e.g. {"status":false,"errorCode":"-1","errorMessage":"Mismatch
+  // variables"} if the workflow's variable names ever drift from the six
+  // keys above) — a plain fetch-didn't-throw check would miss that entirely,
+  // so this call's failures need checking on the body, not just the status.
+  const body = await res.json().catch(() => null) as { status?: boolean; errorMessage?: string } | null;
+  if (!res.ok || body?.status === false) {
+    console.warn(`[notifyGoLive] Zoom rejected the go-live message: ${body?.errorMessage ?? res.statusText}`);
+  }
+}
+
 export async function notifyZoomNewCase(
   webhookUrl: string,
   webhookSecret: string,

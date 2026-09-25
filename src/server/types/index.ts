@@ -101,6 +101,10 @@ export type Bindings = {
   // Zoom Custom App webhook + shared secret for support-case notifications (HMAC-signed)
   ZOOM_WEBHOOK_URL?: string;
   ZOOM_WEBHOOK_SECRET?: string;
+  // Zoom Team Chat Workflow trigger URL for the "Complete Go-Lives" channel —
+  // fires when a PM marks a project's go-live task completed. Unsigned; not
+  // the classic incoming-webhook scheme (see notifyGoLive).
+  ZOOM_GOLIVE_WEBHOOK_URL?: string;
   // SOW HTML → .docx converter Lambda. Deployed manually per the runbook
   // in aws/sow-converter/README.md. URL is the Function URL; secret is
   // matched against X-PFI-Auth header by the Lambda. Both wrangler secrets
