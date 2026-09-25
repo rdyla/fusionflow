@@ -1057,6 +1057,22 @@ export default function ProjectDetailPage() {
     }
   }
 
+  // Status-change entry point for the Status dropdown and Done checkbox —
+  // the only two places a task can actually transition to "completed". Warns
+  // before completing a go-live-flagged task specifically, since that fires
+  // an org-wide Zoom Team Chat announcement (see the server's justWentLive
+  // check in tasks.ts) the PM can't easily undo the visibility of afterward.
+  function patchTaskStatus(task: Task, status: "not_started" | "in_progress" | "completed" | "blocked") {
+    const aboutToGoLive = status === "completed" && task.status !== "completed" && task.is_go_live_event === 1;
+    if (aboutToGoLive) {
+      const proceed = confirm(
+        `"${taskDisplayTitle(task)}" is this project's go-live task. Marking it complete will immediately post a go-live announcement to the company Zoom channel.\n\nContinue?`
+      );
+      if (!proceed) return;
+    }
+    patchTask(task.id, { status });
+  }
+
   function toggleTaskSelected(taskId: string) {
     setSelectedTaskIds((prev) => {
       const next = new Set(prev);
@@ -2425,7 +2441,7 @@ export default function ProjectDetailPage() {
                                         value={task.status ?? "not_started"}
                                         disabled={!canManageTasks}
                                         style={{ ...cellInputStyle, color: isBlocked ? "#dc2626" : (STATUS_COLOR[task.status ?? "not_started"] ?? "#1e293b"), fontWeight: 600 }}
-                                        onChange={(e) => patchTask(task.id, { status: e.target.value as "not_started" | "in_progress" | "completed" | "blocked" })}
+                                        onChange={(e) => patchTaskStatus(task, e.target.value as "not_started" | "in_progress" | "completed" | "blocked")}
                                       >
                                         <option value="not_started">Not Started</option>
                                         <option value="in_progress">In Progress</option>
@@ -2452,7 +2468,7 @@ export default function ProjectDetailPage() {
                                           type="checkbox"
                                           checked={isDone}
                                           disabled={!canManageTasks}
-                                          onChange={(e) => patchTask(task.id, { status: e.target.checked ? "completed" : "not_started" })}
+                                          onChange={(e) => patchTaskStatus(task, e.target.checked ? "completed" : "not_started")}
                                           style={{ cursor: canManageTasks ? "pointer" : "default" }}
                                           title="Toggle status to/from completed"
                                         />
