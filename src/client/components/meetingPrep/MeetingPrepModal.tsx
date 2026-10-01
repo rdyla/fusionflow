@@ -33,6 +33,7 @@ const MEETING_TYPE_TITLES: Record<MeetingType, string> = {
   design_review: "Send Design Review Prep",
   uat:           "Send UAT Prep",
   go_live:       "Send Go-Live Prep",
+  closure_notice: "Send Closure Notice",
 };
 
 const MEETING_TYPE_VERBS: Record<MeetingType, string> = {
@@ -41,6 +42,7 @@ const MEETING_TYPE_VERBS: Record<MeetingType, string> = {
   design_review: "design review prep",
   uat:           "UAT prep",
   go_live:       "go-live prep",
+  closure_notice: "closure notice",
 };
 
 const MEETING_TYPE_LABEL_PLACEHOLDERS: Record<MeetingType, string> = {
@@ -49,6 +51,7 @@ const MEETING_TYPE_LABEL_PLACEHOLDERS: Record<MeetingType, string> = {
   design_review: "(optional) e.g. Call Flow Design",
   uat:           "(optional) e.g. Stage 2 UAT",
   go_live:       "(optional) e.g. Phase B Cutover",
+  closure_notice: "(optional) e.g. Second attempt",
 };
 
 function fmtKb(n: number | null): string {
