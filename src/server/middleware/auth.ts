@@ -33,7 +33,12 @@ const PARTNER_DOMAINS: Record<string, string> = {
 type ContactCompany = {
   accountId: string;
   organization: string | null;
+  /** LOCAL project_contacts/solution_contacts/customer_contacts row id. Not a
+   *  Dynamics id — see crmContactId. */
   contactId: string;
+  /** The row's Dynamics contact GUID, when the contact was linked to CRM.
+   *  This is the one D365 will accept in /contacts(...). */
+  crmContactId: string | null;
   contactName: string | null;
 };
 
@@ -62,11 +67,13 @@ async function resolveContactCompanies(db: D1Database, email: string): Promise<C
     const rows = await db
     .prepare(
       `
-      SELECT account_id AS accountId, org AS organization, contact_id AS contactId, contact_name AS contactName, MAX(ts) AS ts
+      SELECT account_id AS accountId, org AS organization, contact_id AS contactId,
+             crm_contact_id AS crmContactId, contact_name AS contactName, MAX(ts) AS ts
       FROM (
         SELECT COALESCE(p.dynamics_account_id, c.crm_account_id) AS account_id,
                COALESCE(c.name, p.customer_name)                 AS org,
-               pc.id AS contact_id, pc.name AS contact_name, pc.added_at AS ts
+               pc.id AS contact_id, pc.dynamics_contact_id AS crm_contact_id,
+               pc.name AS contact_name, pc.added_at AS ts
         FROM project_contacts pc
         JOIN projects p       ON p.id = pc.project_id
         LEFT JOIN customers c ON c.id = p.customer_id
@@ -75,14 +82,14 @@ async function resolveContactCompanies(db: D1Database, email: string): Promise<C
         UNION ALL
         SELECT COALESCE(s.dynamics_account_id, c.crm_account_id),
                COALESCE(c.name, s.customer_name),
-               sc.id, sc.name, sc.added_at
+               sc.id, sc.dynamics_contact_id, sc.name, sc.added_at
         FROM solution_contacts sc
         JOIN solutions s      ON s.id = sc.solution_id
         LEFT JOIN customers c ON c.id = s.customer_id
         WHERE sc.email IS NOT NULL AND lower(sc.email) = lower(?)
 
         UNION ALL
-        SELECT cu.crm_account_id, cu.name, cc.id, cc.name, cc.added_at
+        SELECT cu.crm_account_id, cu.name, cc.id, cc.dynamics_contact_id, cc.name, cc.added_at
         FROM customer_contacts cc
         JOIN customers cu     ON cu.id = cc.customer_id
         WHERE cc.email IS NOT NULL AND lower(cc.email) = lower(?)
@@ -154,7 +161,19 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
         // it. Ad-hoc contacts not in CRM resolve to null here → view-only.
         const portal = await getPortalContact(env, email);
         const clientUser: AppUser = {
-          id: primary.contactId,
+          // MUST be the Dynamics contact GUID, not the local row id. Every
+          // downstream use of a client's user.id is a D365 lookup — the support
+          // case list filter (_customerid_value), resolveAccountId, and the
+          // primarycontactid@odata.bind on case creation. Passing the local
+          // project_contacts.id made Dynamics answer 0x80040217 "Entity
+          // 'Contact' With Id = ... Does Not Exist" on every case submission.
+          //
+          // Prefer the CRM portal lookup (authoritative, by email), then the
+          // id stored on the contact row. Falling back to the local id keeps
+          // login working for contacts that aren't in CRM at all — they can't
+          // open cases anyway, since can_open_cases comes from that same
+          // portal lookup.
+          id: portal?.contactid ?? primary.crmContactId ?? primary.contactId,
           email,
           name: primary.contactName,
           organization_name: primary.organization,
