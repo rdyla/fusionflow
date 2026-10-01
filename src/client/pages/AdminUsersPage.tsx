@@ -182,6 +182,10 @@ export default function AdminUsersPage() {
       is_support_supervisor: user.is_support_supervisor ?? 0,
       is_project_resource: user.is_project_resource ?? 0,
       is_pm_eligible: user.is_pm_eligible ?? 0,
+      is_trainer: user.is_trainer ?? 0,
+      is_integrations: user.is_integrations ?? 0,
+      is_specialist: user.is_specialist ?? 0,
+      is_time_assist: user.is_time_assist ?? 0,
       is_sales_tools: user.is_sales_tools ?? 0,
       email_notifications: user.email_notifications ?? "all",
     });
@@ -203,6 +207,10 @@ export default function AdminUsersPage() {
         is_support_supervisor: editForm.role === "client" ? 0 : (editForm.is_support_supervisor ?? 0),
         is_project_resource: editForm.role === "client" ? 0 : (editForm.is_project_resource ?? 0),
         is_pm_eligible: editForm.role === "client" ? 0 : (editForm.is_pm_eligible ?? 0),
+        is_trainer: editForm.role === "client" ? 0 : (editForm.is_trainer ?? 0),
+        is_integrations: editForm.role === "client" ? 0 : (editForm.is_integrations ?? 0),
+        is_specialist: editForm.role === "client" ? 0 : (editForm.is_specialist ?? 0),
+        is_time_assist: editForm.role === "client" ? 0 : (editForm.is_time_assist ?? 0),
         is_sales_tools: editForm.role === "client" ? 0 : (editForm.is_sales_tools ?? 0),
         email_notifications: (editForm.email_notifications ?? "all") as "all" | "important" | "off",
       });
