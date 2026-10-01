@@ -171,6 +171,11 @@ const TYPE_LABELS: Record<MeetingType, { ctaLabel: string; resendLabel: string; 
     resendLabel:  "Send Another",
     sectionLabel: "Go-Live Prep",
   },
+  closure_notice: {
+    ctaLabel:     "Send Closure Notice",
+    resendLabel:  "Send Again",
+    sectionLabel: "Closure Notice",
+  },
 };
 
 function formatWhen(iso: string): string {
