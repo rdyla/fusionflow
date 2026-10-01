@@ -64,6 +64,10 @@ export type SowBuildContext = {
   sowNumber: string;
   /** Issue date — defaults to today; renders as "Month DD, YYYY". */
   issueDateText: string;
+  /** Pricing validity deadline — issue date + PRICING_VALIDITY_DAYS (see
+   *  buildHtml.ts), renders as "Month DD, YYYY". Computed alongside
+   *  issueDateText so both are pinned to the same render-time "today". */
+  pricingValidThroughText: string;
   /** PM-entered target go-live date (YYYY-MM-DD). When set, Key Dates rows
    *  on the cover are derived backward from this date — Planning Complete,
    *  Port Orders Submitted, UAT, Go-Live, and Project Closure all compute
