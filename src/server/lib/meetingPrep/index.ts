@@ -13,13 +13,14 @@ import { renderDiscovery, type DiscoveryData } from "./discovery";
 import { renderDesignReview, type DesignReviewData } from "./designReview";
 import { renderUat, type UatData } from "./uat";
 import { renderGoLive, type GoLiveData } from "./goLive";
+import { renderClosureNotice, type ClosureNoticeData } from "./closureNotice";
 
 export type {
   MeetingPrepTeamMember,
   MeetingPrepTeamSection,
 } from "./envelope";
-export { renderKickoff, renderDiscovery, renderDesignReview, renderUat, renderGoLive };
-export type { KickoffData, DiscoveryData, DesignReviewData, UatData, GoLiveData };
+export { renderKickoff, renderDiscovery, renderDesignReview, renderUat, renderGoLive, renderClosureNotice };
+export type { KickoffData, DiscoveryData, DesignReviewData, UatData, GoLiveData, ClosureNoticeData };
 
 // Type-erased dispatch. Each renderer narrows its input via cast at the
 // boundary; the route pre-validates the shape per meeting type before
@@ -32,6 +33,7 @@ const RENDERERS: Record<MeetingType, AnyRenderer> = {
   design_review: (d) => renderDesignReview(d as DesignReviewData),
   uat:           (d) => renderUat(d as UatData),
   go_live:       (d) => renderGoLive(d as GoLiveData),
+  closure_notice: (d) => renderClosureNotice(d as ClosureNoticeData),
 };
 
 export function getRendererFor(meetingType: MeetingType): AnyRenderer {

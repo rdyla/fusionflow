@@ -38,11 +38,11 @@ const STAFF_ROLE_LABEL: Record<string, string> = {
   pm: "Project Manager",
   ae: "Account Executive",
   sa: "Solution Architect",
-  csm: "Customer Success Manager",
+  csm: "Client Success Manager",
   engineer: "Engineer",
   pf_ae: "Account Executive",
   pf_sa: "Solution Architect",
-  pf_csm: "Customer Success Manager",
+  pf_csm: "Client Success Manager",
   pf_engineer: "Engineer",
 };
 
@@ -158,6 +158,23 @@ function staffRoleLabel(s: StaffRow): string {
 function displayRoleFor(s: StaffRow, vendor: string | null): string {
   if (s.staff_role === "partner_ae") return partnerLabel(vendor);
   return staffRoleLabel(s);
+}
+
+// The customer's assigned Client Success Manager — same source as the
+// Overview tab's Account Team card (customers.pf_csm_user_id). Used by the
+// Closure Notice email to name the CSM directly in the copy rather than
+// leaving the introduction generic.
+async function loadCsm(db: D1Database, customerId: string | null): Promise<{ name: string | null; email: string | null } | null> {
+  if (!customerId) return null;
+  const row = await db
+    .prepare(
+      `SELECT csm.name AS name, csm.email AS email
+       FROM customers c LEFT JOIN users csm ON csm.id = c.pf_csm_user_id
+       WHERE c.id = ? LIMIT 1`
+    )
+    .bind(customerId)
+    .first<{ name: string | null; email: string | null }>();
+  return row?.email ? row : null;
 }
 
 async function loadRecipientCandidates(db: D1Database, project: ProjectRow) {
@@ -412,20 +429,32 @@ async function buildTemplateContext(c: any, project: ProjectRow, meetingType: Me
   }
 
   // Kickoff has extra type-specific fields (kickoff URL/when, dates, DL email);
-  // every other type takes the standard envelope shape with `label`.
-  const rendererData = meetingType === "kickoff"
-    ? {
-        ...commonData,
-        kickoffMeetingUrl: draft.kickoffMeetingUrl ?? project.kickoff_meeting_url,
-        kickoffWhen: draft.kickoffWhen ?? null,
-        kickoffDate: project.kickoff_date,
-        targetGoLiveDate: project.target_go_live_date,
-        distributionListEmail,
-      }
-    : {
-        ...commonData,
-        label: resolvedLabel,
-      };
+  // Closure Notice names the CSM directly rather than leaving the
+  // introduction generic; every other type takes the standard envelope
+  // shape with just `label`.
+  let rendererData: Record<string, unknown>;
+  if (meetingType === "kickoff") {
+    rendererData = {
+      ...commonData,
+      kickoffMeetingUrl: draft.kickoffMeetingUrl ?? project.kickoff_meeting_url,
+      kickoffWhen: draft.kickoffWhen ?? null,
+      kickoffDate: project.kickoff_date,
+      targetGoLiveDate: project.target_go_live_date,
+      distributionListEmail,
+    };
+  } else if (meetingType === "closure_notice") {
+    const csm = await loadCsm(c.env.DB, project.customer_id);
+    rendererData = {
+      ...commonData,
+      label: resolvedLabel,
+      csmName: csm?.name ?? null,
+    };
+  } else {
+    rendererData = {
+      ...commonData,
+      label: resolvedLabel,
+    };
+  }
 
   const { html, subject } = renderer(rendererData);
 

@@ -1881,7 +1881,7 @@ export default function ProjectDetailPage() {
                   />
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                  {(["kickoff", "discovery", "design_review", "uat", "go_live"] as const).map((mt, i) => (
+                  {(["kickoff", "discovery", "design_review", "uat", "go_live", "closure_notice"] as const).map((mt, i) => (
                     <div key={mt} style={{ borderTop: i === 0 ? "none" : "1px solid #f1f5f9" }}>
                       <MeetingPrepCard projectId={project.id} meetingType={mt} canSend={canEdit} compact />
                     </div>
