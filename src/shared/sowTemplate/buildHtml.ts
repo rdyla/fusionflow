@@ -24,6 +24,12 @@ const NAVY  = "#003B5C";
 const GREEN = "#17C662";
 const GREY  = "#D9E1E2";
 
+/** How long pricing in a generated SOW stays valid, counted from the Issue
+ *  Date. Single source of truth — referenced both by the caller computing
+ *  ctx.pricingValidThroughText and by the Section 8 pricing-validity copy
+ *  below, so the two can't drift out of sync. */
+export const PRICING_VALIDITY_DAYS = 60;
+
 // The printed page margin. @page itself is zero (see styles()), so this is
 // applied by the .doc-sheet thead/tbody/tfoot bands and by the cover, which
 // keeps every sheet's geometry identical — the thing the running footer
@@ -94,55 +100,96 @@ function fillScopeQuantity(q: string, ctx: SowBuildContext): string {
 
 // ── Sections ─────────────────────────────────────────────────────────────────
 
-function coverPage(variant: SowVariant, ctx: SowBuildContext, logoUrl: string, heroImageUrl: string | null, _forWord: boolean): string {
-  // The title page is a full-bleed hero illustration (navy/teal cloud +
-  // UCaaS ecosystem) with the title text overlaid. Document Control and
-  // the metadata/revision tables sit on page 2.
+/** Decorative dot grid, top-right of the cover. Inline SVG rather than a CSS
+ *  repeating-gradient — renders identically through both Chrome print and the
+ *  LibreOffice-based Word export pipeline (see note below), where gradient
+ *  patterns are a frequent docx-conversion casualty. Purely ornamental. */
+function coverDotGrid(dotColor: string): string {
+  // 4 rows (not 6) so the grid's bottom edge clears the header rule below it
+  // (measured: 6 rows ran the grid through the rule at ~0.9in + 78px).
+  const cols = 8, rows = 4, spacing = 13;
+  const circles: string[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      circles.push(`<circle cx="${c * spacing + 4}" cy="${r * spacing + 4}" r="1.6" fill="${dotColor}" />`);
+    }
+  }
+  const w = cols * spacing;
+  const h = rows * spacing;
+  return `<svg class="cover-pf-dots" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true">${circles.join("")}</svg>`;
+}
+
+function coverPage(variant: SowVariant, ctx: SowBuildContext, _logoUrl: string, _heroImageUrl: string | null, _forWord: boolean): string {
+  // Standard Packet Fusion cover (replaces the earlier hero-illustration /
+  // plain-text variants): logo + tagline header, left accent bar (navy with
+  // a green break), a dot-grid accent, title block, and a condensed
+  // Prepared By / Issue Date / Version / Status row at the foot of the page.
+  // The fuller Prepared For/By + SOW Details + Revision History tables still
+  // live on the Document Control page that follows — this row is a
+  // at-a-glance preview, not a replacement for it.
+  //
+  // _heroImageUrl is accepted but unused — kept so the function signature
+  // (and its one call site) didn't need touching when hero covers retired.
   //
   // Word export note: the .docx pipeline (LibreOffice headless via the
-  // converter Lambda — see aws/sow-converter/) handles CSS background-
-  // image on sections correctly, so the same HTML produces a faithful
-  // .docx cover. The previous compromises (text-only cover, inline-img
-  // cover, html-to-docx) were workarounds for browser-side conversion
-  // limits that no longer apply now that LibreOffice does the rendering.
+  // converter Lambda — see aws/sow-converter/) renders this the same as
+  // Chrome print for everything used here (flex layout, svg, absolute
+  // position) — no browser-only CSS in this design.
 
   const stubBanner = variant.isStub
     ? `<div class="stub-banner">STUB — content for ${esc(variant.productLine)} is placeholder. Do not issue without review.</div>`
     : "";
 
-  if (heroImageUrl) {
-    return `
-      <section class="cover cover--hero" style="background-image: linear-gradient(rgba(0,30,50,0.05), rgba(0,30,50,0.25)), url('${heroImageUrl}');">
-        <div class="cover-inner">
-          ${stubBanner}
-          <div class="cover-head">
-            <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo cover-logo--on-hero" />
-            <div class="cover-confidential cover-confidential--on-hero">CONFIDENTIAL</div>
+  return `
+    <section class="cover cover--pf">
+      <div class="cover-pf-bar-navy"></div>
+      <div class="cover-pf-bar-green"></div>
+      ${coverDotGrid(GREY)}
+      <div class="cover-pf-inner">
+        ${stubBanner}
+        <div class="cover-pf-head">
+          <div>
+            <div class="cover-pf-wordmark">Packet Fusion<span class="cover-pf-dot">.</span></div>
+            <div class="cover-pf-tagline">Powered by Bridgepointe Technologies</div>
           </div>
-          <div class="cover-hero-text">
-            <div class="cover-title cover-title--on-hero">STATEMENT OF WORK</div>
-            <div class="cover-subtitle cover-subtitle--on-hero">${esc(variant.productLine)}</div>
-            <div class="cover-customer-line">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
-            <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+          <div class="cover-confidential">CONFIDENTIAL</div>
+        </div>
+        <hr class="cover-pf-rule" />
+
+        <div class="cover-pf-body">
+          <div class="cover-pf-eyebrow">Statement of Work</div>
+          <h1 class="cover-pf-title">${esc(variant.productLine)}</h1>
+          <div class="cover-pf-title-rule"></div>
+          <div class="cover-pf-prepared-label">Prepared for</div>
+          <div class="cover-pf-customer">${esc(ctx.customerName)}</div>
+        </div>
+
+        <div class="cover-pf-meta-wrap">
+          <div class="cover-pf-meta-rule"></div>
+          <div class="cover-pf-meta-row">
+            <div class="cover-pf-meta-col">
+              <div class="cover-pf-meta-label">Prepared by</div>
+              <div class="cover-pf-meta-value">${esc(ctx.preparedBy.name)}</div>
+              ${ctx.preparedBy.title ? `<div class="cover-pf-meta-sub">${esc(ctx.preparedBy.title)}</div>` : ""}
+            </div>
+            <div class="cover-pf-meta-col">
+              <div class="cover-pf-meta-label">Issue date</div>
+              <div class="cover-pf-meta-value">${esc(ctx.issueDateText)}</div>
+            </div>
+            <div class="cover-pf-meta-col">
+              <div class="cover-pf-meta-label">Version</div>
+              <div class="cover-pf-meta-value">${esc(ctx.sowNumber)}</div>
+            </div>
+            <div class="cover-pf-meta-col">
+              <div class="cover-pf-meta-label">Status</div>
+              <div class="cover-pf-meta-value">${esc(SOW_DOC_STAGE_LABELS[ctx.docStage])}</div>
+            </div>
           </div>
         </div>
-      </section>
-    `;
-  }
-
-  // Fallback (no hero): text-only cover with the logo header + title block.
-  return `
-    <section class="cover">
-      ${stubBanner}
-      <div class="cover-head">
-        <img src="${logoUrl}" alt="Packet Fusion" class="cover-logo" />
-        <div class="cover-confidential">CONFIDENTIAL</div>
       </div>
-      <div class="cover-title-block cover-title-block--center">
-        <div class="cover-title">STATEMENT OF WORK</div>
-        <div class="cover-subtitle">${esc(variant.productLine)}</div>
-        <div class="cover-customer-line" style="margin-top:24px;">Prepared for <strong>${esc(ctx.customerName)}</strong></div>
-        <div class="cover-issue-line">${esc(ctx.issueDateText)}  ·  ${esc(ctx.sowNumber)}</div>
+      <div class="cover-pf-footer">
+        <span><strong>Packet Fusion</strong> &middot; Powered by Bridgepointe Technologies</span>
+        ${ctx.preparedBy.email ? `<span>${esc(ctx.preparedBy.email)}</span>` : ""}
       </div>
     </section>
   `;
@@ -169,10 +216,11 @@ function documentControlPage(_variant: SowVariant, ctx: SowBuildContext): string
   // the MSA (or the Zoom Reseller Customer Agreement, per isZoomReseller), which
   // is the reference § 11's order-of-precedence clause relies on.
   const detailsRows = [
-    { label: "SOW Number",        value: esc(ctx.sowNumber) },
-    { label: "Issue Date",        value: esc(ctx.issueDateText) },
-    { label: "Project Reference", value: esc(ctx.projectReference) },
-    { label: "SOW Status",        value: esc(SOW_DOC_STAGE_LABELS[ctx.docStage]) },
+    { label: "SOW Number",            value: esc(ctx.sowNumber) },
+    { label: "Issue Date",            value: esc(ctx.issueDateText) },
+    { label: "Pricing Valid Through", value: esc(ctx.pricingValidThroughText) },
+    { label: "Project Reference",     value: esc(ctx.projectReference) },
+    { label: "SOW Status",            value: esc(SOW_DOC_STAGE_LABELS[ctx.docStage]) },
   ];
 
   const revisionRows = ctx.revisions.length > 0
@@ -506,6 +554,9 @@ function section8Pricing(variant: SowVariant, ctx: SowBuildContext, optServices:
 
       <h3>8.5  Taxes</h3>
       <p>All fees are exclusive of applicable sales, use, and similar transaction taxes. The Customer is responsible for any such taxes other than taxes based on Packet Fusion's net income.</p>
+
+      <h3>8.6  Pricing Validity</h3>
+      <p>Pricing in this SOW is valid for ${PRICING_VALIDITY_DAYS} days from the Issue Date — through <strong>${esc(ctx.pricingValidThroughText)}</strong>. If this SOW is not executed by that date, Packet Fusion may re-quote pricing subject to then-current rates.</p>
     </section>
   `;
 }
@@ -693,56 +744,39 @@ function styles(): string {
     .data-table td { padding: 6px 10px; border: 1px solid #d6dde2; vertical-align: top; }
     .pricing-summary .total-row td { border-top: 2px solid ${NAVY}; background: rgba(0,59,92,0.04); }
     .page-section { page-break-inside: auto; margin-bottom: 14px; }
-    /* Cover */
-    /* The cover is rendered outside .doc-sheet (so the running footer never
-       lands on it) and therefore gets no thead/tbody band — with a zero @page
-       box it has to carry the page inset itself. The hero variant overrides
-       this padding away so its illustration can reach the paper edge. */
-    .cover { padding: ${PAGE_MARGIN}; box-sizing: border-box; height: 11in; position: relative; page-break-after: always; }
-    .cover-head { display: flex; align-items: center; justify-content: space-between; padding-bottom: 18px; border-bottom: 3px solid ${GREEN}; margin-bottom: 38px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .cover-logo { height: 42px; }
-    .cover-confidential { font-size: 9.5pt; font-weight: 700; letter-spacing: 0.22em; color: ${GREEN}; text-transform: uppercase; }
-    .cover-title-block { margin-bottom: 32px; }
-    .cover-title-block--center { text-align: center; padding-top: 1.5in; }
-    .cover-title { font-size: 38pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.025em; line-height: 1.02; }
-    .cover-subtitle { font-size: 16pt; font-weight: 700; color: ${GREEN}; margin-top: 8px; letter-spacing: 0.01em; }
-    .cover-customer-line { font-size: 13pt; color: ${NAVY}; margin-top: 18px; font-weight: 600; }
-    .cover-issue-line { font-size: 10.5pt; color: #475569; margin-top: 6px; letter-spacing: 0.04em; }
-    /* Hero-cover variant — illustration as the page background edge-to-edge.
-       Outer .cover--hero carries the background and zero padding so the image
-       bleeds to the page edges. Inner .cover-inner gives the title block + the
-       logo/CONFIDENTIAL header breathing room (~0.6in inset) so the text
-       doesn't touch the printed paper edges. */
-    .cover--hero {
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      color: #ffffff;
-      /* Overrides .cover's page inset: the illustration fills the whole sheet.
-         Possible only because @page has no margin — Chrome clips printed
-         content to the page area, so nothing can bleed past it. */
-      padding: 0;
-      margin: 0;
-      width: 8.5in;
-      height: 11in;
-      overflow: hidden;
-      -webkit-print-color-adjust: exact; print-color-adjust: exact;
-    }
-    .cover--hero .cover-inner {
-      padding: 0.5in 0.6in 0.5in;
-      height: 11in;
-      box-sizing: border-box;
-      display: flex;
-      flex-direction: column;
-    }
-    .cover--hero .cover-head { border-bottom-color: rgba(255,255,255,0.4); }
-    .cover-logo--on-hero { filter: brightness(0) invert(1); /* makes the logo white over the dark image */ }
-    .cover-confidential--on-hero { color: #ffffff; }
-    .cover-hero-text { margin-top: 0.4in; max-width: 6.5in; }
-    .cover-title--on-hero { color: #ffffff; font-size: 48pt; letter-spacing: -0.03em; line-height: 1; }
-    .cover-subtitle--on-hero { color: ${GREEN}; font-size: 18pt; }
-    .cover--hero .cover-customer-line { color: #ffffff; font-size: 16pt; margin-top: 0.6in; }
-    .cover--hero .cover-issue-line { color: rgba(255,255,255,0.85); font-size: 11pt; }
+    /* Cover — Packet Fusion standard cover (white). Rendered outside
+       .doc-sheet (so the running footer never lands on it), so with a zero
+       @page box it carries its own page inset. .cover--pf is zero-padding
+       at the outer level — same "bleed" technique the old hero cover used —
+       so the left accent bar and footer band can reach the paper edges;
+       .cover-pf-inner carries the real page margin for everything else. */
+    .cover { box-sizing: border-box; height: 11in; width: 8.5in; position: relative; page-break-after: always; overflow: hidden; }
+    .cover--pf { padding: 0; margin: 0; background: #ffffff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-pf-bar-navy { position: absolute; left: 0; top: 0; bottom: 0; width: 0.18in; background: ${NAVY}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-pf-bar-green { position: absolute; left: 0; top: 42%; height: 11%; width: 0.18in; background: ${GREEN}; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-pf-dots { position: absolute; top: 0.78in; right: 0.75in; opacity: 0.6; }
+    .cover-pf-inner { position: relative; height: 100%; box-sizing: border-box; padding: ${PAGE_MARGIN} ${PAGE_MARGIN} 0 calc(${PAGE_MARGIN} + 0.18in); display: flex; flex-direction: column; font-family: "Segoe UI", Arial, Helvetica, sans-serif; }
+    .cover-pf-head { display: flex; align-items: flex-start; justify-content: space-between; }
+    .cover-pf-wordmark { font-size: 20pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.01em; }
+    .cover-pf-dot { color: ${GREEN}; }
+    .cover-pf-tagline { font-size: 8.5pt; color: ${GREEN}; margin-top: 2px; }
+    .cover-confidential { font-size: 8.5pt; font-weight: 700; letter-spacing: 0.22em; color: #334155; text-transform: uppercase; }
+    .cover-pf-rule { border: none; border-top: 1px solid ${GREY}; margin: 14px 0 0; }
+    .cover-pf-body { margin-top: 1.4in; max-width: 6in; }
+    .cover-pf-eyebrow { font-size: 10pt; font-weight: 700; color: ${GREEN}; text-transform: uppercase; letter-spacing: 0.18em; }
+    .cover-pf-title { font-family: inherit; font-size: 29pt; font-weight: 800; color: ${NAVY}; letter-spacing: -0.015em; line-height: 1.15; margin: 10px 0 0; border: none; padding: 0; }
+    .cover-pf-title-rule { width: 0.9in; height: 3px; background: ${GREEN}; margin-top: 16px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-pf-prepared-label { font-size: 9pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.14em; margin-top: 22px; }
+    .cover-pf-customer { font-size: 17pt; color: ${NAVY}; margin-top: 4px; }
+    .cover-pf-meta-wrap { margin-top: auto; padding-bottom: 0.55in; }
+    .cover-pf-meta-rule { border-top: 2px solid ${NAVY}; margin-bottom: 14px; }
+    .cover-pf-meta-row { display: flex; gap: 0.4in; }
+    .cover-pf-meta-col { flex: 1; min-width: 0; }
+    .cover-pf-meta-label { font-size: 7.5pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.14em; margin-bottom: 4px; }
+    .cover-pf-meta-value { font-size: 10.5pt; color: ${NAVY}; font-weight: 600; }
+    .cover-pf-meta-sub { font-size: 9pt; color: #64748b; margin-top: 1px; }
+    .cover-pf-footer { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; padding: 10px ${PAGE_MARGIN} 10px calc(${PAGE_MARGIN} + 0.18in); background: ${GREY}; font-size: 8.5pt; color: #334155; font-family: "Segoe UI", Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .cover-pf-footer strong { color: ${GREEN}; }
     /* Document Control page header style */
     .cover-section-header { font-size: 11pt; font-weight: 800; color: ${NAVY}; text-transform: uppercase; letter-spacing: 0.14em; padding-bottom: 4px; border-bottom: 1px solid ${GREEN}; margin: 10px 0 12px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .doc-control { page-break-after: always; }

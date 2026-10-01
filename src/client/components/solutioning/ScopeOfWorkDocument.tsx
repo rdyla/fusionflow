@@ -18,7 +18,7 @@ import type { SowData } from "./SowSizingForm";
 import { calcSowTotal, calcBasicSowTotal, DEFAULT_BLENDED_RATE, type AddOn } from "../../../shared/sowAddOns";
 import { calcUcaasBasicBreakdown, getUcaasTieredTier, sowDataToBasicInputs } from "../../../shared/ucaasBasicPricing";
 import { parseCcaasComboInputs, isComboMode, sowDataToComboInputs, calcCcaasComboBreakdown } from "../../../shared/ccaasComboPricing";
-import { buildSowHtml } from "../../../shared/sowTemplate/buildHtml";
+import { buildSowHtml, PRICING_VALIDITY_DAYS } from "../../../shared/sowTemplate/buildHtml";
 import { resolveSowVariant } from "../../../shared/sowTemplate/variants";
 import type { SowBuildContext, SowDocStage } from "../../../shared/sowTemplate/types";
 import { SOW_DOC_STAGE_LABELS } from "../../../shared/sowTemplate/types";
@@ -298,6 +298,10 @@ export default function ScopeOfWorkDocument({
     // clean version even before the first Generate Version click.
     sowNumber: sowMetadata?.revisions?.length ? sowMetadata.revisions[sowMetadata.revisions.length - 1].version : "V1",
     issueDateText: new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
+    // PRICING_VALIDITY_DAYS (buildHtml.ts) from today — kept in sync with
+    // issueDateText above since both represent "today" at render time.
+    pricingValidThroughText: new Date(Date.now() + PRICING_VALIDITY_DAYS * 24 * 60 * 60 * 1000)
+      .toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     // Date cascade for the Key Dates table: PM's explicit SOW form value
     // wins; otherwise pull from the needs assessment (project_context
     // section); otherwise null and the cover renders "[MM/DD/YYYY]" rows.
