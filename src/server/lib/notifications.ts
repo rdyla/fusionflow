@@ -181,8 +181,10 @@ export async function notifyGoLive(
 /**
  * Private heads-up to a "Hypercare Support" Zoom Team Chat channel the
  * moment a customer with a hypercare_engineer_user_id assigned opens a new
- * case — fires alongside (not instead of) notifyZoomNewCase's general
- * broadcast. Same unsigned Zoom Workflow trigger scheme as notifyGoLive
+ * case — replaces notifyZoomNewCase's general broadcast for that case
+ * (support.ts skips the general notification when hypercare routing
+ * applies), rather than firing alongside it. Same unsigned Zoom Workflow
+ * trigger scheme as notifyGoLive
  * (see that function's doc comment for why): a flat JSON body whose keys
  * must match whatever variables are configured on the workflow's "From
  * webhook" trigger step. Shared across every hypercare engineer rather than
