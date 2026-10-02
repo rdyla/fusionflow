@@ -744,6 +744,11 @@ app.post("/cases", async (c) => {
         const engineerSystemUserId = await getSystemUserIdByEmail(c.env, hypercareEngineer.email);
         if (engineerSystemUserId) {
           payload["am_escalationengineer@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
+          // Owner too, not just escalation engineer — otherwise the case
+          // still shows as owned by the generic portal integration user
+          // ("# pfsupport portal"), which is confusing for a case that's
+          // supposed to read as Scott's, not the general queue's.
+          payload["ownerid@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
         }
       }
     } else {
@@ -783,7 +788,10 @@ app.post("/cases", async (c) => {
   const ticketNumber = created.ticketnumber ?? "";
   const accountName = created.customerid_account?.name ?? null;
 
-  if (c.env.ZOOM_WEBHOOK_URL && c.env.ZOOM_WEBHOOK_SECRET) {
+  // Hypercare cases skip the general new-case broadcast entirely — Scott
+  // (or whoever's covering) gets the private notification below instead,
+  // rather than this also showing up in the general support channel.
+  if (!hypercareEngineer && c.env.ZOOM_WEBHOOK_URL && c.env.ZOOM_WEBHOOK_SECRET) {
     c.executionCtx.waitUntil(
       notifyZoomNewCase(c.env.ZOOM_WEBHOOK_URL, c.env.ZOOM_WEBHOOK_SECRET, {
         ticketNumber,
@@ -795,8 +803,7 @@ app.post("/cases", async (c) => {
     );
   }
 
-  // Private hypercare routing — fires alongside the general notification
-  // above, never instead of it. The customer has no visibility into this;
+  // Private hypercare routing — the customer has no visibility into this;
   // it's purely an internal heads-up to the one engineer covering this
   // account's temporary support window.
   if (hypercareEngineer) {
