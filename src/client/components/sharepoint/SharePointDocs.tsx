@@ -128,6 +128,11 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
   const [pickerEditingOn, setPickerEditingOn] = useState(false);
   const [togglingEditing, setTogglingEditing] = useState(false);
   const [revokingEmail, setRevokingEmail] = useState<string | null>(null);
+  // Which picker session is current. Bumped on every open/close so responses
+  // from a picker the user already left (folder A's loads, grants, revokes
+  // resolving after they opened folder B) are dropped instead of overwriting
+  // folder B's state.
+  const pickerSessionRef = useRef(0);
 
   const [locError, setLocError] = useState<string | null>(null);
   const [filesError, setFilesError] = useState<string | null>(null);
@@ -269,7 +274,12 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
 
   async function openEditPicker(folder: SPFile) {
     if (!projectId) return;
+    const session = ++pickerSessionRef.current;
     setEditPickerFolder(folder);
+    // Busy flags from a previous picker's in-flight call don't apply here.
+    setGrantingEmail(null);
+    setRevokingEmail(null);
+    setTogglingEditing(false);
     setManualEmail("");
     setPickerEditingOn(folder.clientEditing === true);
     setPickerLoading(true);
@@ -289,6 +299,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       api.projectStaff(projectId),
       api.spEditGrants(projectId),
     ]);
+    if (session !== pickerSessionRef.current) return; // user moved to another folder / closed
     if (contactsRes.status === "fulfilled") {
       setPickerContacts(contactsRes.value.filter((c) => !!c.email));
     }
@@ -305,7 +316,9 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       // stick whenever the contact also had a grant on another folder.
       setGrantedEmails(new Set(
         grantsRes.value.grants
-          .filter((g) => g.web_url === folder.webUrl)
+          // Prefer the stable item id (survives renames); legacy rows without
+          // one fall back to the URL.
+          .filter((g) => (g.sp_item_id ? g.sp_item_id === folder.id : g.web_url === folder.webUrl))
           .map((g) => g.grantee_email.toLowerCase())
       ));
     }
@@ -324,6 +337,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
 
   async function toggleClientEditing(next: boolean) {
     if (!editPickerFolder || !projectId) return;
+    const session = pickerSessionRef.current;
     setTogglingEditing(true);
     try {
       const res = await api.spAllowClientEditing({
@@ -332,14 +346,17 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
         project_id: projectId,
         enabled: next,
       });
-      setPickerEditingOn(next);
+      // The folder-row update below is keyed by id, so it's safe after the
+      // picker moved on; the picker's own state is not.
+      const current = session === pickerSessionRef.current;
+      if (current) setPickerEditingOn(next);
       // Reflect on the folder row (badge + audience; enabling folds the customer
       // into the folder's audience, matching the server invariant).
       setFiles((prev) => prev.map((f) => (f.id === editPickerFolder.id
         ? { ...f, clientEditing: next, ...(next ? { audience: withCustomer(f.audience), visibleToClient: true } : {}) }
         : f)));
       if (next) {
-        setGrantedEmails(new Set((res.granted ?? []).map((e) => e.toLowerCase())));
+        if (current) setGrantedEmails(new Set((res.granted ?? []).map((e) => e.toLowerCase())));
         showToast(`Client editing on — granted ${res.granted?.length ?? 0} contact${res.granted?.length === 1 ? "" : "s"}${res.failed?.length ? `, ${res.failed.length} failed` : ""}.`, res.failed?.length ? "error" : "success");
       } else {
         showToast("Client editing off — new contacts won't be auto-granted (existing access stays until revoked).", "success");
@@ -347,22 +364,23 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to update client editing", "error");
     } finally {
-      setTogglingEditing(false);
+      if (session === pickerSessionRef.current) setTogglingEditing(false);
     }
   }
 
   async function revokeEditFrom(email: string) {
     if (!editPickerFolder || !projectId) return;
     if (!window.confirm(`Revoke ${email}'s edit access to this folder?`)) return;
+    const session = pickerSessionRef.current;
     setRevokingEmail(email);
     try {
-      await api.spRevokeEditAccess(editPickerFolder.webUrl, email, projectId);
-      setGrantedEmails((prev) => { const n = new Set(prev); n.delete(email.toLowerCase()); return n; });
+      await api.spRevokeEditAccess(editPickerFolder.webUrl, editPickerFolder.id, email, projectId);
+      if (session === pickerSessionRef.current) setGrantedEmails((prev) => { const n = new Set(prev); n.delete(email.toLowerCase()); return n; });
       showToast(`Revoked edit access for ${email}.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to revoke access", "error");
     } finally {
-      setRevokingEmail(null);
+      if (session === pickerSessionRef.current) setRevokingEmail(null);
     }
   }
 
@@ -370,17 +388,25 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
     if (!editPickerFolder || !projectId) return;
     const clean = email.trim();
     if (!clean) return;
+    const session = pickerSessionRef.current;
     setGrantingEmail(clean);
     try {
-      await api.spGrantEditAccess(editPickerFolder.webUrl, clean, projectId, name ?? null);
-      setGrantedEmails((prev) => new Set(prev).add(clean.toLowerCase()));
-      setManualEmail("");
+      await api.spGrantEditAccess(editPickerFolder.webUrl, editPickerFolder.id, clean, projectId, name ?? null);
+      if (session === pickerSessionRef.current) {
+        setGrantedEmails((prev) => new Set(prev).add(clean.toLowerCase()));
+        setManualEmail("");
+      }
       showToast(`${clean} can now edit this folder online — they'll see an "Edit online" link on its files in the portal.`, "success");
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Failed to grant edit access", "error");
     } finally {
-      setGrantingEmail(null);
+      if (session === pickerSessionRef.current) setGrantingEmail(null);
     }
+  }
+
+  function closeEditPicker() {
+    pickerSessionRef.current++;
+    setEditPickerFolder(null);
   }
 
   // ── Create folder ─────────────────────────────────────────────────────────
@@ -663,11 +689,11 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
 
       {/* Enable-online-editing picker — grant customers guest edit access. */}
       {editPickerFolder && (
-        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setEditPickerFolder(null); }}>
+        <div className="ms-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) closeEditPicker(); }}>
           <div className="ms-modal" style={{ maxWidth: 520 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
               <h2 style={{ margin: 0 }}>Enable online editing</h2>
-              <button onClick={() => setEditPickerFolder(null)} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#64748b", lineHeight: 1 }}>×</button>
+              <button onClick={closeEditPicker} style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: "#64748b", lineHeight: 1 }}>×</button>
             </div>
             <div style={{ fontSize: 13, color: "#64748b", marginBottom: 12 }}>
               Give customer contacts and partner AEs edit access to <strong>{editPickerFolder.name}</strong>. They're invited as guests and edit its documents in Office online — attributed to them.
@@ -760,7 +786,7 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
             )}
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
-              <button className="ms-btn-secondary" onClick={() => setEditPickerFolder(null)} style={{ fontSize: 12 }}>Done</button>
+              <button className="ms-btn-secondary" onClick={closeEditPicker} style={{ fontSize: 12 }}>Done</button>
             </div>
           </div>
         </div>

@@ -1171,14 +1171,14 @@ app.post("/:id/contacts", requireRole("admin", "pm", "pf_ae", "pf_csm", "pf_engi
     c.executionCtx.waitUntil((async () => {
       try {
         const folders = await db
-          .prepare(`SELECT web_url FROM sharepoint_folder_visibility
+          .prepare(`SELECT sp_item_id, web_url FROM sharepoint_folder_visibility
                     WHERE project_id = ? AND client_editing = 1 AND web_url IS NOT NULL
                       AND audience IN ('internal_customer', 'internal_customer_partner')`)
           .bind(projectId)
-          .all<{ web_url: string }>();
+          .all<{ sp_item_id: string; web_url: string }>();
         for (const f of folders.results ?? []) {
           try {
-            await grantFolderEdit(c.env, db, { projectId, webUrl: f.web_url, email, name, grantedByUserId: auth.user.id });
+            await grantFolderEdit(c.env, db, { projectId, webUrl: f.web_url, spItemId: f.sp_item_id, email, name, grantedByUserId: auth.user.id });
           } catch (err) {
             console.warn(`[projects.contacts] auto-grant edit for ${email} on ${f.web_url} failed:`, err instanceof Error ? err.message : err);
           }
@@ -1274,14 +1274,14 @@ app.post("/:id/staff", async (c) => {
       c.executionCtx.waitUntil((async () => {
         try {
           const folders = await db
-            .prepare(`SELECT web_url FROM sharepoint_folder_visibility
+            .prepare(`SELECT sp_item_id, web_url FROM sharepoint_folder_visibility
                       WHERE project_id = ? AND client_editing = 1 AND web_url IS NOT NULL
                         AND audience IN ('internal_partner', 'internal_customer_partner')`)
             .bind(projectId)
-            .all<{ web_url: string }>();
+            .all<{ sp_item_id: string; web_url: string }>();
           for (const f of folders.results ?? []) {
             try {
-              await grantFolderEdit(c.env, db, { projectId, webUrl: f.web_url, email: pEmail, name: partner?.name ?? null, grantedByUserId: auth.user.id });
+              await grantFolderEdit(c.env, db, { projectId, webUrl: f.web_url, spItemId: f.sp_item_id, email: pEmail, name: partner?.name ?? null, grantedByUserId: auth.user.id });
             } catch (err) {
               console.warn(`[projects.staff] partner auto-grant edit for ${pEmail} on ${f.web_url} failed:`, err instanceof Error ? err.message : err);
             }
