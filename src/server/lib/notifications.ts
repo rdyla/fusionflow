@@ -202,12 +202,16 @@ export async function notifyHypercareCase(
   const res = await fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    // Keys match the trigger's registered field names exactly as set up in
+    // the Zoom workflow UI (capitalized, confirmed 2026-10-02) — Zoom's
+    // "Mismatch variables" rejection is case-sensitive and exact-set, not
+    // just exact-name (see the finding above re: leftover template fields).
     body: JSON.stringify({
-      engineer_name: opts.engineerName,
-      customer_name: opts.customerName ?? "—",
-      ticket_number: opts.ticketNumber,
-      case_title: opts.caseTitle,
-      submitted_by: opts.submittedBy,
+      Engineer_Name: opts.engineerName,
+      Customer_Name: opts.customerName ?? "—",
+      Ticket_Number: opts.ticketNumber,
+      Case_Title: opts.caseTitle,
+      Submitted_By: opts.submittedBy,
     }),
   });
 
