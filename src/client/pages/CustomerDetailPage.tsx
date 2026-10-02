@@ -105,7 +105,7 @@ export default function CustomerDetailPage() {
 
   // Edit state
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ sharepoint_url: "", pf_ae_user_id: "", pf_sa_user_id: "", pf_csm_user_id: "" });
+  const [editForm, setEditForm] = useState({ sharepoint_url: "", pf_ae_user_id: "", pf_sa_user_id: "", pf_csm_user_id: "", hypercare_engineer_user_id: "" });
   const [saving, setSaving] = useState(false);
 
   // Contact form
@@ -158,6 +158,7 @@ export default function CustomerDetailPage() {
           pf_ae_user_id: c.pf_ae_user_id ?? "",
           pf_sa_user_id: c.pf_sa_user_id ?? "",
           pf_csm_user_id: c.pf_csm_user_id ?? "",
+          hypercare_engineer_user_id: c.hypercare_engineer_user_id ?? "",
         });
         // Fetch PF team headshots
         const teamEmails = [c.pf_ae_email, c.pf_sa_email, c.pf_csm_email].filter(Boolean) as string[];
@@ -178,6 +179,7 @@ export default function CustomerDetailPage() {
         pf_ae_user_id: editForm.pf_ae_user_id || null,
         pf_sa_user_id: editForm.pf_sa_user_id || null,
         pf_csm_user_id: editForm.pf_csm_user_id || null,
+        hypercare_engineer_user_id: editForm.hypercare_engineer_user_id || null,
       });
       setCustomer(updated);
       setEditing(false);
@@ -324,6 +326,7 @@ export default function CustomerDetailPage() {
   const pfAes = users.filter((u) => u.role === "pf_ae");
   const pfSas = users.filter((u) => u.role === "pf_sa");
   const pfCsms = users.filter((u) => u.role === "pf_csm");
+  const pfEngineers = users.filter((u) => u.role === "pf_engineer");
 
   if (loading) return <div style={{ color: "#64748b", padding: 32 }}>Loading…</div>;
   if (!customer) return <div style={{ color: "#d13438", padding: 32 }}>Customer not found.</div>;
@@ -463,6 +466,20 @@ export default function CustomerDetailPage() {
                 );
               })}
             </div>
+            {customer.hypercare_engineer_name && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
+                <div
+                  title="Temporary support routing — new cases this customer opens are also privately routed to this engineer, in addition to the normal support flow. Clear it on the Edit form when the hypercare window ends."
+                  style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8 }}
+                >
+                  <span style={{ fontSize: 16 }}>⏱</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#b45309" }}>Hypercare Engineer (temporary)</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#1e293b" }}>{customer.hypercare_engineer_name}</div>
+                  </div>
+                </div>
+              </div>
+            )}
             {customer.sharepoint_url && (
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f1f5f9" }}>
                 <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.07em", color: "#94a3b8", marginBottom: 6 }}>SharePoint</div>
@@ -732,6 +749,16 @@ export default function CustomerDetailPage() {
                   <option value="">— Unassigned —</option>
                   {pfCsms.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
                 </select>
+              </label>
+              <label className="ms-label">
+                <span>Hypercare Engineer</span>
+                <select className="ms-input" value={editForm.hypercare_engineer_user_id} onChange={(e) => setEditForm((f) => ({ ...f, hypercare_engineer_user_id: e.target.value }))}>
+                  <option value="">— None —</option>
+                  {pfEngineers.map((u) => <option key={u.id} value={u.id}>{u.name ?? u.email}</option>)}
+                </select>
+                <span style={{ fontSize: 11, color: "#94a3b8", marginTop: 2, display: "block" }}>
+                  Temporary routing only — e.g. post-go-live hypercare for a customer without ongoing support. When set, new cases this customer opens are also privately routed to this engineer (email + Zoom), in addition to the normal support flow. Clear it when the hypercare window ends.
+                </span>
               </label>
               <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
                 <button className="ms-btn-primary" onClick={handleSaveEdit} disabled={saving}>{saving ? "Saving…" : "Save"}</button>

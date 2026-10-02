@@ -451,6 +451,46 @@ export function projectReadyToClose(data: {
   `, data.appUrl);
 }
 
+// ── Hypercare: private case notification ───────────────────────────────────────
+
+/**
+ * Sent only to a customer's assigned Hypercare Engineer (customers.
+ * hypercare_engineer_user_id), the moment that customer opens a new support
+ * case — in addition to, not instead of, the normal new-case Zoom
+ * notification. The customer has no visibility into this routing; this is
+ * purely an internal heads-up so the engineer who knows the build gets to it
+ * fast during a temporary post-go-live coverage window.
+ */
+export function hypercareCaseOpened(data: {
+  engineerName: string;
+  customerName: string | null;
+  ticketNumber: string;
+  caseTitle: string;
+  submittedByName: string;
+  appUrl: string;
+  caseId: string;
+}): string {
+  const engineerName = escapeHtml(data.engineerName);
+  const customerName = escapeHtml(data.customerName ?? "");
+  const ticketNumber = escapeHtml(data.ticketNumber);
+  const caseTitle = escapeHtml(data.caseTitle);
+  const submittedByName = escapeHtml(data.submittedByName);
+
+  return base(`
+    <h2 style="margin:0 0 6px;font-size:18px;font-weight:700;color:#22c55e;">Hypercare case opened</h2>
+    <p style="margin:0 0 20px;font-size:14px;color:#0b5394;">Hi ${engineerName}, you're the Hypercare Engineer on this account — a new case just came in and is routed to you in addition to the normal support queue.</p>
+    <div style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);border-radius:6px;padding:16px 18px;margin-bottom:6px;">
+      <div style="font-size:16px;font-weight:700;color:#22c55e;margin-bottom:12px;">${caseTitle}</div>
+      <table style="border-collapse:collapse;">
+        ${detail("Ticket", ticketNumber)}
+        ${customerName ? detail("Customer", customerName) : ""}
+        ${detail("Submitted By", submittedByName)}
+      </table>
+    </div>
+    ${ctaButton("View Case", `${data.appUrl}/support/cases/${data.caseId}`)}
+  `, data.appUrl);
+}
+
 // ── Partner AE: Note Posted ────────────────────────────────────────────────────
 
 export function partnerNotePosted(data: {
