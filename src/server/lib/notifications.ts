@@ -178,6 +178,53 @@ export async function notifyGoLive(
   }
 }
 
+/**
+ * Private heads-up to a "Hypercare Support" Zoom Team Chat channel the
+ * moment a customer with a hypercare_engineer_user_id assigned opens a new
+ * case — replaces notifyZoomNewCase's general broadcast for that case
+ * (support.ts skips the general notification when hypercare routing
+ * applies), rather than firing alongside it. Same unsigned Zoom Workflow
+ * trigger scheme as notifyGoLive
+ * (see that function's doc comment for why): a flat JSON body whose keys
+ * must match whatever variables are configured on the workflow's "From
+ * webhook" trigger step. Shared across every hypercare engineer rather than
+ * one channel per engineer, so the engineer's name is always named in the
+ * message — that's how a reader tells whether a given case is theirs.
+ */
+export async function notifyHypercareCase(
+  webhookUrl: string,
+  opts: {
+    engineerName: string;
+    customerName: string | null;
+    ticketNumber: string;
+    caseTitle: string;
+    submittedBy: string;
+  }
+): Promise<void> {
+  const res = await fetch(webhookUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    // Keys match the trigger's registered field names exactly as set up in
+    // the Zoom workflow UI (capitalized, confirmed 2026-10-02) — Zoom's
+    // "Mismatch variables" rejection is case-sensitive and exact-set, not
+    // just exact-name (see the finding above re: leftover template fields).
+    body: JSON.stringify({
+      Engineer_Name: opts.engineerName,
+      Customer_Name: opts.customerName ?? "—",
+      Ticket_Number: opts.ticketNumber,
+      Case_Title: opts.caseTitle,
+      Submitted_By: opts.submittedBy,
+    }),
+  });
+
+  // Same Zoom quirk as notifyGoLive: a workflow rejection still returns
+  // HTTP 200, so a plain fetch-didn't-throw check would miss it.
+  const body = await res.json().catch(() => null) as { status?: boolean; errorMessage?: string } | null;
+  if (!res.ok || body?.status === false) {
+    console.warn(`[notifyHypercareCase] Zoom rejected the hypercare case message: ${body?.errorMessage ?? res.statusText}`);
+  }
+}
+
 export async function notifyZoomNewCase(
   webhookUrl: string,
   webhookSecret: string,

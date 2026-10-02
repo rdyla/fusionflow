@@ -105,6 +105,10 @@ export type Bindings = {
   // fires when a PM marks a project's go-live task completed. Unsigned; not
   // the classic incoming-webhook scheme (see notifyGoLive).
   ZOOM_GOLIVE_WEBHOOK_URL?: string;
+  // Zoom Team Chat Workflow trigger URL for a "Hypercare Support" channel —
+  // fires alongside the normal new-case notification when the customer has
+  // a hypercare_engineer_user_id assigned (see notifyHypercareCase).
+  ZOOM_HYPERCARE_WEBHOOK_URL?: string;
   // SOW HTML → .docx converter Lambda. Deployed manually per the runbook
   // in aws/sow-converter/README.md. URL is the Function URL; secret is
   // matched against X-PFI-Auth header by the Lambda. Both wrangler secrets
