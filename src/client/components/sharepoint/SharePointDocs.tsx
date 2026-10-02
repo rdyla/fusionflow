@@ -300,7 +300,14 @@ export default function SharePointDocs({ recordId, sharepointUrl, folderUrl, own
       );
     }
     if (grantsRes.status === "fulfilled") {
-      setGrantedEmails(new Set(grantsRes.value.grants.map((g) => g.grantee_email.toLowerCase())));
+      // The endpoint returns every grant on the project; only this folder's
+      // count here. Matching project-wide made a revoke look like it didn't
+      // stick whenever the contact also had a grant on another folder.
+      setGrantedEmails(new Set(
+        grantsRes.value.grants
+          .filter((g) => g.web_url === folder.webUrl)
+          .map((g) => g.grantee_email.toLowerCase())
+      ));
     }
     const failedParts: string[] = [];
     if (contactsRes.status === "rejected") failedParts.push("project contacts");
