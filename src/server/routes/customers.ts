@@ -31,11 +31,13 @@ const CUSTOMER_SELECT = `
   SELECT c.*,
     ae.name  AS pf_ae_name,  ae.email  AS pf_ae_email,
     sa.name  AS pf_sa_name,  sa.email  AS pf_sa_email,
-    csm.name AS pf_csm_name, csm.email AS pf_csm_email
+    csm.name AS pf_csm_name, csm.email AS pf_csm_email,
+    hc.name  AS hypercare_engineer_name, hc.email AS hypercare_engineer_email
   FROM customers c
   LEFT JOIN users ae  ON ae.id  = c.pf_ae_user_id
   LEFT JOIN users sa  ON sa.id  = c.pf_sa_user_id
   LEFT JOIN users csm ON csm.id = c.pf_csm_user_id
+  LEFT JOIN users hc  ON hc.id  = c.hypercare_engineer_user_id
 `;
 
 // ── Data migration (must come before /:id to avoid 405 shadowing) ─────────────
@@ -236,6 +238,7 @@ const updateCustomerSchema = z.object({
   pf_ae_user_id: z.string().nullable().optional(),
   pf_sa_user_id: z.string().nullable().optional(),
   pf_csm_user_id: z.string().nullable().optional(),
+  hypercare_engineer_user_id: z.string().nullable().optional(),
 });
 
 app.patch("/:id", async (c) => {

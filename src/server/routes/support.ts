@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Bindings, Variables } from "../types";
-import { d365FetchSupport, getLastUcaasVendor, isUuid } from "../services/dynamicsService";
-import { sendEmail } from "../services/emailService";
-import { supportDigestEmail, type DigestEmailData } from "../lib/emailTemplates";
+import { d365FetchSupport, getLastUcaasVendor, getSystemUserIdByEmail, isUuid } from "../services/dynamicsService";
+import { sendEmail, maybeSendEmail } from "../services/emailService";
+import { supportDigestEmail, hypercareCaseOpened, type DigestEmailData } from "../lib/emailTemplates";
 import { isSupportSupervisor } from "../lib/permissions";
-import { notifyZoomNewCase } from "../lib/notifications";
+import { notifyZoomNewCase, notifyHypercareCase } from "../lib/notifications";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -710,6 +710,14 @@ app.post("/cases", async (c) => {
     severitycode,
   };
 
+  // Set when a customer (non-internal submitter) belongs to an account with
+  // a hypercare_engineer_user_id assigned — temporary support routing for a
+  // customer who isn't normally entitled to ongoing support (e.g. 1-2 weeks
+  // of post-go-live coverage). Resolved here (before the D365 POST) so the
+  // case can be assigned directly to that engineer in CRM, not just
+  // notified about separately after the fact.
+  let hypercareEngineer: { id: string; name: string | null; email: string } | null = null;
+
   if (internal) {
     if (body.accountId) payload["customerid_account@odata.bind"] = `/accounts(${body.accountId})`;
     if (body.primaryContactId) payload["primarycontactid@odata.bind"] = `/contacts(${body.primaryContactId})`;
@@ -722,6 +730,22 @@ app.post("/cases", async (c) => {
     if (!accountId) accountId = await resolveAccountId(contactId, c.env);
     if (accountId) {
       payload["customerid_account@odata.bind"] = `/accounts(${accountId})`;
+
+      hypercareEngineer = await c.env.DB
+        .prepare(
+          `SELECT u.id, u.name, u.email FROM customers cust
+           JOIN users u ON u.id = cust.hypercare_engineer_user_id
+           WHERE cust.crm_account_id = ? LIMIT 1`
+        )
+        .bind(accountId)
+        .first<{ id: string; name: string | null; email: string }>();
+
+      if (hypercareEngineer) {
+        const engineerSystemUserId = await getSystemUserIdByEmail(c.env, hypercareEngineer.email);
+        if (engineerSystemUserId) {
+          payload["am_escalationengineer@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
+        }
+      }
     } else {
       payload["customerid_contact@odata.bind"] = `/contacts(${contactId})`;
     }
@@ -769,6 +793,40 @@ app.post("/cases", async (c) => {
         title: body.title,
       })
     );
+  }
+
+  // Private hypercare routing — fires alongside the general notification
+  // above, never instead of it. The customer has no visibility into this;
+  // it's purely an internal heads-up to the one engineer covering this
+  // account's temporary support window.
+  if (hypercareEngineer) {
+    const submittedBy = auth.user.name ?? auth.user.email;
+    c.executionCtx.waitUntil(
+      maybeSendEmail(c.env, c.env.DB, hypercareEngineer.id, "important", {
+        to: hypercareEngineer.email,
+        subject: `Hypercare case opened: ${ticketNumber}`,
+        html: hypercareCaseOpened({
+          engineerName: hypercareEngineer.name ?? hypercareEngineer.email,
+          customerName: accountName,
+          ticketNumber,
+          caseTitle: body.title,
+          submittedByName: submittedBy,
+          appUrl: c.env.APP_URL ?? "",
+          caseId: newId,
+        }),
+      })
+    );
+    if (c.env.ZOOM_HYPERCARE_WEBHOOK_URL) {
+      c.executionCtx.waitUntil(
+        notifyHypercareCase(c.env.ZOOM_HYPERCARE_WEBHOOK_URL, {
+          engineerName: hypercareEngineer.name ?? hypercareEngineer.email,
+          customerName: accountName,
+          ticketNumber,
+          caseTitle: body.title,
+          submittedBy,
+        })
+      );
+    }
   }
 
   return c.json({ id: newId, ticketNumber }, 201);

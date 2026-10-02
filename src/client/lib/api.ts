@@ -861,6 +861,10 @@ export type Customer = {
   pf_ae_user_id: string | null;
   pf_sa_user_id: string | null;
   pf_csm_user_id: string | null;
+  /** Temporary hypercare support routing (migration 0147) — manually set/
+   *  cleared on the customer record, independent of normal support coverage.
+   *  See CustomerDetailPage's edit modal and support.ts case creation. */
+  hypercare_engineer_user_id: string | null;
   address_city: string | null;
   address_state: string | null;
   created_at: string;
@@ -872,6 +876,8 @@ export type Customer = {
   pf_sa_email: string | null;
   pf_csm_name: string | null;
   pf_csm_email: string | null;
+  hypercare_engineer_name: string | null;
+  hypercare_engineer_email: string | null;
 };
 
 export type CustomerContact = {
@@ -3175,7 +3181,7 @@ export const api = {
     request<Customer>(`/customers/${id}`),
   createCustomer: (data: { name: string; crm_account_id: string; sharepoint_url?: string | null; pf_ae_user_id?: string | null; pf_sa_user_id?: string | null; pf_csm_user_id?: string | null }) =>
     request<Customer>("/customers", { method: "POST", body: JSON.stringify(data) }),
-  updateCustomer: (id: string, data: Partial<{ name: string; sharepoint_url: string | null; pf_ae_user_id: string | null; pf_sa_user_id: string | null; pf_csm_user_id: string | null }>) =>
+  updateCustomer: (id: string, data: Partial<{ name: string; sharepoint_url: string | null; pf_ae_user_id: string | null; pf_sa_user_id: string | null; pf_csm_user_id: string | null; hypercare_engineer_user_id: string | null }>) =>
     request<Customer>(`/customers/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteCustomer: (id: string) =>
     request<{ success: boolean }>(`/customers/${id}`, { method: "DELETE" }),
