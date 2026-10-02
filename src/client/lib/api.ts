@@ -304,6 +304,8 @@ export type CustomPlanItemInput = Partial<Omit<CustomPlanItem, "id" | "project_i
 export type SPEditGrant = {
   id: string;
   web_url: string;
+  /** Stable driveItem id of the granted folder (null on legacy rows). */
+  sp_item_id: string | null;
   grantee_email: string;
   grantee_name: string | null;
   granted_at: string;
@@ -2481,10 +2483,10 @@ export const api = {
     request<{ events: SPFileEvent[] }>(`/sharepoint/file/history?spItemId=${encodeURIComponent(spItemId)}`),
   /** Invite an external person as a guest + grant them write on the folder at
    *  webUrl (cascades to children) so they can edit in Office online. */
-  spGrantEditAccess: (webUrl: string, email: string, projectId: string, name?: string | null) =>
+  spGrantEditAccess: (webUrl: string, spItemId: string, email: string, projectId: string, name?: string | null) =>
     request<{ ok: boolean; invited: boolean; granted: boolean }>(`/sharepoint/grant-edit`, {
       method: "POST",
-      body: JSON.stringify({ webUrl, email, projectId, name: name ?? null }),
+      body: JSON.stringify({ webUrl, spItemId, email, projectId, name: name ?? null }),
     }),
   /** List external edit grants for a project (who can edit online). */
   spEditGrants: (projectId: string) =>
@@ -2498,10 +2500,10 @@ export const api = {
     }),
   /** Revoke one external person's edit access to a folder (removes the SP
    *  permission + our grant row; guest account is left to Entra). */
-  spRevokeEditAccess: (webUrl: string, email: string, projectId: string) =>
+  spRevokeEditAccess: (webUrl: string, spItemId: string, email: string, projectId: string) =>
     request<{ ok: boolean }>(`/sharepoint/revoke-edit`, {
       method: "POST",
-      body: JSON.stringify({ web_url: webUrl, email, project_id: projectId }),
+      body: JSON.stringify({ web_url: webUrl, sp_item_id: spItemId, email, project_id: projectId }),
     }),
   /** PATCH the description on an existing SharePoint file. Used by the inline
    *  "Edit description" UI on the SharePoint tab so PMs can backfill context

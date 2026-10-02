@@ -137,6 +137,32 @@ function viewerSeesAudience(role: string | undefined, audience: string | null | 
   return true; // internal roles see all
 }
 
+/** Self-heal sharepoint_edit_grants.web_url for folders renamed/moved in
+ *  SharePoint, using the stable driveItem id. Also rewrites grants on their
+ *  descendants (keyed under the old URL prefix) so the cascade overlay keeps
+ *  matching. One SELECT per listing; UPDATEs only when something is stale. */
+async function healGrantUrls(db: D1Database, folders: { id: string; webUrl: string }[]): Promise<void> {
+  if (folders.length === 0) return;
+  const ids = folders.map((f) => f.id);
+  const stale = await db
+    .prepare(`SELECT DISTINCT sp_item_id, project_id, web_url FROM sharepoint_edit_grants WHERE sp_item_id IN (${inPlaceholders(ids)})`)
+    .bind(...ids)
+    .all<{ sp_item_id: string; project_id: string; web_url: string }>();
+  const currentUrl = new Map(folders.map((f) => [f.id, f.webUrl]));
+  const stmts = (stale.results ?? [])
+    .filter((r) => currentUrl.get(r.sp_item_id) !== r.web_url)
+    .flatMap((r) => {
+      const next = currentUrl.get(r.sp_item_id)!;
+      return [
+        db.prepare("UPDATE sharepoint_edit_grants SET web_url = ? WHERE sp_item_id = ?").bind(next, r.sp_item_id),
+        // substr prefix compare, not LIKE: SharePoint URLs can contain '_' / '%'.
+        db.prepare("UPDATE sharepoint_edit_grants SET web_url = ? || substr(web_url, ?) WHERE project_id = ? AND substr(web_url, 1, ?) = ?")
+          .bind(next, r.web_url.length + 1, r.project_id, r.web_url.length + 1, `${r.web_url}/`),
+      ];
+    });
+  if (stmts.length) await db.batch(stmts);
+}
+
 /** Overlay each FOLDER's audience (+ derived visibleToClient) and client-editing
  *  flag from sharepoint_folder_visibility (by sp_item_id). Files are untouched. */
 async function overlayFolderVisibility(db: D1Database, files: SPFile[]): Promise<SPFile[]> {
@@ -170,6 +196,9 @@ app.get("/files", async (c) => {
     const raw = await listSharePointFiles(c.env, url);
     const withAttribution = await overlayUploaderAttribution(c.env.DB, raw);
     let files = await overlayFolderVisibility(c.env.DB, withAttribution);
+    // Best-effort: a heal failure must not break the listing.
+    await healGrantUrls(c.env.DB, files.filter((f) => f.isFolder).map((f) => ({ id: f.id, webUrl: f.webUrl })))
+      .catch((err) => console.warn("[sp.files] grant URL heal failed:", err instanceof Error ? err.message : err));
 
     if (isExternalRole(auth?.role)) {
       // Does the folder being listed itself include this viewer's audience?
@@ -191,6 +220,10 @@ app.get("/files", async (c) => {
             .prepare("UPDATE sharepoint_folder_visibility SET web_url = ? WHERE sp_item_id = ?")
             .bind(url, folderId).run();
         }
+        // Same for grant rows, so the "Edit online" prefix match below sees the
+        // current URL even when the viewer deep-links past the parent listing.
+        await healGrantUrls(c.env.DB, [{ id: folderId, webUrl: url }])
+          .catch((err) => console.warn("[sp.files] grant URL heal failed:", err instanceof Error ? err.message : err));
       } else {
         // Fallback to the legacy web_url match if the id couldn't be resolved.
         const cur = await c.env.DB
@@ -528,7 +561,7 @@ app.delete("/folder", async (c) => {
     try {
       await c.env.DB.batch([
         c.env.DB.prepare("DELETE FROM sharepoint_folder_visibility WHERE sp_item_id = ?").bind(spItemId),
-        c.env.DB.prepare("DELETE FROM sharepoint_edit_grants WHERE web_url = ? OR web_url LIKE ?").bind(folderUrl, `${folderUrl}/%`),
+        c.env.DB.prepare("DELETE FROM sharepoint_edit_grants WHERE web_url = ? OR web_url LIKE ? OR sp_item_id = ?").bind(folderUrl, `${folderUrl}/%`, spItemId),
       ]);
     } catch (cleanupErr) {
       console.warn("[sp.delete-folder] cleanup failed:", cleanupErr instanceof Error ? cleanupErr.message : cleanupErr);
@@ -693,7 +726,7 @@ app.get("/grants", async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
   const rows = await c.env.DB
-    .prepare(`SELECT id, web_url, grantee_email, grantee_name, granted_at
+    .prepare(`SELECT id, web_url, sp_item_id, grantee_email, grantee_name, granted_at
               FROM sharepoint_edit_grants WHERE project_id = ? ORDER BY granted_at DESC`)
     .bind(projectId)
     .all();
@@ -701,14 +734,14 @@ app.get("/grants", async (c) => {
 });
 
 // POST /api/sharepoint/grant-edit
-// Body: { webUrl, email, name?, projectId }
+// Body: { webUrl, spItemId?, email, name?, projectId }
 // Invites an external person as a B2B guest and grants them WRITE access to the
 // folder at webUrl, so they can edit its documents in Office-for-the-web as
 // themselves (attributed). Gated to project editors; records the grant so the
 // customer gets an in-portal "Edit online" link and PMs can see/revoke access.
 app.post("/grant-edit", async (c) => {
   const auth = c.get("auth");
-  let body: { webUrl?: string; email?: string; name?: string | null; projectId?: string };
+  let body: { webUrl?: string; spItemId?: string | null; email?: string; name?: string | null; projectId?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
   const webUrl = (body.webUrl ?? "").trim();
   const email = (body.email ?? "").trim();
@@ -725,10 +758,10 @@ app.post("/grant-edit", async (c) => {
     try {
       await c.env.DB
         .prepare(
-          `INSERT INTO sharepoint_edit_grants (id, project_id, web_url, grantee_email, grantee_name, granted_by_user_id)
-           VALUES (?, ?, ?, ?, ?, ?)`
+          `INSERT INTO sharepoint_edit_grants (id, project_id, web_url, sp_item_id, grantee_email, grantee_name, granted_by_user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`
         )
-        .bind(crypto.randomUUID(), projectId, webUrl, email.toLowerCase(), body.name ?? null, auth.user.id)
+        .bind(crypto.randomUUID(), projectId, webUrl, body.spItemId?.trim() || null, email.toLowerCase(), body.name ?? null, auth.user.id)
         .run();
     } catch (err) {
       console.warn("[sp.grant-edit] grant-record insert failed:", err instanceof Error ? err.message : err);
@@ -816,7 +849,7 @@ app.post("/folder/allow-editing", async (c) => {
   const list = grantees.filter((g) => { const e = g.email.toLowerCase(); if (seen.has(e)) return false; seen.add(e); return true; });
 
   const results = await Promise.allSettled(
-    list.map((g) => grantFolderEdit(c.env, c.env.DB, { projectId, webUrl, email: g.email, name: g.name, grantedByUserId: auth.user!.id }))
+    list.map((g) => grantFolderEdit(c.env, c.env.DB, { projectId, webUrl, spItemId, email: g.email, name: g.name, grantedByUserId: auth.user!.id }))
   );
   const granted = list.filter((_, i) => results[i].status === "fulfilled").map((g) => g.email);
   const failed = list.filter((_, i) => results[i].status === "rejected").map((g) => g.email);
@@ -825,15 +858,16 @@ app.post("/folder/allow-editing", async (c) => {
 });
 
 // POST /api/sharepoint/revoke-edit
-// Body: { web_url, email, project_id }
+// Body: { web_url, sp_item_id?, email, project_id }
 // Removes one external person's edit access to a folder (deletes the SharePoint
 // permission + our grant row). Does NOT delete the guest account (Entra owns
 // guest lifecycle). Internal editors only.
 app.post("/revoke-edit", async (c) => {
   const auth = c.get("auth");
-  let body: { web_url?: string; email?: string; project_id?: string };
+  let body: { web_url?: string; sp_item_id?: string | null; email?: string; project_id?: string };
   try { body = await c.req.json(); } catch { return c.json({ error: "JSON body required" }, 400); }
   const webUrl = (body.web_url ?? "").trim();
+  const spItemId = (body.sp_item_id ?? "").trim();
   const email = (body.email ?? "").trim();
   const projectId = (body.project_id ?? "").trim();
   if (!webUrl || !email || !projectId) return c.json({ error: "web_url, email, project_id required" }, 400);
@@ -842,8 +876,11 @@ app.post("/revoke-edit", async (c) => {
   try {
     await revokeFolderEdit(c.env, webUrl, email);
     await c.env.DB
-      .prepare(`DELETE FROM sharepoint_edit_grants WHERE project_id = ? AND web_url = ? AND grantee_email = ?`)
-      .bind(projectId, webUrl, email.toLowerCase())
+      // Match by stable item id too, so a row whose web_url predates a rename
+      // (and hasn't been healed yet) is still removed.
+      .prepare(`DELETE FROM sharepoint_edit_grants
+                WHERE project_id = ? AND grantee_email = ? AND (web_url = ? OR (? != '' AND sp_item_id = ?))`)
+      .bind(projectId, email.toLowerCase(), webUrl, spItemId, spItemId)
       .run();
     return c.json({ ok: true });
   } catch (err) {
