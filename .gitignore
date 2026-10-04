@@ -203,3 +203,14 @@ scripts/snapshots/
 
 # Claude Code personal settings (may contain machine-specific permission grants)
 .claude/settings.local.json
+
+# Added before moving off OneDrive
+.env.*
+.dev.vars
+.dev.vars.*
+.idea/
+.venv/
+venv/
+__pycache__/
+!*.tpl
+!*.example
