@@ -446,6 +446,7 @@ export default function AppShell() {
                       Admin
                     </div>
                     <AdminMenuLink to="/admin/projects" icon={NAV_ICONS.adminProjects} onClick={() => setAdminMenuOpen(false)}>Projects</AdminMenuLink>
+                    <AdminMenuLink to="/admin/project-assignment-report" icon={NAV_ICONS.adminProjects} onClick={() => setAdminMenuOpen(false)}>Assignment Report</AdminMenuLink>
                     <AdminMenuLink to="/admin/solutions" icon={NAV_ICONS.adminSolutions} onClick={() => setAdminMenuOpen(false)}>Solutions</AdminMenuLink>
                     <AdminMenuLink to="/admin/optimize" icon={NAV_ICONS.adminOptimize} onClick={() => setAdminMenuOpen(false)}>Optimize</AdminMenuLink>
                     <AdminMenuLink to="/admin/labor" icon={NAV_ICONS.adminLabor} onClick={() => setAdminMenuOpen(false)}>Labor</AdminMenuLink>

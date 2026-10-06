@@ -367,6 +367,58 @@ app.get("/projects", requireRole("admin"), async (c) => {
   return c.json((rows.results ?? []).map(normalizeSolutionTypesField));
 });
 
+// Project Assignment Report — read model for the "who's on what" rollup the
+// team previously tracked by hand in a spreadsheet. Every project, including
+// closed/archived ones, with every PM and IE assigned (not just the primary
+// pm_user_id), since a project can carry more than one of each via project_staff.
+app.get("/project-assignment-report", requireRole("admin"), async (c) => {
+  const db = c.env.DB;
+
+  const projects = await db
+    .prepare(
+      `SELECT p.id, COALESCE(c.name, p.customer_name) AS customer_name, p.vendor,
+              p.solution_types, p.created_at, p.pm_user_id, pmu.name AS pm_name
+       FROM projects p
+       LEFT JOIN customers c ON c.id = p.customer_id
+       LEFT JOIN users pmu ON pmu.id = p.pm_user_id
+       ORDER BY p.created_at DESC`
+    )
+    .all<{
+      id: string; customer_name: string | null; vendor: string | null;
+      solution_types: unknown; created_at: string; pm_user_id: string | null; pm_name: string | null;
+    }>();
+
+  const staff = await db
+    .prepare(
+      `SELECT ps.project_id, ps.user_id, ps.staff_role, u.name
+       FROM project_staff ps
+       JOIN users u ON u.id = ps.user_id
+       WHERE ps.staff_role IN ('pm', 'engineer')`
+    )
+    .all<{ project_id: string; user_id: string; staff_role: string; name: string }>();
+
+  const pmByProject = new Map<string, Map<string, string>>();
+  const ieByProject = new Map<string, Map<string, string>>();
+  for (const row of staff.results ?? []) {
+    const target = row.staff_role === "pm" ? pmByProject : ieByProject;
+    if (!target.has(row.project_id)) target.set(row.project_id, new Map());
+    target.get(row.project_id)!.set(row.user_id, row.name);
+  }
+
+  const result = (projects.results ?? []).map((p) => {
+    const pmMap = pmByProject.get(p.id) ?? new Map<string, string>();
+    if (p.pm_user_id && p.pm_name) pmMap.set(p.pm_user_id, p.pm_name);
+    const ieMap = ieByProject.get(p.id) ?? new Map<string, string>();
+    return {
+      ...normalizeSolutionTypesField(p),
+      pm_names: [...new Set(pmMap.values())].sort(),
+      ie_names: [...new Set(ieMap.values())].sort(),
+    };
+  });
+
+  return c.json(result);
+});
+
 app.patch("/projects/:id", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const projectId = c.req.param("id");
