@@ -9,6 +9,7 @@ import AdminUsersPage from "../pages/AdminUsersPage";
 import AdminHelpRequestsPage from "../pages/AdminHelpRequestsPage";
 import AdminAccessPage from "../pages/AdminAccessPage";
 import AdminProjectsPage from "../pages/AdminProjectsPage";
+import AdminProjectAssignmentReportPage from "../pages/AdminProjectAssignmentReportPage";
 import AdminSolutionsPage from "../pages/AdminSolutionsPage";
 import AdminOptimizePage from "../pages/AdminOptimizePage";
 import AdminLaborPage from "../pages/AdminLaborPage";
@@ -87,6 +88,7 @@ export default function Router() {
           <Route path="/admin/help-requests" element={<AdminHelpRequestsPage />} />
           <Route path="/admin/access" element={<AdminAccessPage />} />
           <Route path="/admin/projects" element={<AdminProjectsPage />} />
+          <Route path="/admin/project-assignment-report" element={<AdminProjectAssignmentReportPage />} />
           <Route path="/admin/solutions" element={<AdminSolutionsPage />} />
           <Route path="/admin/optimize" element={<AdminOptimizePage />} />
           <Route path="/admin/labor" element={<AdminLaborPage />} />
