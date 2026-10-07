@@ -24,7 +24,15 @@ export default function SupportNewCasePage() {
     setNotificationContactId("");
     setAccountContacts([]);
     if (account?.id) {
-      supportAccounts.getContacts(account.id).then(setAccountContacts).catch(() => {});
+      supportAccounts.getContacts(account.id).then((contacts) => {
+        setAccountContacts(contacts);
+        // Internal staff can also be a real contact on the account they're
+        // filing for (e.g. a PM set up as a test/support contact in D365) —
+        // default Primary Contact to them instead of leaving it on "None",
+        // still overridable via the dropdown below.
+        const self = contacts.find((ct) => ct.email?.toLowerCase() === user?.email?.toLowerCase());
+        if (self) setPrimaryContactId(self.id);
+      }).catch(() => {});
     }
   }, [account?.id]);
 
