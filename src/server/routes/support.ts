@@ -75,6 +75,42 @@ async function resolveAccountId(contactId: string, env: Bindings): Promise<strin
   return data._parentcustomerid_value ?? null;
 }
 
+/**
+ * If `accountId` belongs to a customer with a hypercare_engineer_user_id set,
+ * binds that engineer as both am_escalationengineer and ownerid on `payload`
+ * and returns who it resolved to — used for the private Zoom/email routing
+ * that replaces the general new-case broadcast for hypercare customers.
+ * Applied on both the client self-service path and (when the submitter hasn't
+ * manually picked an escalation engineer) the internal/admin path, since PF
+ * staff can also submit a hypercare case on a customer's behalf.
+ */
+async function applyHypercareRouting(
+  env: Bindings,
+  payload: Record<string, unknown>,
+  accountId: string
+): Promise<{ id: string; name: string | null; email: string } | null> {
+  const engineer = await env.DB
+    .prepare(
+      `SELECT u.id, u.name, u.email FROM customers cust
+       JOIN users u ON u.id = cust.hypercare_engineer_user_id
+       WHERE cust.crm_account_id = ? LIMIT 1`
+    )
+    .bind(accountId)
+    .first<{ id: string; name: string | null; email: string }>();
+  if (!engineer) return null;
+
+  const engineerSystemUserId = await getSystemUserIdByEmail(env, engineer.email);
+  if (engineerSystemUserId) {
+    payload["am_escalationengineer@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
+    // Owner too, not just escalation engineer — otherwise the case still
+    // shows as owned by the generic portal integration user ("# pfsupport
+    // portal"), which is confusing for a case that's supposed to read as
+    // the engineer's, not the general queue's.
+    payload["ownerid@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
+  }
+  return engineer;
+}
+
 // ── Me ────────────────────────────────────────────────────────────────────────
 
 // NOTE ON MULTI-ACCOUNT CLIENTS: client sessions can now carry several CRM
@@ -722,7 +758,15 @@ app.post("/cases", async (c) => {
     if (body.accountId) payload["customerid_account@odata.bind"] = `/accounts(${body.accountId})`;
     if (body.primaryContactId) payload["primarycontactid@odata.bind"] = `/contacts(${body.primaryContactId})`;
     if (body.notificationContactId) payload["amc_notificationcontact1@odata.bind"] = `/contacts(${body.notificationContactId})`;
-    if (body.escalationEngineerId) payload["am_escalationengineer@odata.bind"] = `/systemusers(${body.escalationEngineerId})`;
+    if (body.escalationEngineerId) {
+      payload["am_escalationengineer@odata.bind"] = `/systemusers(${body.escalationEngineerId})`;
+    } else if (body.accountId) {
+      // No manual escalation engineer picked — fall back to the account's
+      // configured hypercare coverage, same as the client self-service path
+      // below, so a PM filing a case on a hypercare customer's behalf still
+      // gets routed correctly.
+      hypercareEngineer = await applyHypercareRouting(c.env, payload, body.accountId);
+    }
   } else {
     const contactId = auth.user.id;
     payload["primarycontactid@odata.bind"] = `/contacts(${contactId})`;
@@ -730,27 +774,7 @@ app.post("/cases", async (c) => {
     if (!accountId) accountId = await resolveAccountId(contactId, c.env);
     if (accountId) {
       payload["customerid_account@odata.bind"] = `/accounts(${accountId})`;
-
-      hypercareEngineer = await c.env.DB
-        .prepare(
-          `SELECT u.id, u.name, u.email FROM customers cust
-           JOIN users u ON u.id = cust.hypercare_engineer_user_id
-           WHERE cust.crm_account_id = ? LIMIT 1`
-        )
-        .bind(accountId)
-        .first<{ id: string; name: string | null; email: string }>();
-
-      if (hypercareEngineer) {
-        const engineerSystemUserId = await getSystemUserIdByEmail(c.env, hypercareEngineer.email);
-        if (engineerSystemUserId) {
-          payload["am_escalationengineer@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
-          // Owner too, not just escalation engineer — otherwise the case
-          // still shows as owned by the generic portal integration user
-          // ("# pfsupport portal"), which is confusing for a case that's
-          // supposed to read as Scott's, not the general queue's.
-          payload["ownerid@odata.bind"] = `/systemusers(${engineerSystemUserId})`;
-        }
-      }
+      hypercareEngineer = await applyHypercareRouting(c.env, payload, accountId);
     } else {
       payload["customerid_contact@odata.bind"] = `/contacts(${contactId})`;
     }
