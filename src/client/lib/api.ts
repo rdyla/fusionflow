@@ -560,6 +560,9 @@ export type ProjectAssignmentReportRow = {
   customer_name: string | null;
   vendor: string | null;
   solution_types: SolutionType[];
+  status: string | null;
+  on_hold: number | null;
+  closed_at: string | null;
   pm_names: string[];
   ie_names: string[];
   created_at: string;

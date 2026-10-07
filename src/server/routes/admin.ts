@@ -377,7 +377,7 @@ app.get("/project-assignment-report", requireRole("admin"), async (c) => {
   const projects = await db
     .prepare(
       `SELECT p.id, COALESCE(c.name, p.customer_name) AS customer_name, p.vendor,
-              p.solution_types, p.created_at, p.pm_user_id, pmu.name AS pm_name
+              p.solution_types, p.status, p.on_hold, p.closed_at, p.created_at, p.pm_user_id, pmu.name AS pm_name
        FROM projects p
        LEFT JOIN customers c ON c.id = p.customer_id
        LEFT JOIN users pmu ON pmu.id = p.pm_user_id
@@ -385,7 +385,8 @@ app.get("/project-assignment-report", requireRole("admin"), async (c) => {
     )
     .all<{
       id: string; customer_name: string | null; vendor: string | null;
-      solution_types: unknown; created_at: string; pm_user_id: string | null; pm_name: string | null;
+      solution_types: unknown; status: string | null; on_hold: number | null; closed_at: string | null;
+      created_at: string; pm_user_id: string | null; pm_name: string | null;
     }>();
 
   const staff = await db
