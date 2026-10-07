@@ -552,6 +552,19 @@ export type Project = {
   updated_at: string;
 };
 
+/** Row shape for Admin → Assignment Report (`GET /admin/project-assignment-report`).
+ *  pm_names/ie_names already fold in every project_staff pm/engineer row plus the
+ *  primary pm_user_id, deduped — no further merging needed on the client. */
+export type ProjectAssignmentReportRow = {
+  id: string;
+  customer_name: string | null;
+  vendor: string | null;
+  solution_types: SolutionType[];
+  pm_names: string[];
+  ie_names: string[];
+  created_at: string;
+};
+
 export type AsanaSectionSummary = {
   gid: string;
   name: string;
@@ -2560,6 +2573,9 @@ export const api = {
 
   // Admin
   adminProjects: () => request<Project[]>("/admin/projects"),
+
+  adminProjectAssignmentReport: () =>
+    request<ProjectAssignmentReportRow[]>("/admin/project-assignment-report"),
 
   adminArchiveProject: (id: string, archived: boolean) =>
     request<Project>(`/admin/projects/${id}`, {
