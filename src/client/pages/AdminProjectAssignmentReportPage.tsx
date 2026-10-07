@@ -3,14 +3,41 @@ import { api, type ProjectAssignmentReportRow } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 import { joinSolutionTypeLabels } from "../../shared/solutionTypes";
 import { buildCsvText, downloadCsv, shortDate, todayIso } from "../lib/exportKit";
+import { humanize } from "../lib/format";
 
-type SortKey = "customer_name" | "vendor" | "solution_types" | "pm_names" | "ie_names" | "created_at";
+type SortKey = "customer_name" | "vendor" | "solution_types" | "status" | "pm_names" | "ie_names" | "created_at";
 type SortDir = "asc" | "desc";
+
+// Same precedence ProjectsPage.tsx uses: closed_at is the deliberate, final
+// signal (wins even over a stray on_hold flag left set); on_hold is a
+// temporary overlay on top of the auto-derived status
+// (not_started/in_progress/blocked/complete, from syncProjectStatus); the
+// derived status otherwise, humanized for display.
+const STATUS_COLOR: Record<string, string> = {
+  closed: "#64748b",
+  on_hold: "#92400e",
+  blocked: "#d13438",
+  complete: "#059669",
+  in_progress: "#0891b2",
+  not_started: "#94a3b8",
+};
+
+function statusKey(row: ProjectAssignmentReportRow): string {
+  if (row.closed_at) return "closed";
+  if (row.on_hold === 1) return "on_hold";
+  return row.status ?? "not_started";
+}
+
+function statusLabel(row: ProjectAssignmentReportRow): string {
+  const key = statusKey(row);
+  return key === "closed" ? "Closed" : key === "on_hold" ? "On Hold" : humanize(row.status, "Not Started");
+}
 
 const COLUMNS: Array<{ key: SortKey; label: string }> = [
   { key: "customer_name", label: "Customer" },
   { key: "vendor", label: "Provider" },
   { key: "solution_types", label: "Technology Types" },
+  { key: "status", label: "Status" },
   { key: "pm_names", label: "PM(s)" },
   { key: "ie_names", label: "IE(s)" },
   { key: "created_at", label: "Created" },
@@ -19,6 +46,7 @@ const COLUMNS: Array<{ key: SortKey; label: string }> = [
 function sortValue(row: ProjectAssignmentReportRow, key: SortKey): string {
   switch (key) {
     case "solution_types": return joinSolutionTypeLabels(row.solution_types);
+    case "status": return statusLabel(row);
     case "pm_names": return row.pm_names.join(", ");
     case "ie_names": return row.ie_names.join(", ");
     default: return row[key] ?? "";
@@ -68,6 +96,7 @@ export default function AdminProjectAssignmentReportPage() {
       r.customer_name ?? "",
       r.vendor ?? "",
       joinSolutionTypeLabels(r.solution_types),
+      statusLabel(r),
       r.pm_names.join(", "),
       r.ie_names.join(", "),
       shortDate(r.created_at),
@@ -119,6 +148,11 @@ export default function AdminProjectAssignmentReportPage() {
                   <td style={{ fontWeight: 500 }}>{r.customer_name ?? "—"}</td>
                   <td style={{ color: "#64748b" }}>{r.vendor ?? "—"}</td>
                   <td style={{ color: "#64748b" }}>{joinSolutionTypeLabels(r.solution_types) || "—"}</td>
+                  <td>
+                    <span style={{ color: STATUS_COLOR[statusKey(r)] ?? "#64748b", fontWeight: 600, fontSize: 12.5 }}>
+                      {statusLabel(r)}
+                    </span>
+                  </td>
                   <td style={{ color: "#64748b" }}>{r.pm_names.join(", ") || "—"}</td>
                   <td style={{ color: "#64748b" }}>{r.ie_names.join(", ") || "—"}</td>
                   <td style={{ color: "#94a3b8", fontSize: 12 }}>{shortDate(r.created_at)}</td>
