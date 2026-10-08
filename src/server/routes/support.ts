@@ -4,7 +4,7 @@ import type { AppUser, Bindings, Variables } from "../types";
 import { d365FetchSupport, getLastUcaasVendor, getSystemUserIdByEmail, isUuid } from "../services/dynamicsService";
 import { sendEmail, maybeSendEmail } from "../services/emailService";
 import { supportDigestEmail, hypercareCaseOpened, type DigestEmailData } from "../lib/emailTemplates";
-import { isSupportSupervisor } from "../lib/permissions";
+import { clientAccountIds, isSupportSupervisor } from "../lib/permissions";
 import { notifyZoomNewCase, notifyHypercareCase } from "../lib/notifications";
 import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 
@@ -74,6 +74,43 @@ const DEFAULT_SEVERITY = 173590001; // P3
  */
 function clientContactId(auth: { user: AppUser }): string {
   return auth.user.crm_contact_id ?? auth.user.id;
+}
+
+/**
+ * Picks the contact + account pair a client's new case is filed under. D365
+ * rejects a case whose primary contact isn't parented to the customer account
+ * (0x8004f864), and the session's two halves come from different places — the
+ * contact from an email lookup in CRM, the primary account from CloudConnect's
+ * contact tables (most recently added company) — so they can disagree, e.g. a
+ * client who is a contact on several customers. Ask D365 for this email's
+ * contact under one of the session's accounts instead, preferring the primary.
+ * No match → file under the primary account with no primary contact; the
+ * "Submitted by" note still records who opened it.
+ */
+async function resolveClientCaseParty(
+  env: Bindings,
+  user: AppUser
+): Promise<{ accountId: string | null; contactId: string | null }> {
+  const sessionContactId = clientContactId({ user });
+  const accountIds = clientAccountIds(user).filter(isUuid);
+  if (accountIds.length === 0) {
+    return { accountId: await resolveAccountId(sessionContactId, env), contactId: sessionContactId };
+  }
+
+  const email = user.email.toLowerCase().replace(/'/g, "''");
+  const parents = accountIds.map((id) => `_parentcustomerid_value eq '${id}'`).join(" or ");
+  const filter = `emailaddress1 eq '${email}' and statecode eq 0 and (${parents})`;
+  const res = await d365FetchSupport(
+    env,
+    `/contacts?$select=contactid,_parentcustomerid_value&$filter=${encodeURIComponent(filter)}`
+  );
+  const matches = res.ok
+    ? ((await res.json()) as { value: { contactid: string; _parentcustomerid_value: string }[] }).value ?? []
+    : [];
+  const match =
+    matches.find((m) => m._parentcustomerid_value === user.dynamics_account_id) ?? matches[0];
+  if (match) return { accountId: match._parentcustomerid_value, contactId: match.contactid };
+  return { accountId: user.dynamics_account_id ?? accountIds[0], contactId: null };
 }
 
 /** Resolve the D365 account ID for a contact (used for client users when dynamics_account_id is missing). */
@@ -777,15 +814,15 @@ app.post("/cases", async (c) => {
       hypercareEngineer = await applyHypercareRouting(c.env, payload, body.accountId);
     }
   } else {
-    const contactId = clientContactId(auth);
-    payload["primarycontactid@odata.bind"] = `/contacts(${contactId})`;
-    let accountId = auth.user.dynamics_account_id ?? null;
-    if (!accountId) accountId = await resolveAccountId(contactId, c.env);
+    const { accountId, contactId } = await resolveClientCaseParty(c.env, auth.user);
+    if (contactId) payload["primarycontactid@odata.bind"] = `/contacts(${contactId})`;
     if (accountId) {
       payload["customerid_account@odata.bind"] = `/accounts(${accountId})`;
       hypercareEngineer = await applyHypercareRouting(c.env, payload, accountId);
     } else {
-      payload["customerid_contact@odata.bind"] = `/contacts(${contactId})`;
+      const fallbackContactId = clientContactId(auth);
+      payload["primarycontactid@odata.bind"] = `/contacts(${fallbackContactId})`;
+      payload["customerid_contact@odata.bind"] = `/contacts(${fallbackContactId})`;
     }
   }
 
