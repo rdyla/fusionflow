@@ -21,6 +21,11 @@ export interface AppUser {
   dynamics_account_ids?: string[];
   manager_id: string | null;
   can_open_cases?: boolean; // only set for CRM-derived client sessions
+  /** Client sessions only: the user's Dynamics contact GUID. Distinct from `id`
+   *  because a client with a `users` row keeps that row's id, which for rows
+   *  created before v2.1.694 is a LOCAL contact-table id that D365 rejects.
+   *  Read it through `clientContactId()` in routes/support.ts. */
+  crm_contact_id?: string | null;
   cs_permission?: "none" | "user" | "power_user"; // cloud support calculator access
   // Self-editable profile fields (per migration 0090). avatar_url is the
   // resolved URL — either /api/users/:id/avatar when the user has uploaded
