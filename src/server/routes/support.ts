@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
-import type { Bindings, Variables } from "../types";
+import type { AppUser, Bindings, Variables } from "../types";
 import { d365FetchSupport, getLastUcaasVendor, getSystemUserIdByEmail, isUuid } from "../services/dynamicsService";
 import { sendEmail, maybeSendEmail } from "../services/emailService";
 import { supportDigestEmail, hypercareCaseOpened, type DigestEmailData } from "../lib/emailTemplates";
@@ -66,6 +66,15 @@ const STATE_MAP: Record<number, string> = { 0: "Active", 1: "Resolved", 2: "Canc
 // severitycode option-set values (D365 incident, Packet Fusion tenant)
 const CUSTOMER_SEVERITY_VALUES = new Set([1, 173590000, 173590001]); // P1, P2, P3
 const DEFAULT_SEVERITY = 173590001; // P3
+
+/**
+ * A client's Dynamics contact GUID — use this, never auth.user.id, for any D365
+ * lookup or bind. Clients with a pre-v2.1.694 `users` row carry a LOCAL id in
+ * user.id. Sessions minted before crm_contact_id existed fall back to user.id.
+ */
+function clientContactId(auth: { user: AppUser }): string {
+  return auth.user.crm_contact_id ?? auth.user.id;
+}
 
 /** Resolve the D365 account ID for a contact (used for client users when dynamics_account_id is missing). */
 async function resolveAccountId(contactId: string, env: Bindings): Promise<string | null> {
@@ -134,7 +143,7 @@ app.get("/me", (c) => {
     isInternal: internal,
     isPartnerAe: auth.role === "partner_ae",
     isSupportSupervisor: isSupportSupervisor(auth),
-    contactId: internal ? null : auth.user.id,
+    contactId: internal ? null : clientContactId(auth),
     accountId: internal ? null : (auth.user.dynamics_account_id ?? null),
   });
 });
@@ -146,7 +155,7 @@ app.get("/me/contacts", async (c) => {
 
   let accountId = auth.user.dynamics_account_id ?? null;
   if (!accountId) {
-    accountId = await resolveAccountId(auth.user.id, c.env);
+    accountId = await resolveAccountId(clientContactId(auth), c.env);
   }
   if (!accountId) return c.json([]);
 
@@ -579,12 +588,12 @@ app.get("/cases", async (c) => {
   } else {
     let accountId = auth.user.dynamics_account_id ?? null;
     if (!accountId) {
-      accountId = await resolveAccountId(auth.user.id, c.env);
+      accountId = await resolveAccountId(clientContactId(auth), c.env);
     }
     if (!accountId) {
       return c.json({ error: "Could not determine account" }, 400);
     }
-    const contactId = auth.user.id;
+    const contactId = clientContactId(auth);
     const baseFilter = `(_customerid_value eq '${accountId}' or _customerid_value eq '${contactId}')`;
     if (search) {
       const s = search.replace(/'/g, "''");
@@ -768,7 +777,7 @@ app.post("/cases", async (c) => {
       hypercareEngineer = await applyHypercareRouting(c.env, payload, body.accountId);
     }
   } else {
-    const contactId = auth.user.id;
+    const contactId = clientContactId(auth);
     payload["primarycontactid@odata.bind"] = `/contacts(${contactId})`;
     let accountId = auth.user.dynamics_account_id ?? null;
     if (!accountId) accountId = await resolveAccountId(contactId, c.env);

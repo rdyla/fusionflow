@@ -183,6 +183,7 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
           dynamics_account_ids: companies.map((cc) => cc.accountId),
           manager_id: null,
           can_open_cases: portal?.canOpenCases ?? false,
+          crm_contact_id: portal?.contactid ?? primary.crmContactId ?? null,
         };
         return { user: clientUser, role: "client", organization: primary.organization };
       }
@@ -200,6 +201,7 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
           dynamics_account_id: contact.accountId,
           manager_id: null,
           can_open_cases: contact.canOpenCases,
+          crm_contact_id: contact.contactid,
         };
         return { user: clientUser, role: "client", organization: contact.accountName };
       }
@@ -225,6 +227,19 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
       ...companies.map((cc) => cc.accountId),
     ])];
     if (ids.length > 0) user = { ...user, dynamics_account_ids: ids };
+
+    // This path keeps the users row's id, which for rows created before
+    // v2.1.694 is the LOCAL contact-table id, not a Dynamics one. Binding it
+    // into D365 fails case creation with 0x80040217 "Entity 'Contact' With
+    // Id = ... Does Not Exist", and re-login never fixed it because the row
+    // short-circuits the contact branch above. Resolve the real contact GUID
+    // separately; user.id stays as-is since D1 (profile, avatar) is keyed on it.
+    const portal = await getPortalContact(env, email);
+    user = {
+      ...user,
+      crm_contact_id: portal?.contactid ?? companies.find((cc) => cc.crmContactId)?.crmContactId ?? null,
+      can_open_cases: portal?.canOpenCases ?? false,
+    };
   }
 
   return { user, role: user.role, organization: user.organization_name };
