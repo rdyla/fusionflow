@@ -76,7 +76,7 @@ function consentPage(details: ConsentDescription, handle: string, userEmail: str
 <p class="muted">${origin} Access goes to <strong>${escape(details.redirectHost)}</strong>.</p>
 ${details.redirectIsLoopback ? '<p class="warn">This sends access to an app on your computer. Continue only if you just started connecting from it.</p>' : ""}
 <p>Signed in as <strong>${escape(userEmail)}</strong>. It will be able to:</p>
-<ul><li>See your projects, their CE case numbers and hours</li><li>See time entries on projects you can see</li><li>Log, edit and delete your own time in CE, as you</li></ul>
+<ul><li>See your projects, their CE case numbers and hours</li><li>See time entries on projects you can see</li><li>Log, edit and delete your own time in CE, as you</li><li>Add notes to your projects' CE case Internal Notes</li></ul>
 <p class="muted">It sees only what you see in CloudConnect. An admin can turn this off at any time.</p>
 <form method="post">
   <input type="hidden" name="handle" value="${escape(handle)}">
