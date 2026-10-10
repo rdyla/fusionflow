@@ -7,6 +7,7 @@ import { sendEmail } from "../services/emailService";
 import { userInvite } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
+import { getPayCodes } from "../services/dynamicsService";
 import { getDemoVendor, setDemoVendor, getLeadershipSummarySchedule, setLeadershipSummarySchedule } from "../lib/appSettings";
 
 const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
@@ -48,12 +49,19 @@ app.get("/templates-list", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_eng
 
 // ── Users ─────────────────────────────────────────────────────────────────────
 
+// Pay codes from Dynamics, for the per-user default (used by the Claude
+// connector when logging time). Global list, cached in KV by getPayCodes.
+app.get("/pay-codes", requireRole("admin"), async (c) => {
+  const codes = await getPayCodes(c.env);
+  return c.json(codes.map((p) => ({ id: p.amc_paycodeid, name: p.amc_name, description: p.amc_description })));
+});
+
 app.get("/users", requireRole("admin"), async (c) => {
   const db = c.env.DB;
   const rows = await db
     .prepare(
       `SELECT id, email, name, organization_name, role, is_active, is_support_supervisor, is_project_resource, is_pm_eligible, is_sales_tools,
-              is_trainer, is_integrations, is_specialist, is_time_assist, is_mcp, manager_id, zoom_user_id, cs_permission, created_at, updated_at
+              is_trainer, is_integrations, is_specialist, is_time_assist, is_mcp, default_pay_code_id, manager_id, zoom_user_id, cs_permission, created_at, updated_at
        FROM users
        ORDER BY name ASC`
     )
@@ -128,6 +136,7 @@ const updateUserSchema = z.object({
   is_specialist: z.number().int().min(0).max(1).optional(),
   is_time_assist: z.number().int().min(0).max(1).optional(),
   is_mcp: z.number().int().min(0).max(1).optional(),
+  default_pay_code_id: z.string().uuid().nullable().optional(),
   is_sales_tools: z.number().int().min(0).max(1).optional(),
   dynamics_account_id: z.string().nullable().optional(),
   manager_id: z.string().nullable().optional(),

@@ -107,6 +107,8 @@ export async function removeTimeEntryFromCrm(
   } catch (err) {
     const message = err instanceof Error ? err.message : "CRM delete failed";
     console.error(`deleteTimeEntry (${context}) error:`, message, "entry:", crmTimeEntryId);
-    throw new HTTPException(502, { message: `CRM error: ${message}` });
+    // cause keeps a TimeEntryLeftOpenError identifiable to callers that need
+    // to tell "record left Active" apart from a plain failure.
+    throw new HTTPException(502, { message: `CRM error: ${message}`, cause: err });
   }
 }

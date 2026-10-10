@@ -92,6 +92,8 @@ export type User = {
   is_time_assist?: number;
   /** Claude MCP connector access (migration 0149). Off by default. */
   is_mcp?: number;
+  /** amc_paycode GUID the connector logs time with (migration 0150). */
+  default_pay_code_id?: string | null;
   is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
@@ -2647,6 +2649,8 @@ export const api = {
 
   adminUsers: () => request<User[]>("/admin/users"),
 
+  adminPayCodes: () => request<{ id: string; name: string; description: string | null }[]>("/admin/pay-codes"),
+
   adminDeleteUser: (id: string) =>
     request<{ success: boolean }>(`/admin/users/${id}`, { method: "DELETE" }),
 
@@ -2684,6 +2688,7 @@ export const api = {
       is_specialist?: number;
       is_time_assist?: number;
       is_mcp?: number;
+      default_pay_code_id?: string | null;
       is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;

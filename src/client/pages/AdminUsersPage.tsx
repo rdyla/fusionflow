@@ -119,6 +119,11 @@ export default function AdminUsersPage() {
 
   useEffect(() => { loadUsers(); }, []);
 
+  // Pay codes for the connector's per-user default. Empty when Dynamics isn't
+  // configured (local dev) — the picker then just shows "Not set".
+  const [payCodes, setPayCodes] = useState<{ id: string; name: string; description: string | null }[]>([]);
+  useEffect(() => { api.adminPayCodes().then(setPayCodes).catch(() => setPayCodes([])); }, []);
+
   function handleViewAs(user: User) {
     localStorage.setItem(IMPERSONATE_KEY, user.email);
     navigate("/dashboard");
@@ -187,6 +192,7 @@ export default function AdminUsersPage() {
       is_specialist: user.is_specialist ?? 0,
       is_time_assist: user.is_time_assist ?? 0,
       is_mcp: user.is_mcp ?? 0,
+      default_pay_code_id: user.default_pay_code_id ?? null,
       is_sales_tools: user.is_sales_tools ?? 0,
       email_notifications: user.email_notifications ?? "all",
     });
@@ -213,6 +219,7 @@ export default function AdminUsersPage() {
         is_specialist: editForm.role === "client" ? 0 : (editForm.is_specialist ?? 0),
         is_time_assist: editForm.role === "client" ? 0 : (editForm.is_time_assist ?? 0),
         is_mcp: editForm.role === "client" ? 0 : (editForm.is_mcp ?? 0),
+        default_pay_code_id: editForm.role === "client" ? null : (editForm.default_pay_code_id ?? null),
         is_sales_tools: editForm.role === "client" ? 0 : (editForm.is_sales_tools ?? 0),
         email_notifications: (editForm.email_notifications ?? "all") as "all" | "important" | "off",
       });
@@ -824,9 +831,29 @@ export default function AdminUsersPage() {
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Claude Connector</div>
                     <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
-                      Lets this user connect Claude to CloudConnect to look up their projects and hours. Claude acts as them and sees only what they can see. Turning this off cuts off an existing connection on its next request.
+                      Lets this user connect Claude to CloudConnect to look up their projects and hours and log their time. Claude acts as them and sees only what they can see. Turning this off cuts off an existing connection on its next request.
                     </div>
                   </div>
+                </label>
+              )}
+
+              {/* Pay code the connector logs this user's time with. */}
+              {editForm.role !== "client" && (editForm.is_mcp ?? 0) === 1 && (
+                <label style={{ display: "block", border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", background: "#f8fafc" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Default pay code</div>
+                  <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4, marginBottom: 8 }}>
+                    Used when Claude logs time for this user. If not set, their most recently used pay code is used.
+                  </div>
+                  <select
+                    className="ms-input"
+                    value={editForm.default_pay_code_id ?? ""}
+                    onChange={(e) => setEditForm({ ...editForm, default_pay_code_id: e.target.value || null })}
+                  >
+                    <option value="">Not set</option>
+                    {payCodes.map((pc) => (
+                      <option key={pc.id} value={pc.id}>{pc.name}{pc.description ? ` — ${pc.description}` : ""}</option>
+                    ))}
+                  </select>
                 </label>
               )}
 
