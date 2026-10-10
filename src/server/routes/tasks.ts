@@ -11,9 +11,8 @@ import { canEditProject, canLogTimeOnProject, canViewProject, visiblePhaseIds } 
 import { maybeSendEmail } from "../services/emailService";
 import { taskAssigned, taskBlocked, pmTaskUpdate } from "../lib/emailTemplates";
 import { createNotification, notifyGoLive } from "../lib/notifications";
-import {
-  getPayCodes, getCaseAndJob, getCostCodesForJob, getSystemUserIdByEmail, createTimeEntry, closeTimeEntry, deleteTimeEntry,
-} from "../services/dynamicsService";
+import { getPayCodes, getCaseAndJob, getCostCodesForJob } from "../services/dynamicsService";
+import { pushTimeEntryToCrm, removeTimeEntryFromCrm, resolveCaseForTime } from "../services/timeEntryService";
 import { syncStageStatus, maybeGraduateProject, syncProjectGoLiveDate, syncProjectStatus } from "../lib/teamUtils";
 import { parseSolutionTypes, joinSolutionTypeLabels } from "../../shared/solutionTypes";
 
@@ -840,41 +839,18 @@ app.post("/:id/tasks/:taskId/time-entries", async (c) => {
 
   const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, case_id, job_id, account_id } = parsed.data;
 
-  const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
-  if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
-
-  let crmTimeEntryId: string;
-  try {
-    crmTimeEntryId = await createTimeEntry(c.env, {
-      subject: task.title,
-      scheduledStart: scheduled_start,
-      scheduledEnd: scheduled_end,
-      caseId: case_id,
-      jobId: job_id,
-      payCodeId: pay_code_id,
-      costCodeId: cost_code_id ?? null,
-      companyId: account_id ?? null,
-      ownerId,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "CRM time entry failed";
-    console.error("createTimeEntry error:", message);
-    throw new HTTPException(502, { message: `CRM error: ${message}` });
-  }
-
-  // Payroll's integration only picks up Completed entries; leaving the entry
-  // in Open creates a stuck record in their feed. Hard-fail if the close
-  // PATCH errors — the create-then-close is a single logical operation from
-  // the user's perspective, and a half-completed state is worse than a clean
-  // error they can retry from. Local row is intentionally not inserted on
-  // failure; the orphan in CRM is the cost of keeping retry idempotent-ish.
-  try {
-    await closeTimeEntry(c.env, crmTimeEntryId);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "CRM time entry close failed";
-    console.error("closeTimeEntry error:", message, "orphan entry:", crmTimeEntryId);
-    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
-  }
+  // Create-then-close in CRM; throws before the local insert on any failure.
+  const crmTimeEntryId = await pushTimeEntryToCrm(c.env, {
+    subject: task.title,
+    scheduledStart: scheduled_start,
+    scheduledEnd: scheduled_end,
+    caseId: case_id,
+    jobId: job_id,
+    payCodeId: pay_code_id,
+    costCodeId: cost_code_id ?? null,
+    companyId: account_id ?? null,
+    ownerEmail: auth.user.email,
+  }, "task");
 
   const entryId = crypto.randomUUID();
   await db
@@ -961,43 +937,23 @@ app.post("/:id/stages/:stageId/time-entries", async (c) => {
 
   const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, note, case_id, job_id, account_id } = parsed.data;
 
-  const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
-  if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
-
   // CRM subject: "{stage} | {note}" — e.g. "Initiate | Kick off meeting with
   // client". The entry is related to the project's CRM case, which already
   // identifies the project, so the project name isn't repeated here.
   const noteTrimmed = (note ?? "").trim();
   const subject = noteTrimmed ? `${stage.name} | ${noteTrimmed}` : stage.name;
 
-  let crmTimeEntryId: string;
-  try {
-    crmTimeEntryId = await createTimeEntry(c.env, {
-      subject,
-      scheduledStart: scheduled_start,
-      scheduledEnd: scheduled_end,
-      caseId: case_id,
-      jobId: job_id,
-      payCodeId: pay_code_id,
-      costCodeId: cost_code_id,
-      companyId: account_id ?? null,
-      ownerId,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "CRM time entry failed";
-    console.error("createTimeEntry (stage) error:", message);
-    throw new HTTPException(502, { message: `CRM error: ${message}` });
-  }
-
-  // Same create-then-close contract as the task path: payroll only picks up
-  // Completed entries, so a failed close is a hard error (orphan left in CRM).
-  try {
-    await closeTimeEntry(c.env, crmTimeEntryId);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "CRM time entry close failed";
-    console.error("closeTimeEntry (stage) error:", message, "orphan entry:", crmTimeEntryId);
-    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
-  }
+  const crmTimeEntryId = await pushTimeEntryToCrm(c.env, {
+    subject,
+    scheduledStart: scheduled_start,
+    scheduledEnd: scheduled_end,
+    caseId: case_id,
+    jobId: job_id,
+    payCodeId: pay_code_id,
+    costCodeId: cost_code_id,
+    companyId: account_id ?? null,
+    ownerEmail: auth.user.email,
+  }, "stage");
 
   const entryId = crypto.randomUUID();
   await db
@@ -1035,17 +991,8 @@ app.delete("/:id/stages/:stageId/time-entries/:entryId", async (c) => {
   const isOwnEntry = entry.user_id === auth.user.id;
   if (!canEdit && !isOwnEntry) throw new HTTPException(403, { message: "Forbidden" });
 
-  // Delete the CRM record first so we never leave the local row pointing at a
-  // CRM entry we failed to remove. A 404 in CRM is treated as success.
-  if (entry.crm_time_entry_id) {
-    try {
-      await deleteTimeEntry(c.env, entry.crm_time_entry_id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "CRM delete failed";
-      console.error("deleteTimeEntry error:", message, "entry:", entry.crm_time_entry_id);
-      throw new HTTPException(502, { message: `CRM error: ${message}` });
-    }
-  }
+  // CRM record first, so the local row never points at a CRM entry we failed to remove.
+  await removeTimeEntryFromCrm(c.env, entry.crm_time_entry_id, "stage");
 
   await db.prepare("DELETE FROM stage_time_entries WHERE id = ?").bind(entryId).run();
 
@@ -1122,14 +1069,8 @@ app.post("/:id/time-entries", async (c) => {
   const { scheduled_start, scheduled_end, pay_code_id, cost_code_id, note } = parsed.data;
 
   // Resolve case/job/account from the project's linked case SERVER-SIDE — never
-  // trust client-supplied ids. A missing job means no billing context, so the
-  // CRM submission can't proceed.
-  const caseAndJob = await getCaseAndJob(c.env, project.crm_case_id);
-  if (!caseAndJob) throw new HTTPException(400, { message: "Could not resolve the project's CRM case in Dynamics." });
-  if (!caseAndJob.jobId) throw new HTTPException(400, { message: "The project's CRM case has no linked job — a job is required to log time." });
-
-  const ownerId = await getSystemUserIdByEmail(c.env, auth.user.email);
-  if (!ownerId) throw new HTTPException(422, { message: `No Dynamics user found for ${auth.user.email}` });
+  // trust client-supplied ids.
+  const caseAndJob = await resolveCaseForTime(c.env, project.crm_case_id);
 
   // CRM subject: "Project Admin | {note}" — e.g. "Project Admin | weekly
   // internal sync". The entry is related to the project's CRM case, which
@@ -1137,34 +1078,17 @@ app.post("/:id/time-entries", async (c) => {
   const noteTrimmed = (note ?? "").trim();
   const subject = noteTrimmed ? `Project Admin | ${noteTrimmed}` : "Project Admin";
 
-  let crmTimeEntryId: string;
-  try {
-    crmTimeEntryId = await createTimeEntry(c.env, {
-      subject,
-      scheduledStart: scheduled_start,
-      scheduledEnd: scheduled_end,
-      caseId: caseAndJob.caseId,
-      jobId: caseAndJob.jobId,
-      payCodeId: pay_code_id,
-      costCodeId: cost_code_id,
-      companyId: caseAndJob.accountId ?? null,
-      ownerId,
-    });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "CRM time entry failed";
-    console.error("createTimeEntry (project admin) error:", message);
-    throw new HTTPException(502, { message: `CRM error: ${message}` });
-  }
-
-  // Same create-then-close contract as the stage/task paths: payroll only picks
-  // up Completed entries, so a failed close is a hard error (orphan left in CRM).
-  try {
-    await closeTimeEntry(c.env, crmTimeEntryId);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "CRM time entry close failed";
-    console.error("closeTimeEntry (project admin) error:", message, "orphan entry:", crmTimeEntryId);
-    throw new HTTPException(502, { message: `CRM time entry created but not closed (orphan ${crmTimeEntryId}): ${message}` });
-  }
+  const crmTimeEntryId = await pushTimeEntryToCrm(c.env, {
+    subject,
+    scheduledStart: scheduled_start,
+    scheduledEnd: scheduled_end,
+    caseId: caseAndJob.caseId,
+    jobId: caseAndJob.jobId,
+    payCodeId: pay_code_id,
+    costCodeId: cost_code_id,
+    companyId: caseAndJob.accountId,
+    ownerEmail: auth.user.email,
+  }, "project admin");
 
   const entryId = crypto.randomUUID();
   await db
@@ -1204,17 +1128,8 @@ app.delete("/:id/time-entries/:entryId", async (c) => {
   const isOwnEntry = entry.user_id === auth.user.id;
   if (!canEdit && !isOwnEntry) throw new HTTPException(403, { message: "Forbidden" });
 
-  // Delete the CRM record first so we never leave the local row pointing at a
-  // CRM entry we failed to remove. A 404 in CRM is treated as success.
-  if (entry.crm_time_entry_id) {
-    try {
-      await deleteTimeEntry(c.env, entry.crm_time_entry_id);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "CRM delete failed";
-      console.error("deleteTimeEntry (project admin) error:", message, "entry:", entry.crm_time_entry_id);
-      throw new HTTPException(502, { message: `CRM error: ${message}` });
-    }
-  }
+  // CRM record first, so the local row never points at a CRM entry we failed to remove.
+  await removeTimeEntryFromCrm(c.env, entry.crm_time_entry_id, "project admin");
 
   await db.prepare("DELETE FROM project_time_entries WHERE id = ?").bind(entryId).run();
 
