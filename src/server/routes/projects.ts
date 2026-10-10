@@ -10,7 +10,7 @@ import { clientAccountIds } from "../lib/permissions";
 import { maybeSendEmail, sendEmail } from "../services/emailService";
 import { projectAtRisk, contactProjectInvite, projectReadyToClose } from "../lib/emailTemplates";
 import { computeProjectHealth } from "../lib/healthScore";
-import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes, closeCase } from "../services/dynamicsService";
+import { getAccountTeam, getCase, getCaseTimeEntries, getAccountOpportunities, getOpportunityQuotes, pickSowQuote, closeCase } from "../services/dynamicsService";
 import { ensureSharePointChildFolder, grantFolderEdit, lookupMailGroup, revokeAllProjectEditGrants } from "../services/graphService";
 import { resolveCustomerSharePointUrl } from "../lib/customerSharePoint";
 import { findOrCreatePfUser } from "../lib/crmUsers";
@@ -620,6 +620,10 @@ app.patch("/:id", requireRole("admin", "pm", "pf_sa", "pf_csm", "pf_engineer"), 
     values.push(value);
   }
 
+  // crm_ticket_number caches the CE case number for crm_case_id; re-linking the
+  // case invalidates it. It's refilled from Dynamics on next read (lib/caseNumbers).
+  if (updates.crm_case_id !== undefined) fields.push("crm_ticket_number = NULL");
+
   // When health is explicitly set by a PM, record it as a manual override
   if (updates.health !== undefined) {
     fields.push("health_override = ?");
@@ -928,10 +932,7 @@ app.get("/:id/case", async (c) => {
       if (project.crm_opportunity_id) {
         // Opportunity is pinned — fetch its quotes directly
         const quotes = await getOpportunityQuotes(c.env, project.crm_opportunity_id).catch(() => []);
-        const withSow = quotes.filter((q) => q.am_sow != null);
-        const priority = (q: { statecode: number }) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
-        withSow.sort((a, b) => priority(a) - priority(b));
-        sowQuote = withSow[0] ?? null;
+        sowQuote = pickSowQuote(quotes);
       }
     }
   }

@@ -42,6 +42,10 @@
     {
       "binding": "KV_STAGING",
       "id": "b440d440223245729ef519290020ab6d"
+    },
+    {
+      "binding": "OAUTH_KV",
+      "id": "ce5145e8c79643209ba7588fbc007b7f"
     }
   ],
   "r2_buckets": [
@@ -74,6 +78,10 @@
         {
           "binding": "KV",
           "id": "b440d440223245729ef519290020ab6d"
+        },
+        {
+          "binding": "OAUTH_KV",
+          "id": "4d95da476c7148dda7ef277004b219bd"
         }
       ],
       "r2_buckets": [

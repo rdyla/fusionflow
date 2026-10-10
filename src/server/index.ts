@@ -45,6 +45,8 @@ import phasesRoutes from "./routes/phases";
 import meRoutes from "./routes/me";
 import salesToolsRoutes from "./routes/salesTools";
 import customPlanRoutes from "./routes/customPlan"; // one-off MedVet custom plan (throwaway)
+import mcpAuthorizeRoutes, { AUTHORIZE_PATH } from "./mcp/authorize";
+import { isOAuthOrMcpPath, oauthProviderFor } from "./mcp/provider";
 import { sendEmail } from "./services/emailService";
 import { goLiveReminder, leadershipWeeklySummary } from "./lib/emailTemplates";
 import { createNotification } from "./lib/notifications";
@@ -115,6 +117,11 @@ app.route("/api/projects", phasesRoutes);
 app.route("/api/projects", customPlanRoutes);
 app.route("/api/me", meRoutes);
 app.route("/api/sales-tools", salesToolsRoutes);
+
+// Claude connector sign-in + consent. Outside /api: it's a page, it reads the
+// session itself, and it's only reachable through the OAuth provider (see the
+// default export), which supplies env.OAUTH_PROVIDER.
+app.route(AUTHORIZE_PATH, mcpAuthorizeRoutes);
 
 // Catch-all: serve static assets (and SPA index.html fallback) for everything
 // that isn't an /api/* route. Required because run_worker_first=true means
@@ -277,8 +284,17 @@ async function runLeadershipWeeklySummaryCheck(env: Bindings): Promise<void> {
   await setLeadershipSummarySchedule(env.DB, { ...schedule, lastSentAt: pacificDateStr }, null);
 }
 
+const appHandler = { fetch: app.fetch.bind(app) };
+
 export default {
-  fetch: app.fetch.bind(app),
+  // Only the Claude connector's OAuth/MCP paths go through the provider; the
+  // rest of the app is served exactly as before, untouched by it.
+  fetch(request: Request, env: Bindings, ctx: ExecutionContext) {
+    if (isOAuthOrMcpPath(new URL(request.url).pathname)) {
+      return oauthProviderFor(request, env, appHandler).fetch(request, env, ctx);
+    }
+    return app.fetch(request, env, ctx);
+  },
   async scheduled(event: ScheduledEvent, env: Bindings, ctx: ExecutionContext) {
     if (event.cron === "0 * * * *") {
       ctx.waitUntil(runLeadershipWeeklySummaryCheck(env));

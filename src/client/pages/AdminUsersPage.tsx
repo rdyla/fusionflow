@@ -186,6 +186,7 @@ export default function AdminUsersPage() {
       is_integrations: user.is_integrations ?? 0,
       is_specialist: user.is_specialist ?? 0,
       is_time_assist: user.is_time_assist ?? 0,
+      is_mcp: user.is_mcp ?? 0,
       is_sales_tools: user.is_sales_tools ?? 0,
       email_notifications: user.email_notifications ?? "all",
     });
@@ -211,6 +212,7 @@ export default function AdminUsersPage() {
         is_integrations: editForm.role === "client" ? 0 : (editForm.is_integrations ?? 0),
         is_specialist: editForm.role === "client" ? 0 : (editForm.is_specialist ?? 0),
         is_time_assist: editForm.role === "client" ? 0 : (editForm.is_time_assist ?? 0),
+        is_mcp: editForm.role === "client" ? 0 : (editForm.is_mcp ?? 0),
         is_sales_tools: editForm.role === "client" ? 0 : (editForm.is_sales_tools ?? 0),
         email_notifications: (editForm.email_notifications ?? "all") as "all" | "important" | "off",
       });
@@ -800,6 +802,29 @@ export default function AdminUsersPage() {
                     <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Time Entry Suggestions</div>
                     <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
                       Shows a "My Time" page suggesting time entries from last week's Zoom meetings and Outlook calendar, matched to this user's active projects. Suggestions only — nothing is logged to CRM until they confirm it.
+                    </div>
+                  </div>
+                </label>
+              )}
+
+              {/* Claude connector (MCP) — internal only. */}
+              {editForm.role !== "client" && (
+                <label
+                  style={{
+                    display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer",
+                    border: "1px solid #e2e8f0", borderRadius: 8, padding: "12px 14px", background: "#f8fafc",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={(editForm.is_mcp ?? 0) === 1}
+                    onChange={(e) => setEditForm({ ...editForm, is_mcp: e.target.checked ? 1 : 0 })}
+                    style={{ marginTop: 3, flexShrink: 0 }}
+                  />
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 2 }}>Claude Connector</div>
+                    <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>
+                      Lets this user connect Claude to CloudConnect to look up their projects and hours. Claude acts as them and sees only what they can see. Turning this off cuts off an existing connection on its next request.
                     </div>
                   </div>
                 </label>

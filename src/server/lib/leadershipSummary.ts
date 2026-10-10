@@ -1,5 +1,5 @@
 import type { Bindings } from "../types";
-import { getOpportunityQuotes } from "../services/dynamicsService";
+import { getOpportunityQuotes, pickSowQuote } from "../services/dynamicsService";
 import type { LeadershipSummaryData } from "./emailTemplates";
 
 // Shared by the Leadership dashboard's "Preview Weekly Summary" endpoint and
@@ -78,10 +78,7 @@ export async function buildLeadershipSummaryData(env: Bindings): Promise<Leaders
   const hoursChecked = await Promise.all(
     (hoursCandidates.results ?? []).map(async (p) => {
       const quotes = await getOpportunityQuotes(env, p.crm_opportunity_id).catch(() => []);
-      const withSow = quotes.filter((q) => q.am_sow != null);
-      const priority = (q: { statecode: number }) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
-      withSow.sort((a, b) => priority(a) - priority(b));
-      const quotedHours = withSow[0]?.am_sow ?? null;
+      const quotedHours = pickSowQuote(quotes)?.am_sow ?? null;
       const pct = quotedHours ? Math.round((p.hours_logged / quotedHours) * 1000) / 10 : null;
       return { name: p.name, customerName: p.customer_name, pct };
     })

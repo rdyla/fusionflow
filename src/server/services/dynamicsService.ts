@@ -582,6 +582,16 @@ export async function getAccountOpportunities(
 
 const QUOTE_STATE: Record<number, string> = { 0: "Draft", 1: "Active", 2: "Won", 4: "Closed" };
 
+/**
+ * The quote whose am_sow is a project's quoted ("allotted") hours: Won beats
+ * Active beats anything else; quotes with no SOW hours never count. Ties keep
+ * getOpportunityQuotes' newest-first order.
+ */
+export function pickSowQuote<Q extends { statecode: number; am_sow: number | null }>(quotes: Q[]): Q | null {
+  const priority = (q: Q) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
+  return quotes.filter((q) => q.am_sow != null).sort((a, b) => priority(a) - priority(b))[0] ?? null;
+}
+
 export async function getOpportunityQuotes(env: Env, opportunityId: string): Promise<DynamicsQuote[]> {
   if (!isConfigured(env)) return [];
   const select = "quoteid,name,statecode,am_sow,_opportunityid_value";
