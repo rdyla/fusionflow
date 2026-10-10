@@ -7,6 +7,7 @@ import { pacificToday, addDays } from "../lib/pacificTime";
 import {
   WORK_TYPES, createTimeEntryForUser, deleteTimeEntryForUser, isFailure, updateTimeEntryForUser, type WorkType,
 } from "./timeWrites";
+import { addCaseNoteForUser } from "./caseNotes";
 
 const zDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const zTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM, 24-hour");
@@ -224,6 +225,34 @@ export function buildMcpServer(env: Bindings, ctx: ExecutionContext, auth: AuthC
       annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true },
     },
     async ({ entry_id }) => writeResult(await deleteTimeEntryForUser(env, ctx, auth, entry_id))
+  );
+
+  server.registerTool(
+    "add_case_note",
+    {
+      title: "Add case note",
+      description:
+        "Append a note to a project's CE case Internal Notes, stamped with Pacific time and my " +
+        "name. Appends — never replaces existing notes. Retrying the same note doesn't add it " +
+        "twice. Returns the exact text appended.",
+      inputSchema: {
+        project: z.string().min(1).describe("Case number, project id, or name"),
+        note: z.string().min(1).max(2000).describe("The note text"),
+        allow_duplicate: z.boolean().optional().describe("Add even if this exact note from me is already on the case"),
+      },
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
+    },
+    async ({ project, note, allow_duplicate }) => {
+      const rows = await findProjects(env, user, project);
+      if (rows.length === 0) return toolError(`No project you can see matches "${project}".`);
+      if (rows.length > 1) return json({ ambiguous: true, matches: candidates(rows) });
+      const r = rows[0];
+      return writeResult(await addCaseNoteForUser(
+        env, ctx, auth,
+        { id: r.id, name: r.name, crm_case_id: r.crm_case_id, crm_ticket_number: r.crm_ticket_number },
+        note, allow_duplicate ?? false
+      ));
+    }
   );
 
   return server;

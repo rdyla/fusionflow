@@ -875,6 +875,54 @@ export async function updateCase(env: Env, caseId: string, payload: {
 // support portal uses (support.ts) — a plain PATCH to statecode=1 is
 // unreliable across D365 configs, CloseIncident is the documented way to
 // transition a case to Resolved.
+/**
+ * Append `entry` to a case's Internal Notes (incident.new_internalnotes, plain
+ * text). Appends, never replaces: read the field, add the entry after a blank
+ * line, write it back.
+ *
+ * Read-modify-write on a shared field, so the PATCH carries the record's ETag
+ * (If-Match). If someone else saved the case in between, Dynamics answers 412
+ * and we re-read and retry, rather than silently dropping their edit.
+ *
+ * `alreadyPresent` lets the caller spot a retry of a note that already landed
+ * (checked against the freshly read text, so it works across attempts).
+ * Returns the text as written.
+ */
+export async function appendCaseInternalNote(
+  env: Env,
+  caseId: string,
+  entry: string,
+  alreadyPresent?: (current: string) => boolean
+): Promise<{ appended: boolean; notes: string }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await dynamicsGet<{ "@odata.etag": string; new_internalnotes: string | null }>(
+      env,
+      `/incidents(${caseId})?$select=new_internalnotes`
+    );
+    const existing = current.new_internalnotes ?? "";
+    if (alreadyPresent?.(existing)) return { appended: false, notes: existing };
+
+    const notes = existing.trim() ? `${existing.replace(/\s+$/, "")}\n\n${entry}` : entry;
+    const token = await getToken(env);
+    const res = await fetch(`${API_BASE}/incidents(${caseId})`, {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        "OData-MaxVersion": "4.0",
+        "OData-Version": "4.0",
+        "If-Match": current["@odata.etag"],
+      },
+      body: JSON.stringify({ new_internalnotes: notes }),
+    });
+    if (res.ok) return { appended: true, notes };
+    if (res.status === 412) continue; // changed underneath us — re-read, re-append
+    const text = await res.text().catch(() => "");
+    throw new Error(`Dynamics PATCH error: ${res.status} /incidents(${caseId}) - ${text}`);
+  }
+  throw new Error("The case kept changing while the note was being added; try again.");
+}
+
 export async function closeCase(env: Env, caseId: string, opts: {
   subject: string;
   description?: string;
