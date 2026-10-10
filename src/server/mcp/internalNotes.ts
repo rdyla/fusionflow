@@ -6,8 +6,10 @@ import { utcToPacific } from "../lib/pacificTime";
 import { type ToolFailure } from "./timeWrites";
 
 /**
- * add_case_note: append to a project's CE case Internal Notes
- * (incident.new_internalnotes). Each entry is stamped with Pacific time and the
+ * add_internal_note: append to the Internal Notes FIELD on a project's CE case
+ * (incident.new_internalnotes). Not a "case note" — at Packet Fusion that means
+ * the separate note records on the case Timeline (annotations), which this
+ * never creates; the naming keeps the two apart for people and the model. Each entry is stamped with Pacific time and the
  * author, e.g.
  *
  *   [2026-10-10 14:32 PT] Ryan Dyla: Customer confirmed go-live date.
@@ -33,7 +35,7 @@ function entryBodies(notes: string): string[] {
 
 type ProjectForNote = { id: string; name: string; crm_case_id: string | null; crm_ticket_number: string | null };
 
-export async function addCaseNoteForUser(
+export async function addInternalNoteForUser(
   env: Bindings, ctx: ExecutionContext, auth: AuthContext,
   project: ProjectForNote, note: string, allowDuplicate: boolean
 ) {
@@ -77,7 +79,7 @@ export async function addCaseNoteForUser(
   if (!result.appended) {
     return {
       status: "duplicate",
-      message: "This note from you is already on the case, so it wasn't added again. Set allow_duplicate to add it anyway.",
+      message: "This entry from you is already in the case's Internal Notes, so it wasn't added again. Set allow_duplicate to add it anyway.",
       project: project.name,
       ce_case_number: project.crm_ticket_number,
     };
@@ -86,7 +88,7 @@ export async function addCaseNoteForUser(
   ctx.waitUntil(writeAuditLog(env.DB, {
     entityType: "project",
     entityId: project.id,
-    action: "mcp_case_note",
+    action: "mcp_internal_note",
     method: "MCP",
     path: "/mcp",
     status: 200,
