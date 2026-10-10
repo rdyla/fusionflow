@@ -2,7 +2,8 @@ import { HTTPException } from "hono/http-exception";
 import type { AuthContext, Bindings } from "../types";
 import { canLogTimeOnProject } from "../services/accessService";
 import {
-  getCostCodesForJob, getPayCodes, updateTimeEntry, type DynamicsCostCode,
+  TimeEntryLeftOpenError, closeTimeEntry, ensureTimeEntryClosed, findMatchingTimeEntries, getCostCodesForJob, getPayCodes,
+  getSystemUserIdByEmail, updateTimeEntry, type DynamicsCostCode,
 } from "../services/dynamicsService";
 import { pushTimeEntryToCrm, removeTimeEntryFromCrm, resolveCaseForTime } from "../services/timeEntryService";
 import { writeAuditLog } from "../lib/auditLog";
@@ -154,8 +155,17 @@ async function sha256(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/**
+ * A pending claim older than this is abandoned: the Worker that made it died
+ * (eviction, deploy, crash) before marking it done or failed. Creates finish in
+ * seconds, so two minutes is well clear of any live request.
+ */
+const STALE_CLAIM_MINUTES = 2;
+
 type Claim =
-  | { kind: "claimed"; requestId: string }
+  // reconcile: this request was attempted before and may have reached CE, so
+  // check CE for the entry before posting a new one.
+  | { kind: "claimed"; requestId: string; reconcile: boolean }
   | { kind: "done"; result: Record<string, unknown> }
   | { kind: "in_flight"; since: string };
 
@@ -181,30 +191,62 @@ async function claimRequest(db: D1Database, userId: string, key: string, startIs
     )
     .bind(requestId, userId, key)
     .run();
-  if (ins.meta.changes === 1) return { kind: "claimed", requestId };
+  if (ins.meta.changes === 1) return { kind: "claimed", requestId, reconcile: false };
 
   const row = await db
-    .prepare("SELECT id, status, entry_id, result_json, updated_at FROM mcp_time_requests WHERE user_id = ? AND request_key = ?")
-    .bind(userId, key)
-    .first<{ id: string; status: string; entry_id: string | null; result_json: string | null; updated_at: string }>();
+    .prepare(
+      `SELECT id, status, entry_id, result_json, updated_at,
+              updated_at < datetime('now', ?) AS stale
+         FROM mcp_time_requests WHERE user_id = ? AND request_key = ?`
+    )
+    .bind(`-${STALE_CLAIM_MINUTES} minutes`, userId, key)
+    .first<{ id: string; status: string; entry_id: string | null; result_json: string | null; updated_at: string; stale: number }>();
   if (!row) return claimRequest(db, userId, key, startIso, endIso); // deleted between statements
 
-  if (row.status === "pending") return { kind: "in_flight", since: row.updated_at };
+  if (row.status === "pending" && !row.stale) return { kind: "in_flight", since: row.updated_at };
   if (row.status === "done" && (await entryStillMatches(db, row.entry_id, startIso, endIso))) {
     return { kind: "done", result: JSON.parse(row.result_json ?? "{}") };
   }
 
-  // Failed, or done-but-since-deleted/edited: reclaim, guarded on the status we
-  // read so a concurrent retry can't reclaim it too.
+  // Failed, abandoned (stale pending), or done-but-since-deleted/edited:
+  // reclaim. Guarded on the exact status + timestamp we read, so of several
+  // concurrent retries only one takes it over.
   const re = await db
     .prepare(
       `UPDATE mcp_time_requests SET status = 'pending', entry_id = NULL, result_json = NULL, error = NULL,
               updated_at = CURRENT_TIMESTAMP
-        WHERE id = ? AND status = ?`
+        WHERE id = ? AND status = ? AND updated_at = ?`
     )
-    .bind(row.id, row.status)
+    .bind(row.id, row.status, row.updated_at)
     .run();
-  return re.meta.changes === 1 ? { kind: "claimed", requestId: row.id } : { kind: "in_flight", since: row.updated_at };
+  return re.meta.changes === 1
+    ? { kind: "claimed", requestId: row.id, reconcile: true }
+    : { kind: "in_flight", since: row.updated_at };
+}
+
+/**
+ * A CE record this request may already have created on an earlier attempt:
+ * same case, owner, start and end, and not already backing a local entry
+ * (so an intentional allow_duplicate twin is never mistaken for it).
+ */
+async function findUntrackedCeEntry(
+  env: Bindings, caseId: string, ownerEmail: string, startIso: string, endIso: string
+): Promise<{ id: string; open: boolean; payCodeId: string | null; costCodeId: string | null } | null> {
+  const ownerId = await getSystemUserIdByEmail(env, ownerEmail);
+  if (!ownerId) return null;
+  const matches = await findMatchingTimeEntries(env, { caseId, ownerId, scheduledStart: startIso, scheduledEnd: endIso });
+  for (const m of matches) {
+    const tracked = await env.DB
+      .prepare(
+        `SELECT 1 FROM project_time_entries WHERE crm_time_entry_id = ?1
+         UNION ALL SELECT 1 FROM stage_time_entries WHERE crm_time_entry_id = ?1
+         UNION ALL SELECT 1 FROM task_time_entries WHERE crm_time_entry_id = ?1 LIMIT 1`
+      )
+      .bind(m.id)
+      .first();
+    if (!tracked) return m;
+  }
+  return null;
 }
 
 // ── Create ──────────────────────────────────────────────────────────────────
@@ -267,15 +309,23 @@ export async function createTimeEntryForUser(env: Bindings, ctx: ExecutionContex
     }
   }
 
-  const key = input.allowDuplicate
-    ? `dup:${crypto.randomUUID()}`
-    : input.idempotencyKey
-      ? `key:${input.idempotencyKey}`
+  // The caller's key always wins — including with allow_duplicate, where it is
+  // the ONLY thing stopping a timed-out retry from posting the intentional
+  // duplicate again. A random key is used only for an unkeyed allow_duplicate,
+  // which by definition asks for a new entry every time.
+  const key = input.idempotencyKey
+    ? `key:${input.idempotencyKey}`
+    : input.allowDuplicate
+      ? `dup:${crypto.randomUUID()}`
       : `auto:${await sha256([project.id, stage?.id ?? "", startIso, endIso].join("|"))}`;
   const claim = await claimRequest(db, user.id, key, startIso, endIso);
   if (claim.kind === "done") return { ...claim.result, status: "duplicate", message: "Already logged by an earlier identical request; returning that entry." };
   if (claim.kind === "in_flight") {
-    return fail(`An identical request is already being logged (started ${claim.since} UTC). Don't retry — check list_time_entries in a minute.`);
+    return fail(
+      `An identical request is already being logged (started ${claim.since} UTC), so this one was not sent. ` +
+      `Check list_time_entries shortly. If it never appears, retrying after ${STALE_CLAIM_MINUTES} minutes ` +
+      `checks CE for the entry and recovers it rather than posting twice.`
+    );
   }
 
   const markFailed = (message: string) => db
@@ -286,6 +336,7 @@ export async function createTimeEntryForUser(env: Bindings, ctx: ExecutionContex
   let crmTimeEntryId: string;
   let payCode: { id: string; name: string };
   let costCode: { id: string; name: string };
+  let recovered = false;
   try {
     const caseAndJob = await resolveCaseForTime(env, crmCaseId);
     const [pay, cost] = await Promise.all([
@@ -300,23 +351,52 @@ export async function createTimeEntryForUser(env: Bindings, ctx: ExecutionContex
     payCode = pay;
     costCode = cost;
 
-    // Same CRM subjects as the UI: "{stage} | {note}" / "Project Admin | {note}".
-    const subject = `${stage ? stage.name : "Project Admin"} | ${description}`;
-    crmTimeEntryId = await pushTimeEntryToCrm(env, {
-      subject,
-      scheduledStart: startIso,
-      scheduledEnd: endIso,
-      caseId: caseAndJob.caseId,
-      jobId: caseAndJob.jobId,
-      payCodeId: payCode.id,
-      costCodeId: costCode.id,
-      companyId: caseAndJob.accountId,
-      ownerEmail: user.email,
-    }, "mcp");
+    // A retried request may have reached CE last time: the Worker died after
+    // the POST, or the record was created but the close failed. Adopt that
+    // record (closing it, so payroll sees it) instead of posting a second
+    // billable entry.
+    const earlier = claim.reconcile
+      ? await findUntrackedCeEntry(env, caseAndJob.caseId, user.email, startIso, endIso)
+      : null;
+    if (earlier) {
+      if (earlier.open) await closeTimeEntry(env, earlier.id);
+      crmTimeEntryId = earlier.id;
+      recovered = true;
+      // Report the codes the CE record actually carries.
+      if (earlier.payCodeId && earlier.payCodeId !== payCode.id) {
+        const p = (await getPayCodes(env)).find((c) => c.amc_paycodeid === earlier.payCodeId);
+        payCode = { id: earlier.payCodeId, name: p?.amc_name ?? earlier.payCodeId };
+      }
+      if (earlier.costCodeId && earlier.costCodeId !== costCode.id) {
+        const c = (await getCostCodesForJob(env, caseAndJob.jobId)).find((x) => x.amc_costcodeid === earlier.costCodeId);
+        costCode = { id: earlier.costCodeId, name: c?.amc_name ?? earlier.costCodeId };
+      }
+    } else {
+      // Same CRM subjects as the UI: "{stage} | {note}" / "Project Admin | {note}".
+      crmTimeEntryId = await pushTimeEntryToCrm(env, {
+        subject: `${stage ? stage.name : "Project Admin"} | ${description}`,
+        scheduledStart: startIso,
+        scheduledEnd: endIso,
+        caseId: caseAndJob.caseId,
+        jobId: caseAndJob.jobId,
+        payCodeId: payCode.id,
+        costCodeId: costCode.id,
+        companyId: caseAndJob.accountId,
+        ownerEmail: user.email,
+      }, "mcp");
+    }
   } catch (err) {
     const message = err instanceof HTTPException || err instanceof Error ? err.message : "CE push failed";
     await markFailed(message);
-    return fail("The entry was not logged — the push to CE failed.", { ce_push: { succeeded: false, error: message } });
+    // pushTimeEntryToCrm's "created but not closed (orphan …)" means a record
+    // DOES exist in CE, Active. Say so; a retry finds, closes and adopts it.
+    const orphaned = /orphan/i.test(message);
+    return fail(
+      orphaned
+        ? "The CE entry was created but couldn't be closed, so it isn't in payroll yet and wasn't saved in CloudConnect. Retry the same request: it will find that entry, close it, and record it — not post a second one."
+        : "The entry was not logged — the push to CE failed.",
+      { ce_push: { succeeded: false, error: message } }
+    );
   }
 
   const entryId = crypto.randomUUID();
@@ -353,6 +433,8 @@ export async function createTimeEntryForUser(env: Bindings, ctx: ExecutionContex
     description,
     pay_code: payCode.name,
     cost_code: costCode.name,
+    // An earlier attempt had already reached CE; this adopted that record.
+    ...(recovered ? { recovered_from_earlier_attempt: true } : {}),
   };
   await db
     .prepare(
@@ -412,6 +494,26 @@ async function describeEntry(db: D1Database, entryId: string) {
     description: e.note ?? e.label,
     ce_time_entry_id: e.crm_time_entry_id,
   };
+}
+
+/**
+ * The CE record ended up Active (out of payroll's feed). Never reported as a
+ * plain failure: the user has to know, and retrying the same call fixes it.
+ */
+function leftOpen(err: TimeEntryLeftOpenError, action: "edit" | "delete") {
+  return fail(
+    action === "edit"
+      ? err.changed
+        ? "The edit was saved, but the CE entry couldn't be closed again — it is Active and won't reach payroll until it is. Retry the same edit to close it."
+        : "The edit failed, and the CE entry couldn't be closed again afterwards — it is now Active and won't reach payroll. Retry the edit (or any edit) to close it."
+      : "The delete failed, and the CE entry couldn't be closed again afterwards — it is now Active and won't reach payroll. Retry the delete.",
+    {
+      ce_push: { succeeded: false, error: err.message },
+      ce_record_state: "active_not_in_payroll",
+      ce_time_entry_id: err.entryId,
+      change_applied: err.changed,
+    }
+  );
 }
 
 /** Edits and deletes are limited to the caller's own entries, as the request asked. */
@@ -479,16 +581,31 @@ export async function updateTimeEntryForUser(env: Bindings, ctx: ExecutionContex
 
   const description = input.description?.trim();
   const subjectPrefix = entry.table === "stage_time_entries" ? entry.label ?? "Stage" : "Project Admin";
+  let openAfterEdit: TimeEntryLeftOpenError | null = null;
   try {
-    await updateTimeEntry(env, entry.crm_time_entry_id, {
+    const changes = {
       subject: description !== undefined ? `${subjectPrefix} | ${description}` : undefined,
       scheduledStart: timesChanged ? start.toISOString() : undefined,
       scheduledEnd: timesChanged ? end.toISOString() : undefined,
       costCodeId: costCode?.id,
-    });
+    };
+    if (Object.values(changes).some((v) => v !== undefined)) {
+      await updateTimeEntry(env, entry.crm_time_entry_id, changes);
+    } else {
+      // Nothing to change — typically a retry after an edit that landed but
+      // left the record Active. Make sure it's closed.
+      await ensureTimeEntryClosed(env, entry.crm_time_entry_id);
+    }
   } catch (err) {
-    const message = err instanceof Error ? err.message : "CE update failed";
-    return fail("Nothing was changed — the update to CE failed.", { ce_push: { succeeded: false, error: message } });
+    if (err instanceof TimeEntryLeftOpenError && err.changed) {
+      // CE has the new values; keep the local row in step, then report.
+      openAfterEdit = err;
+    } else if (err instanceof TimeEntryLeftOpenError) {
+      return leftOpen(err, "edit");
+    } else {
+      const message = err instanceof Error ? err.message : "CE update failed";
+      return fail("Nothing was changed — the update to CE failed.", { ce_push: { succeeded: false, error: message } });
+    }
   }
 
   const sets: string[] = [];
@@ -501,6 +618,7 @@ export async function updateTimeEntryForUser(env: Bindings, ctx: ExecutionContex
   }
 
   audit(env, ctx, auth, entry.id, "mcp_time_update");
+  if (openAfterEdit) return leftOpen(openAfterEdit, "edit");
   return {
     status: "updated",
     updated_at: new Date().toISOString(),
@@ -519,6 +637,8 @@ export async function deleteTimeEntryForUser(env: Bindings, ctx: ExecutionContex
   try {
     await removeTimeEntryFromCrm(env, entry.crm_time_entry_id, "mcp");
   } catch (err) {
+    const cause = err instanceof HTTPException ? err.cause : err;
+    if (cause instanceof TimeEntryLeftOpenError) return leftOpen(cause, "delete");
     const message = err instanceof Error ? err.message : "CE delete failed";
     return fail("Nothing was deleted — removing it from CE failed.", { ce_push: { succeeded: false, error: message } });
   }
