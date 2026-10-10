@@ -61,9 +61,14 @@ export default function LoginPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: email.trim(), code: code.trim() }),
       });
-      const data = await res.json() as { error?: string };
+      const data = await res.json() as { error?: string; redirectTo?: string | null };
       if (!res.ok) {
         setError(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+      // Signing in to connect Claude: back to the server-rendered consent page.
+      if (data.redirectTo?.startsWith("/oauth/authorize?")) {
+        window.location.assign(data.redirectTo);
         return;
       }
       navigate("/");

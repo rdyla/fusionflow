@@ -245,11 +245,27 @@ export async function resolveUserByEmail(env: Bindings, email: string): Promise<
   return { user, role: user.role, organization: user.organization_name };
 }
 
+/** The ff_session cookie's id, or null. */
+function sessionIdFrom(cookieHeader: string | undefined): string | null {
+  const match = (cookieHeader ?? "").split(";").map(s => s.trim()).find(s => s.startsWith("ff_session="));
+  return match ? match.slice("ff_session=".length) : null;
+}
+
+/**
+ * The signed-in browser session, or null. For pages outside /api that need to
+ * know who's signed in without 401ing (the MCP connector's consent page).
+ * No impersonation: that's an /api-only admin affordance.
+ */
+export async function getSessionAuth(kv: KVNamespace, cookieHeader: string | undefined): Promise<AuthContext | null> {
+  const sessionId = sessionIdFrom(cookieHeader);
+  if (!sessionId) return null;
+  const raw = await kv.get(`session:${sessionId}`);
+  return raw ? (JSON.parse(raw) as AuthContext) : null;
+}
+
 export const authMiddleware: AppMiddleware = async (c, next) => {
   // Validate ff_session cookie → KV session lookup
-  const cookieHeader = c.req.header("cookie") ?? "";
-  const match = cookieHeader.split(";").map(s => s.trim()).find(s => s.startsWith("ff_session="));
-  const sessionId = match ? match.slice("ff_session=".length) : null;
+  const sessionId = sessionIdFrom(c.req.header("cookie"));
 
   if (!sessionId) {
     throw new HTTPException(401, { message: "Unauthorized" });

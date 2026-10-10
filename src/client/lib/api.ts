@@ -90,6 +90,8 @@ export type User = {
   is_specialist?: number;
   /** Personal time-entry suggestions (migration 0144). Off by default. */
   is_time_assist?: number;
+  /** Claude MCP connector access (migration 0149). Off by default. */
+  is_mcp?: number;
   is_sales_tools?: number;
   avatar_url?: string | null;
   title?: string | null;
@@ -2681,6 +2683,7 @@ export const api = {
       is_integrations?: number;
       is_specialist?: number;
       is_time_assist?: number;
+      is_mcp?: number;
       is_sales_tools?: number;
       dynamics_account_id?: string | null;
       manager_id?: string | null;

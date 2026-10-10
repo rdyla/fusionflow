@@ -14,8 +14,9 @@
  * Data-only is the right split: the schema comes from migrations (so local
  * matches what a fresh deploy would build) and only the rows come from
  * staging. Verified equivalent to a live schema export — 58 tables / 647
- * columns identical, minus two artifacts prod carries that no migration
- * creates and nothing reads (`milestones`, `projects.crm_case_number`).
+ * columns identical, minus one artifact prod carries that no migration
+ * creates and nothing reads (`milestones`). (`projects.crm_case_number` was
+ * the other; dropped from prod 2026-10-09.)
  *
  *   npm run db:local:from-staging              # export fresh from staging
  *   npm run db:local:from-staging -- <file>    # reuse an existing snapshot

@@ -5,7 +5,7 @@ import { getTeamUserIds, inPlaceholders } from "../lib/teamUtils";
 import { clientAccountIds } from "../lib/permissions";
 import { normalizeSolutionTypesField } from "../../shared/solutionTypes";
 import { getDemoVendor } from "../lib/appSettings";
-import { getOpportunityQuotes } from "../services/dynamicsService";
+import { getOpportunityQuotes, pickSowQuote } from "../services/dynamicsService";
 import { leadershipWeeklySummary } from "../lib/emailTemplates";
 import { buildLeadershipSummaryData } from "../lib/leadershipSummary";
 import { sendEmail } from "../services/emailService";
@@ -628,10 +628,7 @@ app.get("/leadership", async (c) => {
   const hoursRiskChecked = await Promise.all(
     (hoursRiskCandidates.results ?? []).map(async (p) => {
       const quotes = await getOpportunityQuotes(c.env, p.crm_opportunity_id).catch(() => []);
-      const withSow = quotes.filter((q) => q.am_sow != null);
-      const priority = (q: { statecode: number }) => (q.statecode === 2 ? 0 : q.statecode === 1 ? 1 : 2);
-      withSow.sort((a, b) => priority(a) - priority(b));
-      const quotedHours = withSow[0]?.am_sow ?? null;
+      const quotedHours = pickSowQuote(quotes)?.am_sow ?? null;
       return {
         id: p.id,
         name: p.name,

@@ -58,6 +58,9 @@ export type Bindings = {
   // that need them guard with a defined-check + return 503 when missing.
   DB_STAGING?: D1Database;
   KV_STAGING?: KVNamespace;
+  /** Claude connector OAuth state (clients, grants, hashed tokens). Owned by
+   *  @cloudflare/workers-oauth-provider, which requires this binding name. */
+  OAUTH_KV: KVNamespace;
   R2_STAGING?: R2Bucket;
   // Dynamics 365 integration (set via wrangler secret put)
   DYNAMICS_TENANT_ID?: string;

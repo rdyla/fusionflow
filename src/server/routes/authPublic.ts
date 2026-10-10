@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { CLEAR_RETURN_COOKIE, pendingAuthorizeUrl } from "../mcp/authorize";
 import type { Bindings, Variables } from "../types";
 import { resolveUserByEmail } from "../middleware/auth";
 import { sendEmail } from "../services/emailService";
@@ -119,12 +120,13 @@ app.post("/verify", async (c) => {
   const sessionId = crypto.randomUUID();
   await c.env.KV.put(sessionKey(sessionId), JSON.stringify(auth), { expirationTtl: SESSION_TTL });
 
-  return new Response(JSON.stringify({ ok: true }), {
-    headers: {
-      "Content-Type": "application/json",
-      "Set-Cookie": sessionCookie(sessionId, SESSION_TTL, c.env.APP_URL),
-    },
-  });
+  // Mid Claude-connector sign-in: send the browser back to the consent page.
+  const redirectTo = pendingAuthorizeUrl(c.req.header("cookie"));
+  const headers = new Headers({ "Content-Type": "application/json" });
+  headers.append("Set-Cookie", sessionCookie(sessionId, SESSION_TTL, c.env.APP_URL));
+  if (redirectTo) headers.append("Set-Cookie", CLEAR_RETURN_COOKIE);
+
+  return new Response(JSON.stringify({ ok: true, redirectTo }), { headers });
 });
 
 // GET /api/auth/logout
@@ -222,13 +224,13 @@ app.get("/sso/callback", async (c) => {
   const sessionId = crypto.randomUUID();
   await c.env.KV.put(`session:${sessionId}`, JSON.stringify(auth), { expirationTtl: SESSION_TTL });
 
-  return new Response(null, {
-    status: 302,
-    headers: {
-      Location: "/",
-      "Set-Cookie": sessionCookie(sessionId, SESSION_TTL, c.env.APP_URL),
-    },
-  });
+  // Mid Claude-connector sign-in: go back to the consent page, not the app.
+  const redirectTo = pendingAuthorizeUrl(c.req.header("cookie"));
+  const headers = new Headers({ Location: redirectTo ?? "/" });
+  headers.append("Set-Cookie", sessionCookie(sessionId, SESSION_TTL, c.env.APP_URL));
+  if (redirectTo) headers.append("Set-Cookie", CLEAR_RETURN_COOKIE);
+
+  return new Response(null, { status: 302, headers });
 });
 
 export default app;
