@@ -7,7 +7,7 @@ import { pacificToday, addDays } from "../lib/pacificTime";
 import {
   WORK_TYPES, createTimeEntryForUser, deleteTimeEntryForUser, isFailure, updateTimeEntryForUser, type WorkType,
 } from "./timeWrites";
-import { addCaseNoteForUser } from "./caseNotes";
+import { addInternalNoteForUser } from "./internalNotes";
 
 const zDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const zTime = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:MM, 24-hour");
@@ -228,17 +228,18 @@ export function buildMcpServer(env: Bindings, ctx: ExecutionContext, auth: AuthC
   );
 
   server.registerTool(
-    "add_case_note",
+    "add_internal_note",
     {
-      title: "Add case note",
+      title: "Add to case Internal Notes",
       description:
-        "Append a note to a project's CE case Internal Notes, stamped with Pacific time and my " +
-        "name. Appends — never replaces existing notes. Retrying the same note doesn't add it " +
-        "twice. Returns the exact text appended.",
+        "Append an entry to the Internal Notes field on a project's CE case, stamped with Pacific " +
+        "time and my name. Appends — never replaces what's in the field. This is the Internal " +
+        "Notes field only; it does NOT create a case note (the separate note records on the case " +
+        "Timeline). Retrying the same entry doesn't add it twice. Returns the exact text appended.",
       inputSchema: {
         project: z.string().min(1).describe("Case number, project id, or name"),
         note: z.string().trim().min(1).max(2000).describe("The note text"),
-        allow_duplicate: z.boolean().optional().describe("Add even if this exact note from me is already on the case"),
+        allow_duplicate: z.boolean().optional().describe("Add even if this exact entry from me is already in Internal Notes"),
       },
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
     },
@@ -247,7 +248,7 @@ export function buildMcpServer(env: Bindings, ctx: ExecutionContext, auth: AuthC
       if (rows.length === 0) return toolError(`No project you can see matches "${project}".`);
       if (rows.length > 1) return json({ ambiguous: true, matches: candidates(rows) });
       const r = rows[0];
-      return writeResult(await addCaseNoteForUser(
+      return writeResult(await addInternalNoteForUser(
         env, ctx, auth,
         { id: r.id, name: r.name, crm_case_id: r.crm_case_id, crm_ticket_number: r.crm_ticket_number },
         note, allow_duplicate ?? false
