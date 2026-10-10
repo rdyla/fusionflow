@@ -1325,3 +1325,33 @@ export async function deleteTimeEntry(env: Env, entryId: string): Promise<void> 
   }
   await dynamicsDelete(env, `/amc_timeentries(${entryId})`);
 }
+
+export type UpdateTimeEntryInput = {
+  subject?: string;
+  scheduledStart?: string;
+  scheduledEnd?: string;
+  costCodeId?: string;
+};
+
+// Edits an amc_timeentry in place, keeping its GUID (the "proof" a caller was
+// given at create time stays valid). Completed entries are read-only in
+// Dynamics, so: reopen → patch → close again. If the patch fails the entry is
+// re-closed best-effort before rethrowing, so a failed edit never leaves an
+// Open record in payroll's feed.
+export async function updateTimeEntry(env: Env, entryId: string, input: UpdateTimeEntryInput): Promise<void> {
+  const body: Record<string, unknown> = {};
+  if (input.subject !== undefined) body.subject = input.subject;
+  if (input.scheduledStart !== undefined) body.scheduledstart = input.scheduledStart;
+  if (input.scheduledEnd !== undefined) body.scheduledend = input.scheduledEnd;
+  if (input.costCodeId !== undefined) body["amc_costcode_amc_timeentry@odata.bind"] = `/amc_costcodes(${input.costCodeId})`;
+  if (Object.keys(body).length === 0) return;
+
+  await dynamicsPatch(env, `/amc_timeentries(${entryId})`, { statecode: 0, statuscode: 1 });
+  try {
+    await dynamicsPatch(env, `/amc_timeentries(${entryId})`, body);
+  } catch (err) {
+    await closeTimeEntry(env, entryId).catch(() => { /* surfaced via the original error */ });
+    throw err;
+  }
+  await closeTimeEntry(env, entryId);
+}

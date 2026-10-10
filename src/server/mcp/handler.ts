@@ -46,7 +46,7 @@ const mcpHandler: ExportedHandler<Bindings> = {
     // Stateless: a fresh server + transport per request, JSON responses rather
     // than SSE. Every tool call is a single request/response, and Workers keep
     // no state between requests to hang a session on.
-    const server = buildMcpServer(env, auth);
+    const server = buildMcpServer(env, ctx, auth);
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
