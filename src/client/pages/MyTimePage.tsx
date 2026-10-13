@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { api, type MyTimeSuggestions, type TimeSuggestion, type TimeEntrySetup } from "../lib/api";
 import { useToast } from "../components/ui/ToastProvider";
 
@@ -31,6 +31,14 @@ const STAGE_REASON_LABEL: Record<TimeSuggestion["stageReason"], string> = {
   keyword_only: "the meeting title (no stage is active)",
   no_stages: "nothing — this project has no stages",
 };
+
+/* Row controls share one height and label style so they line up row to row. */
+const FIELD: CSSProperties = { display: "flex", flexDirection: "column", gap: 4 };
+const FIELD_LABEL: CSSProperties = { fontSize: 11, fontWeight: 600, color: MUTED, textTransform: "uppercase", letterSpacing: ".04em" };
+const CONTROL = {
+  height: 34, boxSizing: "border-box", padding: "0 10px", border: `1px solid ${GREY}`, borderRadius: 6,
+  fontSize: 13, color: BODY, background: "#fff",
+} satisfies CSSProperties;
 
 const keyOf = (s: TimeSuggestion) => `${s.source}:${s.eventId}`;
 /** Pay/cost codes hang off the CRM job and are stage-aware (a phase can carry
@@ -335,7 +343,7 @@ export default function MyTimePage() {
                     style={{ marginTop: 4, cursor: processing ? "default" : "pointer", flexShrink: 0 }}
                   />
 
-                  <div style={{ flex: "1 1 340px", minWidth: 0 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: NAVY, lineHeight: 1.3 }}>
                       {s.subject || "Untitled meeting"}
                     </div>
@@ -361,81 +369,72 @@ export default function MyTimePage() {
                     {st?.status === "failed" && (
                       <div style={{ fontSize: 12, color: DANGER, marginTop: 6, lineHeight: 1.5 }}>{st.error}</div>
                     )}
-                  </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                    <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: MUTED }}>
-                      Stage
-                      <select
-                        value={stageId[k] ?? ""}
+                    <div style={{ display: "flex", alignItems: "flex-end", gap: 12, flexWrap: "wrap", marginTop: 14 }}>
+                      <label style={FIELD}>
+                        <span style={FIELD_LABEL}>Stage</span>
+                        <select
+                          value={stageId[k] ?? ""}
+                          disabled={processing}
+                          onChange={(e) => {
+                            setStageId((prev) => ({ ...prev, [k]: e.target.value }));
+                            setCostCodeId((prev) => ({ ...prev, [k]: "" }));
+                          }}
+                          style={{ ...CONTROL, width: 220 }}
+                        >
+                          {/* Falling back to project-admin time stays available —
+                              some projects have no stages, and some work genuinely
+                              isn't phase work. */}
+                          <option value="">Project admin (no stage)</option>
+                          {(data?.stagesByProject[s.projectId] ?? []).map((st) => (
+                            <option key={st.id} value={st.id}>
+                              {st.name}{st.status === "in_progress" ? " ·  active" : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      {(() => {
+                        const setup = setupCache[setupKeyOf(s.projectId, stageId[k] ?? "")];
+                        return (
+                          <label style={FIELD}>
+                            <span style={FIELD_LABEL}>Cost code</span>
+                            <select
+                              value={costCodeId[k] || setup?.default_cost_code_id || ""}
+                              disabled={processing || !setup}
+                              onChange={(e) => setCostCodeId((prev) => ({ ...prev, [k]: e.target.value }))}
+                              style={{ ...CONTROL, width: 240 }}
+                            >
+                              {!setup && <option value="">Loading…</option>}
+                              {setup && !(costCodeId[k] || setup.default_cost_code_id) && <option value="">— Select —</option>}
+                              {(setup?.cost_codes ?? []).map((cc) => (
+                                <option key={cc.amc_costcodeid} value={cc.amc_costcodeid}>{cc.amc_name}</option>
+                              ))}
+                            </select>
+                          </label>
+                        );
+                      })()}
+                      <label style={FIELD}>
+                        <span style={FIELD_LABEL}>Hours</span>
+                        <input
+                          type="number"
+                          min={0.25}
+                          max={24}
+                          step={0.25}
+                          value={hours[k] ?? ""}
+                          disabled={processing}
+                          onChange={(e) => setHours((prev) => ({ ...prev, [k]: Number(e.target.value) }))}
+                          style={{ ...CONTROL, width: 80, textAlign: "right" }}
+                        />
+                      </label>
+                      <button
+                        onClick={() => dismiss(s)}
                         disabled={processing}
-                        onChange={(e) => {
-                          setStageId((prev) => ({ ...prev, [k]: e.target.value }));
-                          setCostCodeId((prev) => ({ ...prev, [k]: "" }));
-                        }}
-                        style={{
-                          padding: "6px 8px", border: `1px solid ${GREY}`, borderRadius: 6,
-                          fontSize: 13, color: BODY, maxWidth: 210, background: "#fff",
-                        }}
+                        className="ms-btn-ghost"
+                        style={{ fontSize: 12, height: CONTROL.height, marginLeft: "auto" }}
                       >
-                        {/* Falling back to project-admin time stays available —
-                            some projects have no stages, and some work genuinely
-                            isn't phase work. */}
-                        <option value="">Project admin (no stage)</option>
-                        {(data?.stagesByProject[s.projectId] ?? []).map((st) => (
-                          <option key={st.id} value={st.id}>
-                            {st.name}{st.status === "in_progress" ? " ·  active" : ""}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    {(() => {
-                      const setup = setupCache[setupKeyOf(s.projectId, stageId[k] ?? "")];
-                      return (
-                        <label style={{ display: "flex", flexDirection: "column", gap: 3, fontSize: 11, color: MUTED }}>
-                          Cost code
-                          <select
-                            value={costCodeId[k] || setup?.default_cost_code_id || ""}
-                            disabled={processing || !setup}
-                            onChange={(e) => setCostCodeId((prev) => ({ ...prev, [k]: e.target.value }))}
-                            style={{
-                              padding: "6px 8px", border: `1px solid ${GREY}`, borderRadius: 6,
-                              fontSize: 13, color: BODY, maxWidth: 230, background: "#fff",
-                            }}
-                          >
-                            {!setup && <option value="">Loading…</option>}
-                            {setup && !(costCodeId[k] || setup.default_cost_code_id) && <option value="">— Select —</option>}
-                            {(setup?.cost_codes ?? []).map((cc) => (
-                              <option key={cc.amc_costcodeid} value={cc.amc_costcodeid}>{cc.amc_name}</option>
-                            ))}
-                          </select>
-                        </label>
-                      );
-                    })()}
-                    <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: MUTED }}>
-                      <input
-                        type="number"
-                        min={0.25}
-                        max={24}
-                        step={0.25}
-                        value={hours[k] ?? ""}
-                        disabled={processing}
-                        onChange={(e) => setHours((prev) => ({ ...prev, [k]: Number(e.target.value) }))}
-                        style={{
-                          width: 76, padding: "6px 8px", border: `1px solid ${GREY}`, borderRadius: 6,
-                          fontSize: 14, color: BODY, textAlign: "right",
-                        }}
-                      />
-                      hours
-                    </label>
-                    <button
-                      onClick={() => dismiss(s)}
-                      disabled={processing}
-                      className="ms-btn-ghost"
-                      style={{ fontSize: 12 }}
-                    >
-                      Not billable
-                    </button>
+                        Not billable
+                      </button>
+                    </div>
                   </div>
 
                   {st?.status === "working" && (
