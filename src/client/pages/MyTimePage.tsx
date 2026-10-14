@@ -33,11 +33,12 @@ const STAGE_REASON_LABEL: Record<TimeSuggestion["stageReason"], string> = {
 };
 
 /* Row controls share one height and label style so they line up row to row. */
-const FIELD: CSSProperties = { display: "flex", flexDirection: "column", gap: 4 };
+/* Fixed widths line columns up on desktop; the 100% caps let them shrink to fit a phone. */
+const FIELD: CSSProperties = { display: "flex", flexDirection: "column", gap: 4, minWidth: 0, maxWidth: "100%" };
 const FIELD_LABEL: CSSProperties = { fontSize: 11, fontWeight: 600, color: MUTED, textTransform: "uppercase", letterSpacing: ".04em" };
 const CONTROL = {
   height: 34, boxSizing: "border-box", padding: "0 10px", border: `1px solid ${GREY}`, borderRadius: 6,
-  fontSize: 13, color: BODY, background: "#fff",
+  fontSize: 13, color: BODY, background: "#fff", maxWidth: "100%",
 } satisfies CSSProperties;
 
 const keyOf = (s: TimeSuggestion) => `${s.source}:${s.eventId}`;
