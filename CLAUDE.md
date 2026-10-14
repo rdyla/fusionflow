@@ -42,7 +42,7 @@ Default: **edit locally → Ryan verifies via `npm run dev` → only commit/push
 
 **Don't** reflexively `git add` + commit + push + `gh pr create` after editing. Wait for Ryan to say "ready" / "looks good" / "ship it". Tiny one-line fixes Ryan asks you to commit immediately are exempt.
 
-**D365 works locally once secrets are injected.** `.dev.vars.tpl` holds 1Password refs for the `DYNAMICS_*` creds; fill `.dev.vars` with `op inject -i .dev.vars.tpl -o .dev.vars -f`. Those creds hit **prod** CE, so local D365 testing reads and writes real data — keep test writes small and on your own records.
+**D365 works locally once secrets are injected.** `.dev.vars.tpl` holds 1Password refs for the `DYNAMICS_*` creds; fill `.dev.vars` with `op inject -i .dev.vars.tpl -o .dev.vars -f`. The template also sets `APP_URL=http://localhost:5173` — without it the prod HTTPS `APP_URL` from `wrangler.json` marks the session cookie `Secure`, and the browser drops it over plain-HTTP localhost (login bounces straight back to `/login`). Those creds hit **prod** CE, so local D365 testing reads and writes real data — keep test writes small and on your own records.
 
 **Local login is email OTP, not SSO.** SSO has no localhost redirect URI (and builds its callback from `APP_URL`, which points at prod). There are no Graph creds locally, so the OTP email fails to send — but the code is written to KV first. After "send code":
 `npx wrangler kv key get --local --binding KV "otp:<email>"` → enter the `code`.
