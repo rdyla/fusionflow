@@ -42,7 +42,12 @@ Default: **edit locally → Ryan verifies via `npm run dev` → only commit/push
 
 **Don't** reflexively `git add` + commit + push + `gh pr create` after editing. Wait for Ryan to say "ready" / "looks good" / "ship it". Tiny one-line fixes Ryan asks you to commit immediately are exempt.
 
-**CRM-dependent work is the exception.** Ryan does NOT have D365 (`DYNAMICS_*`) creds in `.dev.vars`, so anything that calls D365 (support cases, CRM customer pickers, dynamics services) cannot be tested locally. For that work the loop is **code → commit → push → PR → merge to staging → test on staging deploy → iterate**. Each iteration is its own small PR — don't bundle iterations, since Ryan can't verify until something is on staging. If a fix lands on a branch whose PR was already merged, cut a fresh branch off `origin/staging` and cherry-pick the fix into a new PR.
+**D365 works locally once secrets are injected.** `.dev.vars.tpl` holds 1Password refs for the `DYNAMICS_*` creds; fill `.dev.vars` with `op inject -i .dev.vars.tpl -o .dev.vars -f`. Those creds hit **prod** CE, so local D365 testing reads and writes real data — keep test writes small and on your own records.
+
+**Local login is email OTP, not SSO.** SSO has no localhost redirect URI (and builds its callback from `APP_URL`, which points at prod). There are no Graph creds locally, so the OTP email fails to send — but the code is written to KV first. After "send code":
+`npx wrangler kv key get --local --binding KV "otp:<email>"` → enter the `code`.
+
+**Integrations without local creds** (Zoom, Outlook/Graph — e.g. My Time suggestions) still can't be tested locally. For those the loop is **code → commit → push → PR → merge to staging → test on staging deploy → iterate**. Each iteration is its own small PR — don't bundle iterations, since Ryan can't verify until something is on staging. If a fix lands on a branch whose PR was already merged, cut a fresh branch off `origin/staging` and cherry-pick the fix into a new PR.
 
 ---
 
